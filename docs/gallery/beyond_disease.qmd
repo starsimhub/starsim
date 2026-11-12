@@ -11,20 +11,18 @@ Starsim is built for infectious diseases, but its machinery for agents is genera
 
 Not every model of something other than an infection needs code. States and transitions describe any process in which people move between categories at given rates (smoking, use of contraception, stages of a chronic disease, employment), and a declared model of such a process runs under every solver, with the same interventions as a disease: see [Diseases](../user_guide/building_diseases.qmd). Some models track things that are not people at all, such as bacteria in water or a population of mosquitoes, as states with `people=False` in the same model as the people (see [Cholera with a water reservoir](cholera.qmd)).
 
-## The model
+## Wealth
 
-### Wealth
-
-This is the "wealth model" of the [Mesa](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html) tutorial: each person starts with one unit of wealth, and at each step, everyone who has any gives one unit to someone chosen at random. Though the rule is fair, wealth ends up very unequal.
+This is the "wealth model" of the [Mesa](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html) tutorial: each person starts with one unit of wealth, and gives one unit at a time to someone chosen at random. Though the rule is fair, wealth ends up very unequal. Here each person who has any gives with a chance of 1 in 10 at each step, so that inequality builds up over steps rather than all in the first.
 
 | Parameter | Value | Meaning |
 |---|---|---|
-| People | 100 | |
+| People | 1,000 | |
 | Starting wealth | 1 unit | The same for everyone |
-| Giving | 1 unit a step | From each person who has any, to someone chosen at random |
+| Giving | 1 unit | With a chance of 0.1 a step, from each person who has any, to someone chosen at random |
 | Steps | 100 | |
 
-Each person's wealth is a state, and whom each giver gives to is drawn from a Starsim distribution, so that runs can be repeated and compared (see [Random numbers](../user_guide/mechanics_random.qmd)). The Gini coefficient (0 if everyone has the same, near 1 if one person has everything) is a result:
+Each person's wealth is a state, and who gives and to whom are drawn from Starsim distributions, so that runs can be repeated and compared (see [Random numbers](../user_guide/mechanics_random.qmd)). The Gini coefficient (0 if everyone has the same, near 1 if one person has everything) is a result:
 
 ```{python}
 import numpy as np
@@ -32,14 +30,17 @@ import matplotlib.pyplot as plt
 import starsim as ss
 
 class Wealth(ss.Module):
-    """ Each person starts with 1 unit of wealth; each step, everyone with any gives 1 unit to someone chosen at random """
+    """ Each person starts with 1 unit of wealth; each step, a tenth of those with any give 1 unit to someone chosen at random """
 
     def __init__(self, **kwargs):
         super().__init__()
+        self.define_pars(
+            p_give = ss.bernoulli(p=0.1), # The chance that a person who has any wealth gives a unit in a step
+        )
+        self.update_pars(**kwargs)
         self.define_states(
             ss.FloatArr('wealth', default=1.0, label='Wealth'),
         )
-        self.update_pars(**kwargs)
         self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to: a position, the same as a UID only since nobody is born or dies here
         return
 
@@ -51,7 +52,7 @@ class Wealth(ss.Module):
         return
 
     def step(self):
-        givers = (self.wealth > 0).uids
+        givers = self.pars.p_give.filter((self.wealth > 0).uids)
         recipients = self.recipient.rvs(givers)
         self.wealth[givers] = self.wealth[givers] - 1
         self.wealth[:] = self.wealth + np.bincount(recipients, minlength=len(self.wealth)) # Each recipient gets 1 unit for each giver who chose them
@@ -65,7 +66,26 @@ class Wealth(ss.Module):
         return
 ```
 
-### Flocking
+```{python}
+sim = ss.Sim(Wealth(), n_agents=1000, stop=100) # 100 steps
+sim.run()
+sim.results.wealth.gini.plot()
+```
+
+Inequality rises over the first 10 or so steps, and then stays high, with a Gini coefficient of about 0.65, close to that of the most unequal countries. The final distribution has many people with nothing and a few with several units:
+
+```{python}
+wealth = sim.people.wealth.wealth
+plt.figure()
+plt.hist(wealth.values, bins=np.arange(wealth.max() + 2) - 0.5)
+plt.xlabel('Wealth')
+plt.ylabel('Number of people')
+plt.show()
+```
+
+Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once: the code is a little shorter, and faster for large populations.
+
+## Flocking
 
 Boids are the classic model of flocking, in which each bird follows three simple rules about the birds it can see: **alignment** (steer towards their average heading), **cohesion** (steer towards their center), and **separation** (steer away from any that are too close). No bird leads, and nobody tells the flock where to go, but flocks form and fly together.
 
@@ -152,31 +172,6 @@ class Boids(ss.Module):
         return
 ```
 
-## Result
-
-### How unequal wealth becomes
-
-```{python}
-sim = ss.Sim(Wealth(), n_agents=100, stop=100) # 100 steps
-sim.run()
-sim.results.wealth.gini.plot()
-```
-
-Inequality rises within a few steps and then stays high. The final distribution has many people with nothing and a few with several units:
-
-```{python}
-wealth = sim.people.wealth.wealth
-plt.figure()
-plt.hist(wealth.values, bins=np.arange(wealth.max() + 2) - 0.5)
-plt.xlabel('Wealth')
-plt.ylabel('Number of people')
-plt.show()
-```
-
-Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once: the code is a little shorter, and faster for large populations.
-
-### How flocks form
-
 The rule of alignment is what makes a flock: without it, boids still gather and keep their distance, but each flies its own way. Here 200 boids fly for 200 steps, with and without it:
 
 ```{python}
@@ -188,26 +183,38 @@ msim = ss.parallel(scenarios, workers=1)
 msim.plot('boids.aligned')
 ```
 
-With alignment, most boids are moving with their neighbors within about 50 steps, and nearly all within 100; without it, their headings stay about as random as at the start. The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), and each snapshot shows every boid as an arrow along its heading:
+With alignment, most boids are moving with their neighbors within about 50 steps, and nearly all within 100; without it, their headings stay about as random as at the start.
+
+The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), keeping the boids' positions and headings every 3 steps, and then plays them back as an animation, with each boid as an arrow along its heading:
 
 ```{python}
+from matplotlib import animation
+from IPython.display import HTML
+
 sim = ss.Sim(Boids(), n_agents=200, stop=200)
-fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-for ax, step in zip(axes, [0, 30, 200]):
+sim.init()
+boids = sim.custom.boids # The module is given as `custom`: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
+frames = []
+for step in range(0, 201, 3):
     sim.run(until=step)
-    boids = sim.custom.boids
-    speed = np.hypot(boids.vx.values, boids.vy.values)
-    ax.quiver(boids.x.values, boids.y.values, boids.vx.values/speed, boids.vy.values/speed, angles='xy', scale_units='xy', scale=40, width=0.005) # Arrows along each heading
-    ax.set_title(f'Step {step}')
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_aspect('equal')
-    ax.set_xticks([])
-    ax.set_yticks([])
-plt.show()
+    frames.append([state.values.copy() for state in [boids.x, boids.y, boids.vx, boids.vy]])
+
+fig, ax = plt.subplots(figsize=(4, 4), dpi=72)
+ax.set(xlim=(0, 1), ylim=(0, 1), xticks=[], yticks=[], aspect='equal')
+arrows = ax.quiver(*frames[0], angles='xy', scale_units='xy', scale=0.25, width=0.005, pivot='mid')
+
+def draw(i):
+    x, y, vx, vy = frames[i]
+    arrows.set_offsets(np.c_[x, y])
+    arrows.set_UVC(vx, vy)
+    ax.set_title(f'Step {3*i}')
+
+anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=100)
+plt.close(fig)
+HTML(anim.to_jshtml(default_mode='loop'))
 ```
 
-From random headings at the start, groups form within a few dozen steps, and by the end the boids fly as a few large flocks (which wrap around the edges of the square), with space between their members. The module is given to the sim as `custom` (any module that is not a disease, network, demographic module, intervention, analyzer, or connector), and is reached as `sim.custom.boids`.
+From random headings at the start, groups form within a few dozen steps, and by the end the boids fly as a few large flocks (which wrap around the edges of the square), with space between their members.
 
 As in the wealth model, each rule is applied to every boid at once, as operations on arrays, rather than by looping over the boids. Working out the distance between every pair of boids takes time and memory in proportion to the square of their number, which is fine for hundreds or a few thousand; for many more, a spatial index (such as SciPy's `cKDTree`) would find each boid's neighbors faster.
 

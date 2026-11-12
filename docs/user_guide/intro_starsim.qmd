@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 35
   ai: 65
-  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI)
+  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI
 ---
 
 ## Introduction
@@ -21,81 +21,25 @@ Starsim is a framework for modeling the spread of diseases: as deterministic or 
 
 Starsim is available for both Python and R (see [R-Starsim](https://r.starsim.org)), and is fully open-source under the MIT license.
 
-This page sets out the kinds of model and of tool, where Starsim fits among them, why you might use a framework rather than code of your own, when another tool is the better choice, and the models and examples to start from.
+## Kinds of model and tool
 
-## Kinds of model
-
-Mechanistic models of transmission (models of how infection passes between people, as opposed to statistical models that forecast cases from past cases) come in a few kinds, which differ in how they represent the population:
-
-- **Deterministic compartmental models** divide the population into compartments (susceptible, infectious, recovered, and so on, often stratified by age, sex, or place) and follow the number in each as an ordinary differential equation (ODE) or difference equation. They are fast, smooth, and easy to fit, and they give the expected course of a large epidemic; they have no chance, so they say nothing about fade-out or the spread of outcomes in small populations.
-- **Stochastic compartmental models** have the same compartments, but move whole numbers of people between them at random: a chain binomial in discrete time, or the Gillespie algorithm in continuous time. They capture chance (outbreaks that die out, variation between runs) at little more cost than an ODE, and are the usual basis of particle filters.
-- **Metapopulation models** are compartmental models in each of many places (towns, districts, farms) linked by movement or commuting. They capture the geography of spread without following individuals.
-- **Network models** follow individuals and their contacts: partnerships for sexually transmitted infections, households, or contact graphs. They are needed when who meets whom matters (concurrency, clustering, contact tracing), and often estimate the network from survey data.
-- **Agent-based models** (ABMs) follow every individual, each with their own states (age, infection, immunity, treatment, history), contacts, and events. They are the most flexible (any rule that can be written about a person can be modeled) and the most costly, both to run and, often, to write and check.
-
-The same disease can usually be written in more than one of these, and the choice is about the question: an ODE for the expected size of an epidemic in a large population, a stochastic or agent-based model where chance, heterogeneity, or individual histories matter. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
+Mechanistic models of transmission differ in how they represent the population. **Deterministic compartmental models** follow the number of people in each compartment (susceptible, infectious, recovered, often stratified by age, sex, or place) as an ordinary differential equation (ODE): fast, smooth, and easy to fit, but with no chance in them. **Stochastic compartmental models** move whole numbers of people between the same compartments at random (a chain binomial, or the Gillespie algorithm), which captures fade-out and the variation between runs. **Metapopulation models** link compartmental models in many places by movement. **Network and agent-based models** (ABMs) follow individuals, with their own states, contacts, and histories: the most flexible, and the most costly to run and to check. The choice depends on the question: an ODE for the expected course of a large epidemic, a stochastic or agent-based model where chance, heterogeneity, or individual histories matter.
 
 ![Types of model](assets/types_of_model.png)
 
-For simpler questions, statistical or compartmental models are often all that's needed. For very complex questions, machine learning models may be more suitable. Examples of each type of question are:
-
-- **Statistical models**: "Are people who received the vaccine less likely to get infected?"
-- **Machine learning models**: "What behavioral factors influence vaccination uptake?"
-- **Compartmental models**: "What is disease prevalence going to be in 5 years given 100% vaccine uptake?"
-- **Agent-based models**: "What is disease prevalence going to be in 5 years given realistic assumptions about screening and vaccine coverage?"
-
-## Kinds of tool
-
-The tools differ as much in how a model is written as in what it can represent:
-
-- **Written by hand**, in a general-purpose language: a loop in NumPy, or an ODE solver such as R's deSolve or Julia's DifferentialEquations. Complete freedom, and nothing done for you: stratification, interventions, calibration, and checking are all yours to write.
-- **Model languages** compiled to fast code: odin (R, compiled to C++), and camdl. A model is a short list of equations; the tool runs it fast, and often fits it (odin's companions for particle filters and MCMC).
-- **Configuration files**: flepiMoP and EMULSION in YAML, Atomica in spreadsheets. A model is data rather than code, which suits teams and non-programmers, and pipelines that run many models the same way.
-- **Libraries of compartmental models**, used from Python: summer2 (stratifications and JAX), epydemix (populations and contact matrices by country, and fitting by approximate Bayesian computation), MEmilio (a C++ core, with ODE, integro-differential, metapopulation, and agent-based models), and SimInf in R (stochastic models in thousands of linked herds).
-- **Network and agent-based frameworks**: EpiModel (R, with networks estimated by exponential random graph models), LASER (fast agent-based models at national scale), Starsim v3 and Covasim, EMOD, and general-purpose agent-based tools such as Mesa and NetLogo.
-- **Statistical tools** that fit mechanistic models to data: pomp (partially observed Markov processes), Stan and PyMC (Bayesian inference), and the packages of the R Epidemics Consortium and the Epiverse for outbreak analytics.
-
-Models from many of these tools can be read into Starsim, and Starsim models written out to several of them (see [Import and export](building_import.qmd)). For a model from each of these frameworks written both ways, with how their results agree and how long each takes, see the comparison in the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
+Tools differ as much in how a model is written: by hand in a general-purpose language (NumPy, deSolve), in a model language (odin), in configuration files (flepiMoP, Atomica), as a library of compartmental models (summer2, epydemix, MEmilio, SimInf), as a network or agent-based framework (EpiModel, LASER, EMOD, Mesa), or with statistical tools that fit mechanistic models to data (pomp, Stan). Models from many of these can be read into Starsim, and Starsim models written out to several (see [Import and export](building_import.qmd)); the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo has a model from each written both ways, with how their results and speed compare. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
 
 ## Where Starsim fits
 
-Starsim's distinctive feature is that one model runs in more than one of these ways. A disease declared as states and transitions (`S >> I @ beta*I`; see [Writing models](building_writing.qmd)) is data that Starsim can read, so the same declaration runs as an ODE, as a stochastic compartmental model, or as agents, in one place or across several as a metapopulation. It runs as compartments when the model can be written as compartments, and as agents when something in it needs individuals, such as a network of who is in contact with whom; Starsim chooses which, and says so, and it can also be told with a single argument (see [Solvers and backends](running_solvers.qmd)). So the choice need not be made up front: a model can start as an ODE, be fitted fast, and then run as agents to add a network, a household structure, or an intervention that targets individuals, without being written twice, and the two can be compared to see what the individual detail changes. Where the declaration can't express something, a module written as code in Python (see [Custom modules](building_modules.qmd)) adds it; a module that keeps a value for each person, such as an antibody level, runs only as agents. The [conceptual overview](intro_concepts.qmd) explains how this works.
+Starsim's distinctive feature is that one model runs in more than one of these ways. A disease declared as states and transitions (`S >> I @ beta*I`; see [Writing models](building_writing.qmd)) is data that Starsim can read, so the same declaration runs as an ODE, as a stochastic compartmental model, or as agents, in one place or across several as a metapopulation. Starsim runs it as compartments unless something in it needs individuals, such as a contact network, and says which it chose; one argument overrides it (see [Solvers and backends](running_solvers.qmd)). So a model can start as an ODE, be fitted fast, and then run as agents to add a network or an intervention that targets individuals, without being written twice. What the declaration can't express is added by a module written as code ([Custom modules](building_modules.qmd)). The [conceptual overview](intro_concepts.qmd) explains how this works.
 
 Around that core are the parts most models need: stratification by age, sex, place, or anything else ([Stratification](building_stratification.qmd)); populations by country ([Places and data](populations_places.qmd)); contact matrices and networks ([Mixing](populations_mixing.qmd)); demographics and pregnancy ([People and demographics](populations_people.qmd)); vaccines, treatments, and other interventions ([Interventions](interventions_interventions.qmd)); costs ([Health economics](library_econ.qmd)); and calibration, including gradients through the model ([Fitting a model](calibration_fitting.qmd)).
 
-Starsim is a Python library (with an R interface). It suits modelers who write code (or are willing to), who want one tool from a quick compartmental model to a detailed agent-based one, and who want to compare the two.
-
-Starsim aims to address the limitations of existing disease modeling tools, specifically along the dimensions of usability, capability, and outcome:
-
-| Dimension | Starsim | Status quo |
-|----------|----------|----------|
-| Usability   | Starsim is fast, has a simple interface, and requires knowledge of Python (or R) only   | Many models are slow, complex, or require knowledge of C++/Java   |
-| Capability   | Starsim supports multiple custom diseases and networks, including co-transmission   | Most other disease models are single-disease or hard-coded to a handful of diseases   |
-| Outcome   | Once you've collected your data, modeling your questions with Starsim takes days to weeks   | Writing, testing, and calibrating a custom model can take months to years   |
-
-While of course not all existing tools have these limitations, many of them have at least one. (For a good review of general-purpose ABMs, see [Antelmi et al. 2023](https://www.mdpi.com/2076-3417/13/1/13).)
-
-## Starsim principles
-
-Starsim's design philosophy has two parts. First, "**Common tasks should be simple**". Examples include:
-
-- Defining parameters
-- Running a simulation
-- Plotting results
-
-These are things you need to do in every single Starsim analysis, so we've tried to make them as easy as possible.
-
-The second part of the philosophy is "**Custom tasks can't always be simple, but they should still be possible**". Examples include:
-
-- Introducing a new vaccine
-- Implementing a new disease
-- Writing a custom calibration function
-
-If you're implementing a complicated disease, there will always be some irreducible complexity involved in that. Starsim's job is to help you where it can, but then get out of the way and let you write your code.
+Starsim's design follows two principles: common tasks (defining parameters, running a sim, plotting results) should be simple, and custom tasks (a new vaccine, a new disease, a calibration function of your own) can't always be simple, but should still be possible. See [Architecture](architecture_index.qmd#the-idea-and-the-principles) for the full set.
 
 ## Why use a framework?
 
-The question most people ask first is a fair one: a disease model is a few equations, so why not write them in Python or R yourself? For many models that is the right answer. This section says when it is, where code of your own starts to strain, and what Starsim takes care of that is easy to miss.
+A disease model is a few equations, so why not write them in Python or R yourself? For many models that is the right answer.
 
 ### When your own code is enough
 
@@ -172,7 +116,7 @@ print('Most infectious at once:', round(sim.results.measles.I.max()))
 ```
 :::
 
-The two agree to within a couple of people. If this is the whole job (one model, run deterministically, read by you), the plain version is fine: there is nothing to install or learn, and nothing between you and the equations. The same is true in R with deSolve or odin. Starsim is not faster than good code of your own for a model like this, and it doesn't try to be.
+The two agree to within a couple of people. If this is the whole job (one model, run deterministically, read by you), the plain version is fine, as is deSolve or odin in R; Starsim is not faster than good code of your own for a model like this.
 
 ### Where your own code starts to strain
 
@@ -191,19 +135,13 @@ A model rarely stays that small. These are the changes that tend to turn a short
 | A second disease that interacts with the first | Combined states, or two models coupled step by step | Two diseases in one sim, and `ss.modify()` between them ([Connectors](interventions_connectors.qmd)) |
 | Someone else checking the model | Reading the code | `describe()`, `equations()`, `diagram()`, and `R0()` ([Writing models](building_writing.qmd)) |
 
-None of these is hard on its own. The difficulty is that each one touches the others: adding age groups changes the force of infection, which changes what the vaccine acts on, which changes the results the fit compares with data. After a few rounds of this, most of a script is bookkeeping, and the bookkeeping is where the mistakes are. A rough guide: once a script is past about 100 lines, or needs calibration, more than one unit of time, or both a deterministic and a stochastic version, a framework is likely to save time.
+None of these is hard on its own, but each touches the others (age groups change the force of infection, which changes what the vaccine acts on, which changes what the fit compares with data), and the bookkeeping is where the mistakes are. A rough guide: once a script is past about 100 lines, or needs calibration, more than one unit of time, or both a deterministic and a stochastic version, a framework is likely to save time.
 
-### Performance
-
-For a small deterministic model, code of your own is as fast as anything: SciPy integrates the model above in milliseconds. Starsim's speed matters in other cases:
-
-- **Many runs.** Fitting, uncertainty analysis, and scenario sweeps run a model thousands of times. A declared compartmental model in Starsim runs in compiled code, a year of daily steps in under a millisecond, and many runs can be taken together (see [Speed and scale](running_performance.qmd)).
-- **Agents.** An agent-based model written as a loop over people in plain Python is slow: a year's run of 50,000 agents with an update of each person's immunity at each step took about 3 seconds with that update as a loop in Python, and under half a second with it written for whole arrays, or compiled, with the rest of the run in Starsim's compiled code (see [What can be declared](building_declared.qmd#performance)). Writing a fast agent-based model yourself is possible, but it is a project of its own.
-- **Large populations.** Starsim's compartmental solvers cost the same whatever the size of the population, and its agents can each stand for many people (see [Branching and rescaling](running_branching.qmd)).
+Speed matters less for one small model than for many runs (fitting, uncertainty, scenario sweeps), for agents, and for large populations. Starsim runs compartmental models in compiled code, at the same cost whatever the size of the population, and steps agents with compiled passes over arrays; see [Speed and scale](running_performance.qmd).
 
 ### Problems that are easy to miss
 
-The hardest mistakes in a model are the ones that give plausible numbers. Each of the problems below was found while building Starsim, sometimes in Starsim itself, and each is now handled and tested. A model written from scratch would most likely run into several of them, and nothing would say so.
+The hardest mistakes in a model are the ones that give plausible numbers. Each of the problems below was found while building Starsim, sometimes in Starsim itself, and each is now handled and tested:
 
 | The problem | How big it can be | What Starsim does |
 |---|---|---|
@@ -212,55 +150,39 @@ The hardest mistakes in a model are the ones that give plausible numbers. Each o
 | **A step that is long for the disease.** Someone infected in a step can't infect anyone until the next one | Measles in daily steps peaks about 3 days late (see the [conceptual overview](intro_concepts.qmd#how-the-solver-is-chosen)) | Compartmental solvers take as many substeps as they need; agents get a note when the step is long, and `sim.check_dt()` measures the effect |
 | **Converting a probability between periods by dividing.** An annual probability of 0.5 is not 0.5/12 a month | 0.042 a month instead of 0.056; scaling the other way gives probabilities above 1 | Probabilities, rates, and durations are typed, and converted through the rate |
 | **Losing the unit of time.** A rate or duration becomes a bare number, and the unit is forgotten | A country's contact matrix, in contacts a day, used 365 times too low in a model in years | Values carry their units, and arithmetic that mixes them wrongly raises an error |
-| **Seed cases infectious for an extra step** | The chance that an outbreak in the Reed–Frost model stops at the first case: 0.013 instead of the exact 0.131 | People infectious at the start are treated as infected in the step before |
-| **A death rate that misses the start of a fixed stay** (e.g. mosquitoes dying during a fixed incubation) | A one-month stay with deaths at 1 per year lost nobody, instead of 8% | The rate acts over the whole stay |
-| **Rounding durations to whole steps**, so that every stay shorter than half a step ends at once | The mean duration shifts | Rounds up or down at random, in proportion, so that the mean is kept |
-| **A seasonal rate held at its value at the start of each step** | A seasonal model in quarterly steps: 5–6% too many infections | Takes the value at the middle of each substep |
-| **People who died in the step counted in the denominator of prevalence** | Prevalence 3.5% too low in an SIR with a 20% chance of death (this was in Starsim 3) | Prevalence is the number infected over the number alive |
-| **Transmission per step worked out in the wrong order** (the contact rate turned into a probability before multiplying by the share infectious) | 0.33 per day instead of 0.4, for β = 0.4 per day | One expression of the force of infection, used by every solver |
 | **Scenarios that differ by chance.** With one stream of random numbers, one extra draw in a scenario changes every draw after it | Differences between scenarios that the intervention didn't cause, which need many more runs to average out | Common random numbers: each person's draws stay the same between scenarios unless the scenario changes them |
-| **Several causes of death for one person in one step** | Deaths by cause that depend on the order of the code | Deaths are settled at the end of the step, with one cause for each person, chosen in proportion to the hazards when they are given |
 | **Compartments that go negative** when the outflows in a step are larger than the compartment | Negative numbers of people, or runs that stop | In steps that are taken whole, outflows that would take more than everyone in a compartment are scaled down together; the stochastic solvers draw no more people than there are |
 
-Most of these are of the order of the rates times the length of the step, so they are small with short steps and slow diseases, and large with long steps or fast diseases. That is also why they are easy to miss: a model checked with daily steps can go wrong when it is run in weeks to save time.
+Most of these errors are of the order of the rates times the step, so a model checked in daily steps can go wrong when run in weeks.
 
-A framework is not a guarantee of correctness. The model's structure, its assumptions, and the evidence behind its parameters are still yours to get right; what Starsim can do is take the bookkeeping off your hands, and say what it assumed (`sim.describe()` lists every value it filled in itself).
+A framework is not a guarantee of correctness: the model's structure, assumptions, and evidence are still yours to get right. Starsim takes the bookkeeping off your hands, and says what it assumed (`sim.describe()` lists every value it filled in itself).
 
 ## Should I use Starsim?
 
-Starsim is suitable for many use cases, but not all. Some examples of suitable Starsim use cases are:
+Starsim suits modelers who write code (or are willing to), and is a good fit:
 
-- If you are currently doing agent-based modeling but your model is too slow/inflexible/hard to use for your research questions
-    - *Example*: Your model takes 14 hours for a single run, and every year you're worried that your computing grant won't be renewed
-- If you are currently doing compartmental modeling, and want to try out an agent-based model without investing 3-6 months learning how to use it
-    - *Example*: Your compartmental mpox model has so far been very effective, but you've been asked to evaluate an individually-targeted intervention that requires tracking individual agents. In Starsim, the same model can be run as an ODE and as agents, and the two compared
-- If you want to quickly prototype different diseases or networks before deciding whether to implement them in your full model
-    - *Example*: You know and love your HIV model, but you want to see what the impact would be of including syphilis co-transmission or a different type of MSM network
+- If your agent-based model is too slow, inflexible, or hard to use for your questions (a single run takes 14 hours, say).
+- If you model with compartments and want to try agents without months of learning a new tool: an mpox model asked to evaluate an individually targeted intervention can run as an ODE and as agents, and the two can be compared.
+- If you want to prototype a disease or network before adding it to your full model (syphilis co-transmission beside your HIV model, or a different MSM network).
 
-However, there are other cases where Starsim may not be suitable. These include:
+It may not be the best choice:
 
-- If you are doing a very simple modeling task, such as a single run of a simple SIR or SEIR model, plain Python or R may be all you need (see [When your own code is enough](#when-your-own-code-is-enough)). But if your script starts getting longer than about 100 lines, and if you want to do calibration or handle different time units, there is a good chance that Starsim would be able to make things easier (see [Where your own code starts to strain](#where-your-own-code-starts-to-strain)).
-- If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile; if the team already has a working model in another tool, that is often reason enough to keep it. Starsim can import models from several other frameworks (see [Import and export](building_import.qmd)), and AI tools make translating a model much easier than it used to be, so get in touch if this is of interest to you.
+- For one run of a simple SIR or SEIR model, where plain Python or R is enough ([above](#when-your-own-code-is-enough)).
+- If your team has a working model, highly specialized to its context, in another tool: the cost of switching may not be worth it. Starsim can import models from several frameworks ([Import and export](building_import.qmd)), so get in touch if this interests you.
+- For networks estimated from survey data with exponential random graph models (`nodemix`, `gwesp`): EpiModel. Starsim's networks target degrees and matching.
+- For the fastest agent-based runs at national scale (tens of millions of agents): LASER, which is about 4 times faster on the England and Wales model.
+- For many small stochastic runs: odin and its companions, whose compiled models start slower but run faster.
+- For livestock in thousands of herds driven by a register of movements: SimInf.
+- For models built and used in spreadsheets, with budget optimization: Atomica.
+- For a full pipeline of hub scenario projections on a cluster: flepiMoP, which has the batch jobs and post-processing Starsim lacks.
+- For teaching with a graphical interface: NetLogo.
+- For estimating the reproduction number or forecasting from surveillance data, or for statistical models not about transmission: EpiNow2, the Epiverse packages, Stan, or PyMC.
 
-### When another tool is the better choice
+## Models and examples to start from
 
-Starsim is not the best tool for every job. Another tool is likely to serve better:
+### Models built with Starsim
 
-- **For networks estimated from survey data** with exponential random graph models (terms such as `nodemix`, `absdiff`, or `gwesp`): EpiModel, which builds on statnet. Starsim's networks target degrees and matching, not general ERGM terms.
-- **For the fastest agent-based runs at national scale** (tens of millions of agents): LASER, which is built for speed per agent above all; Starsim is about 4 times slower on the England and Wales model, on one thread or many.
-- **For many small stochastic runs**: odin with its companion packages, whose compiled models take longer to start but run faster once built.
-- **For models of livestock in thousands of herds driven by a register of movements**: SimInf, which is faster for small models of this kind.
-- **For models built and used in spreadsheets, with budget optimization**: Atomica, whose users need no code at all.
-- **For a full pipeline of scenario projections for a hub, on a cluster**: flepiMoP, which has the batch jobs and post-processing that Starsim lacks.
-- **For teaching with a graphical interface**: NetLogo, where students can watch and change a model without writing Python.
-- **For estimating the reproduction number or forecasting cases from surveillance data**: statistical tools such as EpiNow2 and the Epiverse packages, rather than a mechanistic model of transmission.
-- **For statistical models that are not about transmission**: Stan or PyMC directly.
-
-## Models built with Starsim
-
-The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases, as compartments or among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
-
-Specific models that have been created using the Starsim framework are kept in their own separate repositories. Starsim's models include the following:
+Models built with Starsim are kept in their own repositories:
 
 | Model | Status | Description |
 |-------|--------|------------|
@@ -277,17 +199,17 @@ Specific models that have been created using the Starsim framework are kept in t
 
 *(If you've developed a model and want it included in this list, please [get in touch](mailto:info@starsim.org).)*
 
-One of the strengths of Starsim is that all of these models are inter-compatible. For example, an HIV-TB coinfection model can be created by combining the HIV module from STIsim and the TB module from TBsim.
+These models are inter-compatible: an HIV-TB coinfection model can combine the HIV module from STIsim and the TB module from TBsim.
 
-## The built-in library
+### The built-in library
 
 Starsim itself comes with a library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, malaria with its mosquitoes, TB, measles, and others), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), maternal, newborn, and child health (fetal health, neonatal sepsis), and health economics (costs, DALYs, and cost-effectiveness; see [Health economics](library_econ.qmd)). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
 
-The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR` (see [Diseases](building_diseases.qmd#built-in-sir-sis-and-seir)).
+The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR` (see [Diseases](building_diseases.qmd#diseases-as-classes)).
 
-## Choosing a starting model
+### Choosing a starting model
 
-Start from the smallest model that represents the mechanism your question depends on. An extra compartment, network, or demographic process is worth adding when it changes a quantity relevant to the question, and when it can be supported by assumptions or data. These pages are good starting points for common questions:
+Start from the smallest model that represents the mechanism your question depends on. These pages are good starting points:
 
 | Question | Starting point |
 |---|---|
@@ -303,25 +225,17 @@ Start from the smallest model that represents the mechanism your question depend
 | What drives recurring epidemics, such as those of measles? | [Measles in London, two ways](../gallery/measles_london.qmd) |
 | Do individual partnerships matter? | [An STI on a sexual network](../gallery/sexual_network.qmd), [T4 – Mixing](../tutorials/t4_mixing.qmd) |
 
-When adapting a model, first reproduce its baseline, then change one assumption at a time, and compare the results with and without each change. Record where each parameter value came from (`ss.par(..., source=...)` keeps it with the model; see [Parameters](building_parameters.qmd)), and which outputs were checked against data. If you already have a model in another framework, see [Import and export](building_import.qmd), and check that the translated model gives the same results as the original.
-
-A runnable example is a starting point, not a calibrated model of a particular population: a model's scientific validity depends on its assumptions, the evidence behind its parameters, and the checks made against data.
+A runnable example is a starting point, not a calibrated model of a particular population.
 
 ## Finding your way around
 
-These docs are organized by what you want to do:
-
-- **To see Starsim in action**, take the [tour](../tour.qmd), which builds and runs a model in a few minutes, or browse the [gallery](../gallery.qmd) of complete models.
-- **To learn Starsim**, follow the [tutorials](../tutorials.qmd) in order. They build up one measles model, from a simple SIR to age groups and mixing, vaccination, data and calibration, stratification, and custom code; the last covers models that need individual agents.
-- **To look something up**, use this user guide. Each page is a complete reference for one topic, such as [writing models](building_writing.qmd), [time](building_time.qmd), or [running scenarios](running_scenarios.qmd), and links to the tutorial that introduces it. The [Architecture](architecture_index.qmd) pages explain how Starsim works under the hood.
-- **For the exact arguments of a function**, see the [API reference](../api/index.qmd).
-- **If you are coming from another framework** (Starsim 3, EpiModel, odin, epydemix, and others), see [Import and export](building_import.qmd), and the [migration guide](../migration/v3_v4.md) for Starsim 3.
-- **If you work with an AI coding agent** (Claude Code, Codex, and others), run `starsim init ai` in your project: it gives the agent Starsim's skills, which match the installed version, for writing, checking, and running models, and for converting them (see [ai.starsim.org](https://ai.starsim.org)).
+- **To see Starsim in action**, take the [tour](../tour.qmd), or browse the [gallery](../gallery.qmd) of complete models.
+- **To learn Starsim**, follow the [tutorials](../tutorials.qmd) in order; they build up one measles model, from a simple SIR to custom code.
+- **To look something up**, use this user guide: each page is a reference for one topic, and the [Architecture](architecture_index.qmd) pages explain how Starsim works under the hood. For the exact arguments of a function, see the [API reference](../api/index.qmd).
+- **If you work with an AI coding agent**, run `starsim init ai` in your project to give it Starsim's skills (see [ai.starsim.org](https://ai.starsim.org)).
 
 ## Further reading
 
 - [Covasim: An agent-based model of COVID-19 dynamics and interventions](https://doi.org/10.1371/journal.pcbi.1009149): the paper on Starsim's predecessor, with a discussion of when agent-based models are worth their cost
-- [Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): how a model's structural assumptions (such as exponential durations) change its predictions
-- [Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): stochastic compartmental models and fitting them, with pomp
 - [CRAN Task View: Epidemiology](https://cran.r-project.org/web/views/Epidemiology.html): a curated list of R packages for epidemiology, including transmission models (EpiModel, odin, deSolve, and others)
 - [Epicookbook](https://epirecip.es/epicookbook/): the same models written in many languages and tools

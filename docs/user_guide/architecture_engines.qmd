@@ -4,15 +4,13 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI
+  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI
 ---
 
 
-The same declared model can be run five ways, some with options: as a deterministic ODE (`'ode'`, or with each dwell time as it is, `ss.solvers.ode(dwells='exact')`), as three kinds of stochastic compartmental model (`'binomial'`, `'gillespie'`, `'tau'`), or as agents (`'abm'`, by steps or by events: `ss.solvers.abm(step=)`). This page explains how Starsim chooses between them, the engines that do the work, the backends and kernel sets that make them fast, how approximations are announced, and which tests keep each path honest. For how to choose a solver as a modeler, and how the solvers' results differ, see [Solvers and backends](running_solvers.qmd) in Running models.
+The same declared model can be run by five solvers (`'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, and `'abm'`), some with options. This page explains how Starsim chooses between them, the engines and kernels that do the work, the tests that pin each path, and how the engines compute transmission and apply the routes, effects, interventions, and results that are kept separate from the disease. For the solvers from a modeler's side (what each is good for, and how their results differ), see [Solvers and backends](running_solvers.qmd).
 
-A disease says *who infects whom*: `S >> I @ beta * I` reads "susceptible people become infected at a rate proportional to their contact with infected people". Everything around it is kept separate. The **routes** say who meets whom and how often; **effects** say what changes what; **interventions** say what is delivered to whom; and **results** say what comes out. Each of these is a separate object, so changing one (homogeneous mixing to a contact matrix, say, or a vaccine to a test) doesn't touch the disease. The second half of this page covers each of them, and how the engines turn routes and modifiers into who is infected.
-
-## How `solver='auto'` chooses
+## How the solver is chosen
 
 The default, `solver='auto'`, picks the simplest, fastest representation that runs the model without changing what it means: an ODE if every part of the model has a compartmental form, and agents otherwise. The line the sim prints when it is initialized says which it chose, and `sim.solver_reason` (and `describe()`) says why:
 
@@ -35,37 +33,15 @@ print()
 sim = ss.Sim(make_sir(ss.lognormal(mean=ss.days(10), std=ss.days(4))), **kw).init() # A lognormal dwell time
 ```
 
-The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level. A model runs as agents if it has any of these:
-
-- an individual-level network (`ss.RandomNet`, `ss.SexualNet`), or `n_agents=`;
-- a function that takes `uids`, or a per-agent attribute that isn't a stratification (viral load);
-- a module written as code that keeps a value for each person (`define_states()`), or that says `compartmental = False`; being written as code isn't a reason by itself, so a module that keeps nothing per person (an ODE of its own, an analyzer) runs beside the compartments, and a sim of such modules has no agents at all;
-- anything that needs individual histories: contact tracing, the infection log, time in a state, or each person's mother or children.
-
-Everything else, including contact matrices, stratifications, fixed delays, and interventions that target strata, has a compartmental form.
+The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level: a model runs as agents if it has an individual-level network, `n_agents=`, a function of `uids`, a module written as code that keeps a value for each person, or anything that needs individual histories. Being written as code isn't a reason by itself: a module that keeps nothing per person runs beside the compartments. The full list is in [What needs agents](running_solvers.qmd#appendix-what-needs-agents), and the rules themselves are in `solvers/choose.py` ([below](#what-decides-which-engine-runs-a-model)).
 
 The one thing `'auto'` approximates unasked is a dwell time that isn't exponential, Erlang or fixed, as in the third example. Sending a simple model to agents over one lognormal would be the bigger surprise, so it uses Erlang stages that keep the mean exactly, and prints the standard deviation they give. A dwell time too variable for stages (a coefficient of variation above 3) makes `'auto'` choose agents.
 
 `sim.describe()` lists each ingredient that matters for the choice and whether it runs as compartments: `yes`, `approx` (and how), or `no` (and why). Code is never analyzed in advance: a function is called with what the solver has (one value per agent, or one per group), and if it asks for something only agents have, the run stops with an `ss.CapabilityError` that names it.
 
-## The solvers
+`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, exact dwell times (`ss.solvers.ode(dwells='exact')`), or event-driven agents (`ss.solvers.abm(step='events')`) are used only when asked for. Any solver can also run the model as a branching process (`branching=True`; see [Branching and rescaling](running_branching.qmd)). Every solver and its options are listed in [Solvers and backends](running_solvers.qmd#appendix-every-solver).
 
-| Solver | Time | State | Good for | Loses accuracy when |
-|---|---|---|---|---|
-| `ode` | continuous | real numbers | large populations, fast fitting, gradients | counts are small or extinction matters |
-| `ss.solvers.ode(dwells='exact')` | continuous, dwell times by whole steps | real numbers | dwell times far from exponential, renewal-equation models | the step is long against a dwell time |
-| `binomial` | discrete | whole people | simple stochastic models on a fixed step | `rate × dt` is large |
-| `gillespie` | continuous | whole people | exact stochastic dynamics | values vary quickly within a step |
-| `tau` | continuous | whole people | large stochastic runs, close to exact | rates change quickly within a leap |
-| `abm` | discrete | individuals | networks, heterogeneity, histories | `rate × dt` is large; cost grows with `n_agents` |
-| `ss.solvers.abm(step='wholestep')` | discrete, rates over whole steps | individuals | speed; matching code written with `ss.bernoulli()` | `rate × dt` is large, more so than by midsteps (the default) |
-| `ss.solvers.abm(step='events')` | continuous | individuals | networks where events are fast against a step | what is stepped changes quickly within a step; cost grows with the number of events |
-
-`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, or exact dwell times, is used only when it is asked for. `ss.solvers.ode(dwells='exact')` runs as the ODE, with each dwell time that is not exponential as a conveyor of whole steps, leaving each slot at the distribution's own chance rather than through Erlang stages. Any solver can also run the model as a branching process (`branching=True`): infection takes no one from the uninfected and gives no one back, and as agents, agents are made only for the infected (see [Branching and rescaling](running_branching.qmd)). A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).
-
-Some of the conditions in the last column are reported as notes, and `sim.check_dt()` measures how much a smaller step would change the results.
-
-## Approximations are announced
+### Approximations are announced
 
 When a solver is asked for that the model doesn't natively fit, Starsim uses the standard approximation where one exists, and says so in one line. It stops only when there is no sensible approximation. For example, a random network run as an ODE becomes homogeneous mixing at the network's mean number of contacts:
 
@@ -76,9 +52,17 @@ Sim: sir, 10,000 people, as an ODE, days 0 to 100
   Note: RandomNet approximated by homogeneous mixing with 10 contacts per day (its mean number of contacts)
 ```
 
-A network model run as an ODE is a coarser model, not an invalid one, and someone who typed `solver='ode'` asked for it. Each ingredient has one standard approximation (a random network uses homogeneous mixing with the same mean contacts, each transmitting at most once in a step, as it does as agents; lasting partnerships use the Anderson–May partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
+Each ingredient has one standard approximation (lasting partnerships use the Anderson–May partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
 
 By default each approximation prints a note; `approximations='allow'` keeps the notes without printing them, and `approximations='error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
+
+### What decides which engine runs a model
+
+One ordered list of rules decides it, in `solvers/choose.py`, read for `solver='auto'`, for the `CapabilityError` of a solver that was asked for, and for why a run is stepped (in `sim.describe()`). Each rule says what it looks for, the engines that can run a model with it, and the message; a module adds its own reasons with `agent_reasons()`, as the built-in ones do. In the table, `compartments` is one step at a time, `kernels` is the whole run in one call, and `jax` is the ODE in JAX.
+
+```{python}
+ss.solvers.solver_table()
+```
 
 ## The engines
 
@@ -102,26 +86,9 @@ Each of the engine's draws is keyed by its stream, the step, and the *round* (`A
 
 The random draws are shared too: `solvers/backends/draws.py` has exact draws from counter-based uniforms, so a stream doesn't depend on how work is split across threads. Users' own code can be compiled with `@ss.jit` (`solvers/backends/jit.py`), with the same results as when run as Python.
 
-## The kernels
+### The kernels
 
-The same kernels exist as several sets, which give the same numbers: Rust's (`solvers/rust/`, swapped in by `solvers/backends/rust.py`), Numba's (`solvers/backends/kernels.py`, `passes.py`, `events.py`, `draws.py`), and plain Python's (the compartmental kernels in Numba's code, run without compiling it; for the ODE, the same steps vectorized in NumPy, `solvers/backends/ode.py`). `ss.options.kernels` chooses between them; by default (`'auto'`) it is chosen at run time, as the table says. JAX is not one of these: it is an engine for a whole run of the ODE, chosen by the run (`sim.jax`).
-
-| Kernels | Used by `'auto'` | First run | Speed | Works with | Doesn't work with |
-|---|---|---|---|---|---|
-| Rust (`'rust'`) | Always, where it is installed (in the wheels; from a clone, `cd starsim/solvers/rust && ./build`) | No compiling | As fast as Numba or faster: compartmental runs 1.05–7×, agents 1.0–1.1× (on one thread; 0.97–0.99× on four) | Everything in Starsim | `ss.jit` (users' own code, which Numba compiles) |
-| Numba (`'numba'`) | Without Rust: the agents always, and compartmental runs once compiled (or long enough to be worth compiling) | Compiles once per install, and keeps it on disk: about 2 minutes for the compartmental kernels, and 20 s for agents; `ss.compile()` does it ahead of time | The reference | Everything, including `ss.jit` | |
-| Plain Python (`'python'`) | Without Rust, for compartmental runs too short to be worth compiling first (estimated from the size of the model, with a note) | Nothing to compile | 15–300× slower than compiled | The compartmental kernels | The passes over agents (always compiled) |
-| JAX (by `sim.jax`, not `ss.options.kernels`) | For gradients (and the fits that use them), many ODE runs with different values, or an ODE run with `sim.jax = True` | About 0.5 s to start in a session | 2–10× faster than Numba's kernels for long runs and many groups (less against Rust's) | The ODE (equal to the kernels up to rounding), gradients (`sim.gradient()`) | The stochastic solvers, agents, and modules written as code (see `ss.solvers.why_not()`) |
-
-Numba's kernels are the reference: a change is made there first, then in Rust's (`solvers/rust/README.md` says how), and `test_kernel_sets.py` checks that every set still gives the same numbers.
-
-## What decides which engine runs a model
-
-One ordered list of rules decides it, in `solvers/choose.py`, read for `solver='auto'`, for the `CapabilityError` of a solver that was asked for, and for why a run is stepped (in `sim.describe()`). Each rule says what it looks for, the engines that can run a model with it, and the message; a module adds its own reasons with `agent_reasons()`, as the built-in ones do. In the table, `compartments` is one step at a time, `kernels` is the whole run in one call, and `jax` is the ODE in JAX.
-
-```{python}
-ss.solvers.solver_table()
-```
+The same kernels exist as several sets, which give the same numbers: Rust's (`solvers/rust/`, swapped in by `solvers/backends/rust.py`), Numba's (`solvers/backends/kernels.py`, `passes.py`, `events.py`, `draws.py`), and plain Python's (the compartmental kernels run without compiling; for the ODE, `solvers/backends/ode.py` in NumPy). `ss.options.kernels` chooses between them; by default Rust is used where it is built, then Numba, with plain Python for compartmental runs too short to be worth compiling. JAX is not one of these: it is an engine for a whole run of the ODE (`sim.jax`). Numba's kernels are the reference: a change is made there first, then in Rust's (`solvers/rust/README.md` says how), and `test_kernel_sets.py` checks that every set still gives the same numbers. What each set works with is in [Solvers and backends](running_solvers.qmd#speed-and-backends).
 
 ## Execution paths and the tests that pin them
 
@@ -143,43 +110,11 @@ Each path below is checked against a reference where one exists: the ODE against
 
 The [developer guide](../contributing/developer.qmd#testing) explains the suites these come from, and which to run after a change.
 
-## Routes: who meets whom
-
-A bare state in a rate means contact with people in that state, through whatever routes the sim has. With no network, `beta * I` is the textbook `beta * I / N`, and `beta` is a transmission rate. With a network or mixing pool, the route supplies the contacts, and `beta` becomes a rate per contact: over a step of length dt, a susceptible person with one infectious contact is infected with probability 1 − e^−β·dt, close to β·dt when that is small (for a chance per contact over a week, give `ss.probperweek()`; per act, on a sexual network, `ss.peract()`). It is one rule: the hazard is `beta` times the contact rate times the share of contacts who are infectious, and the default contact rate is 1. Nobody has to write `/N`, a common mistake in hand-written models.
-
-When a formula needs the number itself, it uses `I.n`, which is taken literally, except that a contact matrix acts on it in an acquisition's rate (the number met, Σ_j C_ij I_j; see [Mixing](populations_mixing.qmd)). This is how environmental and vector-borne transmission are written: a water reservoir or a mosquito population is just a state declared with `people=False`, and its count appears in the rate (`beta * W.n / (W.n + K)`). There is no special route type for these.
-
-All routes are passed with `networks=`, and the disease stays the same object throughout:
-
-```{python}
-S, I, R = ss.states('S I R')
-beta = ss.par(0.05) # Per contact: with 10 contacts a day and 10 days infectious, R0 = 5
-sir = ss.Disease(
-    infection = S >> I @ beta * I,
-    recovery  = I >> R @ ss.days(10),
-    init_prev = 0.01,
-    name      = 'sir',
-)
-
-routes = {
-    'No network':     dict(pars=dict(beta=0.5)), # A rate, with no contacts: 0.5 per day for the same R0
-    'Mixing pool':    dict(networks=ss.MixingPool(n_contacts=10)),
-    'Contact matrix': dict(networks=ss.contacts('Kenya'), stratify=dict(age=[0, 15, 65])),
-    'Random network': dict(networks=ss.RandomNet(n_contacts=10)),
-}
-for label, kw in routes.items():
-    sim = ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kw)
-    sim.init()
-    print(f'{label}: {sim.solver}, since {sim.solver_reason}')
-```
-
-With no network, `beta` is a rate per person rather than per contact, so the same R0 of 5 needs 0.5 per day rather than 0.05. Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing ([How `solver='auto'` chooses](#how-solverauto-chooses)). Ask for `solver='ode'` on a network and Starsim uses the standard approximation and prints one line saying so, or raises `CapabilityError` with `approximations='error'` ([Approximations are announced](#approximations-are-announced)).
-
-A list of routes is a layered population (`ss.contacts('Kenya', layer='school')`, and so on), and the force of infection sums over the layers. Space is a stratification by patch (`ss.geo.geography('Kenya', level=1)`), with an optional mobility model (`ss.geo.gravity()`, `ss.geo.radiation()`, or a matrix) that couples the patches by commuting or migration; these run under every solver. Contact tracing and the transmission log need routes that keep individual contacts, so they need agents.
-
 ## How the engines compute transmission
 
-The rule above is one, but each engine computes it in its own terms, from the same declaration:
+A bare state in a rate means contact with people in that state, through whatever routes the sim has (all passed with `networks=`). With no network, `beta * I` is the textbook `beta * I / N`, and `beta` is a transmission rate; with a network or mixing pool, `beta` is a rate per contact. It is one rule: the hazard is `beta` times the contact rate times the share of contacts who are infectious, and the default contact rate is 1. `I.n` is used literally, except that a contact matrix acts on it in an acquisition's rate; this is how environmental and vector-borne transmission are written, with the reservoir a state declared with `people=False`. A list of routes is a layered population, whose forces of infection sum, and space is a stratification by patch, coupled by a mobility model. For the modeler's view, see [Mixing](populations_mixing.qmd).
+
+Each engine computes the rule in its own terms, from the same declaration:
 
 - **As compartments**, the routes are turned into contact rates between groups when the sim is initialized (`ss.solvers.Mixing`, in `solvers/mixing.py`): homogeneous mixing is one contact per unit of time, a mixing pool sets the number of contacts, mixing pools between age groups give a contact matrix, and space adds the movement between patches. The force of infection on each group is then `beta` times the contact rates times the share infectious in each group it meets, which the kernels evaluate as part of the program. Nothing is drawn per contact.
 - **As agents**, transmission is drawn over each network's edges (`ss.solvers.Transmission`, in `solvers/agents.py`): for each edge with an infectious person at one end and a susceptible at the other, the chance in the step is `1 − exp(−beta·dt·rel_trans·rel_sus)`, with the effective `rel_trans` of the source and `rel_sus` of the target. Every factor of a contact's hazard is in the exponent: `beta`, the source state's coefficient, `rel_trans`, `rel_sus`, the edge's weight, and the modifiers on the route. So a contact infects at most once in a step, and an effect gives the same answer wherever it is written (halving `rel_sus` is the same as halving `beta`). One consequence: a chance of 1 per contact stays 1 under any factor above 0, since it is an infinite hazard. A network with acts per partnership works out a hazard per act, and the acts in the step scale it the same way. The routes are taken in the order of `sim.networks`, and someone reached by several sources is infected by the first, who is recorded as the source in the infection log. A mixing pool as agents is a force of infection on each agent from the share infectious in the pool, with no edges.
@@ -187,68 +122,17 @@ The rule above is one, but each engine computes it in its own terms, from the sa
 
 Each edge's random number is drawn by its source and target, from a stream named after the disease, so adding a network or another disease doesn't change which edges transmit (see [Random numbers](mechanics_random.qmd#how-it-works)).
 
-## Effects: what changes what
+## Effects, interventions, and results
 
-There are two ways for one module to change another, and both are first-class:
+Each of these is a separate object from the disease, so changing one doesn't touch it. A few rules hold across them; for how to use each, see [Connectors](interventions_connectors.qmd), [Interventions](interventions_interventions.qmd), [Products](interventions_products.qmd), and [Results](building_results.qmd).
 
-- **`ss.modify`**, for the common case: while a condition holds, multiply (or add to, or set) a named quantity. `ss.modify(hiv.rel_trans, multiply=2.0, who=syphilis.active)` reads "for people with active syphilis, multiply HIV transmissibility by 2".
-- **Ordinary Python in a module's `step()`**, for everything else: several sources and targets, boolean flags, schedules, memory.
+**Effects.** One module changes another either with `ss.modify` (while a condition holds, set, multiply, or add to a named quantity) or with ordinary Python in its `step()`. A modifier never overwrites what it changes: each modifiable quantity has a *base* value (what its module set) and an *effective* value (the base with every active modifier applied). Reading or assigning `sir.rel_sus[uids]` uses the base, and `sir.current_value('rel_sus', uids)` is what transmission will use, through `ss.solvers.Transmission`, shared by declared diseases and those written as code. When a modifier switches off, the quantity is back at its base, with nothing to restore, and several modifiers on one quantity combine by one fixed rule, whatever their order: **set, then multiply, then add**. Products are modifiers too, so `sim.what_modifies(sir.rel_sus)` lists vaccines with the rest, before anything runs. Conditions (`who=`, e.g. `ss.person.age > 65`, an `ss.conditions.Cond`) are lazy, and tried on whatever the solver provides: `age > 65` works on groups if 65 is a bin edge, and otherwise needs agents. A modifier that no solver would apply raises a `ValueError` when the sim is built. Code that writes another module's arrays directly is allowed, but isn't tracked.
 
-A modifier never overwrites what it changes. Each modifiable quantity has a *base* value (what its module set) and an *effective* value (the base with every active modifier applied). Reading `sir.rel_sus[uids]` gives the base, assigning to it sets the base, and `sir.current_value('rel_sus', uids)` is what transmission will use (whether the disease is declared or written as code, which share the code that applies it: `ss.solvers.Transmission`). When a modifier switches off, the quantity is simply back at its base: there is nothing to save or restore, and two modules can't clobber each other. Several modifiers on one quantity combine by one fixed rule, whatever order they were declared in: **set, then multiply, then add**.
+**Interventions.** A product (`ss.Vaccine`) is what is given, and a delivery (`ss.vaccinate`) is who gets it, when, and how many. A delivery's outcome such as `screening.positive` is an *event*, and a cascade of care is a list of deliveries each triggered by another's event. Each delivery runs after the deliveries whose events trigger it, whatever order they are listed in, so a follow-up acts in the same step as its trigger. As compartments a delivery reaches a share of each group (`solvers/deliveries.py`), with tests as flows thinned by sensitivity and specificity; a delay, the joint of two events, `.since`, or `trace=` need agents.
 
-Conditions (`who=`) use the sim's real attributes. Written before the sim exists, `ss.person.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
+**Results.** Every state gets a count and every transition a flow of the same name. Each result knows its `kind` (flow, stock, or ratio), which sets how it is summarized, resampled, and compared with data, so no caller needs to know which it is; a ratio is never averaged across groups. An `ss.MultiSim`'s results are the same `ss.Result` objects with a row for each run, so the same methods work on one run or many.
 
-Because modifiers are declared, Starsim can list them all, before anything runs. Products are modifiers too, so a vaccine shows up in the same list:
-
-```{python}
-masks       = ss.modify(sir.rel_sus, multiply=0.6, who=ss.person.age > 65, start=ss.days(20))
-vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=ss.days(30), coverage=0.7)
-sim = ss.Sim(sir, interventions=[masks, vaccination], pars=dict(beta=0.5), stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
-sim.what_modifies(sir.rel_sus)
-```
-
-Code that writes another module's arrays directly is allowed, but isn't tracked. Nothing is accepted and then ignored: a modifier that no solver would apply raises a `ValueError` when the sim is built. Modules run in Starsim's ordered loop ([From declaration to run](architecture_run.qmd#the-order-of-a-step)), each seeing the current values, so mutual dependence (HIV raising syphilis susceptibility while syphilis raises HIV transmissibility) needs no special handling; any effect of the order is of order `dt`, which `sim.check_dt()` measures.
-
-## Interventions: products and delivery
-
-An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `when=`, `coverage=`, `capacity=`), with optional helpers for the less common cases (`ss.schedule()`, `ss.on(event, delay=...)`, `ss.at_age()`, `ss.capacity()`). Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
-
-A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
-
-```python
-screening = ss.screen(sensitivity=0.8, specificity=0.95, when=ss.schedule(every=ss.days(7)), coverage=0.1)  # a rapid test
-confirm   = ss.screen(sensitivity=0.95, specificity=0.99, when=screening.positive, coverage=0.9) # a follow-up is a step of its own
-treatment = ss.treat(cure=0.95, when=confirm.positive, capacity=ss.perday(50))                # while stocks last
-```
-
-An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.n_times`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
-
-The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a delay (a test's `result_delay=`, or `when=ss.on(event, delay=...)`), the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
-
-A rule with memory ("reopen schools only after four weeks below the threshold") is a small intervention class whose `step()` keeps a flag, plus a modifier that reads it. A scenario is just a sim with its interventions; `ss.parallel({'Baseline': base, 'Masks': masks})` runs several as one `ss.MultiSim`, labeled by scenario.
-
-## Results
-
-Every state gets a count (`I`) and every transition a flow of the same name (`infection`), with no declaration needed. Extra results are declared with the model: a ratio (`prevalence = I / N`) or an `ss.outcome`, a weighted, delayed sum of flows for observed quantities ("half of infections are reported, five days later": `ss.outcome(0.5 * infection, delay=ss.days(5))`). An outcome moves nobody, and if the model includes testing, the tests' own `positive` results are the cases instead.
-
-Each result knows what kind of quantity it is (`kind`: a flow, a stock, or a ratio), and that one fact does a lot of work: it sets how the result is summarized over time (`summarize_by`: `'sum'` for a flow, `'last'` for a stock, `'mean'` for a ratio, unless told otherwise); resampling to weeks sums a flow over each week but reads a stock at its start (each period is labeled by its start, as each time point is the start of its step), comparing with weekly data sums a flow from each data date to the next but reads a stock at the date, and a ratio is never averaged across groups (its numerator and denominator are summed, then divided). After stratification a result is still one result with extra dimensions, so `res.I.select(age='0-14')` and `res.I.by('age')` replace names like `I_female_high`. Data attaches by column name (`data='cases.csv'` with a column called `cases`), which is also all that calibration needs (see [Calibration](calibration_fitting.qmd)).
-
-A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss.Result` objects, each holding every run (an array with a row for each run and a column for each time point), with the scenario and any parameters swept recorded for each run. So the same methods work on one run or many: `res.select(scenario=...)`, `res.median()` and `res.quantiles()` at each time point, and `res.summarize()`, which reduces each run to one value by the result's kind (a flow to its total, a stock to its final value):
-
-```{python}
-S, I, R = ss.states('S I R')
-small = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_n=dict(I=3), name='sir')
-sim = ss.Sim(small, solver='gillespie', total_pop=1000, unit='day', stop=ss.days(120), verbose=0)
-msim = ss.parallel(sim, n_runs=20)
-
-totals = msim.results.sir.infection.summarize() # The total infections of each run
-print('Total infections in each run:', totals)
-print('Share of runs with a major outbreak:', (totals > 100).mean())
-```
-
-Extinction and bimodality can't be seen in a median, which is why `msim.plot(lines=True)` draws every run, and `msim.summarize()` gives an interval as well as the median.
-
-The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [mixing](populations_mixing.qmd) (networks, contact matrices, and movement), [places and data](populations_places.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
+The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`.
 
 ## Limits
 
@@ -256,20 +140,22 @@ The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connecto
 - Agreement is tested on simple models. For complex ones (a sexual network as an ODE), solvers are expected to differ; the guarantee is that Starsim says what it approximated.
 - Gillespie is exact but takes events one at a time; for millions of events in groups that mix, `'tau'` is the practical choice.
 - Gradients exist only for `solver='ode'` and for rates written as expressions. One model can't yet mix solvers (an ODE with rare importations as discrete events).
-- Modifiers on one quantity combine by the one rule in [Effects](#effects-what-changes-what) (set, then multiply, then add). Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
+- Modifiers on one quantity combine by the one rule in [Effects](#effects-interventions-and-results) (set, then multiply, then add). Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
 - Functions in `who=` and `ss.modify` keep no memory apart from `until=`; anything that must remember is a class.
 
-## In the design record
-
-- [Solvers: choosing, approximating, and building](https://starsim.org/lingua_franca/design/12-backends.html): the solvers, the approximations, and how a model is built for each
-- [Execution](https://starsim.org/lingua_franca/design/10-execution.html): the loop the engines are called from
-- [Conformance](https://starsim.org/lingua_franca/design/18-conformance.html): the agreement contracts between solvers
-- [Routes](https://starsim.org/lingua_franca/design/06-routes.html): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
-- [Effects](https://starsim.org/lingua_franca/design/07-effects.html): `ss.modify`, base and effective values, conditions, and execution order
-- [Interventions](https://starsim.org/lingua_franca/design/08-interventions.html): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
-- [Results](https://starsim.org/lingua_franca/design/09-results.html): automatic and declared results, outcomes, data, and many runs
-
 ## Further reading
+
+The design record:
+
+- [Solvers: choosing, approximating, and building](https://starsim.org/lingua_franca/design/12-backends.html)
+- [Execution](https://starsim.org/lingua_franca/design/10-execution.html)
+- [Conformance](https://starsim.org/lingua_franca/design/18-conformance.html)
+- [Routes](https://starsim.org/lingua_franca/design/06-routes.html)
+- [Effects](https://starsim.org/lingua_franca/design/07-effects.html)
+- [Interventions](https://starsim.org/lingua_franca/design/08-interventions.html)
+- [Results](https://starsim.org/lingua_franca/design/09-results.html)
+
+Elsewhere:
 
 - [dust2: Introduction](https://mrc-ide.github.io/dust2/): the engine behind odin2, which runs one compiled model deterministically or as many stochastic particles, as Starsim's compartmental engine does
 - [GillesPy2](https://stochss.github.io/GillesPy2/): exact (Gillespie) and tau-leaping solvers for stochastic compartmental models, with several compiled backends

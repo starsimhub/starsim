@@ -4,63 +4,27 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of "The model as data", "From model to run", and "Errors, importing, and exporting", and from the execution spec and the report on timestep conventions in lingua_franca, checked against the current code. Merged from "Model declaration", "Model execution", and "Steps and time points" on Nov 11 by AI
+  note: Written by AI from the Claude drafts of "The model as data", "From model to run", and "Errors, importing, and exporting", and from the execution spec and the report on timestep conventions in lingua_franca, checked against the current code. Merged from "Model declaration", "Model execution", and "Steps and time points" on Nov 11 by AI; shortened on Nov 11 by AI
 ---
 
 
 A disease written as code, as a class whose `step()` method changes arrays of agents, can be run but not read: Starsim can't describe the model, draw it, or run it any other way. A *declared* disease is instead a set of objects (states, transitions, parameters) that describe the model without running it. Everything else is derived from them: the description, the diagram and equations, the stratified model, the exports to other frameworks, and the engines that run it as an ODE, a stochastic compartmental model, or agents.
 
-This page follows a model from those objects to a run. The first half covers the objects, what Starsim does with them when a module is built, how it fills in what you left out, and how models from other frameworks are turned into the same objects. The second half follows the model into a sim: what `sim.init()` does, how time works, what a step is and the order things happen in within it, why results are recorded twice in each step, how the state is updated within a step (compared with Starsim 3 and with a textbook Euler step), the objects that hold a run's state, and how Starsim reports what went wrong or what it assumed. [Architecture](architecture_index.qmd#reading-the-loop) looks at the same loop from the side of one module. For how to write a disease as a modeler, see [Diseases](building_diseases.qmd) and [Writing models](building_writing.qmd); for a short version of the order of a step, see [The order of each step](running_sim.qmd#the-order-of-each-step) in Running a sim.
+This page follows a model from those objects to a run: the objects, how they are resolved and checked, what `sim.init()` does, how time and the order of a step work, and how Starsim reports what it assumed. For how to write a disease as a modeler, see [Diseases](building_diseases.qmd) and [Writing models](building_writing.qmd).
 
-## States and transitions
+## Declaring a model
 
-A **state** (`ss.State`) is something a person can be in: a compartment in an ODE, a boolean array over agents in an agent-based run. A **transition** (`ss.Transition`) moves people between states, driven by a rate, a dwell time, a branch probability, or a trigger. There are four ways to write a model, and they build the same objects:
+### States and transitions
 
-```python
-import starsim as ss
+A **state** (`ss.State`) is something a person can be in: a compartment in an ODE, a boolean array over agents in an agent-based run. A **transition** (`ss.Transition`) moves people between states, driven by a rate, a dwell time, a branch probability, or a trigger. The ways of writing a model (operators, `ss.Transition()`, a class body, or `define_states()` and `define_transitions()` in `__init__()`; see [Writing models](building_writing.qmd)) all build the same objects, and give the same results. This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name. What is declared in `__init__()` is collected as it is given and built once, when the outermost `__init__()` returns (`BuiltAfterInit` in `starsim/diseases.py`), so a subclass can add to its parent's states before anything is built; after that, declaring more raises an error.
 
-# Operators: "S goes to I at rate beta times I"
-S, I, R = ss.states('S I R')
-sir = ss.Disease(
-    infection = S >> I @ 0.3 * I,
-    recovery  = I >> R @ ss.days(10),
-)
+### Rates are expressions
 
-# Fully explicit, e.g. for building models in a loop or from another language
-S, I, R = ss.states('S I R')
-sir = ss.Disease(
-    ss.Transition(S, I, rate=0.3 * I, name='infection'),
-    ss.Transition(I, R, dur=ss.days(10), name='recovery'),
-)
-
-# A class, when there is also behavior that isn't a transition
-class SIR(ss.Disease):
-    S, I, R   = ss.states('S I R')
-    infection = S >> I @ 0.3 * I
-    recovery  = I >> R @ ss.days(10)
-
-# A class whose structure depends on its arguments, declared in __init__()
-class SIRS(ss.Disease):
-    def __init__(self, waning=True, **kwargs):
-        super().__init__(**kwargs)
-        self.define_states(ss.states('S I R'))
-        self.define_transitions(
-            infection = self.S >> self.I @ 0.3 * self.I,
-            recovery  = self.I >> self.R @ ss.days(10),
-        )
-        if waning:
-            self.define_transitions(waning=self.R >> self.S @ ss.days(100))
-```
-
-The first three are the same model, and give the same results. This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name. In the fourth form, what is declared in `__init__()` is collected as it is given and built once, when the outermost `__init__()` returns (`BuiltAfterInit` in `starsim/diseases.py`), so a subclass can add to its parent's states before anything is built; after that, declaring more raises an error.
-
-## Rates are expressions
-
-When you write `0.3 * I`, nothing is computed. `I` is a state, so the result is an expression (`ss.expressions.Expr`, in `starsim/internals/expressions.py`): a small tree whose leaves are parameters, states, counts (`I.n`), and properties of people (`ss.person.age`), joined by arithmetic and NumPy functions. Each engine evaluates the same tree in its own terms: a value for each group of a compartmental model, for each agent, or as JAX arrays so a gradient can be taken through the run. This is what lets a model written once be run by any solver.
+When you write `0.3 * I`, nothing is computed. `I` is a state, so the result is an expression (`ss.expressions.Expr`, in `starsim/internals/expressions.py`): a small tree whose leaves are parameters, states, counts (`I.n`), and properties of people (`ss.person.age`), joined by arithmetic and NumPy functions. Each engine evaluates the same tree in its own terms (a value for each group, for each agent, or as JAX arrays for gradients), which is what lets one model run under any solver.
 
 Two kinds of leaf differ. **`I.n`** is the number of people in `I`, used literally (or, in an acquisition's rate with a contact matrix, the number met through it). A **bare `I`** means contact with people in `I`: with no network that's `I.n / N`, so `beta * I` is the textbook `beta * S * I / N`, and with a network each engine works it out from who actually meets whom, which no single formula can say. Since that is a sum over contacts, a rate must be linear in its bare states (`beta * I * I` raises a `ValueError` that suggests the two ways to say what was probably meant). [Engines and transmission](architecture_engines.qmd#how-the-engines-compute-transmission) covers how each engine turns a bare state into a force of infection.
 
-The **kind** of a transition is derived from its rate, not declared: if the rate mentions a bare state, the transition is contact-mediated and that state is a source of infection; otherwise it is spontaneous. You can see this on the transition itself:
+The **kind** of a transition is derived from its rate, not declared: if the rate mentions a bare state, the transition is contact-mediated and that state is a source of infection; otherwise it is spontaneous. For `sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10))`:
 
 ```python
 sir.infection.contact     # True: its rate mentions I
@@ -68,37 +32,32 @@ sir.infection.terms       # {I: par(0.3)}: the coefficient of each source of inf
 sir.recovery.contact      # False
 ```
 
-## Parameters
+### Parameters
 
-A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur_I` (the dwell time of recovery, the mean time in I), with `init_prev`. A duration is always named by the state it is the time in, or by its transition if people can leave that state after more than one duration (`dur_recovery`), and a rate by its transition (`rate_death`); any other name is qualified by its transition only if two would clash (`beta_infection`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises a `KeyError` that lists the parameters it does have and suggests the nearest, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](building_parameters.qmd).
+A number written inline becomes a parameter of the module, named after its slot (`beta` for the coefficient of `I`, `dur_I` for the time in I; the rules are in [the appendix of Writing models](building_writing.qmd#appendix-what-starsim-names-and-fills-in)). The slot decides what a value means, and the form is free: a value may be a number, an `ss.par()` with bounds or a source, or vary by group, in time, or between people. See [Parameters](building_parameters.qmd).
 
-## Dimensions
+### Dimensions
 
-Age, sex, place, and risk group are all handled by one operation, `stratify()`, which takes a finished model and divides it by a property of people:
+Age, sex, place, and risk group are all handled by one operation, `stratify()`, which divides a finished model by a property of people. It doesn't copy the states: the dimension becomes an axis, with one row per group in a compartmental run, and an array on the people as agents. The base model and the stratification don't refer to each other, so one disease can be reused with different structures, and a stratified result is still one result (`res.I.by('age')`). The code is in `starsim/internals/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
 
-```python
-sim = ss.Sim(sir, stratify=dict(age=[0, 15, 65]))   # or sim.stratify(age=...), for every module
-sir.stratify(risk={'low': 0.8, 'high': 0.2})                     # one disease's own dimension
-```
+### The vocabulary
 
-Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for values by group, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them. The code is in `starsim/internals/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
+The design record lists every public name in one place ([The complete vocabulary](https://starsim.org/lingua_franca/design/17-vocabulary.html)), and a name is added only after asking whether Starsim already has one, whether it can be written with what exists (a bednet is an `ss.modify`), whether more than one kind of model would use it, and whether a keyword is enough. Modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Vaccine`); the pieces put inside them are lowercase (`ss.days`, `ss.modify`, `ss.vaccinate`). Importers write only names a person would write by hand.
 
 ## The graph: resolve, complete, check
 
 When `ss.Disease(...)` is called, it builds the module's graph (`ss.graph.Graph`, in `starsim/internals/graph.py`). The graph is where the objects you wrote become a model:
 
-1. **Collect and name.** It gathers the states, transitions, parameters, and results, and names any that have no name: from the keyword they were passed under, then a `name=` argument, then the variable they're bound to in the calling code. A transition with none of these is named `infection` if it is the disease's only transmission (as in `ss.SIR`), and otherwise gets a name built from its endpoints (`I_to_R`); a state with none raises a `ValueError`, since a made-up state name would leak into results.
+1. **Collect and name.** It gathers the states, transitions, parameters, and results, and names any that have no name: from the keyword they were passed under, then a `name=` argument, then the variable they're bound to in the calling code. A transition with none of these is named `infection` if it is the disease's only transmission (as in `ss.SIR`), and otherwise gets a name built from its endpoints (`I_to_R`); a state with none raises a `ValueError`, since a made-up state name would leak into results. Names are picked up from variables in this one place; it can miss (a transition written inline in the call gets the fallback name), and `describe()` shows the names used.
 2. **Resolve.** It finds which states are people and which are plain counts (a water reservoir, a mosquito population), derives the kind of each transition from its rate, marks the sources of infection, works out which transitions are acquisitions of the disease, and finds the first state (where people start and are born into).
 3. **Complete.** It turns inline values into named parameters, and groups the exits of each state into those that compete (rates, resolved together in one draw, so declaration order never matters) and those that split on entry (`p=`).
 4. **Check.** It checks what can be checked without a sim: the time dimension of every rate, that branch probabilities add up, that exposure is linear, and that keywords name real parameters.
 
 So mistakes in the model's structure are errors when the disease is built, at the line that made it. What needs the sim (the unit of bare numbers, values against their bounds, the shapes of values by group, the choice of solver) is checked at `sim.init()`.
 
-Picking names up from variables is convenient but implicit, so it happens in one place, once. It can miss (a transition written inline in the call gets the fallback name), and `describe()` shows the names used.
+### Guessed defaults
 
-## Guessed defaults
-
-Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap with a default and records the rule that produced it: a **guessed default**. `describe()` gives the resolved model with every guess marked, so nothing is assumed silently:
+Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap with a **guessed default**, and `describe()` marks every guess:
 
 ```{python}
 import starsim as ss
@@ -116,27 +75,7 @@ sim.describe()
 
 Every `[guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solver, homogeneous mixing, 11 Erlang stages for the lognormal dwell time, and `beta` starting at the geometric middle of its bounds. Each guess is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
 
-Because the model is data, its other views come for free. They are all in `starsim/internals/display.py`:
-
-```{python}
-print(sir.equations())
-sir.transitions
-```
-
-`sir.diagram()` draws the same graph (`sir.diagram('text')` as a Mermaid flowchart), and `ss.export_to()` as odin or SBML ([below](#importers-and-exporters)).
-
-## Ways to write a model out
-
-A Starsim model is written as Python, and that code is the model: it is what is kept, shared, and compared (with a diff in a text editor, or by the results it gives). The other forms each hold less:
-
-| What | Method | Holds | Read back? |
-|---|---|---|---|
-| The code | the script itself; for an import, `sim.imported.code` | the model, as Python | yes, by running it |
-| Results as JSON | `sim.to_json()` | parameters, summary, and results, for use elsewhere | no |
-| A saved sim | `ss.save('run.sim', sim)` | the sim itself (a pickle), including partway through a run | yes, with `ss.load()` |
-| Another framework's format | `ss.export_to(sim, 'odin')` or `'sbml'` | the compartmental form of the declared diseases | yes, with `ss.import_from()` |
-
-A sim made in Starsim is never written back out as Starsim code: its code is the script that made it. Only an import is written as code, as the next section explains.
+Because the model is data, its other views (`equations()`, `diagram()`, and the table of transitions, all in `starsim/internals/display.py`; see [Writing models](building_writing.qmd#checking-a-model)) and its exports ([below](#importers-and-exporters)) are read from the same graph.
 
 ## Importers and exporters
 
@@ -149,35 +88,11 @@ flowchart LR
   Sim --> E["SBML, odin"]
 ```
 
-The hardest part of importing is reading rates. Most frameworks write a flow as a total, such as `beta * S * I / N`; the importer turns it into a per-person rate on a transition, and says how it read each one. A rate divided by the population total is exposure through the routes (`beta * I`); one without the division is density-dependent and is kept as a count (`beta * I.n`); anything else is kept literally, as an expression of counts, which is exact under every solver. A `Source` can also be filled in by hand, which shows each step:
+The hardest part of importing is reading rates. Most frameworks write a flow as a total, such as `beta * S * I / N`; the importer turns it into a per-person rate on a transition, and says how it read each one. A rate divided by the population total is exposure through the routes (`beta * I`); one without the division is density-dependent and is kept as a count (`beta * I.n`); anything else is kept literally, as an expression of counts, which is exact under every solver.
 
-```{python}
-src = ss.converters.Source('sir', format='by hand')
-for name, n in dict(S=990, I=10, R=0).items():
-    src.add_state(name, init=n)
-src.add_par('beta', 0.3)
-src.add_par('gamma', 0.1)
-src.add_flow('S', 'I', rate='beta * S * I / (S + I + R)', per='total', name='infection')
-src.add_flow('I', 'R', rate='gamma * I', per='total', name='recovery')
-sim = ss.converters.build(src, stop=100)
-print(sim.imported.code)
-```
+An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). Exporters write SBML and odin from the built model's compartmental form, and list what they left out or changed (`ss.errors.LossyExport`); a network, a module written as code, and a function are always left out. A sim made in Starsim is never written back out as Starsim code: its code is the script that made it.
 
-The flow `beta * S * I / (S + I + R)` was read as frequency-dependent exposure, and written as `beta * I`; `gamma * I` lost its `I` and became a rate per person. Exporting goes the other way, from the built model:
-
-```{python}
-print(ss.export_to(sim, 'odin'))
-```
-
-An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `convert-model` skill for AI assistants (in `starsim/.agents/skills/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.converters.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
-
-The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/` in the lingua_franca repo). For the modeler's view, see [Import and export](building_import.qmd).
-
-## The vocabulary
-
-A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place ([The complete vocabulary](https://starsim.org/lingua_franca/design/17-vocabulary.html)), and a name is added only after asking: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
-
-The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). The importers are held to the same vocabulary: they write only names that a person would write by hand, which is why every import is ordinary Starsim code.
+The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments, writing the model as JSON for the importer (EpiModel's equivalent is `dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`). For the modeler's view, with worked examples, see [Import and export](building_import.qmd).
 
 ## What `sim.init()` does
 
@@ -185,12 +100,12 @@ Creating a sim only stores what it was given (as copies, so one `sir` can go int
 
 1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (a `ValueError`).
 2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
-3. **Unit.** The unit of bare numbers is chosen ([below](#units-and-time)).
-4. **Solver.** Under `solver='auto'`, Starsim records each ingredient that matters to the choice, lays the model out as compartments (which runs none of its code), and chooses an ODE if every part has a compartmental form, agents otherwise; a compartmental run uses that layout, so it is made once. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Engines and transmission](architecture_engines.qmd#how-solverauto-chooses).
+3. **Unit.** The unit of bare numbers is chosen ([below](#units-time-points-and-steps)).
+4. **Solver.** Starsim lays the model out as compartments (which runs none of its code) and, under `solver='auto'`, chooses an ODE if every part has a compartmental form, agents otherwise; a compartmental run reuses that layout. See [Engines and transmission](architecture_engines.qmd#how-the-solver-is-chosen).
 5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
 6. **Starting values.** Random number streams ([Random numbers](mechanics_random.qmd#how-it-works)), people's attributes, then each state's initial conditions.
 7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
-8. **Report.** One line saying what will run and how (the modules, the population, the solver, and the span of time), a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant. When `sim.describe()` initializes the sim, the line is said when the sim is run instead. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
+8. **Report.** One line saying what will run and how, a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -205,21 +120,16 @@ sim.init()
 
 Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called. After `sim.init()` the sim's settings are frozen: a changed copy is made with `sim.new()`.
 
-## Units and time
+### The runtime objects
 
-Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises a `TypeError`. The types are in `starsim/internals/time.py`, and dates in `starsim/internals/dates.py`.
+The engines and modules are covered in [Architecture](architecture_index.qmd#what-a-module-is) and [Engines and transmission](architecture_engines.qmd#the-engines). The other objects a module written as code reads and writes are:
 
-**A bare number is typed by its slot.** Above, `0.3` is a rate and `dur=10` a duration. After `@` a bare number is always a rate: `I >> R @ 10` recovers at 10 a day, while a 10-day dwell time is `@ ss.days(10)`. Its unit is **the sim's unit**, from the first of: `unit=`, the typed values in the model's diseases, dates for `start` and `stop`, a typed `dt` or `stop`, years for `start` and `stop`, and the typed values in other modules. With none, time is in timesteps, as in a textbook model. The unit is never guessed from the size of a number (0.05 is plausible per day and per year), and when it is inferred, a note says from what:
+- **People.** As agents, `sim.people` (`starsim/people.py`) has one entry per agent: age, sex, whether alive, and every module's states. In a compartmental run it has one row per group, so `people.age` in a model not stratified by age raises an `ss.CapabilityError` saying to stratify or run as agents.
+- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/internals/arrays.py`), beside the `ss.FloatArr` and others that code adds. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](mechanics_indexing.qmd).
 
-| Sim | Unit | Note |
-|---|---|---|
-| `ss.Sim(sir, stop=100)`, with only bare numbers | none: 100 steps | none, since nothing was guessed |
-| `ss.Sim(sir, stop=100, unit='day')` | day | none |
-| `ss.Sim(sir, start='2020-01-01', stop='2020-06-01')` | day | `unit='day' (from start and stop dates)`, kept but not printed, since the dates make it plain |
-| `ss.Sim(sir, start=2020, stop=2030)` | year | `unit='year' (from start and stop years)` |
-| `ss.Sim(sir, stop=100, dt=ss.weeks(1))` | week | `unit='week' (from dt)` |
+## Units, time points, and steps
 
-## Time points and steps
+Durations, hazard rates, probabilities per period, and frequencies are types of their own (`starsim/internals/time.py`, with dates in `internals/dates.py`): converting one to a timestep is the type's job (a hazard `r` becomes the probability `1 − exp(−r·dt)`, a frequency the expected count `f·dt`), and arithmetic that mixes them wrongly raises a `TypeError`. A bare number is typed by its slot (after `@`, a rate; for `dur=`, a duration), in the sim's unit, which is taken from `unit=` or inferred from the typed values and dates ([Time](building_time.qmd#units) lists the order). The unit is never guessed from the size of a number (0.05 is plausible per day and per year), and when it is inferred, a note says from what.
 
 A sim has time points `0, 1, ..., N`, from `start` to `stop`. Step `k` runs from time point `k` to time point `k + 1`:
 
@@ -237,7 +147,7 @@ A step is taken from every time point, the last one included, so every time poin
 
 So with yearly steps, the row for 2020 holds the prevalence on 1 January 2020 and the infections during 2020, which is how data labeled "2020" are usually meant. The state after the last step isn't recorded, so after a run `sim.people` is one step past the last time point.
 
-Throughout step `k`, in every module, `sim.ti` is `k` and `sim.now` is time point `k`, as a date or a duration (`sim.now == 2015`, `sim.now.dayofyear`). They are the same time point: `ti` is its index, where results go, and `now` is its value, at which values that vary in time are read. The first step is `ti == 0`. See [Time](building_time.qmd).
+Throughout step `k`, in every module, `sim.ti` is `k` (the index, where results go) and `sim.now` is time point `k` as a date or a duration (the value, at which values that vary in time are read).
 
 Because a stock is the state at the start of a step and a flow is the total over it, each stock is the one before it plus the flows of the step between them:
 
@@ -251,16 +161,14 @@ print('I[0], the initial condition:', r.I[0])
 print('S[k+1] - S[k] == -infection[k] at every step:', np.array_equal(np.diff(r.S), -r.infection[:-1]))
 ```
 
-## Why stocks and flows are recorded separately
+### Why stocks and flows are recorded separately
 
 A stock is a snapshot and a flow is a sum over an interval, so they are ready at different times. The stocks are ready at the start of a step, before anything has changed. The flows are ready only at its end, after every module has run and the deaths have happened. One call to record both can get only one of them right. Hence two methods:
 
 - `record_stocks()` runs at the start of each step, before any module steps.
 - `record_flows()` runs at the end, after the deaths and before the analyzers.
 
-Starsim 3 had one method, `update_results()`, called after the step. Its stocks were therefore the state at the end of the step, labeled with its start: there was no row for the initial condition, and Starsim 3's `n_infected[k]` is Starsim 4's `I[k + 1]`. Splitting the method is what gives each row a single meaning.
-
-In a module written as code, put a count of who is in some state in `record_stocks()`, and a count of events in `record_flows()` (or add to it in `step()` as the events happen). A result that needs both, such as births per person alive, goes in `record_flows()` and reads the stock from its result (`self.sim.results.alive[self.ti]`). See [Results](building_results.qmd) and [Custom modules](building_modules.qmd) for examples. A class that still defines `update_results()` raises a `TypeError` saying to split it.
+Starsim 3 had one method, `update_results()`, called after the step, so its stocks were the state at the end of the step: Starsim 3's `n_infected[k]` is Starsim 4's `I[k + 1]` (see [Migrating from v3](../migration/v3_v4.md)). How a module written as code fills each is in [Custom modules](building_modules.qmd#results).
 
 ## The order of a step
 
@@ -279,73 +187,34 @@ Each step, the loop calls the modules in Starsim's long-standing order (`starsim
 | 9 | analyzers | `step()`, reading the finished step |
 | 10 | every module, people, sim | `finish_step()`: dead agents are removed |
 
-This is the same order as in Starsim 3, and each choice has a reason. New agents exist before diseases see them, so a child born during a step can be infected in it. The progression of a disease written as code comes before the networks, so that a change of state can change who is eligible for contact (a declared disease takes all its transitions at row 6, so that a delivery sees the same people under every solver). Networks update before interventions, so an intervention sees the final network. Interventions run before transmission, so someone vaccinated today is protected today. Within a kind, modules run in the order given; there are no priorities, phases, or dependency graph.
-
-Three rules make this easy to reason about:
+This is the same order as in Starsim 3. New agents exist before diseases see them, so a child born during a step can be infected in it. The progression of a disease written as code comes before the networks, so that a change of state can change who is eligible for contact (a declared disease takes all its transitions at row 6, so that a delivery sees the same people under every solver). Networks update before interventions, so an intervention sees the final network, and interventions run before transmission, so someone vaccinated today is protected today. Within a kind, modules run in the order given. Three rules follow:
 
 - **Each module sees what the modules before it did.** Infection, testing, and treatment can happen in one step. HIV and syphilis can each change the other's transmission: the order decides who goes first, and its effect shrinks with the step.
 - **Order inside one module doesn't matter.** Transitions out of one state compete in one draw: the total hazard decides who leaves, and each one's share decides where they go, so declaring recovery before death favors neither.
 - **Nobody is removed mid-step.** A death is a request that takes effect at `step_die()`, so someone who dies during a step can still transmit in it, and arrays never change length partway through.
 
-The order can always be printed (`sim.loop.to_df()`), and it is the only thing that decides what runs when. After `sim.init()`, `sim.loop.insert(fn, label='sir.step')` adds a function at any point, or moves a module there; methods that are sure to do nothing in this sim are left out. [Reading the loop](architecture_index.qmd#reading-the-loop) shows how to read it.
+The plan can be printed, changed, and profiled ([Reading the loop](architecture_index.qmd#reading-the-loop)). In a compartmental run with nothing that needs a step of its own, the whole run is one call to the *kernels* ([Engines and transmission](architecture_engines.qmd#the-engines)); `sim.describe()` says why a run is stepped instead, and `require_kernels=True` makes that an error.
 
-In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the *kernels* (small compiled functions that step the compartments; see [Engines and transmission](architecture_engines.qmd#the-engines)), with no Python loop. `sim.describe()` says why a run is stepped instead (for example the name of an analyzer with a step of its own). To be told rather than slowed when a run can't be taken this way, pass `require_kernels=True` to the sim, which raises an error giving the reason.
+### Per-module timesteps
 
-## Per-module timesteps
-
-A module can have its own `dt`. The loop's plan is every (time, function) pair of every module on its own timeline, sorted by time and then by the order above, so a daily disease and yearly demographics share one sim, and on the days the demographics are due they run at their usual place. Rates and durations are converted with the `dt` of the module that uses them, and a module with a timeline of its own appears in the loop only at its own times. `describe()` shows the schedule; for a daily disease with `ss.Births(dt=ss.years(1))` and `ss.Deaths(dt=ss.years(1))`:
+A module can have its own `dt`. The loop's plan is every (time, function) pair of every module on its own timeline, sorted by time and then by the order above, so on the days yearly demographics are due they run at their usual place in a daily sim. Rates and durations are converted with the `dt` of the module that uses them. `describe()` shows the schedule; for a daily disease with `ss.Births(dt=ss.years(1))` and `ss.Deaths(dt=ss.years(1))`:
 
 ```text
 schedule     every day: sir
              every 365 days: births, deaths
 ```
 
-## How the state is updated within a step
+### How the state is updated within a step
 
-The order says when each module runs. A separate question is what each one sees when it does: the state at the start of the step, or the state as the modules before it left it. There are two pure answers:
-
-- **Simultaneous**, as in a textbook Euler step: every flow is computed from the state at the start of the step, then they are all applied together, `y[k+1] = y[k] + dt·f(y[k])`. Order can't matter, because nobody sees anyone else's changes.
-- **Sequential, in place**, as in Starsim 3: each module changes the state directly, and the next one sees the result. This is what makes within-step chains (infected, tested, treated) possible, and what makes order matter.
-
-Starsim 4 uses both, each where it fits:
+What does each module see: the state at the start of the step (**simultaneous**, as in a textbook Euler step, `y[k+1] = y[k] + dt·f(y[k])`, where order can't matter), or the state as the modules before it left it (**sequential, in place**, as in Starsim 3, which allows within-step chains such as infected, tested, treated)? Starsim 4 uses both:
 
 - **Between modules, sequential**, as in Starsim 3, under every solver. Interventions, connectors, demographics, and code in `step()` run at their places in the order and see what came before them.
-- **Within a declared disease, simultaneous.** Its transitions read the counts at the start of the step. Under a compartmental solver all of a disease's flows are worked out together: the ODE integrates them over the step (`'rk4'` by default, or `'euler'`), the binomial solver draws them together from the counts at the start of the step, and the Gillespie and tau-leaping solvers draw events in continuous time. As agents, the exits from each state compete in one draw, and the transitions that are not contact-mediated are taken just before transmission. People who arrive in a state partway through a step get half a step of its rates, because on average they arrived halfway through.
+- **Within a declared disease, simultaneous.** Its transitions read the counts at the start of the step. Under a compartmental solver all of a disease's flows are worked out together (integrated, drawn together, or drawn as events in continuous time). As agents, the exits from each state compete in one draw, and the transitions that are not contact-mediated are taken just before transmission. People who arrive in a state partway through a step get half a step of its rates, because on average they arrived halfway through.
 - **A disease written as code** does what its code says, as in Starsim 3: `step_state()` and `step()` change the states in place, at their places in the order.
 
-### Why it matters: accuracy and the size of the step
+#### Why it matters: accuracy and the size of the step
 
-Every scheme that takes whole steps is an approximation, with an error that shrinks as the step shrinks. Updating sequentially within one disease is the worst choice: someone infected and then recovered in the same step never transmits, which lowers the effective R0 by a share of about γ·dt. On an SIR with R0 = 2 and a 4-day infectious period, a daily step lowers the peak by about two-thirds. This is why a declared disease never updates its own states sequentially. Between modules, the error is of order dt, like the rest of the step.
-
-Here is the same SIR at a daily step under each solver, against an ODE run at a tenth of a day:
-
-```{python}
-def make(solver, dt=ss.days(1), seed=1):
-    sir = ss.SIR(beta=ss.perday(0.5), dur_inf=ss.days(4), init_prev=0.001)
-    return ss.Sim(diseases=sir, total_pop=100_000, unit='day', dt=dt, stop=100, solver=solver, rand_seed=seed, verbose=0)
-
-exact = make('ode', dt=ss.days(0.1)).run().results.sir.I.max()
-solvers = {
-    'ODE, RK4': ss.solvers.ode(),
-    'ODE, Euler': ss.solvers.ode(integrator='euler'),
-    'Binomial': 'binomial',
-    'Agents': 'abm',
-}
-for label, solver in solvers.items():
-    peak = make(solver).run().results.sir.I.max()
-    print(f'{label:12s} peak {peak/exact - 1:+.1%}')
-```
-
-The stochastic solvers also differ from run to run, so compare them over several seeds. To check whether the step is small enough for a particular model, rerun it with a smaller step: `sim.check_dt()` does this and reports how much each result changes, which covers every effect of order dt at once (turning rates into probabilities, the order of the modules, and the delay of a step between them). If the change is too large, use a smaller `dt`, `ss.solvers.ode(substeps=)` or `ss.solvers.binomial(substeps=)`, or `solver='gillespie'`, which has no step. When a dwell time is short compared with the step, the sim gives a note saying so when it is built. See [Solvers](running_solvers.qmd).
-
-## The runtime objects
-
-These are the objects that hold a run's state, and that a module written as code reads and writes.
-
-- **Modules.** Diseases, networks, demographics, interventions, connectors, and analyzers are all `ss.Module` (`starsim/internals/modules.py`), with one lifecycle: `init_pre()` and `init_post()`, then the step functions above, then `finalize()`. They differ in what they contain, not in how they are scheduled. See [What a module is](architecture_index.qmd#what-a-module-is).
-- **Engines.** A declared disease's `step()` hands its transitions to its engine (`ss.solvers.make_engine()`): `Agents` or `Compartmental`, or one that runs nothing for a disease written as code. This is the seam between model and solver: no method of `ss.Disease` asks which solver it has. A subclass that overrides `step()` calls `super().step()`, then does anything else.
-- **People.** As agents, `sim.people` (`starsim/people.py`) has one entry per agent: age, sex, whether alive, and every module's states. In a compartmental run it has one row per group, so `people.age` in a model not stratified by age raises an `ss.CapabilityError` saying to stratify or run as agents.
-- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/internals/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](mechanics_indexing.qmd).
+Every scheme that takes whole steps is an approximation, with an error that shrinks as the step shrinks. Updating sequentially within one disease is the worst choice: someone infected and then recovered in the same step never transmits, which lowers the effective R0 by a share of about γ·dt. On an SIR with R0 = 2 and a 4-day infectious period, a daily step lowers the peak by about two-thirds. This is why a declared disease never updates its own states sequentially. Between modules, the error is of order dt, like the rest of the step. `sim.check_dt()` measures every effect of order dt at once; see [Solvers](running_solvers.qmd#the-length-of-a-step) for how big it is under each solver, and what to do about it.
 
 ## Errors, warnings, and notes
 
@@ -371,45 +240,30 @@ There are three levels:
 
 A note is said once: the same note isn't kept twice, and notes made while a sim is being initialized are held and printed after the line that starts the run, so they read as part of it. Since the notes are kept, they survive into a saved sim, and a test can check for them.
 
-Six errors and four warnings are classes of their own, in `starsim/internals/errors.py`, since code catches or filters them by kind: `ss.CapabilityError` (the solver asked for can't run part of the model, which `solver='auto'` catches to run as agents; it is a `ValueError`), its subclass `ss.errors.NoAgentAttribute`, `ss.AlreadyRunError` (a sim or module run twice), the distribution errors `ss.errors.DistNotInitializedError` and `DistSeedRepeatError`, and `BooleanOperationError`; and the warnings `ss.errors.AtBound` (a best fit at a bound), `NotConverged`, `LossyExport`, and `ImportIncomplete`. A table of them, generated from that file, is in [Profiling and debugging](running_debugging.qmd#appendix-errors-and-warnings). The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`), so a change to a message is a deliberate one.
-
-## Coming from Starsim 3
-
-| | Starsim 3 | Starsim 4 |
-|---|---|---|
-| Order of a step | demographics, disease progression, connectors, networks, interventions, transmission, deaths, results, analyzers | the same |
-| Recording results | `update_results()`, after the step | `record_stocks()` at the start, `record_flows()` at the end |
-| A stock at row `k` | the state at the end of step `k` | the state at its start; row 0 is the initial condition |
-| A flow at row `k` | the total during step `k` | the same |
-| Within a disease | in place, in the order of the code | written as code: the same; declared: simultaneous, with competing exits in one draw |
-| Between modules | sequential | the same |
-
-So a flow means the same as before, while a stock is shifted by one step. The same script gives the same answer statistically, not number for number. See [Migrating from v3](../migration/v3_v4.md).
+The few errors and warnings that code catches or filters by kind (`ss.CapabilityError`, `ss.AlreadyRunError`, `ss.errors.AtBound`, and others) are classes of their own, in `starsim/internals/errors.py`, listed in [Profiling and debugging](running_debugging.qmd#appendix-errors-and-warnings). The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`), so a change to a message is a deliberate one.
 
 ## Limits
 
-- **Code is opaque.** A function given as a rate (`rate=my_fn`) isn't analyzed in advance; if it needs something only agents have, a compartmental run stops and says what it asked for.
-- **A disease written as code is not data.** A disease with its own `define_states()` of arrays and its own `step()` runs in the same loop, but `describe()` shows only its class, arrays, and parameters. A class can mix the two: declared transitions, plus code in `step()` after `super().step()`. See [Declared modules and modules written as code](architecture_index.qmd#declared-modules-and-modules-written-as-code).
-- **Some things need agents.** A distribution across people or an individual-level network has no compartmental form, so `solver='auto'` runs the model as agents and says why. See [Engines and transmission](architecture_engines.qmd#how-solverauto-chooses).
-- **Exports carry less than the code.** Only the compartmental form of the declared diseases goes into odin or SBML.
+- **A disease written as code is not data.** It runs in the same loop, but `describe()` shows only its class, arrays, and parameters, and it can't be exported. See [Declared modules and modules written as code](architecture_index.qmd#declared-modules-and-modules-written-as-code).
 - **Order between modules is a modeling choice** that Starsim won't make for you. By convention, the module whose accuracy matters most runs last, since it sees the most up-to-date state.
-- **Direct writes by code aren't recorded.** `sim.what_modifies(x)` lists the declared modifiers on a quantity, not what a `step()` does to it.
-
-## In the design record
-
-- [Overview](https://starsim.org/lingua_franca/design/00-overview.html): what happens at build time
-- [Objects and construction](https://starsim.org/lingua_franca/design/01-objects.html): names, the equivalence rule, `describe()`, `ss.Sim`, the lifecycle, and the module contract
-- [Types](https://starsim.org/lingua_franca/design/02-types.html): durations, rates, and bare numbers; the sim's unit; how a rate becomes a probability for a step; and the timing contract
-- [States and transitions](https://starsim.org/lingua_franca/design/03-states-and-transitions.html): the operators, rates, dwell times, and what is guessed
-- [Parameters and data](https://starsim.org/lingua_franca/design/04-parameters.html)
-- [Dimensions and stratification](https://starsim.org/lingua_franca/design/05-dimensions.html)
-- [Results](https://starsim.org/lingua_franca/design/09-results.html): stocks, flows, and how results are resampled and compared with data
-- [Execution](https://starsim.org/lingua_franca/design/10-execution.html): the governing rule, the order of calls in one step, competing hazards, deferred removals, per-module timesteps, and the order under each solver
-- [Errors, warnings, and notes](https://starsim.org/lingua_franca/design/15-errors.html): the policy, the message shape, and the errors and warnings that are classes
-- [Working with other frameworks](https://starsim.org/lingua_franca/design/16-interop.html): importers, classifying rates, exports, and the vignette test
-- [The complete vocabulary](https://starsim.org/lingua_franca/design/17-vocabulary.html): every public name, with keywords and slot types
 
 ## Further reading
+
+The design record:
+
+- [Overview](https://starsim.org/lingua_franca/design/00-overview.html)
+- [Objects and construction](https://starsim.org/lingua_franca/design/01-objects.html)
+- [Types](https://starsim.org/lingua_franca/design/02-types.html)
+- [States and transitions](https://starsim.org/lingua_franca/design/03-states-and-transitions.html)
+- [Parameters and data](https://starsim.org/lingua_franca/design/04-parameters.html)
+- [Dimensions and stratification](https://starsim.org/lingua_franca/design/05-dimensions.html)
+- [Results](https://starsim.org/lingua_franca/design/09-results.html)
+- [Execution](https://starsim.org/lingua_franca/design/10-execution.html)
+- [Errors, warnings, and notes](https://starsim.org/lingua_franca/design/15-errors.html)
+- [Working with other frameworks](https://starsim.org/lingua_franca/design/16-interop.html)
+- [The complete vocabulary](https://starsim.org/lingua_franca/design/17-vocabulary.html)
+
+Elsewhere:
 
 - [odin: Introduction](https://mrc-ide.github.io/odin/articles/odin.html): a domain-specific language in which a compartmental model is declared as equations and compiled, the closest relative of Starsim's declared models
 - [Vivarium](https://vivarium.readthedocs.io/en/latest/concepts/index.html): [model specification](https://vivarium.readthedocs.io/en/latest/concepts/model_specification/index.html) (a microsimulation described as configuration separate from its components), [the simulation lifecycle](https://vivarium.readthedocs.io/en/latest/concepts/lifecycle.html) (setup, initialization, main loop, cleanup, for comparison with Starsim's `init()` and loop), and [the event framework](https://vivarium.readthedocs.io/en/latest/concepts/event.html) (components ordered within a timestep by events and priorities, where Starsim uses one fixed order)

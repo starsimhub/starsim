@@ -68,52 +68,7 @@ print('Outbreak died out in', sum(totals < 100), 'of 50 runs; (1/R)^2 =', round(
 
 With 2 people infectious at the start, the outbreak dies out in about one run in seven, close to (1/R)² ≈ 17%: the chains of infection started by each first case must all die out, each with a chance of roughly 1/R. The match is rough, since R = 2.46 is an average over age groups: a child, with many contacts, is more likely to start an outbreak than an adult. In the runs that take off, the size hardly varies; chance matters at the start, when cases are few.
 
-**4. A campaign in Riverton only.** Starting from the model in the four towns of T4:
-
-```{python}
-towns = ss.geo.geography(
-    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
-    populations = [100_000, 40_000, 20_000, 10_000],
-    x           = [0, 20, 35, 60],
-    y           = [0, 10, -15, 5],
-)
-
-def make_towns(immune=ss.by(age=[0.8, 0.92, 0.98]), mobility=ss.geo.gravity(away=0.01)):
-    """ The measles model of T4, by age, in four towns, with the share immune and the movement given """
-    S, E, I, R = ss.states('S E I R')
-    beta = ss.par(0.14, bounds=[0.05, 0.5])
-    infection   = S >> E @ beta*I
-    progression = E >> I @ ss.days(10)
-    recovery    = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, progression, recovery,
-        init   = dict(R=immune),
-        init_n = dict(I=ss.by(patch=[10, 0, 0, 0])),
-        name   = 'measles',
-    )
-    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-    measles.stratify(patch=ss.levels(towns, mobility=mobility))
-    return measles
-
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
-settings = dict(networks=contacts, start='2025-01-01', stop='2026-01-01', verbose=0)
-```
-
-```{python}
-measles = make_towns()
-campaign = ss.vaccinate(efficacy=0.93, who=(measles.age < 15) & (measles.patch == 'Riverton'), when='2025-03-01', coverage=0.8)
-sims = {
-    'No intervention':      ss.Sim(measles, **settings),
-    'Campaign in Riverton': ss.Sim(measles, interventions=campaign, **settings),
-}
-msim = ss.parallel(sims)
-for label, sim in zip(sims, msim.sims):
-    print(label, '- infections in each town:')
-    print(sim.results.measles.infection.by('patch').summarize().round())
-```
-
-The campaign prevents about three quarters of the infections in Riverton, but almost none elsewhere. By 1 March, a little measles has already reached the other towns, and as an ODE, the model has an outbreak in every town it reaches, as large as that town's immunity allows; fewer cases in Riverton only delay it. A stochastic run (as in the tutorial) would show whether fewer travelers from Riverton make it less likely that measles takes off in the smaller towns at all.
-
-**5. Notifying the partners of people who seek care.** Exercises 5 to 7 use the model and interventions of the section on agents:
+**4. Notifying the partners of people who seek care.** Exercises 4 and 5 use the model and interventions of the section on agents:
 
 ```{python}
 S, I = ss.states('S I')
@@ -154,7 +109,7 @@ msim.plot('sti.I')
 msim.summarize().loc['sti_infection']
 ```
 
-**6. Screening everyone aged 15 to 49.**
+**5. Screening everyone aged 15 to 49.**
 
 We compare each with treatment when seeking care alone (without partner notification, so that the effect is that of screening):
 
@@ -180,27 +135,3 @@ for label in ['Screening 15-29', 'Screening 15-49']:
 ```
 
 Screening everyone aged 15 to 49 takes a little over twice as many tests and prevents about twice as many infections, so about as many per test. Here partnerships don't depend on age beyond debut, so people over 30 are as much at risk; where infection is concentrated in the young, the answer could be the reverse. Each is a single stochastic run; with several (`n_runs=`), the comparison would be clearer.
-
-**7. A catch-up campaign.**
-
-The two deliveries share one vaccine, so that nobody is protected twice:
-
-```{python}
-vaccine = ss.Vaccine(efficacy=0.35)
-vaccination = ss.vaccinate(vaccine, who=ss.at_age(15), start='2010', coverage=0.8)
-catch_up = ss.vaccinate(vaccine, who=young, when=['2010'], coverage=0.8)
-
-long = dict(settings, stop=2040) # As in the tutorial, to 2040
-sims = {
-    'Treatment when seeking care': ss.Sim(sti, interventions=care, **long),
-    'And vaccination at age 15':   ss.Sim(sti, interventions=[care, vaccination], **long),
-    'And a catch-up campaign':     ss.Sim(sti, interventions=[care, vaccination, catch_up], **long),
-}
-msim = ss.parallel(sims)
-msim.plot('sti.I')
-sim = msim.sims['And a catch-up campaign']
-print('Doses at age 15:', sim.results.vaccination.delivered.sum())
-print('Doses in the catch-up campaign:', sim.results.catch_up.delivered.sum())
-```
-
-The catch-up campaign protects many of the people at risk at once, rather than waiting for them to be replaced by vaccinated cohorts, so the effect comes a few years sooner, for about half as many doses again as vaccination at 15 alone. In a single run of each, the difference is partly chance; with several runs (`n_runs=`) it would be clearer.

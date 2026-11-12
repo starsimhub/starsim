@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, from the earlier AI-written tutorials on stratification and on several diseases, with new examples of an under-vaccinated community and of measles immune amnesia
+  note: Written by AI, from the earlier AI-written tutorials on stratification and on several diseases, with new examples of an under-vaccinated community and of measles immune amnesia. Shortened on Nov 11 by AI
 ---
 
 **Who is the outbreak in, and does it make other infections worse?**
@@ -120,9 +120,7 @@ def make_community_measles():
     return measles
 ```
 
-Contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of their entries: a child in the community has 10 contacts a day with children, 70% of them within the community, so 7 with children in the community. The rest of the town makes 1.6% of its contacts with the community, which is consistent: 0.95 × 0.016 ≈ 0.05 × 0.3, so the total contacts each way are the same.
-
-To see what the clustering does, compare it with the community mixing like everyone else, so that everyone makes 5% of their contacts (its share of the town) with its members. Coverage is the same in both:
+Contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of their entries: a child in the community has 10 contacts a day with children, 70% of them within the community, so 7. (The rest of the town makes 1.6% of its contacts with the community, so that the total contacts each way are the same.) To see what the clustering does, compare it with the community mixing like everyone else, with the same coverage:
 
 ```{python}
 clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65])
@@ -136,7 +134,7 @@ msim = ss.parallel(sims)
 msim.plot('measles.infection')
 ```
 
-The outbreaks are not the same. Mixed with everyone, unvaccinated community members are surrounded mostly by vaccinated people, and the outbreak smolders, growing slowly all year. Clustered, the community has a reproduction number of about 16 × (0.4 + 0.6 × 0.03) ≈ 7 within itself, against about 16 × (0.02 + 0.98 × 0.03) ≈ 0.8 in the rest of the town, too low to sustain an outbreak alone. So the community has an explosive outbreak within weeks, which spills over into the town. `select()` picks out any combination of groups, summing over the dimensions not named:
+Mixed with everyone, unvaccinated community members are surrounded mostly by vaccinated people, and the outbreak smolders. Clustered, the community has a reproduction number of about 7 within itself, against about 0.8 in the rest of the town, so it has an explosive outbreak within weeks, which spills over into the town. `select()` picks out any combination of groups, summing over the dimensions not named:
 
 ```{python}
 for sim in msim.sims:
@@ -146,7 +144,7 @@ sim = msim.sims['Close-knit']
 sim.results.measles.I.by('community').plot()
 ```
 
-With clustering, there are about ten times as many infections, and the community, 5% of the town, has more than half. Its outbreak peaks first; the town's follows, fed by contacts with the community, without which it would die out. A model that averaged coverage over the town would miss this, and with it where vaccination would do the most good.
+With clustering, there are about ten times as many infections, and the community, 5% of the town, has more than half. A model that averaged coverage over the town would miss this, and with it where vaccination would do the most good.
 
 ## Moving between groups
 
@@ -185,11 +183,11 @@ Each state has a compartment for each combination of levels, so dimensions multi
 
 ## A second disease
 
-Measles damages the immune system's memory of other infections. For two to three years after recovering, children are more likely to fall ill and die from other infections; where measles was common, a large share of childhood deaths from infection have been put down to this "immune amnesia". So a measles outbreak leaves a wake of other infections, and preventing it prevents them too. Modeling this needs a second disease that interacts with measles.
+Measles damages the immune system's memory of other infections. For two to three years after recovering, children are more likely to fall ill from other infections ("immune amnesia"), so a measles outbreak leaves a wake of other infections. Modeling this needs a second disease that interacts with measles.
 
-The second disease is pneumococcus, a bacterium many children carry in the nose and throat for a few weeks at a time, usually harmlessly, and a leading cause of pneumonia. It is an SIS model: people acquire it (`S` to `C`, for carrying) from carriers, and clear it after a month on average, after which they can acquire it again. About a quarter of children and a sixth of adults carry it at any time, about where it would settle on its own, so it starts there.
+The second disease is pneumococcus, a bacterium many children carry in the nose and throat for a few weeks at a time, and a leading cause of pneumonia. It is an SIS model: people acquire it (`S` to `C`, for carrying) from carriers, and clear it after a month on average. About a quarter of children and a sixth of adults carry it at any time, so it starts there.
 
-Measles needs one new state, to remember who has had it recently: in a compartmental model, what a person has been through has to be a state. Recovery now leads to `A` (recovered, with amnesia), and people leave `A` for `R` after two years on average. Both are immune to measles, and differ only in their effect on the other disease. With durations in years as well as days, `unit='day'` says that bare numbers (the values of β) are per day. The run is three years long, to show the wake, and goes back to the model of [T5](t5_interventions.qmd), with immunity in `R` by age. The diagram ([T3](t3_disease.qmd)) shows the new state:
+Measles needs one new state, to remember who has had it recently: in a compartmental model, what a person has been through has to be a state. Recovery now leads to `A` (recovered, with amnesia), and people leave `A` for `R` after two years on average. `unit='day'` says that bare numbers (the values of β) are per day. The run is three years long, to show the wake, with immunity in `R` by age as in [T5](t5_interventions.qmd):
 
 ```{python}
 ages = {0: 0.3, 15: 0.6, 65: 0.1}

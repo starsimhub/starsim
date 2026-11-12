@@ -4,16 +4,14 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI for the v4 docs; DALYs example and appendix added by AI
+  note: Written by AI for the v4 docs; DALYs example and appendix added by AI; shortened on Nov 11 by AI
 ---
 
-A program has to be paid for, and the question that decides between programs is often not only how much each prevents, but at what cost. Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted.
-
-This page covers costing a program, comparing the costs and effects of several, costs with uncertainty, and costs that are not per delivery, such as discounting and fixed costs. Most sims have no costs, so core Starsim stops at the `cost` result of each delivery; the tools for adding costs up, discounting them, and comparing scenarios are in the Starsim library (`import starsim.library as ssl`), in `ssl.econ`: the analyzer `ssl.Costs`, the analyzer `ssl.DALYs`, the function `ssl.discount()`, and `ssl.ICER`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd). To find the best way to spend a fixed budget across programs, see [Optimization](calibration_optimization.qmd).
+Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, `cost`, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted. The tools for adding costs up, discounting them, counting DALYs, and comparing scenarios are in the Starsim library, in `ssl.econ`: `ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, and `ssl.ICER`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd).
 
 ## Costing a vaccination program
 
-Here is measles (an SEIR model, latent for 10 days and infectious for 8) in a population of a million people over 30 years, with births and deaths, so that measles stays endemic (see [Demographics](populations_people.qmd#births-and-deaths)). From 2010, a routine program vaccinates 80% of infants, in yearly rounds that reach every child under one. The vaccine is all or nothing (`leaky=False`), protecting 95% of those vaccinated, and each dose costs $5, the cost of the vaccine and of giving it. The model is stratified by age, so that infants can be picked out, and runs as an ODE:
+Here is measles in a population of a million people over 30 years, with births and deaths, so that it stays endemic. From 2010, a program vaccinates 80% of infants, in yearly rounds, and each dose costs $5, the cost of the vaccine and of giving it. The model is stratified by age, so that infants can be picked out, and runs as an ODE:
 
 ```{python}
 import numpy as np
@@ -34,18 +32,9 @@ routine = ss.vaccinate(efficacy=0.95, leaky=False, who=ss.person.age < 1, when=s
 
 base = ss.Sim(measles, **pars)
 msim = ss.parallel({'No vaccination': base, 'Routine vaccination': base.new(interventions=routine)})
-
-import matplotlib.pyplot as plt
-for sim in msim.sims:
-    yearly = sim.results.measles.infection.resample('year') # Infections in each year
-    plt.plot(yearly.timevec, yearly.values, label=sim.label)
-plt.yscale('log') # The first epidemic is far larger than the rest
-plt.ylim(10, 2_000_000)
-plt.title('Measles infections per year')
-plt.legend();
 ```
 
-Without vaccination, measles comes back every few years as births add susceptible children, and settles at an endemic level of tens of thousands of infections a year. With it, there are fewer infections, but measles persists: reaching 80% of infants with a vaccine that protects 95% of them protects 76% of each birth cohort, short of the 93% needed to stop a disease with an R0 of 15. The delivery's results include `cost`, the amount spent on each step. Over a year, it is the cost of that year's round, which grows with the number of infants as the population grows:
+The delivery's result `cost` is the amount spent on each step; over a year, it is the cost of that year's round:
 
 ```{python}
 sim = msim.sims['Routine vaccination']
@@ -66,11 +55,13 @@ print('Infections averted:', round(averted))
 print('Cost per infection averted ($):', round(cost/averted, 2))
 ```
 
-Each infection averted costs a little more than the price of a dose, since most children vaccinated would otherwise have been infected: with an R0 of 15, nearly everyone who is not immune gets measles. The same count works for any outcome a model has, such as deaths or cases needing treatment, if the model declares them (see [Outcomes](building_outcomes.qmd)). The infections averted are only those within the run: a program that is still running at the end of the run keeps averting infections afterwards, so the horizon of a comparison matters as much as its costs.
+The same count works for any outcome a model has, such as deaths or cases needing treatment, if the model declares them (see [Outcomes](building_outcomes.qmd)).
+
+Costs work the same under every solver. In a compartmental run, the number delivered on a step is a number of people; as agents, the cost is counted per agent and scaled, like any count, by the number of people each agent stands for. A delivery that offers a product but doesn't give it (to someone not eligible, or beyond its capacity) costs nothing.
 
 ## Comparing programs
 
-When there are several programs, the question is usually what each one adds over the next cheapest: its incremental cost per outcome averted (an incremental cost-effectiveness ratio, or ICER). Here the routine program is compared with the same program plus a campaign every four years that reaches 90% of children under five, at $8 a dose (a campaign costs more per child than routine delivery):
+When there are several programs, the question is usually what each one adds over the next cheapest: its incremental cost per outcome averted (an incremental cost-effectiveness ratio, or ICER). Here the routine program is compared with the same program plus a campaign every four years for children under five, at $8 a dose:
 
 ```{python}
 campaign = ss.vaccinate(efficacy=0.95, leaky=False, who=ss.person.age < 5, when=ss.schedule(every=ss.years(4), start='2010'), coverage=0.9, cost=8.0)
@@ -86,13 +77,13 @@ icer = ssl.ICER(msim, outcome='measles.infection')
 icer.df.round()
 ```
 
-The campaigns cost more than routine vaccination, and avert more infections, but each extra infection they avert costs more than with the routine program alone: the campaigns mostly reach children whom routine vaccination has already protected, or who would not have been infected anyway. Whether that is worth paying for is a judgment the model informs but does not make; it depends on what else the money could buy. `ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.ICER` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated (`dominated`), and one that a mix of two others would beat, averting more for the same cost, is extendedly dominated (`extended`); neither has a ratio. It works the same for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means. Every column of the table is in the [appendix](#appendix-the-economic-tools). A table that needs another measure of effect can be built the same way from the results.
+`ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.ICER` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated (`dominated`), and one that a mix of two others would beat, averting more for the same cost, is extendedly dominated (`extended`); neither has a ratio. It works for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means; its columns and methods (such as `icer.best(wtp=1000)`, the best scenario at a willingness to pay) are in the [appendix](#appendix-the-economic-tools).
 
-With several runs of each scenario, `icer.plot()` shows each one on the cost-effectiveness plane, `icer.plot_ceac()` shows how often each scenario is the best at each willingness to pay, and `icer.best(wtp=1000)` gives the best scenario at one value.
+`ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`: the sim is then compared at each step with the finished sims it is given, so that an intervention can act on the result (e.g. follow `sim.analyzers.icer.best(wtp=1000)`); `window=ss.years(1)` compares the latest year alone. How best to divide a budget between programs is an optimization: see [Optimization](calibration_optimization.qmd).
 
 ## Disability-adjusted life years
 
-`ssl.DALYs` counts disability-adjusted life years as results: the time people spend in a state, multiplied by its disability weight (`yld`, years lived with disability), plus the years of life lost to deaths (`yll`). `ssl.ICER` compares these by default, so the outcome doesn't need naming. Here is a curable infection with no lasting immunity, as on [Products](interventions_products.qmd), which kills 1% a year of those infected and has a disability weight of 0.05, and a test-and-treat program that costs $4 a test and $20 a treatment, as 5,000 agents standing for 100,000 people:
+`ssl.DALYs` counts disability-adjusted life years as results: the time people spend in a state, multiplied by its disability weight (`yld`, years lived with disability), plus the years of life lost to deaths (`yll`). `ssl.ICER` compares these by default, so the outcome doesn't need naming. Here is a curable infection that kills 1% a year of those infected and has a disability weight of 0.05, and a test-and-treat program that costs $4 a test and $20 a treatment, as 5,000 agents standing for 100,000 people:
 
 ```{python}
 S, I = ss.states('S I')
@@ -113,15 +104,11 @@ for sim in msim.sims:
 ssl.ICER(msim).df.round()
 ```
 
-Most of the DALYs here are years of life lost, since a death in middle age loses decades, and the program averts them by curing people before they die. With agents, the years of life lost come from each person's age at death and a standard life table (from the Global Burden of Disease 2019 study). Compartmental runs don't record ages at death, so they take a number: `ssl.DALYs(weights=..., life_lost=30)`.
+With agents, the years of life lost come from each person's age at death and a standard life table (from the Global Burden of Disease 2019 study). Compartmental runs don't record ages at death, so they take a number: `ssl.DALYs(weights=..., life_lost=30)`.
 
-## Comparing during a run
+### Costs with uncertainty
 
-`ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`. The sim then counts as one more scenario, compared at each step with the finished sims it is given, over the same period, so that a sim can act on the result: for example, an intervention can follow `sim.analyzers.icer.best(wtp=1000)`. `window=ss.years(1)` compares the latest year alone.
-
-## Costs with uncertainty
-
-A model run as agents, or as a stochastic model, gives different costs and effects in each run, so a cost per outcome averted needs several runs, and an interval. Give each scenario the same seeds (as `n_runs=` does), so that the runs can be paired, and the difference between scenarios is not lost in the differences between runs. Here the test-and-treat program of the section above is run 8 times for each scenario:
+A model run as agents gives different costs and effects in each run, so a cost per outcome averted needs several runs, paired by seed (as `n_runs=` does). Here the test-and-treat program is run 8 times for each scenario:
 
 ```{python}
 msim = ss.parallel({'No program': base, 'Test and treat': base.new(interventions=[screening, treatment])}, n_runs=8)
@@ -131,16 +118,14 @@ cost = res.screening.cost.values.sum(axis=1) + res.treatment.cost.values.sum(axi
 averted = -res.sis.infection.diff('No program')['Test and treat'].values.sum(axis=1)  # The infections it averted, run by run
 ratio = cost / averted
 
-print('Cost of the program ($), median:', round(np.median(cost)))
-print('Infections averted, median:', round(np.median(averted)))
 print('Cost per infection averted ($), median and range:', np.round(np.median(ratio), 1), np.round([ratio.min(), ratio.max()], 1))
 ```
 
-The costs of each run are scaled to the population, as all results are: with 5,000 agents standing for 100,000 people, each test given to an agent counts as 20 tests. The cost varies little between runs, since it follows the number tested, but the infections averted vary more, so the ratio does too. Eight runs give a rough range; more give a better one, and [Scenarios](running_scenarios.qmd) covers how many. The uncertainty here is only from chance: uncertainty in the parameters (the sensitivity of the test, the cost of each treatment) needs runs with values drawn from their priors as well (`ss.parallel(sim, priors=True, n_runs=...)`; see [Scenarios](running_scenarios.qmd)).
+The uncertainty here is only from chance: uncertainty in the parameters needs runs with values drawn from their priors as well (`ss.parallel(sim, priors=True, n_runs=...)`; see [Scenarios](running_scenarios.qmd)).
 
 ## Discounting and other costs
 
-Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example, since a cost paid later, or an infection averted later, counts for less than one now. A result is an array over time, so discounting is a weight for each time point, `(1 + rate)**-(t - start)` for a time `t` in years after `start`. `ssl.discount()` applies it to a result, and gives back a result. Here the routine measles program from the first example, discounted at 3% a year from 2010:
+Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example. `ssl.discount()` weights each time point of a result by `(1 + rate)**-(t - start)`, for a time `t` in years, and gives back a result. Here the routine measles program from the first example, discounted at 3% a year from 2010:
 
 ```{python}
 sim = ss.Sim(measles, interventions=routine, **pars)
@@ -155,7 +140,7 @@ print('Discounted infections averted:', round(averted))
 print('Discounted cost per infection averted ($):', round(cost/averted, 2))
 ```
 
-Other costs work the same way, with the results that drive them. A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is an amount per year over the years the program runs. The cost of the disease itself, such as care for each case, is a cost per infection (or per case, if the model declares one), times the infections; the infections averted then save that cost, and the net cost of a program is its cost less the savings. `ssl.Costs` takes both: `fixed=`, a cost per unit time from `start=` (e.g. `ss.peryear(20_000)`), and `unit_costs=`, the cost of each event of any result, by its path (and `deliveries=False` leaves out the costs of the deliveries, for a table of the other costs alone). Here the program costs $20,000 a year to run from 2010, and each infection $50 of care, in both scenarios, so that the difference between them is the net cost:
+A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is an amount per year; the cost of the disease itself, such as care for each case, is a cost per infection, which the infections averted then save. `ssl.Costs` takes both: `fixed=`, a cost per unit time from `start=` (e.g. `ss.peryear(20_000)`), and `unit_costs=`, the cost of each event of any result, by its path (and `deliveries=False` leaves out the costs of the deliveries, for a table of the other costs alone). Here the program costs $20,000 a year to run from 2010, and each infection $50 of care, in both scenarios, so that the difference between them is the net cost:
 
 ```{python}
 care = {'measles.infection': 50} # $50 of care for each infection
@@ -171,19 +156,11 @@ print('Net cost per infection averted ($):', round(net/df.averted['Routine'], 2)
 
 A net cost below zero means a program saves more than it costs; `ssl.ICER` then marks the scenario without it as dominated.
 
-## Optimizing spending
-
-The examples above cost given programs. The reverse question, how best to divide a budget between programs, is an optimization: `sim.optimize()` allocates a total between programs whose spending is a parameter of the model, to maximize or minimize a result, or finds the least total that reaches a target. The spending parameters, and how spending turns into coverage, come from the model: from a program book imported with the model (as from Atomica), or from parameters you write. See [Optimization](calibration_optimization.qmd).
-
-## Under compartments and agents
-
-Costs work the same under every solver. In a compartmental run, the number delivered on a step is a number of people, and the cost is that number times the cost of each delivery. As agents, the cost is counted per agent and scaled, like any count, by the number of people each agent stands for. A cost of a test is per test given (whatever its result), and a cost of a treatment per treatment given; a delivery that offers a product but doesn't give it (to someone not eligible, or beyond its capacity) costs nothing.
-
 ## Pitfalls
 
 - **The cost is per delivery.** `cost=` is the cost of each product given, including what it takes to give it; costs that don't grow with the number delivered are added separately, as above.
 - **Count every delivery.** A program of several steps (a test, then treatment) has a cost for each; add them up.
-- **Compare like with like.** Take costs and outcomes from the same runs, over the same period, in the same units; with chance in the model, pair the runs of each scenario by seed.
+- **Compare like with like.** Take costs and outcomes from the same runs, over the same period (see [Scenarios](running_scenarios.qmd)).
 - **The horizon matters.** Infections averted after the end of the run are not counted, and a program that starts late in a run has had little time to avert any.
 
 The API reference for this page: [Products](../api/products.qmd), [ss.fitting](../api/fit.qmd).

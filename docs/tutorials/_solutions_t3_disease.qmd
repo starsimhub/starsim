@@ -118,21 +118,6 @@ for label, sim in sims.items():
 
 ### Exercise 5
 
-**Add a latent period of 2 days to that SIRS model, to make an SEIRS model. Does it change the endemic level?**
-
-The latent period slows each generation of infections, so the first epidemic comes later and has a lower peak, and the waves that follow are out of step with those of the SIRS model. The endemic level of people infectious changes little, since it depends mostly on R0 and the duration of immunity, which are the same:
-
-```{python}
-sims = {
-    'SIRS':  ss.Sim(make_cold(), **pars),
-    'SEIRS': ss.Sim(make_cold(dur_latent=ss.days(2)), **pars),
-}
-msim = ss.parallel(sims)
-msim.plot('cold.I')
-```
-
-### Exercise 6
-
 **In the town with 90% immune, increase the share susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What share of introductions die out now, with and without superspreading (k = 0.2)?**
 
 Without superspreading, a share of about 1/R ≈ 1/3 die out. With superspreading, many more do, since most cases still infect nobody:

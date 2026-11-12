@@ -176,7 +176,7 @@ msim.summarize()
 
 In every run, nearly everyone in the town is infected, so the size of the epidemic hardly varies; what chance changes is when it happens. In these runs, the peak comes anywhere from 3 to 14 February, depending on how quickly the first few chains of transmission took off.
 
-The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [tutorials](tutorials.qmd) show how, from [T1](tutorials/t1_intro.qmd#the-same-model-as-agents) to [T9 – Agents](tutorials/t9_agents.qmd).
+The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [tutorials](tutorials.qmd) show how, starting with [T1](tutorials/t1_intro.qmd#the-same-model-as-agents).
 
 ## Next steps
 

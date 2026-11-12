@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Merged with the first two steps of the agent-based diseases tutorial (A1) on Nov 11 by AI
+  note: Written by AI and lightly edited by a human; merged with a second AI draft. Merged with the first two steps of the agent-based diseases tutorial (A1) on Nov 11 by AI. Shortened on Nov 11 by AI
 ---
 
 ::: {.panel-tabset group="language"}
@@ -179,7 +179,7 @@ msim$plot("measles.I")
 
 The epidemic is much the same, but the peak comes a few days later as agents, and the run prints a note saying why. Agents move one step at a time (by default, a day), and this outbreak grows several-fold in a day. With a shorter step, such as `dt=ss.days(0.25)`, agents follow the ODE closely; [Tutorial 2](t2_model.qmd) shows how.
 
-Agents are needed when people differ in ways compartments can't hold, such as their own contacts in a network. Where everyone mixes with everyone, both give the same answer with a short enough step, and the model is written the same way. Most of these tutorials use the ODE, which is fast, and say what changes as agents: chance and differences between people ([T3](t3_disease.qmd#as-agents)), contacts between particular people ([T4](t4_mixing.qmd#contacts-per-person)), interventions that reach people because of what has happened to them ([T5](t5_interventions.qmd#as-agents)), and the rest ([T9 – Agents](t9_agents.qmd)).
+Agents are needed when people differ in ways compartments can't hold, such as their own contacts in a network. Where everyone mixes with everyone, both give the same answer with a short enough step, and the model is written the same way. Most of these tutorials use the ODE, which is fast, and say what changes as agents: chance and differences between people ([T3](t3_disease.qmd#as-agents)), contacts between particular people ([T4](t4_mixing.qmd#contacts-per-person)), and interventions that reach people because of what has happened to them ([T5](t5_interventions.qmd#as-agents)).
 
 ## Looking at individual people
 
@@ -193,16 +193,7 @@ df.loc[:, ['uid', 'age', 'female', 'measles.S', 'measles.I', 'measles.R', 'measl
 
 `agents.people.get_person(uid)` gives everything about one person, and a state gives the IDs (UIDs) of the people in it: `agents.diseases.measles.R.uids` are those who have recovered. [Array indexing](../user_guide/mechanics_indexing.qmd) shows other ways to pick out people, and [People and agents](../user_guide/populations_people.qmd) what each person has.
 
-Starsim also has ready-made diseases, customized with parameters. Here is the built-in `ss.SIR`, with parameters close to measles, as 5,000 agents:
-
-```{python}
-sir = ss.SIR(dur_inf=ss.days(8), beta=ss.perday(1.9), init_prev=0.001, p_death=0.002)
-sim_sir = ss.Sim(sir, n_agents=5000, stop=ss.days(60))
-sim_sir.run()
-sim_sir.plot()
-```
-
-Here `dur_inf` is the mean infectious period, `beta` the transmission rate, `init_prev` the share infected at the start, and `p_death` the share of infected people who die. Giving `n_agents=` without `total_pop=` makes one agent for each person. The results are in `sim_sir.results.sir`. `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models, with exponential durations. The Starsim library (`import starsim.library as ssl`) has fuller models of about twenty diseases, such as `ssl.Measles`, `ssl.Influenza`, and `ssl.TB`, used in the same way, e.g. `ss.Sim(ssl.Measles(), networks=ss.RandomNet(), n_agents=5000)`; see the [Diseases page of the model library](../user_guide/library_diseases.qmd).
+Starsim also has ready-made diseases, customized with parameters, such as the textbook `ss.SIR`, `ss.SIS`, and `ss.SEIR` (e.g. `ss.Sim(ss.SIR(dur_inf=ss.days(8), beta=ss.perday(1.9)), n_agents=5000)`). The Starsim library (`import starsim.library as ssl`) has fuller models of about twenty diseases, such as `ssl.Measles`, `ssl.Influenza`, and `ssl.TB`, used in the same way, e.g. `ss.Sim(ssl.Measles(), networks=ss.RandomNet(), n_agents=5000)`; see the [Diseases page of the model library](../user_guide/library_diseases.qmd).
 
 ## Exercises
 

@@ -4,27 +4,23 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial
+  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer
 ---
 
 **When people hear about an outbreak, some of them go and get vaccinated. How much does that slow the outbreak down, and what limits it?**
 
-Most of a Starsim model is declared: its states and transitions, interventions, and results. Declared parts run under every solver, and `describe()`, `diagram()`, and `equations()` show them. But some things are easier to say in code: a rule of behavior, a quantity with its own dynamics, or a result of your own. A **module written as code** is a Python class with a `step()` method, which Starsim calls at each step, and which can read and change the rest of the sim, alongside the declared diseases.
+Most of a Starsim model is declared: its states, transitions, interventions, and results, which run under every solver and which `describe()` can show. But some things are easier to say in code: a rule of behavior, a quantity with its own dynamics, or a result of your own. A **module written as code** is a Python class with a `step()` method, which Starsim calls at each step, alongside the declared diseases. The first half of this tutorial writes a module that keeps numbers for the whole population, and so still runs as an ODE; the second half writes modules that keep a value for each person, for agents. By the end of this tutorial, you will be able to:
 
-A module that keeps only numbers for the whole population, like the one in the first half of this tutorial, runs with the rest of the model as an ODE. A module that keeps a value for each person needs agents: the second half writes a disease, a quantity for each person, and a network as code. By the end of this tutorial, you will be able to:
-
-- write a function that Starsim calls at each step, and say when a class is needed instead;
-- write a module as a class, with parameters, a state of its own, and results;
-- read the model's results and move people between states from a module, in a way that works under every solver;
+- write a function that Starsim calls at each step, and a module as a class, with parameters, a state of its own, and results;
 - compare scenarios that differ in a module's parameters;
-- write a disease, a quantity for each person, and a network as code, for agents;
+- write a disease, a quantity for each person, an analyzer, and a network as code, for agents;
 - choose between declaring part of a model and writing it as code.
 
 Before writing a module, check the table at the top of [Custom modules](../user_guide/building_modules.qmd): many things that seem to need code (vaccination, testing, treatment, contact tracing, and changes to parameters) can be declared.
 
-## The model so far
+## Vaccine demand
 
-This is the measles model from [T6 – Data and calibration](t6_data.qmd), with the fitted values: β = 0.16, and 40% of infections reported. It runs for a year from 1 January, in a town of 100,000 people in three age groups, about 11% of them susceptible:
+This is the measles model from [T6 – Data and calibration](t6_data.qmd), with the fitted values: β = 0.16, and 40% of infections reported, in a town of 100,000 people in three age groups:
 
 ```{python}
 import starsim as ss
@@ -49,11 +45,9 @@ sim.run()
 sim.plot('measles.cases')
 ```
 
-## Vaccine demand
+During measles outbreaks, parents who had put off vaccinating hear about cases and go to a clinic. A simple rule: the rate at which susceptible people seek vaccination rises with the cases reported in the last week, reaching half its highest value (10% a week) at 300 cases a week.
 
-During measles outbreaks, parents who had put off vaccinating hear about cases and go to a clinic: an unplanned intervention the model leaves out. A simple rule: the rate at which susceptible people seek vaccination rises with the cases reported in the last week, reaching half its highest value (10% a week) at 300 cases a week.
-
-The smallest module written as code is a function of the sim, called once each step; given as `interventions=`, it becomes an intervention. In it, `sim.results` has the results so far, and `sim.ti` is the index of the current time point. `ss.move()` moves people between a declared disease's states, the same way under every solver: here, those vaccinated and protected (93%) from `S` to `R`. A rate becomes the chance of an event in one step with `to_prob()`; written out, that is 1 − exp(−rate × dt):
+The smallest module written as code is a function of the sim, called once each step; given as `interventions=`, it becomes an intervention. In it, `sim.results` has the results so far, and `sim.ti` is the index of the current time point. `ss.move()` moves people between a declared disease's states, the same way under every solver: here, those vaccinated and protected (93%) from `S` to `R`. `to_prob()` turns a rate into the chance of an event in one step, 1 − exp(−rate × dt):
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -96,11 +90,11 @@ print('Solver:', msim.sims['Vaccine demand'].solver)
 msim.plot('measles.I')
 ```
 
-The sim still runs as an ODE, since the function keeps nothing for each person, and demand makes the outbreak smaller. But the function's numbers are fixed inside it, it has no results (so how many doses were given?), and it forgets a case abruptly after 7 days, which isn't how people remember news.
+The sim still runs as an ODE, since the function keeps nothing for each person. But the function's numbers are fixed inside it, it has no results (so how many doses were given?), and it forgets a case abruptly after 7 days.
 
 ## A module as a class
 
-A module written as a class fixes all three. It inherits from one of Starsim's module types (here `ss.Intervention`), so that it runs at the right point in each step and ends up in the right place on the sim:
+A module written as a class fixes all three. It inherits from one of Starsim's module types (here `ss.Intervention`), so that it runs at the right point in each step:
 
 | Base class | Use for | Added to the sim via |
 |---|---|---|
@@ -114,12 +108,11 @@ A module written as a class fixes all three. It inherits from one of Starsim's m
 
 The module has:
 
-- **Parameters**, with defaults in `__init__()` via `define_pars()`, changed by name when the module is made (`update_pars()` raises an error for an unknown name, catching misspellings). Rates and durations are Starsim [time parameters](../user_guide/building_time.qmd) (e.g. `ss.days(30)`, `ss.perweek(0.1)`), so they mean the same whatever the step length.
-- **A state of its own**: here, one number for the whole population, the cases people remember. It is a memory that fades: each step adds the new reported cases and forgets a share of what is remembered, so a case is remembered for `memory` (30 days) on average. This is a small ODE of the module's own, dM/dt = cases − M/memory, solved a step at a time.
-- **Results of its own**, defined in `init_results()` with `define_results()`, and filled in each step at `self.ti`. `kind='flow'` says doses are events in each step (summed over time), and `kind='stock'` that the cases remembered are a quantity at each time point.
+- **Parameters**, with defaults in `__init__()` via `define_pars()`, changed by name when the module is made. Rates and durations are [time parameters](../user_guide/building_time.qmd), so they mean the same whatever the step length.
+- **A state of its own**: here, one number, the cases people remember. Each step adds the new reported cases and forgets a share of what is remembered, so a case is remembered for `memory` (30 days) on average: a small ODE of its own, dM/dt = cases − M/memory.
+- **Results of its own**, defined in `init_results()` and filled in each step at `self.ti`. Doses are a flow (events in each step), and the cases remembered a stock (a quantity at each time point).
 - **A `step()` method**, which does the work. In it, `self.sim` is the sim, `self.t.dt` the step length, and `self.pars` the parameters.
-
-A module can also limit what it does: here, clinics can give at most `capacity` doses a day (no limit by default), and people who can't be served stay susceptible and try again the next day:
+- **A limit**: clinics can give at most `capacity` doses a day (no limit by default); people who can't be served try again the next day.
 
 ```{python}
 class VaccineDemand(ss.Intervention):
@@ -168,11 +161,9 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.S.n` is the number of people in `S` now, under every solver, and `ss.move(..., n=...)` moves a number of people rather than a share. `self.sim.results.measles.cases[self.ti-1]` is the last step's reported cases: a module that is not a disease steps before the diseases, so this step's cases aren't known yet. The sim runs as an ODE, as before. The module is named after its class in lower case, so its results are in `sim.results.vaccinedemand`.
+`measles.S.n` is the number of people in `S` now, under every solver, and `ss.move(..., n=...)` moves a number of people rather than a share. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module's results are under its class name in lower case, `sim.results.vaccinedemand`.
 
-## Comparing scenarios
-
-With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day, about what a few clinics in a town of 100,000 might manage on top of their usual work:
+With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day:
 
 ```{python}
 sims = {
@@ -188,33 +179,13 @@ msim.plot(['measles.I', 'vaccinedemand.doses'])
 msim.summarize().loc[['measles_infection', 'vaccinedemand_doses']]
 ```
 
-With demand met in full, the outbreak infects about 5,400 people rather than 9,400: about 4,900 doses prevent about 4,000 infections. Doses peak in mid-March, during the steep rise, when each person protected breaks the most chains of infection; after that, fewer people are left to seek a dose. With at most 30 doses a day, clinics run at capacity from late February to late April, and people waiting in March, when it matters most, are often infected: about 6,600 in all, with fewer doses given. Even met in full, demand prevents less than half of the infections, because it starts only once the outbreak is under way; vaccination before an outbreak, or a campaign at its start ([T5](t5_interventions.qmd)), doesn't wait.
-
-`sim.describe()` lists the module, but can't say what it does, since that is in its code: the cost of writing part of a model as code. A module's parameters can be fitted to data ([T6](t6_data.qmd#fitting-and-checking-the-fit)) if given as `ss.par` with bounds, e.g. `VaccineDemand(half=ss.par(300, bounds=[50, 2000]))`.
-
-## What changes with a module written as code
-
-- **The solver.** A module that keeps only numbers for the whole population runs under every solver. A module that keeps a value for each person (a state made with `define_states()`) runs only as agents, and a sim with one runs as agents by itself, its declared diseases unchanged: see [below](#a-quantity-for-each-person-immunity-that-fades). If a module asks for individual people (e.g. `measles.I.uids`) in a run without agents, the run stops and says so.
-- **The order.** In each step, a module that is not a disease runs before the diseases, so what it does applies to the same step's transmission, and it sees the previous step's results.
-- **The sim's own copy.** The sim works on its own copy of each module, so from a module, reach others through `self.sim` in `step()` (e.g. `self.sim.diseases.measles`), not a variable from outside the class.
-
-[Custom modules](../user_guide/building_modules.qmd) covers the rest: the other kinds of module (analyzers, connectors, networks, demographics, and diseases written as code), states for each person, the order in which Starsim calls a module's methods, and the pitfalls. [Analyzers](../user_guide/interventions_analyzers.qmd) covers modules that record something without changing the model.
-
-## Modules for individual people
-
-A model of individual people sometimes needs something declarations can't say: a quantity each person carries that changes continuously, your own rule for who meets whom, or a disease whose course is easiest to say step by step.
-
-The rest of this tutorial writes the kinds of module that agent-based models most often need:
-
-1. **A disease written as code**: the waning immunity of [T3](t3_disease.qmd#counting-each-persons-infections), as Starsim 3 wrote it, to compare with the declared version.
-2. **A quantity for each person**: immunity that fades gradually, which a declared model can't say, in a module of its own.
-3. **A network written as code**: contacts with people of a similar age.
-
-Each trades some of what Starsim knows about the model (what `describe()` can show, which solvers can run it) for freedom.
+Met in full, demand prevents about 4,000 of 9,400 infections, but less than half, since it starts only once the outbreak is under way. With at most 30 doses a day, people waiting during the steep rise, when each dose matters most, are often infected. Its parameters can be fitted to data ([T6](t6_data.qmd#fitting-and-checking-the-fit)) if given as `ss.par` with bounds, e.g. `VaccineDemand(half=ss.par(300, bounds=[50, 2000]))`.
 
 ## A disease written as code
 
-In [T3](t3_disease.qmd#counting-each-persons-infections), waning immunity was one more declared transition, `R >> S`. Here is the same SIRS model written as code. The easiest approach is to inherit from a template and change only what differs. `ssl.AgentSIR` is the SIR model written as code (Starsim 3's `ss.SIR`); its states are per-agent arrays, `susceptible`, `infected`, and `recovered`, and its methods move agents between them:
+A model of individual people sometimes needs what declarations can't say: a disease whose course is easiest to say step by step, a quantity each person carries that changes continuously, a result of your own, or your own rule for who meets whom. The rest of this tutorial writes one of each.
+
+In [T3](t3_disease.qmd#counting-each-persons-infections), waning immunity was one more declared transition, `R >> S`. Here is the same SIRS model written as code, inheriting from a template and changing only what differs. `ssl.AgentSIR` is the SIR model written as code (Starsim 3's `ss.SIR`); its states are per-agent arrays, `susceptible`, `infected`, and `recovered`, and its methods move agents between them:
 
 ```{python}
 import numpy as np
@@ -251,13 +222,7 @@ class SIRS(ssl.AgentSIR):
         return
 ```
 
-The changes are:
-
-1. `__init__()` adds the extra parameter (`dur_imm`) and state (`ti_susceptible`); the SIR states are inherited.
-2. `ssl.AgentSIR.set_prognoses()` calls `set_infection()` to make agents infectious, then `set_progression()` to schedule what happens next. Only the second needs extending: `super()` does the usual scheduling, then a waning time is drawn for everyone who will recover (those who will die have `ti_recovered` set to `NaN`).
-3. `step_state()` likewise calls `super()` and adds only the recovered → susceptible transition.
-
-Here it is next to the declared SIRS of T3, with the same R0 (0.4 per day × 7 days = 2.8) and durations. A disease written as code transmits over the sim's networks, so both get a mixing pool with one contact a day each, the same as homogeneous mixing with β = 0.4 per day:
+`__init__()` adds the extra parameter and state; `set_progression()` does the usual scheduling, then draws a waning time for everyone who will recover; and `step_state()` adds the recovered → susceptible transition. Here it is next to the declared SIRS of T3, with the same R0 (0.4 per day × 7 days = 2.8). A disease written as code transmits over the sim's networks, so both get a mixing pool with one contact a day:
 
 ```{python}
 coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
@@ -284,21 +249,17 @@ plt.ylabel('Number infectious')
 plt.legend();
 ```
 
-The two are the same model, and give the same epidemic up to chance: a large first wave, then smaller waves as immunity wanes. They turn rates into chances and round durations to whole steps the same way, so averaged over a few seeds, their first waves peak within about 1% of each other. What differs is what Starsim knows about them. The declared disease can be shown (`describe()`, `diagram()`, `equations()`), run as an ODE or a stochastic compartmental model as well as agents, and fitted with `sim.fit()`; its results are named after its states and transitions. The coded one runs only as agents, and Starsim can't show what it does. So if a model can be declared, declare it. Write a disease as code when its course is easier to say in code, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
+The two give the same epidemic up to chance. What differs is what Starsim knows about them: the declared disease can be shown (`describe()`, `diagram()`, `equations()`), run under every solver, and fitted with `sim.fit()`, while the coded one runs only as agents. So if a model can be declared, declare it; write a disease as code when its course is easier to say in code, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
 
-## The parts of a module for agents
+Besides parameters, results, and `step()`, a module for agents uses:
 
-Besides the parameters, results, and `step()` of a [module as a class](#a-module-as-a-class), a module for agents often has:
+- **States**: per-agent arrays declared with `self.define_states()`: `ss.BoolState` for true or false, `ss.FloatArr` for a number, and `ss.TimeArr` for a time (`due()` gives those whose time has come). Each becomes an attribute that grows as agents are born. Keep per-agent data this way, never in a plain Python attribute or array.
+- **Recording**: besides in `step()`, a stock (the state at the start of the step) can be recorded in `record_stocks()`, and a flow (what happened in the step) in `record_flows()`.
+- **Randomness**: a Starsim distribution (e.g. `ss.expon`, `ss.bernoulli`), not `np.random`, so results stay reproducible; see [Random numbers](../user_guide/mechanics_random.qmd).
 
-- **States.** Per-agent arrays that persist across steps, declared with `self.define_states()`: `ss.BoolState` for true or false, `ss.FloatArr` for a number, and `ss.TimeArr` for a time, as a step number (`due()` gives those whose time has come, rounding at random in proportion so durations keep their mean). Each becomes an attribute (`self.ti_susceptible`) that grows as agents are born, and each `ss.BoolState` gives a result, the number for whom it is true. Keep per-agent data this way, never in a plain Python attribute or array.
-- **When results are recorded.** Besides in `step()`, a stock (the state at the start of the step) can be recorded in `record_stocks()`, and a flow (what happened in the step) in `record_flows()`.
-- **Randomness.** Use a Starsim distribution (e.g. `ss.expon`, `ss.bernoulli`, `ss.normal`), not `np.random`, so results stay reproducible and scenarios differ only where they should; see [Random numbers](../user_guide/mechanics_random.qmd).
+## A quantity for each person
 
-## A quantity for each person: immunity that fades
-
-Above, immunity is all or nothing: full protection until people move back to S, then none. For many respiratory infections, protection fades gradually as antibodies decline, so susceptibility depends on how long ago each person recovered. A per-person quantity that changes continuously can't be declared, but takes a few lines of code.
-
-The module holds each person's antibody level, 1 just after recovery and halving every `half_life`. It is an `ss.Module`, being neither a disease nor an intervention, and reads who recovered in the last step from the declared disease (`recovery.uids`):
+Above, immunity is all or nothing. For many respiratory infections, protection fades gradually as antibodies decline. A per-person quantity that changes continuously can't be declared, but takes a few lines of code. This module holds each person's antibody level, 1 just after recovery and halving every `half_life`. It is an `ss.Module`, being neither a disease nor an intervention, and reads who recovered in the last step from the declared disease (`recovery.uids`):
 
 ```{python}
 class Antibodies(ss.Module):
@@ -335,7 +296,7 @@ class Antibodies(ss.Module):
         return
 ```
 
-The infection itself is SIS (people go back to S when they recover), so the antibodies are its only protection. The module keeps the level, and a modifier multiplies each person's susceptibility by what the antibodies leave of it. A modifier never overwrites what it changes, so the disease's own `rel_sus` is kept, and `describe()` lists the modifier as part of the model:
+The infection itself is SIS, so the antibodies are its only protection. A modifier multiplies each person's susceptibility by what the antibodies leave of it; it never overwrites what it changes, and `describe()` lists it as part of the model:
 
 ```{python}
 S, I = ss.states('S I')
@@ -348,7 +309,7 @@ def susceptibility(sim):
 protection = ss.modify(sis.rel_sus, multiply=susceptibility)
 ```
 
-Here are the infection with antibodies that halve every 90 days, with no immunity, and the all-or-nothing SIRS, whose protection lasts 180 days on average (about two half-lives):
+Here are antibodies that halve every 90 days, no immunity, and the all-or-nothing SIRS (protection for 180 days on average):
 
 ```{python}
 sims = {
@@ -360,7 +321,7 @@ msim = ss.parallel(sims)
 msim.plot('cold.I')
 ```
 
-With no immunity, the infection settles at once at an endemic level. With either kind of immunity, the first wave leaves many people protected, so cases fall and then rise again as protection is lost. With fading antibodies, people regain some susceptibility soon after recovering, so the second wave comes sooner and is larger, and the endemic level is about twice that with all-or-nothing immunity. The module's own result is in the sim's results, under its name:
+With fading antibodies, people regain some susceptibility soon after recovering, so the second wave comes sooner and is larger, and the endemic level is about twice that with all-or-nothing immunity. The module's own result is under its name:
 
 ```{python}
 msim.sims['Antibodies that fade'].results.antibodies.mean_level.plot()
@@ -368,11 +329,59 @@ msim.sims['Antibodies that fade'].results.antibodies.mean_level.plot()
 
 A module that keeps a value for each person needs agents, so a sim with one runs as agents, including its declared diseases, unchanged.
 
+## An analyzer
+
+An analyzer records something without changing the model; it is the kind of module most models write. It runs at the end of each step, after the diseases, so it sees what happened in that step. This one counts how many times each person is infected, and the reinfections in each step; `finalize_results()`, called once at the end of the run, works out the mean number of infections of those ever infected:
+
+```{python}
+class Reinfections(ss.Analyzer):
+    """ The number of times each person is infected, and the reinfections in each step """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(
+            ss.FloatArr('times_infected', default=0, label='Times infected'),
+        )
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('reinfections', kind='flow', label='Reinfections'),
+        )
+        return
+
+    def step(self):
+        new = self.sim.diseases.cold.infection.uids # Those infected in this step
+        self.results.reinfections[self.ti] = np.count_nonzero(self.times_infected[new] > 0)
+        self.times_infected[new] += 1
+        return
+
+    def finalize_results(self):
+        super().finalize_results()
+        ever = self.times_infected > 0
+        self.mean_times = self.times_infected[ever].mean() # Among those ever infected
+        return
+```
+
+Analyzers are given as `analyzers=`, and their results are under their name, as for any module:
+
+```{python}
+sims = {
+    'All or nothing':       ss.Sim(declared, analyzers=Reinfections(), **pars),
+    'Antibodies that fade': ss.Sim(sis, Antibodies(), connectors=protection, analyzers=Reinfections(), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('reinfections.reinfections')
+for label, sim in zip(sims, msim.sims):
+    print(label, '- infections per person ever infected:', round(sim.analyzers.reinfections.mean_times, 1))
+```
+
+With fading antibodies, people are infected more often. [Analyzers](../user_guide/interventions_analyzers.qmd) has more, including the infection log, which records who infected whom.
+
 ## A network written as code
 
-The networks of [T4](t4_mixing.qmd#contacts-per-person) pair people at random, or as partners. Suppose instead that people mostly meet others of a similar age. A network written as code subclasses `ss.Network` (or one of its subclasses) and overrides how edges are made: `add_pairs()` makes them, and `step()`, called every step, here replaces the day's contacts. `self.append()` adds edges, as the UIDs of the two people in each (`p1` and `p2`) and a transmission multiplier (`beta`).
-
-To pair people of similar ages, sort them by age plus a little random noise (standard deviation `spread`), and connect each person with their neighbors in that order:
+The networks of [T4](t4_mixing.qmd#contacts-per-person) pair people at random, or as partners. Suppose instead that people mostly meet others of a similar age. A network written as code subclasses `ss.Network` and overrides how edges are made: `add_pairs()` makes them, `step()` here replaces each day's contacts, and `self.append()` adds edges, as the UIDs of the two people in each (`p1` and `p2`). To pair people of similar ages, sort them by age plus a little random noise, and connect each person with their neighbors in that order:
 
 ```{python}
 class AgeNet(ss.Network):
@@ -407,7 +416,7 @@ class AgeNet(ss.Network):
         return
 ```
 
-Check that a network makes what you meant: here, contacts should be of nearly the same age, about 4 per person:
+Check that a network makes what you meant: contacts of nearly the same age, about 4 per person:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -423,7 +432,7 @@ print('Correlation of the ages of contacts:', round(np.corrcoef(age[ss.uids(df.p
 print('Contacts per person:', round(2*len(df)/len(sim.people), 2))
 ```
 
-Now compare it with a random network with the same number of contacts:
+Compared with a random network with the same number of contacts:
 
 ```{python}
 sims = {
@@ -434,7 +443,7 @@ msim = ss.parallel(sims)
 msim.plot('cold.I')
 ```
 
-With the same number of contacts, contacts close in age give a slower, flatter epidemic that reaches about as many people: each case's contacts overlap with those of whoever infected them, so the infection can't jump across the population. A contact matrix with many narrow age groups would give much the same, under every solver ([T4](t4_mixing.qmd#contacts-between-age-groups)); a network written as code is worth it when the rule is about individuals, such as who is in which household, school, or partnership.
+Contacts close in age give a slower, flatter epidemic, since each case's contacts overlap with those of whoever infected them. A contact matrix with many narrow age groups would give much the same, under every solver ([T4](t4_mixing.qmd#contacts-between-age-groups)); a network written as code is worth it when the rule is about individuals, such as who is in which household or partnership.
 
 ## Which to use
 
@@ -445,7 +454,7 @@ With the same number of contacts, contacts close in age give a slower, flatter e
 | A module written as code | A class with `step()` (and states, results, parameters) | Time, people, random numbers, parallel runs, its results | Showing what the module does, and solvers other than agents if it keeps a value for each person |
 | A disease or network written as code | A subclass of `ss.AgentDisease` or `ss.Network` | The same, and transmission over the sim's networks | The same, and fitting its structure |
 
-Start declared, and move down the table only for the part that needs it. Here, the SIRS model needed no code; the antibodies needed a module only for the level itself; and the network needed code for its rule of who meets whom. When code is slow because it loops over agents, `@ss.jit` compiles a function with Numba; see [Custom modules](../user_guide/building_modules.qmd), which also covers the order in which Starsim calls a module's methods, demographics and connectors written as code, and pitfalls.
+Start declared, and move down the table only for the part that needs it. When code is slow because it loops over agents, `@ss.jit` compiles a function with Numba. [Custom modules](../user_guide/building_modules.qmd) covers the order in which Starsim calls a module's methods, demographics and connectors written as code, and pitfalls.
 
 ## Exercises
 
@@ -456,13 +465,12 @@ Start declared, and move down the table only for the part that needs it. Here, t
 5. Give `AgeNet` a parameter `p_random`, the share of each person's contacts that are with anyone at random rather than with people close in age (hint: shuffle a share of the order before pairing, or add a second, random network). How large does it have to be before the epidemic looks like the one with random contacts?
 6. The `SIRS` class schedules each person's loss of immunity at recovery. Write an `SIRS` in which immunity is lost instead with a constant chance each step (an exponential duration, drawn step by step), using an `ss.bernoulli` distribution in `step_state()`. Does it give the same epidemic?
 
-[Solutions](solutions.qmd#t8-custom-modules) · Next: [T9 – Agents](t9_agents.qmd)
+[Solutions](solutions.qmd#t8-custom-modules)
 
 ## Further reading
 
 - [Funk et al. (2010): Modelling the influence of human behaviour on the spread of infectious diseases: a review](https://pubmed.ncbi.nlm.nih.gov/20504800/): models in which people respond to an epidemic, as here
 - [EpiModel: Extending EpiModel](https://epimodel.github.io/EpiModel-Gallery/): worked examples of modules of your own, for network models
-- [Mesa: Introductory tutorial](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html): writing a model of your own as code, step by step, in another Python framework
 - [NetworkX: graph generators](https://networkx.org/documentation/stable/reference/generators.html): ready-made graphs that can be turned into a Starsim network (`ssl.StaticNet`)
 - [Numba: a 5-minute guide](https://numba.readthedocs.io/en/stable/user/5minguide.html): compiling Python loops, as `@ss.jit` does
 

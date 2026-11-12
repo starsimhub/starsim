@@ -30,4 +30,3 @@ These are solutions to the exercises at the end of each tutorial. Many of the ex
 
 {{< include _solutions_t8_modules.qmd >}}
 
-{{< include _solutions_t9_agents.qmd >}}

@@ -4,12 +4,10 @@ jupyter: python3
 authorship:
   human: 25
   ai: 75
-  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI)
+  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI
 ---
 
-Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. When a run is slower than that, it is nearly always for one of a few reasons, and the first half of this page covers how to find them and what to do. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd).
-
-A study with thousands of runs, or a model that others use through a web page, needs more than a laptop and a notebook. Starsim is plain Python, so it runs anywhere Python does: on one large computer, on a cluster, or behind a dashboard. The second half of this page covers moving an analysis from a notebook into a script, and then each of these. Making many sims and comparing them is in [Scenarios](running_scenarios.qmd); this page is about how fast they run, and where.
+Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. The first half of this page covers what makes a run slow and what to do about it; the second, running many sims from a script, on a large computer, on a cluster, or behind a dashboard. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd), and making and comparing many sims in [Scenarios](running_scenarios.qmd).
 
 ```{python}
 import starsim as ss
@@ -51,7 +49,7 @@ What stays in the kernels, and what does not:
 
 A module written as code is always taken a step at a time, since its `step()` is Python. If it only needs to act at a few times, or on a condition that one of the declared forms above can say, writing it that way keeps the run in the kernels.
 
-## Many runs
+### Many runs
 
 Running the same model many times is fastest with `ss.parallel()`: with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together by the kernels. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
 
@@ -61,51 +59,30 @@ msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=
 
 For the same reason, rerun a sim with `sim.run()` again (or `sim.restart(pars=...).run()` for new values) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
 
-## Substeps
+### Substeps, JAX, and compiling
 
-The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `ss.solvers.ode(substeps=1)` or `ss.solvers.binomial(substeps=1)` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
+`substeps=1` (in `ss.solvers.ode()` or `ss.solvers.binomial()`) takes each step whole, which is faster but less accurate when rates are fast compared with the step. On a CPU, a small model is faster in the kernels than in JAX; JAX gains on large models, on a GPU, and on many runs at once. If a first run after installing is slow, the Numba kernels are being compiled, which `ss.compile()` does once ahead of time. All three are covered in [Solvers and backends](running_solvers.qmd#speed-and-backends).
 
-## JAX and gradients
-
-How Starsim chooses between the kernels and JAX is in [Solvers and backends](running_solvers.qmd#backends). On a CPU, a small model is faster in the kernels: a run of a year of an SIR in daily steps takes about 0.3 ms in the kernels and about 18 ms in JAX, since JAX's cost for each step of a loop dominates when each step is a handful of numbers. JAX gains on large models, on a GPU, and on many runs at once. A run is taken by the kernels unless `sim.jax = True`; gradients and many runs at once use JAX by themselves. For a fit, `method='nelder-mead'` works with the kernels alone, and is chosen by default for one or two fitted parameters; L-BFGS-B uses gradients from JAX.
-
-## Agents
+## Agents and code of your own
 
 An agent-based run takes time in proportion to the number of agents and the number of steps. For speed:
 
 - **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
 - **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
-- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores (see [One level of parallelism](#on-a-cluster-with-a-job-scheduler)).
+- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many (see [On a cluster](#on-a-cluster) for running many sims at once).
 - **Common random numbers.** `ss.options.crn = False` gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
 
-## Code of your own
+### Code of your own
 
-A module written as code runs its `step()` in Python, once a step. Starsim then stays out of the way: a compartmental model written as a module that holds its own numbers runs a year of daily steps in about a millisecond, about as fast as the same model declared, though it can't be taken in one call to the kernels, run in JAX, or differentiated. What decides the speed of your own code is how it handles the people.
+A module written as code runs its `step()` in Python, once a step, and Starsim then stays out of the way (though such a run can't be taken in one call to the kernels, run in JAX, or differentiated). What decides its speed is how it handles the people:
 
 - **Work on arrays, not people.** A loop over the agents in Python is many times slower than the same work on the whole array at once (see [Array indexing](mechanics_indexing.qmd)).
-- **Compile a loop that can't be written as array operations.** `@ss.jit` compiles a function with Numba, keeps it on disk between sessions, and says why if it can't (see [Custom modules](building_modules.qmd)). Called with JAX arrays, the same function is traced by JAX instead, so it can be differentiated. A function compiled with Numba's own `@nb.njit` works as well, and is as fast.
-- **Compiled code is compatible with either set of kernels.** Your functions are compiled with Numba whether Starsim's own kernels are Rust or Numba, and the two don't interact: Starsim passes NumPy arrays to your code, and takes NumPy arrays back.
+- **Compile a loop that can't be written as array operations.** `@ss.jit` compiles a function with Numba, keeps it on disk between sessions, and says why if it can't (see [Custom modules](building_modules.qmd)); called with JAX arrays, it is traced by JAX instead, so it can be differentiated. Numba's own `@nb.njit` works as well, and either works whether Starsim's own kernels are Rust or Numba.
 - **Draw random numbers from Starsim's distributions** (`ss.bernoulli`, `ss.normal`, and the others) rather than `np.random`, so that runs stay reproducible and scenarios share their random numbers (see [Random numbers](mechanics_random.qmd)); their draws are compiled already.
 
-As an example, a module that updates a value for each of 50,000 agents at each step, run for 20 steps alongside an SIR on a random network:
+For a module that updates a value for each of 50,000 agents, a loop in Python made the whole run about seven times slower; the same loop with `@ss.jit`, or NumPy on the whole array, made it 15–40% slower.
 
-| How the update is written | Whole run |
-|---|---|
-| A loop over the agents in Python | 0.38 s |
-| NumPy operations on the whole array | 0.073 s |
-| The same loop, with `@ss.jit` | 0.062 s |
-| The same loop, with `@nb.njit` | 0.058 s |
-| No such module | 0.053 s |
-
-The compiled loop costs about a tenth of the rest of the run, close to what Starsim's own compiled code would take for the same work. Fused kernels are faster still for a compartmental model, since the whole run is one call, but for agents most of the time is in the network and the disease, which are compiled already.
-
-## Finding where the time goes
-
-`sim.profile(kind='loop')` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes; [Profiling and debugging](running_debugging.qmd#profiling) shows how to use them. Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
-
-## Compiling first
-
-If a first run after installing is slow, the Numba kernels are being compiled; `ss.compile()` (or `starsim init compile`) does it once ahead of time (see [Solvers and backends](running_solvers.qmd#backends)). This matters most on a cluster, where hundreds of tasks would otherwise each compile it, or wait for each other to (see [below](#on-a-cluster-with-a-job-scheduler)).
+To find where the time goes, `sim.profile(kind='loop')` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes ([Profiling and debugging](running_debugging.qmd#profiling)). Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
 
 ## From a notebook to a script
 
@@ -138,7 +115,7 @@ if __name__ == '__main__':
     ))
 ```
 
-Keep the computation and the presentation apart: a script (or a cluster job) saves tables, and a notebook makes the figures from them, so a figure can be changed without running everything again. Record the version of Starsim and of your own code (`sc.gitinfo()` gives the commit), the data, the seeds, and the parameter values; a saved table with these is reproducible long after a saved sim (a pickle, which needs the same versions of the code to load) has stopped loading. Check one run and one small batch before a large one.
+Keep the computation and the presentation apart: a script (or a cluster job) saves tables, and a notebook makes the figures from them. Record the versions of Starsim and of your own code, the data, the seeds, and the parameter values; a saved table with these stays reproducible long after a saved sim (a pickle) has stopped loading. Check one run and one small batch before a large one.
 
 ## On one large computer
 
@@ -159,9 +136,7 @@ msim = ss.parallel(sim, pars=dict(beta=np.linspace(1.5, 2.3, 10)), n_runs=10)
 msim.summarize().loc['measles_infection']
 ```
 
-`workers=` limits the number of cores used (for a shared computer), and `workers=1` runs the sims one after another in this process, which is useful for debugging, since an error then comes with its full traceback.
-
-When the sims differ in more than parameter values, make them in a loop, or with a function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and give the list to `ss.parallel()`. If making each sim is itself slow (reading large data files, or building a large population), make them in parallel too, with `sc.parallelize()` from Sciris:
+`workers=` limits the number of cores used (for a shared computer), and `workers=1` runs the sims one after another in this process, which gives an error its full traceback. When the sims differ in more than parameter values, make them with a function (see [Running sims](running_sim.qmd#larger-projects-make_sim)) and give the list to `ss.parallel()`. If making each sim is itself slow (reading large data files, or building a large population), make them in parallel too, with `sc.parallelize()` from Sciris:
 
 ```{python}
 def make_sim(seed, coverage):
@@ -173,28 +148,13 @@ msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
 
-Making sims in parallel copies each one back to the main process, which takes time for a large sim; `sc.parallelize(..., serial=True)` makes them one after another, to check whether parallel is faster. Since the eight sims have the same label, they are runs of one scenario, and the plot shows their median and spread; sims with different labels are scenarios of their own (and so is each sim with no label).
+Making sims in parallel copies each one back to the main process, which takes time for a large sim; `sc.parallelize(..., serial=True)` makes them one after another, to check whether parallel is faster. A remote computer can be used through SSH, from an editor that connects to a remote Python (such as [VS Code](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) or [Positron](https://positron.posit.co)), or with a Jupyter server on it ([The Littlest JupyterHub](https://tljh.jupyter.org/)).
 
-::: {.callout-tip}
-A remote computer can be used through SSH and a terminal, or from an editor on your own computer: [VS Code](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) (and editors based on it, such as [Positron](https://positron.posit.co)), [PyCharm](https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html), and [Spyder](https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel) all connect to a remote Python. A Jupyter server on the remote computer (such as [The Littlest JupyterHub](https://tljh.jupyter.org/)) works too.
-:::
+Starsim sets NumPy's linear algebra library (BLAS) to one thread when imported; for large matrix calculations of your own, `ss.options.blas_threads` gives it more (see the [appendix](#appendix-every-option)).
 
-### Threads for linear algebra
+## On a cluster
 
-NumPy and SciPy do their linear algebra with a library called BLAS, which can use many threads. Starsim sets it to one thread when it is imported: on the machines we tested, more threads didn't make Starsim faster, and they slow down starting up and starting workers. More threads can speed up large matrix calculations of your own, so you can change this:
-
-```python
-ss.options.blas_threads = 4 # For the rest of the session; use 0 to leave BLAS as it is
-
-with ss.options.context(blas_threads=4): # Or just for this block
-    results = my_matrix_calculation()
-```
-
-Or set it from the shell, with `STARSIM_BLAS_THREADS=4 python my_script.py`. This is separate from `ss.options.threads` (`STARSIM_THREADS`), which sets the threads for Starsim's own loops over agents.
-
-On Linux, this works at any time. On Windows and macOS, it can't change BLAS once NumPy has been imported, though workers of `ss.parallel()` still get it. This rarely matters, but if it does, import Starsim before NumPy, or set `OPENBLAS_NUM_THREADS` (`VECLIB_MAXIMUM_THREADS` on a Mac) before starting Python.
-
-## On a cluster with Dask
+### With Dask
 
 For more runs than one computer can manage, tools such as [Dask](https://docs.dask.org/) spread them across many computers. Each task makes and runs a sim and returns it; `sim.shrink()` first removes the people, so that only the results are sent back. `ss.MultiSim()` then collects sims that have already run, without running them again. (This and the next example are not run on this page.)
 
@@ -223,24 +183,9 @@ if __name__ == '__main__':
     msim.plot()
 ```
 
-[Coiled](https://coiled.io/), a paid service built on Dask, runs the same tasks on a cluster in the cloud that grows and shrinks with the work:
+[Coiled](https://coiled.io/), a paid service built on Dask, runs the same tasks on a cloud cluster that grows and shrinks with the work (`coiled.Cluster(n_workers=50).get_client()` in place of `dd.Client()`), and the same pattern works with other tools, such as [Joblib](https://joblib.readthedocs.io/).
 
-```python
-import coiled
-
-cluster = coiled.Cluster(n_workers=50, workspace='<your_coiled_workspace>')
-client = cluster.get_client()
-futures = [client.submit(run_sim, seed, 1.9) for seed in range(1, 1001)]
-sims = client.gather(futures)
-msim = ss.MultiSim(sims)
-msim.plot()
-```
-
-Dask's workers set `MALLOC_TRIM_THRESHOLD_` so that freed memory goes back to the system at once, which slows sims down by making them fault in new pages. On Linux with glibc, importing Starsim overrides this, so nothing needs to be set; a task that needs that memory back during a long job can call `ss.solvers.backends.release_memory()`.
-
-The same pattern (a function that makes, runs, and shrinks one sim, given a seed and the values that differ) works with other tools, such as [Joblib](https://joblib.readthedocs.io/).
-
-## On a cluster with a job scheduler
+### With a job scheduler
 
 On a high-performance cluster run by a scheduler such as [Slurm](https://slurm.schedmd.com/job_array.html), the usual pattern is a job array: the same script is run many times, each with its own task number, which picks the seed and the scenario. Each job saves its sim (shrunk) or, better, a table of the results it needs, and a final script collects them:
 
@@ -268,16 +213,17 @@ msim = ss.MultiSim(sims)  # Collects sims that have already run; sims with the s
 msim.summarize()
 ```
 
-Three things matter more on a cluster than on a laptop:
+Some things matter more on a cluster than on a laptop:
 
-- **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., workers=1)` within a task, or limit it with `workers=`. Within one sim, Starsim uses several threads only for passes over very large populations (200,000 agents or more), and never in the workers of `ss.parallel()`; `ss.options.threads = 1` (or the environment variable `STARSIM_THREADS=1`) turns them off. NumPy's linear algebra (OpenBLAS or MKL) has threads of its own, which the workers of `ss.parallel()` divide among themselves; to keep them to one, set `SCIRIS_NUM_THREADS=1` in the task's environment (e.g. in the job script), or call `sc.limit_threads(1)`. None of these limits the Numba threads that Starsim's passes use; `STARSIM_THREADS=1` does.
-- **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to; `starsim init compile --check` says whether it has been done. `starsim init` compiles too, and also installs the skills for AI coding agents (see the [appendix](#appendix-the-starsim-command)).
-- **Settings from the environment.** Every option in `ss.options` can be set by an environment variable, `STARSIM_` and its name in capitals (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`, `STARSIM_WARNINGS=error`), which is the easiest way to set it for every task of a job; the full list, with each variable, is in the [appendix](#appendix-every-option).
-- **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment), since a saved sim needs them to load.
+- **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., workers=1)` within a task, or limit it with `workers=`. Starsim's own threads (used only for passes over 200,000 agents or more, and never in the workers of `ss.parallel()`) are turned off with `STARSIM_THREADS=1`, and NumPy's with `SCIRIS_NUM_THREADS=1` in the task's environment.
+- **Compile once, before the runs.** With the Numba kernels, run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile them; `starsim init compile --check` says whether it has been done.
+- **Settings from the environment.** Every option in `ss.options` can be set by an environment variable (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`), the easiest way to set it for every task of a job (see the [appendix](#appendix-every-option)).
+- **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment): sims are sent between computers as Python pickles, which need the same code to load.
+- **A seed for each run.** Give each run its own `rand_seed`, or every run of a stochastic model is the same.
 
 ## Interactive dashboards
 
-A model can be put behind a web page, so that others can change its inputs and see the results. There are several tools for this, including [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), and [Panel](https://panel.holoviz.org/); one of the simplest is [Streamlit](https://streamlit.io/). This one has sliders for the share of the town that is immune and the coverage of a vaccination campaign:
+A model can be put behind a web page, so that others can change its inputs and see the results, with tools such as [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), [Panel](https://panel.holoviz.org/), or [Streamlit](https://streamlit.io/). This Streamlit app has sliders for the share of the town that is immune and the coverage of a vaccination campaign:
 
 ```python
 import streamlit as st
@@ -302,14 +248,7 @@ st.write('Infections:', round(sim.results.measles.infection.sum()))
 st.pyplot(sim.diseases.measles.plot())
 ```
 
-Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run app.py`, which opens the dashboard in a browser. As an ODE, each run takes a fraction of a second, so the page updates as the sliders move.
-
-## Pitfalls
-
-- **Sending whole sims between computers.** A sim with its people can be large; shrink it before returning it (`sim.shrink()`), as `ss.parallel()` does by itself.
-- **The same seed in every task.** Give each run its own `rand_seed`, or every run of a stochastic model is the same.
-- **Workers that compete for cores.** A pool of processes in each of many tasks on one node runs slower than one; use one level of parallelism.
-- **Code that isn't on the workers.** A module written as code must be importable on every computer that runs it, since sims are sent between them as Python objects (pickles), which need the same code to be read.
+Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run app.py`, which opens the dashboard in a browser.
 
 ## Further reading
 
@@ -331,9 +270,7 @@ rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optd
 pd.DataFrame.from_dict(rows, orient='index')
 ```
 
-Those that affect speed or memory are `threads` and `blas_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run has many steps); `max_years` (1,000 by default) says when to warn that a run is so long it is probably a mistake. Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_BLAS_THREADS`, for the threads of linear algebra (see [Threads for linear algebra](#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
-
-The settings of a sim that affect speed or memory are `n_agents` and `total_pop` (whose ratio is the people each agent stands for), `dt`, `solver` (and its `substeps=`), `require_kernels`, `group_results` (which results are kept by group), and `record_people` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.
+Starsim also reads `SCIRIS_NUM_THREADS` for the threads of linear algebra, and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed. The settings of a sim that affect speed or memory (`n_agents`, `dt`, `solver`, `require_kernels`, `group_results`, `record_people`) are in [Running sims](running_sim.qmd#appendix-every-sim-setting).
 
 ## Appendix: the starsim command
 
@@ -341,20 +278,13 @@ Installing Starsim also installs a `starsim` command, for setting up an environm
 
 | Command | What it does |
 |---|---|
-| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use (`-y` not to ask anything) |
-| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (once per install; a few minutes). Optional: they are otherwise compiled on first use, and with the Rust kernels in use (as from the wheels on PyPI) they are needed only to compare the two |
-| `starsim init compile --rust` | In a clone of Starsim, builds the Rust kernels instead, installing Rust first if it is missing. Without `--rust` (or `--numba`), a clone whose Rust kernels are not built is asked which to do |
-| `starsim init compile --check` | Says which kernels are in use and whether they are compiled, and exits with 1 if not (for a build script) |
-| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, after asking (`-y` not to ask), as `starsim ai install` does. `--global` installs a short skill for all projects instead, `--to=claude,agents` chooses the agents (by default, each one installed), and `--force` replaces a skill of the same name that `starsim` did not install; `starsim init` and `starsim init dev` take these too |
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use (`-y` not to ask) |
+| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (a few minutes, once per install); optional, since they are otherwise compiled on first use. `--rust` builds the Rust kernels instead, in a clone of Starsim; `--check` says which kernels are in use and whether they are compiled, exiting with 1 if not |
+| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, as `starsim ai install` does; `--global` installs a short skill for all projects, `--to=claude,agents` chooses the agents, and `--force` replaces a skill of the same name |
 | `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
-| `starsim ai` | Where the skills are installed (as `starsim ai status` says) |
-| `starsim ai list` | Lists the skills, with what each is for |
-| `starsim ai show` | Shows the guide for AI agents, which lists the skills, or one skill (`starsim ai show convert-model`) |
-| `starsim ai install` | Links the skills into this project, as `starsim init ai` does, with the same options; `starsim ai uninstall` removes them (`--global`: the short skill for all projects) |
-| `starsim ai off` | Stops the other `starsim` commands from suggesting the skills; `starsim ai on` lets them again |
-| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or as `--from=` says); `--to=` another format, `--out=` the file, and `--force` to replace it if it exists. `starsim convert` lists the formats |
-| `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills, in an interactive session (`--headless` to run it on its own). `--ai=claude` names the agent; by default, it is the one in the `STARSIM_AGENT` environment variable, or else the only one installed |
-| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim`; a second argument gives the format, if it can't be told from the file (`starsim import model.json epipack`) |
-| `starsim import sir.xlsx atomica --databook=data.xlsx` | When importing, any other option goes to the importer, as a keyword argument of `ss.import_from()` (here, `databook='data.xlsx'`) |
+| `starsim ai` | Where the skills are installed; `list`, `show` (the guide, or one skill), `install` and `uninstall`, and `off` and `on` (whether other commands suggest the skills) |
+| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or `--from=`); `--to=` another format, `--out=` the file, `--force` to replace it. `starsim convert` lists the formats |
+| `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills (`--headless` to run it on its own; `--ai=claude` names the agent, by default the one in `STARSIM_AGENT` or the only one installed) |
+| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim`; a second argument gives the format (`starsim import model.json epipack`), and other options go to the importer (`--databook=data.xlsx`) |
 | `starsim export model.py sbml` | Writes the sim that `model.py` makes (as `sim`, or `--sim=`) in another format |
 | `starsim --version` | The version of Starsim |

@@ -4,20 +4,26 @@ jupyter: python3
 authorship:
   human: 35
   ai: 65
-  note: Adapted from the Starsim 3 user guide page on array indexing; ported to v4, with new sections on combining selections and indexing in a module written by AI
+  note: Adapted from the Starsim 3 user guide page on array indexing; ported to v4, with new sections on combining selections and indexing in a module written by AI. On Nov 11, the arrays and multi-column states moved here from People and demographics, and the page was shortened, by AI
 ---
 
-When a model runs as agents, each person's properties (age, sex, the state of each disease) are kept in arrays with one value per agent. Code that reads or changes them, in a [module written as code](building_modules.qmd) or in an analysis after a run, needs to pick out agents correctly, including when some of them have died. This page covers how agents are identified, how the arrays are laid out, and the rules for indexing them.
+When a model runs as agents, each person's properties (age, sex, the state of each disease) are kept in arrays with one value per agent. Code that reads or changes them, in a [module written as code](building_modules.qmd) or in an analysis after a run, needs to pick out agents correctly, including when some of them have died. This page covers the arrays, how agents are identified, and the rules for indexing them.
 
 A declared model needs none of this: conditions such as `who=ss.person.age < 5` or `who=measles.I` pick out people for you, and work under every solver. In a compartmental run there are no agents, and `sim.people` has one row for each group instead.
 
-## Agents and their UIDs
+## Arrays and UIDs
+
+A state such as `alive`, `female`, or a disease's `I` is an `ss.BoolState`, an array of true or false values; a number, such as `age`, is an `ss.FloatArr` (or `ss.IntArr` for whole numbers); the kinds are listed in the [appendix](#appendix-the-kinds-of-array). These arrays work like NumPy arrays, with sums, means, comparisons, and arithmetic, but are made for three things nearly every agent-based model needs:
+
+1. **Growth**: as people are born or arrive, the arrays grow, in chunks rather than one agent at a time, so that adding agents is cheap.
+2. **Indexing**: agents who die or leave stay in the arrays, so that what happened to them can still be looked up, but are left out of counts, sums, and means.
+3. **Random values**: a state's default can be a distribution (e.g. `ss.BoolState('urban', default=ss.bernoulli(p=0.3))`), so each new agent draws its own value, with [common random numbers](mechanics_random.qmd) so that two runs give each agent the same draw.
 
 Every agent has a **UID** (a unique identifier): a whole number, given in order from 0 as agents are made. An agent's UID never changes, and isn't reused after the agent dies, so a UID can be used to look up any agent, alive or dead.
 
 The **active UIDs** (`auids`) are those of the agents who are alive and in the sim now. Each array holds two views of its data:
 
-- `raw`: a value for every agent ever made, indexed by UID (once agents are born, it also has room at the end for agents not yet made)
+- `raw`: a value for every agent ever made, indexed by UID (once agents are born, it also has room at the end for agents not yet made, holding NaN)
 - `values`: a value for each active agent, in the order of `auids`
 
 To see this, here is a small measles outbreak in 10 people, in which infectious people die at a rate of 5% a day (a much higher death rate than measles has, so that some agents die in a short run):
@@ -45,7 +51,9 @@ print('Ages of every agent:', ppl.age.raw)
 
 The dead agents are still in `raw`, but not in `auids` or in an array's `values`.
 
-## Which agents an operation uses
+## Rules for indexing
+
+### Which agents an operation uses
 
 The rules are:
 
@@ -64,7 +72,7 @@ print('Ages of the dead:', age[ppl.dead.uids])
 
 `ppl.dead.uids` finds the dead, since they aren't among the active agents.
 
-## Indexing that works
+### Indexing that works
 
 ```{python}
 print('Age of the agent with UID 0:', ppl.age[0]) # A whole number is a UID
@@ -139,9 +147,9 @@ print('Mean age of everyone:', sim.people.age.mean().round(1))
 print('Mean age of the infectious, every 10 days:', sim.results.ageofinfectious.mean_age[::10].round(1))
 ```
 
-The first cases are of any age, but within two or three weeks the mean age of the infectious falls to about 17, since most transmission is at school; later, as the children become immune, more of the cases are adults infected in the community, and it rises again. [Analyzers](interventions_analyzers.qmd) and [Custom modules](building_modules.qmd) have more examples of modules that index agents.
+[Analyzers](interventions_analyzers.qmd) and [Custom modules](building_modules.qmd) have more examples of modules that index agents.
 
-## Indexing that doesn't
+### Indexing that doesn't
 
 A list of whole numbers raises an error, since it could be UIDs or positions among the active agents:
 
@@ -161,7 +169,7 @@ print('Mean age (raw, including the dead):', age.raw.mean())
 
 ## Arrays with several columns
 
-An array can have several columns, e.g. immunity to each of several strains (see [People](populations_people.qmd#states-with-several-columns)). The first index picks agents, by the rules above, and the second picks columns, by position or by name:
+Sometimes each person needs several values of the same kind, such as their immunity to each of several strains ([strains](building_diseases.qmd) keep immunity like this). An array with `columns=` has one row per agent and one column per value, and grows as agents are born like any other; in a module, it is defined like any state, e.g. `self.define_states(ss.FloatArr('sus', columns=['wild', 'mutant'], default=1.0))`. The first index picks agents, by the rules above, and the second picks columns, by position or by name:
 
 ```{python}
 imm = ss.FloatArr('imm', columns=['wild', 'mutant'], default=0, mock=5) # A stand-alone array of 5 agents
@@ -171,6 +179,13 @@ print(imm[uids])          # A row for each agent
 print(imm[:, 'mutant'])   # One column, for every active agent
 print((imm.mutant > 0.5).uids) # UIDs from one column
 ```
+
+A column can be read by name as an attribute (`imm.mutant`), as a key (`imm['mutant']`), or with `imm.col('mutant')`; each gives an ordinary array with one value per agent, and writing to it (`imm.mutant = 0`, or `imm.mutant *= 0.9` in a module's `step()`) changes the state. Since such an array has several values per agent, it can't be turned into UIDs directly; use one column, as above. Also:
+
+- `columns=3` gives three unnamed columns, read by position only, and a tuple such as `columns=(2, 3)` gives more dimensions.
+- Column names must be unique, and can't be the name of something an array already has (such as `raw` or `mean`).
+- `imm[:, [0, 1]]` gives columns 0 and 1 for every active agent.
+- `people.to_df()` gives one column of the table per value, e.g. `immunity.sus_wild` and `immunity.sus_mutant` (or `_0`, `_1`, and so on for unnamed columns).
 
 ## Good practice
 
@@ -187,3 +202,19 @@ print((imm.mutant > 0.5).uids) # UIDs from one column
 
 - [NumPy: indexing on arrays](https://numpy.org/doc/stable/user/basics.indexing.html): the indexing that Starsim's arrays build on
 - [LASER: documentation for laser-generic](https://laser-base.github.io/laser-generic/): another framework that keeps agents as arrays, one value per person
+
+## Appendix: the kinds of array
+
+The kinds of array that hold what agents are and have (see [Arrays](../api/internals.arrays.qmd)), for the states of `ss.People(extra_states=...)` and of modules:
+
+| Array | Holds | Default |
+|---|---|---|
+| `ss.BoolState` | True or false, for a state people are in that is worth counting (such as `alive`, `female`, or a disease's `I`): a module records the number in each of its states as a result | False |
+| `ss.BoolArr` | True or false, for a flag used inside a module (such as `preterm`), with no result of its own; otherwise the same, with `.uids` for the agents for whom it is true | False |
+| `ss.FloatArr` | A number, such as an age or a relative risk | NaN |
+| `ss.IntArr` | A whole number, such as a count | -999999 (for none, since whole numbers have no NaN) |
+| `ss.TimeArr` | The step on which something happened (such as `ti_dead`) | NaN |
+| `ss.arrays.IndexArr` | The UID of another agent (such as `parent`), made by Starsim rather than by models | -1 |
+| `ss.uids` | A set of UIDs, as from `(people.age < 5).uids`, for indexing any array | |
+
+Each takes `default=`, a value or a distribution to draw each agent's value from, and `label=`, the name used in plots; and `columns=` (above).

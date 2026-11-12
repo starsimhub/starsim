@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Written by AI and lightly edited by a human; merged with a second AI draft
+  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI
 ---
 
 This tutorial goes through the SIR model of [Tutorial 1](t1_intro.qmd) in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?**
@@ -220,7 +220,7 @@ sim.run()
 sim.plot()
 ```
 
-**Steps, people, and agents.** A run moves in steps, `dt`, by default one of the unit (a day). For the ODE, the step is only how often results are recorded. For agents, moves are drawn once per step, so those infected in a step wait until the next to move on; [Tutorial 1](t1_intro.qmd) showed that a day is too long a step for this outbreak. Here are agents with steps of a day and a quarter day, with the ODE:
+**Steps, people, and agents.** A run moves in steps, `dt`, by default one of the unit (a day). For the ODE, the step is only how often results are recorded. For agents, moves are drawn once per step; [Tutorial 1](t1_intro.qmd) showed that a day is too long a step for this outbreak. Here are agents with steps of a day and a quarter day, with the ODE:
 
 ```{python}
 ode = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -230,9 +230,9 @@ msim = ss.parallel({'ODE': ode, 'Agents, step of 1 day': day, 'Agents, step of 1
 msim.plot('measles.I')
 ```
 
-`sim.new()` copies a sim with whatever is given changed; `verbose=0` silences the run. With a quarter-day step, the peak comes on day 6.75, close to the ODE (day 6), rather than day 9. A good check of any agent model is to halve the step and see whether results change; `sim.check_dt()` does this for you. (With different steps, `msim.plot()` plots each sim against its own time points; combining them as runs of one thing, e.g. their median, raises an error.)
+`sim.new()` copies a sim with whatever is given changed; `verbose=0` silences the run. With a quarter-day step, the peak comes close to the ODE's. A good check of any agent model is to halve the step and see whether results change; `sim.check_dt()` does this for you.
 
-`total_pop` is the number of people; as agents, each of the `n_agents` stands for `total_pop / n_agents` people (here 10). Results are always in people. More agents vary less by chance but take longer; 10,000 is often enough for the shape of an epidemic, but small numbers, such as the last few cases, need more. See [Time](../user_guide/building_time.qmd) in the user guide for more.
+`total_pop` is the number of people; as agents, each of the `n_agents` stands for `total_pop / n_agents` people (here 10). Results are always in people. More agents vary less by chance but take longer; small numbers, such as the last few cases, need more. See [Time](../user_guide/building_time.qmd) in the user guide for more.
 
 ## Saving and loading
 

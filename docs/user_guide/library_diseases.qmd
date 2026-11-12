@@ -4,27 +4,17 @@ jupyter: python3
 authorship:
   human: 50
   ai: 50
-  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI; examples made realistic and the catalog appendix added by AI
+  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI; examples made realistic and the catalog appendix added by AI; shortened on Nov 11 by AI
 ---
 
-The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd) for what it is) has ready-made diseases: outbreak diseases such as measles, Ebola, and cholera, HIV with its treatment, short versions of published models of others, and SIR, SIS, and SEIR written as code. This page shows each, with what one of its features changes.
+The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd) for what it is) has ready-made diseases: outbreak diseases such as measles, Ebola, and cholera, HIV with its treatment, short versions of published models of others, and SIR, SIS, and SEIR written as code. Most are declared as states and transitions, so they run as compartments or as agents (see [Diseases](building_diseases.qmd)); the rest are written as code, so they run as agents (see [Custom modules](building_modules.qmd)).
 
-Some library diseases are written as code (see [Custom modules](building_modules.qmd)): each has a `step()` that updates its agents directly, so they run as agents, under the agent-based solver only. Others, like the measles of the [tutorials](../tutorials/t1_intro.qmd), are declared as states and transitions, which run under any solver (see [Diseases](building_diseases.qmd)). The library's `ssl.Measles` is declared too, the tutorials' model with deaths and parameters from the literature.
-
-## Using library modules
-
-Library classes are available both at the top level and through their submodule; the two are the same objects:
+Library classes are available both at the top level and through their submodule (`ssl.Measles` is `ssl.diseases.Measles`), and can be mixed freely with core modules, here a library disease on a core network:
 
 ```{python}
 import starsim as ss
 import starsim.library as ssl
 
-print(ssl.Measles is ssl.diseases.Measles)
-```
-
-Otherwise they behave like core modules, and can be mixed freely with them, here a library disease on a core network:
-
-```{python}
 outbreak = dict(start='2000', dur=ss.years(1), n_agents=2000)
 sim = ss.Sim(diseases=ssl.Measles(beta=ss.perday(0.3)), networks=ss.RandomNet(), **outbreak) # On a network, beta is the rate per contact
 sim.run()
@@ -33,10 +23,10 @@ sim.plot('measles')
 
 ::: {.callout-important}
 ## Outbreak diseases need a step of days
-The library's outbreak diseases give their natural history in days: incubation periods of a week or two, and illness lasting days. Starsim chooses a step of a day for them, from the units of their durations. With a step of a year (`dt=ss.years(1)`), those durations are shorter than a step, and the dynamics are meaningless: `ssl.Cholera`, for example, then gives no infections at all, because its environmental reservoir never has time to build up. See [Time](building_time.qmd) for more on steps.
+The outbreak diseases give their natural history in days, and Starsim chooses a step of a day for them. With a step of a year, their durations are shorter than a step, and the dynamics are meaningless (see [Time](building_time.qmd)).
 :::
 
-The library's diseases are of two kinds. Most are declared as states and transitions, so they run as compartments or as agents: the three outbreak diseases below, and those [further down](#declared-diseases), each a short version of a published model. The rest are written as code, so they run as agents: HIV with its treatment, a disease that is not transmitted, and an SIR, SIS, and SEIR written as code.
+The outbreak diseases, and those written as code (the rest are [further down](#declared-diseases)):
 
 | Class | Based on | Description |
 | --- | --- | --- |
@@ -51,9 +41,9 @@ The library's diseases are of two kinds. Most are declared as states and transit
 
 ## Outbreak diseases: measles, Ebola, and cholera
 
-The three outbreak diseases are declared, as `ssl.Influenza` is, so they run as compartments or as agents, with or without a network. `Measles` is an SEIR with deaths: a latent period of about 8 days, an infectious period of about 11, an R0 of about 15, and a probability of death of 0.5%. `Ebola` and `Cholera` have fuller natural histories (severe disease and burial; symptoms and shedding into the water), each written as states and transitions. Their `beta` is a rate of transmission per day mixing homogeneously; on a network, it is the rate per contact, so give one suited to the network.
+The three outbreak diseases are declared, so they run as compartments or as agents, with or without a network. `Measles` is an SEIR with deaths: a latent period of about 8 days, an infectious period of about 11, an R0 of about 15, and a probability of death of 0.5%. `Ebola` and `Cholera` have fuller natural histories (severe disease and burial; symptoms and shedding into the water), each written as states and transitions. Their `beta` is a rate of transmission per day mixing homogeneously; on a network, it is the rate per contact, so give one suited to the network.
 
-`Ebola` gives each case a chance of severe disease (`p_sev`) and of death (`p_death`); severe cases (`Sev`) transmit more (`sev_factor`), and so do the bodies of those who have died (`D`) until they are buried (`unburied_factor`), unless they are buried safely, at once, which happens with probability `p_safe_bury`. Comparing the default, a quarter of burials safe, with every burial safe shows how much the funerals add to an epidemic. Since this epidemic is close to its threshold, chance matters, so each scenario is run 5 times, and the plot shows the median and the range:
+`Ebola` gives each case a chance of severe disease (`p_sev`) and of death (`p_death`); severe cases (`Sev`) transmit more (`sev_factor`), and so do the bodies of those who have died (`D`) until they are buried (`unburied_factor`), unless they are buried safely, at once, which happens with probability `p_safe_bury`. Here a quarter of burials are safe (the default), or all of them, with each scenario run 5 times, since chance matters near the epidemic threshold:
 
 ```{python}
 ebola = lambda p_safe_bury: ssl.Ebola(beta=ss.perday(0.008), p_safe_bury=p_safe_bury)
@@ -65,9 +55,7 @@ msim = ss.parallel(scenarios, n_runs=5, workers=1)
 msim.plot(['ebola.infected', 'ebola.infection.cum'])
 ```
 
-In these runs, burying every body safely cuts the infections over the year by about a third, though with much variation from run to run.
-
-`Cholera` adds environmental transmission to the usual transmission from person to person, with a state that is a count of bacteria rather than people (`W`, `ss.State(people=False)`): infectious people shed bacteria into it (at `shedding_rate`, asymptomatic people much less), the bacteria die off (at `decay_rate`), and susceptible people are infected by the water at a rate that rises with the concentration, reaching half of `beta_env` at `half_sat_rate`. This is the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease (see also [Cholera with a water reservoir](../gallery/cholera.qmd)). Turning off the environmental route (`beta_env=0`) shows how much of the epidemic it carries:
+`Cholera` adds environmental transmission to the usual transmission from person to person, with a state that is a count of bacteria rather than people (`W`, `ss.State(people=False)`): infectious people shed bacteria into it (at `shedding_rate`, asymptomatic people much less), the bacteria die off (at `decay_rate`), and susceptible people are infected by the water at a rate that rises with the concentration, reaching half of `beta_env` at `half_sat_rate`. This is the pattern to follow for any indirectly transmitted disease (see also [Cholera with a water reservoir](../gallery/cholera.qmd)). Here it is with and without the environmental route (`beta_env=0`):
 
 ```{python}
 town = dict(start='2000', dur=ss.years(1), total_pop=10_000)
@@ -79,16 +67,16 @@ msim = ss.parallel(scenarios, workers=1)
 msim.plot(['cholera.infected', 'cholera.infection.cum', 'cholera.env_conc'])
 ```
 
-With these values, transmission from person to person alone dies out, and the water carries an outbreak through most of a town of 10,000. The results `W` (the bacteria in the water) and `env_conc` (their concentration, as a share of the maximum rate of infection from the water) track the reservoir. Since the bacteria are a count, shed by everyone infectious into one reservoir, the water carries more of an epidemic in a larger population.
+The results `W` (the bacteria in the water) and `env_conc` (their concentration, as a share of the maximum rate of infection from the water) track the reservoir.
 
 ## HIV, treatment, and CD4 counts
 
 `ssl.HIV` comes with two companion modules that show how a disease, an intervention, and an analyzer fit together:
 
 - `ssl.ART` is a delivery, as `ss.treat()` is, that offers treatment once to each person infected for a year (`art_delay`), with the chance `coverage` (here an `ss.timeseries`, scaled up over the years), reducing transmission by `art_efficacy` and raising CD4 counts back towards `cd4_max`. `who=` and `when=` restrict who is offered it and when, as for any delivery.
-- `ssl.CD4_analyzer` is an analyzer that records every agent's CD4 count at every step, in a dense array of steps by agents (so it suits small sims).
+- `ssl.CD4_analyzer` is an analyzer that records every agent's CD4 count at every step, as an array of steps by agents (`sim.analyzers.cd4_analyzer.cd4`), so it suits small sims.
 
-Since deaths from HIV depend on CD4 counts, treatment reduces deaths as well as transmission. Unlike the outbreak diseases above, HIV plays out over years, so steps of a year and a span of decades suit it. It is passed on in sexual partnerships, so it runs on `ss.SexualNet`, where `beta` is a probability per act, from men to women and from women to men (`ss.peract`); with partnerships lasting two years on average and the network's default of about 80 acts a year, these values, at the upper end of the estimates, stand in for the higher infectiousness early in infection that this simple model leaves out:
+HIV plays out over years, so steps of a year suit it. It runs on `ss.SexualNet`, where `beta` is a probability per act, from men to women and from women to men (`ss.peract`):
 
 ```{python}
 endemic = dict(start='2000', stop='2030', dt=ss.years(1), n_agents=2000)
@@ -104,40 +92,13 @@ msim = ss.parallel(scenarios, workers=1)
 msim.plot(['hiv.prevalence', 'hiv.death'])
 ```
 
-The deaths and new infections over the whole run, and the prevalence in 2030 (its last value, rather than its mean over the run, which is what `summarize()` gives a prevalence by default), for each scenario:
-
-```{python}
-summary = msim.summarize(how=dict(hiv_prevalence='last'))
-summary.loc[['hiv_death', 'hiv_infection', 'hiv_prevalence']]
-```
-
-Without treatment, the prevalence rises from about 4% to about 30%, a generalized epidemic; scaling up treatment to 90% coverage roughly halves both the new infections and the deaths over the run.
-
-Each sim's analyzer holds the CD4 counts of every agent. The mean count among those infected falls without treatment, and recovers as treatment is scaled up:
-
-```{python}
-import numpy as np
-import matplotlib.pyplot as plt
-
-fig = plt.figure()
-for label, sim in zip(scenarios, msim.sims):
-    cd4 = sim.analyzers.cd4_analyzer.cd4 # Steps by agents
-    infected = cd4 < sim.diseases.hiv.pars.cd4_max # Uninfected agents keep the maximum count
-    mean_cd4 = np.array([row[inf].mean() if inf.any() else np.nan for row, inf in zip(cd4, infected)])
-    plt.plot(sim.t.yearvec, mean_cd4, label=label)
-plt.xlabel('Year')
-plt.ylabel('Mean CD4 count of those infected')
-plt.legend()
-plt.show()
-```
-
 ::: {.callout-note}
 `ART` offers treatment once to each agent, when they have been infected for `art_delay` (or when it starts, for those infected longer ago), with the coverage at that time: someone offered it while coverage was low is not offered it again. If the number on treatment (`n_art`) stays at zero, check the coverage and that people are still being infected when treatment starts.
 :::
 
-## A non-communicable disease
+## Other diseases written as code
 
-`ssl.NCD` is not transmitted, so it needs no network. Each agent starts at risk with probability `initial_risk`; those at risk develop the condition after a time drawn from `dur_risk`, and die of it after a time drawn from `prognosis`. Its results are the number at risk, the prevalence of the condition, and the deaths from it. A treatment that doubles the time people survive with the condition (`prognosis`, a Weibull distribution whose `scale` is the typical survival) shows a familiar result of chronic disease epidemiology: it delays deaths, and so raises the prevalence, since people live longer with the condition:
+`ssl.NCD` is a non-communicable disease, so it needs no network. Each agent starts at risk with probability `initial_risk`; those at risk develop the condition after a time drawn from `dur_risk`, and die of it after a time drawn from `prognosis`. Its results are the number at risk, the prevalence of the condition, and the deaths from it. Here a treatment doubles the time people survive with the condition (`prognosis`, a Weibull distribution whose `scale` is the typical survival):
 
 ```{python}
 chronic = dict(start='2000', stop='2040', dt=ss.years(1), n_agents=2000, demographics=[ss.Births(), ss.Deaths()])
@@ -149,36 +110,11 @@ msim = ss.parallel(scenarios, workers=1)
 msim.plot(['ncd.prevalence', 'ncd.death'])
 ```
 
-The peak prevalence, and the deaths over the whole run:
+Only the starting population is ever at risk here; a model of a real risk factor would put newborns and others at risk too, which is a change of `init_post()` and `step()` (see [Adapting a library module](#adapting-a-library-module)).
 
-```{python}
-msim.summarize(how=dict(ncd_prevalence='max')).loc[['ncd_prevalence', 'ncd_death']]
-```
+The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code, with Starsim 3's defaults (in years, where those of `ss.SIR` are of a respiratory infection, in days): durations are lognormal (`dur_inf=ss.lognormal(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. They schedule each course in whole steps as the agent engine does a declared disease's, so each case, seeds included, is infectious for `dur_inf` on average. `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](../migration/v3_v4.md#the-same-model-in-both)).
 
-Over 40 years, nearly everyone affected dies of the condition either way, so the treatment moves deaths later more than it prevents them. Only the starting population is ever at risk here, so the condition dies out with them; a model of a real risk factor would put newborns and others at risk too, which is a change of `init_post()` and `step()` (see [Adapting a library module](#adapting-a-library-module)).
-
-## SIR, SIS, and SEIR written as code
-
-The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, as states and transitions, so they run under any solver; they are the textbook models, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code, with Starsim 3's defaults (in years, where those of `ss.SIR` are of a respiratory infection, in days): durations are lognormal (`dur_inf=ss.lognormal(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. They schedule each course in whole steps as the agent engine does a declared disease's, so each case, seeds included, is infectious for `dur_inf` on average. `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](../migration/v3_v4.md#the-same-model-in-both)).
-
-With the same mean duration and no deaths, the two SIRs differ only in the shape of the duration: the lognormal of `AgentSIR` (with a standard deviation of one year) makes almost every infection last about 6 years, while the exponential of `ss.SIR` has many short infections and a few very long ones. Fewer people recover early on, so the epidemic of `AgentSIR` peaks higher and ends more sharply:
-
-```{python}
-pars = dict(beta=ss.peryear(0.1), init_prev=0.01, p_death=0)
-sir_pars = dict(start='2000', stop='2040', dt=ss.months(1), n_agents=2000, networks=ss.RandomNet())
-declared = ss.Sim(diseases=ss.SIR(dur_inf=ss.years(6), **pars), **sir_pars).run() # The mean duration of AgentSIR
-as_code = ss.Sim(diseases=ssl.AgentSIR(**pars), **sir_pars).run()
-
-fig = plt.figure()
-plt.plot(declared.t.yearvec, declared.results.sir.I, label='ss.SIR (declared, exponential duration)')
-plt.plot(as_code.t.yearvec, as_code.results.agentsir.infected, label='ssl.AgentSIR (code, lognormal duration)')
-plt.xlabel('Year')
-plt.ylabel('Number infected')
-plt.legend()
-plt.show()
-```
-
-Their results are named differently: the declared model's are named after its states (`I`) and transitions (`infection`), while the version written as code has Starsim 3's names for its states (`infected`), and the same `infection`.
+With the same mean duration and no deaths, the epidemic of `AgentSIR` peaks higher and ends more sharply than that of `ss.SIR`, whose exponential durations give many short infections and a few very long ones. Their results are named differently: the declared model's after its states (`I`) and transitions (`infection`), and the version written as code with Starsim 3's names (`infected`, and the same `infection`).
 
 ## Declared diseases
 
@@ -220,7 +156,7 @@ for C in [0.5*critical, 2*critical, 0.2]:
     sim = ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(5), stop=ss.days(365*30), verbose=0)
     sim.run()
     res = sim.results.malariaimmunity
-    print(f'Vectorial capacity {C:.3f}: parasite rate {res.prevalence[-1]:.3f}, of which detected {res.detected[-1]:.3f}')
+    print('Vectorial capacity', round(C, 3), '- parasite rate', round(res.prevalence[-1], 3), '- detected', round(res.detected[-1], 3))
 ```
 
 The same declaration runs as agents (`n_agents=` instead of `total_pop=`), where the prevalence is the same but each run differs by chance.
@@ -241,7 +177,7 @@ Library modules are ordinary Starsim modules, so they can be changed in the usua
 measles = ssl.Measles(beta=ss.perday(1.2), dur_exp=ss.normal(mean=ss.days(10), std=ss.days(2)), p_death=0.01)
 ```
 
-For a change to how the disease works, build on the class. Measles immunity is lifelong, but immunity to many respiratory infections is not: reinfection with the seasonal coronaviruses that cause colds is common within a year or two. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune` (exponential, with a mean of a year), and a small daily chance that a susceptible person is infected from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
+For a change to how the disease works, build on the class. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune`, and a small daily chance of infection from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
 
 ```{python}
 class WaningSEIR(ssl.AgentSEIR):
@@ -280,12 +216,6 @@ scenarios = {
 }
 msim = ss.parallel(scenarios, workers=1)
 msim.plot(['cold.infectious', 'cold.susceptible'])
-```
-
-Both scenarios have the same first epidemic and the same imported cases; they differ only in how long immunity lasts. With lifelong immunity, the epidemic leaves too few people susceptible for the imported cases to start another, so infection all but disappears. With immunity that wanes, people return to being susceptible, and the infection becomes endemic, with recurring smaller waves. Without the imported cases, it would not: in a population this small, the first epidemic burns out before immunity wanes, and there is no one infectious left to start a second. The total infections over the four years:
-
-```{python}
-msim.summarize('cold_infection')
 ```
 
 Copying a library module and editing it is also a good way to use it; that is what these modules are for. See [Custom modules](building_modules.qmd) for writing modules from scratch, and the tutorial [T8 – Custom modules](../tutorials/t8_modules.qmd) for a worked example.

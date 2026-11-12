@@ -40,7 +40,7 @@ Who meets whom: age groups and contact matrices, movement between towns, and net
 ::: {.g-col-6}
 [**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-Vaccination, school terms, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
+Vaccination, isolating cases, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
 :::
 
 ::: {.g-col-6}
@@ -59,12 +59,6 @@ Splitting a model by more than age, and two diseases that affect each other.
 [**T8 – Custom modules**](tutorials/t8_modules.qmd)
 
 Writing your own behavior as code: an intervention for compartments, and a disease, a quantity for each person, and a network for agents.
-:::
-
-::: {.g-col-6}
-[**T9 – Agents**](tutorials/t9_agents.qmd)
-
-What else individual people add: dying out and coming back, histories, pregnancy, and agents that stand for many people.
 :::
 
 :::

@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from a short prompt, with each example run and each timing measured
+  note: Written by AI from a short prompt, with each example run and each timing measured; shortened on Nov 11 by AI
 ---
 
-A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, idea by idea, with an example of each and of what would need code instead; then shows how to mix the two, and what each costs in speed.
+A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, how to mix the two, and what each costs in speed.
 
 For how to write a declared model, see [Writing models](building_writing.qmd); for modules written as code, [Custom modules](building_modules.qmd). For questions such as "can people die" or "can I double a rate", and whether each runs under every solver, see [Will my model run as an ODE?](running_solvers.qmd#appendix-what-needs-agents).
 
@@ -39,7 +39,7 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Rates that differ by group** | `ss.by()`, with a stratification | `ss.by(age=[0.5, 0.2, 0.1])` | |
 | **Rates that depend on each person's traits** | `ss.person` | `I >> ss.dead @ 0.001*np.exp(0.05*ss.person.age)` | |
 | **Values that vary between people** (each person's infectiousness) | A distribution, or `ss.attr()` | `ss.attr(ss.normal(500, 50), when=infection)` | |
-| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition or any other event (`sir.I.enter.ever`) | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
+| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition or any other event (`sir.I.enter.ever`) | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in [Custom modules](building_modules.qmd#an-example-immunity-that-builds-up)) |
 | **A move as soon as something holds, or happens** | A trigger, `when=` (or `@ ss.on()`) | `U >> A @ ss.on(ss.person.age >= 15)`, or `ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6)))` | |
 | **Who something applies to** | Conditions (`who=`): see [below](#conditions) | `who=(sir.I.n >= 20_000)` | `who=` the highest weekly incidence so far |
 | **Contacts** | Homogeneous mixing (the default), contact matrices, mixing pools, and networks | `ss.contacts('Kenya')`, `ss.RandomNet(n_contacts=10)`, `ss.SexualNet()` | A network rewired by a rule of your own, e.g. school classes reassigned each term |
@@ -114,74 +114,9 @@ The sim prints which solver it chose and why (`sim.solver_reason`), and the full
 
 ## Mixing declared and coded parts
 
-Declared and coded parts sit in the same sim, and each can read the other: code reads the declared model's states, transitions, and parameters by name, and a declared modifier can take its amount from a function.
+Declared and coded parts sit in the same sim, and each can read the other: code reads the declared model's states, transitions, and parameters by name, and a declared modifier can take its amount from a function. [Custom modules](building_modules.qmd#an-example-immunity-that-builds-up) combines a declared disease with an antibody level written as code.
 
-### A declared disease with immunity written as code
-
-Here a declared SIS model of a respiratory infection is combined with each person's antibody level, written as code. The level is boosted by 0.5 at each recovery, up to 1, and halves every 60 days in between, and a person's susceptibility is 1 minus their level. This can't be declared, since the level depends on every past infection, not only the last one. The update is a function of the levels at each step, so that it can be written in several ways ([below](#performance)):
-
-```{python}
-def update_numpy(level, recovered, decay, boost):
-    """ Each person's antibody level: boosted on recovery, up to 1, and decaying otherwise """
-    return np.where(recovered, np.minimum(1.0, level + boost), level*decay)
-
-class Antibodies(ss.Module):
-    """ Each person's antibody level, updated by a function of the levels """
-
-    def __init__(self, update=update_numpy, half_life=ss.days(60), boost=0.5, **kwargs):
-        super().__init__()
-        self.update = update
-        self.define_pars(
-            half_life = half_life,
-            boost = boost,
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('level', default=0.0, label='Antibody level'),
-        )
-        return
-
-    def step(self):
-        decay = 0.5**(self.t.dt/self.pars.half_life) # The share left after one step
-        uids = self.level.auids # Everyone alive
-        recovered = np.isin(uids, self.sim.diseases.cold.recovery.uids) # Who recovered in the last step
-        self.level[uids] = self.update(self.level[uids], recovered, decay, self.pars.boost)
-        return
-```
-
-The disease is declared, and a modifier, also declared, takes its amount from the module:
-
-```{python}
-def make_cold():
-    S, I = ss.states('S I')
-    return ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> S @ ss.days(7), init_prev=0.01, name='cold')
-
-def make_sim(immunity=None, update=update_numpy):
-    """ The infection with no immunity, with protection declared, or with antibodies written as code """
-    cold = make_cold()
-    pars = dict(n_agents=20_000, stop=ss.days(365), verbose=0)
-    if immunity == 'declared': # Protection that halves every 60 days since the last recovery
-        protection = ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60)))
-        return ss.Sim(cold, connectors=protection, **pars)
-    elif immunity == 'code':
-        protection = ss.modify(cold.rel_sus, multiply=lambda sim: 1 - sim.custom.antibodies.level)
-        return ss.Sim(cold, Antibodies(update=update), connectors=protection, **pars)
-    return ss.Sim(cold, **pars)
-
-sims = {
-    'No immunity': make_sim(),
-    'Declared: halves every 60 days since the last recovery': make_sim('declared'),
-    'Code: boosted by each recovery': make_sim('code'),
-}
-msim = ss.parallel(sims)
-msim.plot('cold_I')
-```
-
-The declared version is the simpler one, and is enough when protection depends only on the time since the last recovery; with boosting, protection builds up over repeated infections, and the infection settles lower. Both run as agents, since each person's protection is their own.
-
-### A declared model with a function in it
-
-A function can also stand in for one value in a declared model: a rate (`S >> I @ my_rate`), the amount of a modifier, or a condition. The rest of the model stays declared, and is still shown by `describe()`, with the function by name. In a compartmental run, the function is called at each step, so the run is taken a step at a time rather than in one call to compiled code. Here is the first measure above, with its condition written as a function:
+A function can also stand in for one value in a declared model: a rate (`S >> I @ my_rate`), the amount of a modifier, or a condition. The rest of the model stays declared, and is still shown by `describe()`, with the function by name; in a compartmental run, the run is then taken a step at a time rather than in one call to compiled code. Here is the first measure above, with its condition written as a function:
 
 ```{python}
 def many_infectious(sim):
@@ -193,13 +128,13 @@ sim = ss.Sim(flu, interventions=measure, **pars)
 sim.describe()
 ```
 
-The `plan` line of `sim.describe()` says why a run is taken a step at a time (a run says so too, as it starts), and `require_kernels=True` on the sim makes that an error instead.
+The `plan` line of `sim.describe()` says why a run is taken a step at a time, and `require_kernels=True` on the sim makes that an error instead.
 
 ## Performance
 
 ### Compartments
 
-A declared compartmental model runs in compiled code, the whole run in one call. Anything that needs Python at each step (a function, a module written as code, or a condition that needs a memory of past steps) takes it a step at a time. The results are the same; the time is not. Here are the measures above, run for two years in daily steps, timed on their second run (so that building and compiling are left out):
+A declared compartmental model runs in compiled code, the whole run in one call. Anything that needs Python at each step (a function, a module written as code, or a condition that needs a memory of past steps) takes it a step at a time, with the same results but not the same speed. Here are the measures above, timed on their second run (so that compiling is left out):
 
 ```{python}
 def seconds(sim):
@@ -225,21 +160,21 @@ for label, measure in versions.items():
     print(f'{label}: {1000*seconds(sim):.1f} ms')
 ```
 
-A run in compiled code takes a few milliseconds; a run a step at a time takes tens to hundreds of times longer, since each step goes back to Python. For one run this doesn't matter, but for a fit of thousands of runs it does: where a declared form can say the same thing, it is worth using. For many runs at once and other ways to keep runs fast, see [Speed and scale](running_performance.qmd).
+For one run the difference doesn't matter, but for a fit of thousands of runs it does: where a declared form can say the same thing, it is worth using ([Speed and scale](running_performance.qmd)).
 
 ### Agents
 
-As agents, the whole model is taken a step at a time anyway, and Starsim's own parts (transmission, the transitions, the networks) are compiled. Code of your own then adds the cost of its own work, and what matters is how it is written:
-
-- **For whole arrays**, as `update_numpy()` above: operations on the arrays of all agents at once, which NumPy does in compiled code. This is usually the simplest and the fastest.
-- **As a loop over people in Python**, which is slow: each person is a step of the Python interpreter.
-- **As a loop compiled with `@ss.jit`**: the same loop, compiled with Numba the first time it is called (and kept on disk after that). This suits logic that is easier written person by person, with branches, than for whole arrays.
-
-Here is the antibody update written as a loop, run as Python and compiled:
+As agents, the whole model is taken a step at a time anyway, and Starsim's own parts are compiled. Code of your own adds the cost of its own work, and what matters is how it is written: for whole arrays with NumPy (usually the simplest and fastest), as a loop over people in Python (slow), or as the same loop compiled with `@ss.jit` (compiled with Numba the first time it is called, and kept on disk), which suits logic that is easier written person by person. Here is an update of each person's antibody level (boosted on recovery, decaying otherwise), for 100,000 people, written each way:
 
 ```{python}
+import time
+
+def update_numpy(level, recovered, decay, boost):
+    """ Each person's antibody level: boosted on recovery, up to 1, and decaying otherwise """
+    return np.where(recovered, np.minimum(1.0, level + boost), level*decay)
+
 def update_loop(level, recovered, decay, boost):
-    """ As update_numpy(), as a loop over people """
+    """ The same, as a loop over people """
     for i in range(len(level)):
         if recovered[i]:
             level[i] = min(1.0, level[i] + boost)
@@ -247,21 +182,16 @@ def update_loop(level, recovered, decay, boost):
             level[i] = level[i]*decay
     return level
 
-update_jit = ss.jit(update_loop) # The same function, compiled; or @ss.jit above the def
-update_jit(np.zeros(1), np.zeros(1, dtype=bool), 0.5, 0.5) # The first call compiles it, once
+update_jit = ss.jit(update_loop) # The same loop, compiled; or @ss.jit above the def
 
-versions = {
-    'No immunity': make_sim(),
-    'Declared':    make_sim('declared'),
-    'Code, a Python loop': make_sim('code', update=update_loop),
-    'Code, NumPy':         make_sim('code', update=update_numpy),
-    'Code, ss.jit':        make_sim('code', update=update_jit),
-}
-for label, sim in versions.items():
-    print(f'{label}: {seconds(sim):.2f} s')
+level = np.random.rand(100_000)
+recovered = np.random.rand(100_000) < 0.01
+for label, update in {'A Python loop': update_loop, 'NumPy': update_numpy, 'ss.jit': update_jit}.items():
+    update(level.copy(), recovered, 0.99, 0.5) # The first call compiles the ss.jit version
+    start = time.perf_counter()
+    update(level.copy(), recovered, 0.99, 0.5)
+    print(label, '- milliseconds per step:', round(1000*(time.perf_counter() - start), 2))
 ```
-
-The loop in Python takes several times as long as the whole rest of the run. Written for whole arrays or compiled, the same update costs about as much as the declared protection, or less. All three versions give the same results.
 
 ## Further reading
 

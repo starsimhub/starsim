@@ -106,7 +106,6 @@ website:
         - tutorials/t6_data.qmd
         - tutorials/t7_strata.qmd
         - tutorials/t8_modules.qmd
-        - tutorials/t9_agents.qmd
         - tutorials/solutions.qmd
     - id: user_guide
       collapse-level: 1
@@ -222,39 +221,68 @@ website:
             - api/converters.qmd
         - section: "**Internals**"
           contents:
-            - api/internals.arrays.qmd
-            - api/internals.conditions.qmd
-            - api/internals.dates.qmd
-            - api/internals.debugtools.qmd
-            - api/internals.dimensions.qmd
-            - api/internals.display.qmd
-            - api/internals.dists.qmd
-            - api/internals.errors.qmd
-            - api/internals.expressions.qmd
-            - api/internals.fitting.qmd
-            - api/internals.gradients.qmd
-            - api/internals.graph.qmd
-            - api/internals.loop.qmd
-            - api/internals.modules.qmd
-            - api/internals.parameters.qmd
-            - api/internals.time.qmd
-            - api/internals.timeline.qmd
+            - href: api/internals.arrays.qmd
+              text: arrays
+            - href: api/internals.conditions.qmd
+              text: conditions
+            - href: api/internals.dates.qmd
+              text: dates
+            - href: api/internals.debugtools.qmd
+              text: debugtools
+            - href: api/internals.dimensions.qmd
+              text: dimensions
+            - href: api/internals.display.qmd
+              text: display
+            - href: api/internals.dists.qmd
+              text: dists
+            - href: api/internals.errors.qmd
+              text: errors
+            - href: api/internals.expressions.qmd
+              text: expressions
+            - href: api/internals.fitting.qmd
+              text: fitting
+            - href: api/internals.gradients.qmd
+              text: gradients
+            - href: api/internals.graph.qmd
+              text: graph
+            - href: api/internals.loop.qmd
+              text: loop
+            - href: api/internals.modules.qmd
+              text: modules
+            - href: api/internals.parameters.qmd
+              text: parameters
+            - href: api/internals.time.qmd
+              text: time
+            - href: api/internals.timeline.qmd
+              text: timeline
         - section: "**Library**"
           contents:
-            - api/library.diseases.qmd
-            - api/library.econ.qmd
-            - api/library.mnch.qmd
-            - api/library.networks.qmd
+            - href: api/library.diseases.qmd
+              text: diseases
+            - href: api/library.econ.qmd
+              text: econ
+            - href: api/library.mnch.qmd
+              text: mnch
+            - href: api/library.networks.qmd
+              text: networks
         - section: "**Solvers**"
           contents:
-            - api/solvers.agents.qmd
-            - api/solvers.choose.qmd
-            - api/solvers.compartmental.qmd
-            - api/solvers.deliveries.qmd
-            - api/solvers.engine.qmd
-            - api/solvers.joint_states.qmd
-            - api/solvers.mixing.qmd
-            - api/solvers.particles.qmd
+            - href: api/solvers.agents.qmd
+              text: agents
+            - href: api/solvers.choose.qmd
+              text: choose
+            - href: api/solvers.compartmental.qmd
+              text: compartmental
+            - href: api/solvers.deliveries.qmd
+              text: deliveries
+            - href: api/solvers.engine.qmd
+              text: engine
+            - href: api/solvers.joint_states.qmd
+              text: joint_states
+            - href: api/solvers.mixing.qmd
+              text: mixing
+            - href: api/solvers.particles.qmd
+              text: particles
     - id: main # The pages that aren't in a section of their own (e.g. Home and Tour): the same links as the navbar. Last, so the pages above keep their own sidebars
       contents:
         - href: index.qmd

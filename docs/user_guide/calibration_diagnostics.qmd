@@ -4,12 +4,12 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged on Nov 11 by AI with "Parameter identification" (based on an AI draft, with the plot of the ridge and fixing a known value added by AI), now the section on whether the data can tell the parameters apart. Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI
+  note: Merged on Nov 11 by AI with "Parameter identification" (based on an AI draft, with the plot of the ridge and fixing a known value added by AI), now the section on whether the data can tell the parameters apart. Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI; shortened on Nov 11 by AI
 ---
 
-`sim.fit()` always returns values. Whether to trust them is a separate question, with several parts: does the model match the data, did the search find the best values, are the values determined by the data, and would the fitted model predict data it hasn't seen? This page goes through the checks, in the order worth making them. It assumes the basics of [Fitting a model](calibration_fitting.qmd).
+`sim.fit()` always returns values. Whether to trust them has several parts: does the model match the data, did the search find the best values, do the data determine the values, and does the fitted model predict data it hasn't seen? This page goes through the checks in that order. It assumes the basics of [Fitting a model](calibration_fitting.qmd).
 
-The examples use a measles outbreak in a town of 100,000, 90% of whom are immune. The data are a year of weekly reported cases, made from the model with a latent period of 10 days (an SEIR model), `beta = 1.9`, and half of all cases reported:
+The examples use a measles outbreak in a town of 100,000, 90% of whom are immune. The data are a year of weekly reported cases, made from an SEIR model with a latent period of 10 days, `beta = 1.9`, and half of all cases reported:
 
 ```{python}
 import starsim as ss
@@ -31,7 +31,7 @@ data = truth.to_synthetic_data('cases', resample='week')
 
 ## Does the model match the data?
 
-Start by looking. A fit can converge perfectly and still be wrong, if the model can't produce the pattern in the data. Here the data are fitted with a model that leaves out the latent period, an SIR model:
+Start by looking: a fit can converge perfectly and still be wrong, if the model can't produce the pattern in the data. Here the data are fitted with a model that leaves out the latent period, an SIR model:
 
 ```{python}
 def make_sir():
@@ -46,20 +46,20 @@ def make_sir():
 sir_fit = ss.Sim(make_sir(), data=data, **pars).fit()
 ```
 
-The search converged, but the share reported ended at its upper bound of 1 (with an `AtBound` warning). `fit.plot(residuals=True)` shows why: the model's weekly cases before and after fitting against the data, and below them the difference between the data and the fitted model (the residuals), on the data's own weeks, as the fit compares them:
+`fit.plot(residuals=True)` shows the model against the data, and below it the residuals (data minus model) on the data's own weeks:
 
 ```{python}
 sir_fit.plot(residuals=True)
 ```
 
-Without a latent period, an epidemic with the same R0 grows much faster, so the SIR model can't be both as late and as large as the data: it peaks too early and too low, even with every case reported. The residuals have a pattern: too many cases in the model early on, then too few through the peak. Residuals that wander above and below zero at random, as for the right model below, are what a good fit looks like:
+The residuals have a pattern, and the share reported is pushed to its bound of 1: the model is wrong. For the right model, they wander above and below zero at random:
 
 ```{python}
 seir_fit = ss.Sim(make_seir(), data=data, **pars).fit(verbose=False)
 seir_fit.plot(residuals=True)
 ```
 
-A pattern in the residuals points to the structure of the model, or to how the data were defined, not to the fitting: no search will fix it. Some common patterns, and what to look at first:
+A pattern in the residuals points to the structure of the model, or to how the data were defined, and no search will fix it. Some common patterns, and what to look at first:
 
 | Pattern | Things to examine |
 |---|---|
@@ -69,7 +69,7 @@ A pattern in the residuals points to the structure of the model, or to how the d
 | Different starts giving different answers | Several optima, too short a search, a noisy objective |
 | A good fit but an unstable projection | Parameters the data can't tell apart; a change in the epidemic the model doesn't have |
 
-Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (Starsim dates a count by the start of its period, so a week starting on a Monday is dated by that Monday, and data dated by the end of each week needs moving back a week). The fit's measure (`fit.objective`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
+Also check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, admissions with admissions rather than beds occupied, and dates aligned (see [The data](calibration_fitting.qmd#the-data)). `fit.objective` compares fits to the same data, but the plot shows *where* a model fails.
 
 ## Did the search converge?
 
@@ -80,21 +80,15 @@ print(seir_fit.converged)
 print(seir_fit.why)
 ```
 
-What "converged" means depends on the method: for an optimizer, that searches from different starts end at the same value, or that the best score has stopped improving; for a sampler, that its chains agree. The rule of every method, and what to do if it fails, is in the [appendix](#appendix-when-each-method-has-converged).
+What "converged" means depends on the method (see the [appendix](#when-each-method-has-converged)). A fit that has not converged is not necessarily wrong, but can't be trusted until it has been run longer, or the reason is understood.
 
-A fit that has not converged is not necessarily wrong, but it can't be trusted until it has been run longer, or until the reason it didn't is understood.
+### A best value at a bound
 
-## Is a best value at a bound?
+A best value at the edge of its bounds gives an `AtBound` warning, as for the SIR model above. It means one of three things: the true value is beyond the bound (widen it, if such values are plausible); the data don't determine the parameter (see [below](#can-the-data-tell-the-parameters-apart)); or the model is missing something, and the parameter is making up for it, as the reporting share was above.
 
-A best value at the edge of its bounds triggers an `AtBound` warning, as for the SIR model above. It means one of three things:
+### The same answer again
 
-- The true value is beyond the bound: widen it, if larger (or smaller) values are plausible.
-- The data don't determine the parameter, so nothing stops it drifting to the edge (see [Can the data tell the parameters apart?](#can-the-data-tell-the-parameters-apart)).
-- The model is missing something, and the parameter is being pushed to the edge to make up for it, as the reporting share was above. Widening its bounds to allow more than 100% of cases to be reported would make the fit better and the model worse.
-
-## Does the fit give the same answer again?
-
-A stochastic model is fitted to noisy scores, so a second fit, with another `rand_seed=`, shows how much the answer depends on chance. Here the model is run as a chain binomial (a stochastic compartmental model), and fitted twice:
+A stochastic model is fitted to noisy scores, so a second fit, with another `rand_seed=`, shows how much the answer depends on chance:
 
 ```{python}
 import pandas as pd
@@ -107,26 +101,44 @@ for seed in [1, 2]:
 pd.DataFrame(rows).round(3)
 ```
 
-The two fits differ, by more in the share reported than in β (against true values of 1.9 and 0.5), and the `converged` column says whether each search had stopped improving by its end. Even a fit that says it has converged has only stopped improving; that doesn't make the answer precise. The noise in the scores is large compared with the difference that `report` makes to them. More trials, or more runs for each trial (`n_runs=`, 4 by default for a stochastic compartmental model), reduce this; so does a likelihood, which weighs the data by how much they vary, and with which Optuna scores each trial by a particle filter's estimate of the likelihood rather than by runs. The fit also reruns its best values with the same seeds as the search, and warns when they then score worse than the starting values: the best trial may have been a lucky run.
+If the fits differ by more than matters, use more trials, more runs per trial (`n_runs=`), or a likelihood, with which Optuna scores each trial by a particle filter rather than by runs. For a deterministic model, more starting points (`scan=`) do the same job. Check a stochastic fit against many runs, `ss.parallel(fit.sim, n_runs=20)`, not one, as in [Fitting a model](calibration_fitting.qmd#a-stochastic-model).
 
-For a stochastic model, also check the fit against many runs, not one: `ss.parallel(fit.sim, n_runs=20)`, as in [Fitting a model](calibration_fitting.qmd#a-stochastic-model). Expect the data to fall outside the range of the runs more often than the interval suggests: the runs leave out the noise in how the data were observed (the likelihood's), and runs at one set of values leave out the uncertainty in the parameters.
+### The time step
 
-## Does the time step matter?
+A model run as agents or a chain binomial takes whole steps, and when its rates are fast compared with the step, the step changes the fitted values (see [Solvers and backends](running_solvers.qmd#the-length-of-a-step)). `fit.sim.check_dt()` reruns the fitted sim with half the step and shows how much each result changes; if more than the mismatch of the fit, fit again with the smaller step.
 
-A model run as agents or as a chain binomial takes whole steps, and when its rates are fast compared with the step, the step changes the results (see [Solvers and backends](running_solvers.qmd#the-length-of-a-step)), and so the fitted values: a fit with daily steps can find a higher β to make up for the delay the steps add. `fit.sim.check_dt()` reruns the fitted sim with half the step and shows how much each result changes; if they change by more than the mismatch of the fit, fit again with the smaller step.
+### A posterior
+
+For a posterior by NUTS or particle MCMC, `fit.summarize()` gives two checks for each parameter (ABC-SMC's has the effective sample size only):
+
+- **R-hat** (`rhat`) compares the spread within each chain with that between chains. Above 1.01, the chains disagree, and the posterior is not yet reliable.
+- **Effective sample size** (`ess`) is how many independent draws the correlated draws are worth. A few hundred is enough for a median and a 95% interval.
+
+NUTS also counts **divergent** draws (`fit.diagnostics.divergences`), where the sampler's path went wrong; even a few mean the posterior may be missing a region. If any check fails, the fit warns (`ss.errors.NotConverged`). More warm-up (`warmup=`) sometimes fixes it, but a common cause is a ridge (see [below](#which-combinations-the-data-determine)): then fix a parameter, or get more data.
+
+### Looking at the search
+
+For any method, `fit.to_df()` has every evaluation, for plots of your own (there is one [below](#which-combinations-the-data-determine)). For Optuna, `fit.study` takes Optuna's plots (these need Plotly): how the best score improved (has it leveled off?), which parameters mattered most, and the score over a pair of parameters (a long diagonal valley is a ridge):
+
+```python
+import optuna
+optuna.visualization.plot_optimization_history(fit.study)
+optuna.visualization.plot_param_importances(fit.study)
+optuna.visualization.plot_contour(fit.study, params=['beta', 'report'])
+```
 
 ## Can the data tell the parameters apart?
 
-A parameter is *identifiable* if the data determine its value. A fit always returns some value for each parameter, but that value is only meaningful if the data could not equally well be explained by quite different values. There are two ways this can fail:
+A parameter is *identifiable* if the data determine its value. This fails in two ways:
 
-- **Structurally**: the model itself can't tell two parameters apart, whatever the data. If transmission depends only on the product of the number of contacts and the chance of infection per contact, any pair with the same product fits equally well.
-- **Practically**: the model could in principle tell them apart, but these data can't, because there is too little of it, it is too noisy, or it doesn't cover the part of the epidemic that would show the difference.
+- **Structurally**: the model can't tell two parameters apart, whatever the data, e.g. when transmission depends only on the product of contacts and the chance of infection per contact.
+- **Practically**: these data can't, because there is too little of it, it is too noisy, or it doesn't cover the part of the epidemic that would show the difference.
 
-The way to check is to fit data for which the right answer is known: data made from the model itself, with known values, as this page's examples do. If the fit doesn't recover those values, it won't recover the truth from real data either. Starsim also notes when two parameters can't be told apart: when they appear in the model only multiplied together, or (for a posterior) when they are almost perfectly correlated. This section shows the check, and what the fit tells you when identification fails.
+The way to check is to fit data made from the model with known values, as this page does: if the fit doesn't recover them, it won't recover the truth from real data either. Starsim also notes when two parameters appear in the model only multiplied together (e.g. `contacts*p_infect*I`), so that the data determine only their product: fit one and fix the other, or make their product one parameter. For a posterior, it notes parameters that are almost perfectly correlated.
 
 ### Recovering known values
 
-The model is the SEIR model above, now with three unknowns: the transmission rate `beta`, how long people stay infectious, `dur_inf`, and the share of cases that are reported, `report`. The reported cases are counts, so their likelihood is a Poisson:
+The SEIR model, now with three unknowns, `beta`, the infectious period `dur_inf`, and `report`, and a Poisson likelihood, fitted to data from a run with `beta = 1.9`, `dur_inf = 8` days, and `report = 0.5`:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -140,11 +152,7 @@ recovery  = I >> R @ dur_inf
 cases     = ss.outcome(report*onset, likelihood=ss.poisson())
 measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=0.0001, R=0.9))
 pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
-```
 
-The data are again a year of weekly reported cases, drawn from a run with `beta = 1.9`, `dur_inf = 8` days, and `report = 0.5`. The true sim has its own random seed, so its noise is not shared with any run being fitted:
-
-```{python}
 true_values = dict(beta=1.9, dur_inf=ss.days(8), report=0.5)
 truth = ss.Sim(measles, pars=true_values, rand_seed=2, **pars)
 truth.run()
@@ -152,33 +160,21 @@ weekly = truth.to_synthetic_data('cases', resample='week')
 
 sim = ss.Sim(measles, data=weekly, **pars)
 fit = sim.fit()
-```
-
-Adding the true values to the fit's table makes the comparison easy:
-
-```{python}
 table = fit.table.copy()
 table['true'] = [1.9, 8, 0.5]
 table
 ```
 
-All three are recovered closely. With a full year of data from a deterministic model, the shape of the epidemic, including how fast it rose, when it peaked, and how many people it reached, is enough to separate them.
-
 ### Which combinations the data determine
 
-A best fit is a single point; it doesn't show how far the values could move and still fit nearly as well. One way to see that is to look at many values and how well each fits. A search by Optuna (`method='optuna'`) spreads its trials widely before it narrows down, and each trial is kept, with its score, in `fit.to_df()`:
-
-```{python}
-search = sim.fit(method=ss.fitting.method('optuna', n_trials=300), rand_seed=1, verbose=False)
-trials = search.to_df()
-trials.sort_values('objective').head()
-```
-
-Plotting `beta` against `dur_inf` for each trial, colored by how much worse its negative log-likelihood is than the best:
+A best fit is a single point; it doesn't show how far the values could move and still fit nearly as well. Optuna spreads its trials widely before it narrows down, and each is kept, with its score, in `fit.to_df()`, so plotting `beta` against `dur_inf` for each trial shows the shape of the fit:
 
 ```{python}
 import numpy as np
 import matplotlib.pyplot as plt
+
+search = sim.fit(method=ss.fitting.method('optuna', n_trials=300), rand_seed=1, verbose=False)
+trials = search.to_df()
 
 worse = np.log10(1 + trials.objective - trials.objective.min()) # 0 at the best trial
 fig, ax = plt.subplots()
@@ -194,22 +190,20 @@ plt.colorbar(points, ax=ax, label='How much worse than the best (log10)')
 ax.legend();
 ```
 
-The good fits lie along a curve on which β × the infectious period, the basic reproduction number R0, stays about the same. The data determine R0 well: it sets how many people the outbreak reaches. They determine β and the infectious period separately much less well, through the timing of the epidemic alone. This is a practical limit, not a structural one: the full data still pick out the right point on the curve, but a little more noise, or less data, and they wouldn't.
+The good fits lie along a ridge of constant R0 (β × the infectious period): the data determine R0 well, but β and the infectious period separately only weakly.
 
-### Less data
+### Less data, and fixing what is known
 
-Suppose the outbreak is being fitted while it is still growing: 16 weeks of data, before the peak. Early growth is set by the rate at which the epidemic grows, which many combinations of β and the infectious period give:
+With 16 weeks of data, before the peak, early growth can be matched by many combinations of β and the infectious period:
 
 ```{python}
 early = sim.fit(data=weekly.iloc[:16], method='nelder-mead')
 early.table
 ```
 
-The fit shows the problem in three ways. The searches from different starting points end at different values and different scores, so it reports that it did not converge; the infectious period ends at its upper bound (with an `AtBound` warning), which here doesn't mean the true value is beyond the bound, only that nothing in the data stops it from going there; and the values are far from the truth. Wider bounds would not help. What helps is more information: more data, data of another kind (such as a serosurvey of who was infected), or fixing a parameter that is known from elsewhere. Measles' infectious period is well known, so in practice it would be fixed rather than fitted. `pars=` fits only the parameters named, and the others keep their values in the sim: here, the infectious period fixed at its true value of 8 days, and at a wrong value of 6 days:
+Wider bounds would not help here; more data, data of another kind (such as a serosurvey), or fixing a parameter that is known from elsewhere would. `pars=` fits only the parameters named. Here the infectious period is fixed at its true value of 8 days, and at a wrong value of 6:
 
 ```{python}
-import pandas as pd
-
 rows = []
 for days in [8, 6]:
     fixed = ss.Sim(measles, pars=dict(dur_inf=ss.days(days)), **pars) # The infectious period, fixed
@@ -218,30 +212,11 @@ for days in [8, 6]:
 pd.DataFrame(rows).round(3)
 ```
 
-With the infectious period fixed at its true value, the 16 weeks of data determine β and the share reported, and the search converges, near their true values (β of 1.96 against 1.9, and 45% reported against 50%, with only the noise of 16 weeks of counts between them): fixing what is known restores identification. With it fixed at 6 days, the fit is just as determined, and wrong: β is biased upwards, to make up for the shorter infectious period, so that R0 (and the rise of the outbreak) stays about the same. Fixing a parameter moves its uncertainty into the others, so fix only what is known, and at its best estimate.
-
-### Parameters that appear only together
-
-Some models can't separate two parameters whatever the data. Here transmission is written as the number of contacts a day times the chance of infection per contact, and both are fitted:
-
-```{python}
-contacts = ss.par(10, bounds=[2, 30])   # Contacts per day
-p_infect = ss.par(0.1, bounds=[0.01, 0.5]) # Chance of infection per contact
-
-S, E, I, R = ss.states('S E I R')
-infection = S >> E @ contacts*p_infect*I
-onset     = E >> I @ ss.days(10)
-cases     = ss.outcome(0.5*onset)
-measles2 = ss.Disease(infection, onset, I >> R @ ss.days(8), cases, init=dict(I=0.0001, R=0.9))
-
-fit2 = ss.Sim(measles2, data=weekly, **pars).fit()
-```
-
-The fit converges, since every search reaches the same best score, but at different values; Starsim notes that the two parameters appear only multiplied together, so the data determine only their product (here 1.9, the true β). The remedy is to fit one and fix the other, or to write the model with their product as one parameter.
+Fixing a parameter moves its uncertainty into the others, so fix only what is known, at its best estimate.
 
 ### Noise in the data
 
-Even when the parameters are identifiable, a real epidemic is one realization of a chance process, and a different realization would give somewhat different estimates. To see how much, make several data sets from a stochastic version of the model (a chain binomial, `solver='binomial'`), each with its own seed, and fit each one with the deterministic model. Here the infectious period is fixed at its true value, 8 days, and β and the share reported are fitted:
+A real epidemic is one realization of a chance process. To see how much that moves the estimates, fit several data sets from a stochastic version of the model, each with its own seed:
 
 ```{python}
 known = ss.Sim(measles, pars=dict(dur_inf=ss.days(8)), **pars) # The infectious period fixed at its true value
@@ -254,45 +229,11 @@ for seed in range(1, 7):
 pd.DataFrame(rows).round(3)
 ```
 
-Each epidemic is a little different (the total number of reported cases ranges from about 2,800 to 3,200), and so is each estimate: β from about 1.8 to 2.0, against a true 1.9, and the share reported from about 0.48 to 0.53, against 0.5. This spread is how precisely one outbreak of this size can determine the parameters. A small outbreak, or one that dies out early by chance, leaves much less to go on. A posterior gives this uncertainty from a single data set, if the model it is fitted with is as random as the process that made the data: an ODE's posterior on data like these is much narrower than this spread, and can exclude the truth, since it leaves out the chance in the epidemic. See [Gradients](calibration_gradients.qmd).
-
-### Signs of a problem
-
-| Sign | Likely cause | What to do |
-|---|---|---|
-| A note that two parameters appear only together | Structural: only their product (or ratio) matters | Fit one and fix the other, or use their product as one parameter |
-| A note that two parameters are almost perfectly correlated in the posterior | Practical: the data determine a combination | More data, or data of another kind; or fix one from other evidence |
-| Searches from different starts end at different values with similar scores | A ridge or a flat region | As above; look at the trials, or a profile likelihood |
-| A best value at a bound | The data don't constrain it, or the bounds are too narrow | Check the trials; widen the bounds only if larger values are plausible |
-| Estimates from known data far from the truth | Too little data, or the wrong data | Recover known values before fitting real data |
-
-Starsim notes the first two cases itself. To draw values from the priors of the parameters (or uniformly over their bounds) and run the model for each, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`. The profile likelihood, which shows how well the data determine one parameter at a time, is in [Gradients](calibration_gradients.qmd#profile-likelihoods).
-
-## Is the posterior reliable?
-
-For a posterior by NUTS or particle MCMC (`method='nuts'` or `'pmcmc'`), `fit.summarize()` prints a table with the posterior's median and 95% interval for each parameter, and two checks for each (ABC-SMC's has the effective sample size only, and its convergence is not assessed; see the [appendix](#appendix-when-each-method-has-converged)):
-
-- **R-hat** (`rhat`): compares the spread within each chain with the spread between chains. Near 1 means the chains have found the same distribution; above 1.01, they disagree, and the posterior is not yet reliable.
-- **Effective sample size** (`ess`): how many independent draws the correlated draws are worth. A few hundred is enough for a median and a 95% interval.
-
-NUTS also counts **divergent** draws (`fit.diagnostics.divergences`), where the sampler's path went wrong in a region of sharp curvature; even a few mean the posterior may be missing a region. If any of these checks fail, the fit warns (`ss.errors.NotConverged`). More warm-up (`warmup=`) sometimes fixes it, but a common cause is a ridge, where the data determine only a combination of parameters: then fix one, or get more data. A ridge in the fits of a model is shown in [Which combinations the data determine](#which-combinations-the-data-determine).
-
-## Looking at the search
-
-For a fit by Optuna, `fit.study` is Optuna's own record of the search, which its plots take: how the best score improved over the trials (has it leveled off?), which parameters mattered most to the score, and the score over each pair of parameters (a long diagonal valley is a ridge that the data can't resolve). These need Plotly:
-
-```python
-import optuna
-optuna.visualization.plot_optimization_history(fit.study)
-optuna.visualization.plot_param_importances(fit.study)
-optuna.visualization.plot_contour(fit.study, params=['beta', 'report'])
-```
-
-For any method, `fit.to_df()` has every evaluation, with the values tried and the objective at each, for plots of your own; [Which combinations the data determine](#which-combinations-the-data-determine) has one.
+The spread of the estimates is how precisely one outbreak of this size can determine the parameters. An ODE's posterior is much narrower, and can exclude the truth (see [Fitting methods](calibration_methods.qmd#comparing-the-methods)). To run the model at draws from the priors, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`; the profile likelihood, which shows how well the data determine one parameter, is in [Gradients](calibration_gradients.qmd#profile-likelihoods).
 
 ## Does the model predict?
 
-A model with more parameters usually fits better, without necessarily being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fitting.compare_models()` fits each model to the data before a cut, runs it forward, and scores it on the part held out. By default the last 25% of each series is held out, but here that would be the decline after the August peak, which is easy to predict once the peak has been fitted. The question a modeler usually faces is whether a model fitted to the rise of an outbreak predicts its peak, so `holdout=` gives a date instead: two months, and then one month, before the peak:
+A model with more parameters usually fits better without being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fitting.compare_models()` fits each model to the data before a cut, runs it forward, and scores it on the part held out (by default the last 25% of each series; here `holdout=` gives dates two months and one month before the peak):
 
 ```{python}
 models = {'SIR': ss.Sim(make_sir(), data=data, **pars), 'SEIR': ss.Sim(make_seir(), data=data, **pars)}
@@ -301,24 +242,24 @@ for cut in ['2025-06-01', '2025-07-01']:
     comparison.summarize()
 ```
 
-With data to the start of July, the SEIR model predicts the rest of the outbreak much better than the SIR model. With data only to the start of June, both predict it badly: two months before the peak, the rise of the outbreak says too little about how high it will go for either model, the right one included. A good fit to the data so far is not a good prediction. A stochastic model is scored over many runs at its best values (`n_runs=`, 100 by default), by the log of the mean of their likelihoods (or by their mean loss). The runs start at the beginning and are not conditioned on the data fitted to, so the score is harsher on a stochastic model than on an ODE, and it is at the best values only, not over a posterior. `folds=` repeats the comparison over several cut points, which shows whether the difference is larger than the spread from one cut point to another; `comparison.plot()` shows each model's fit and prediction against the data (here, for the last cut). Both models were fitted to data made by the SEIR model, so the right one is known here; with real data, every model is wrong to some extent, and this comparison says which predicts better.
+A stochastic model is scored over many runs at its best values (`n_runs=`, 100 by default), which is harsher than on an ODE. `folds=` repeats the comparison over several cut points, and `comparison.plot()` shows each model's fit and prediction.
 
 ## A checklist
 
-| Check | How | A problem looks like |
-|---|---|---|
-| The model matches the data | Plot the model against the data, on the data's own periods, and the residuals (`fit.plot(residuals=True)`) | A pattern in the residuals; a parameter pushed to a bound |
-| The search converged | `fit.converged`, `fit.why` | "Not converged", with the reason |
-| No value is at a bound | The `AtBound` warning | A best value at the edge |
-| The answer is stable | Fit again with another `rand_seed=` (stochastic) or from other starting points (`scan=`) | Different values each time |
-| The parameters are identifiable | A note that they can't be told apart; recover known values | A ridge, or values that move together |
-| The posterior is reliable | `rhat`, `ess`, divergences | R-hat above 1.01, few effective draws, any divergences |
-| The model predicts | `ss.fitting.compare_models()` | A model that fits well but predicts badly |
-| The fit is plausible | Compare the values with what is known from elsewhere | A reporting share above 1, an infectious period of months |
+| Check | How | A problem looks like | What to do |
+|---|---|---|---|
+| The model matches the data | `fit.plot(residuals=True)` | A pattern in the residuals; a parameter pushed to a bound | Change the model, or how the data are matched to it |
+| The search converged | `fit.converged`, `fit.why` | "Not converged", with the reason | Run longer (see the [appendix](#when-each-method-has-converged)) |
+| No value is at a bound | The `AtBound` warning | A best value at the edge | Widen the bounds only if such values are plausible |
+| The answer is stable | Fit again with another `rand_seed=` or `scan=` | Different values each time | More trials, runs, or particles; a likelihood |
+| The parameters are identifiable | Recover known values; the notes that parameters appear only together or are correlated | Values far from the truth; a ridge | Fix one parameter from other evidence, or get more data, or data of another kind |
+| The posterior is reliable | `rhat`, `ess`, divergences | R-hat above 1.01, few effective draws, any divergences | More warm-up and draws; check identifiability |
+| The model predicts | `ss.fitting.compare_models()` | A model that fits well but predicts badly | A simpler model, or more data |
+| The fit is plausible | Compare with what is known from elsewhere | A reporting share above 1, an infectious period of months | Rethink the model |
 
-The last check matters most, and no software can make it: a fit only finds the values that make this model match these data. Whether those values, and the model, make sense for the disease and the setting is a judgment for the modeler.
+The last check matters most, and no software can make it: whether the values, and the model, make sense for the disease and the setting is a judgment for the modeler.
 
-When reporting a fit, say enough for someone else to repeat it and judge it: what each data series is and how it was matched to the model (flow or stock, over what periods); the measure of fit or the likelihood; the parameters fitted, with their bounds and priors, and those held fixed and why; the method, its settings, and the seed; the diagnostics above; and the versions of Starsim and of the data.
+When reporting a fit, say what each data series is and how it was matched to the model; the measure of fit or likelihood; the parameters fitted, with bounds and priors, and those fixed and why; the method, its settings, and the seed; the diagnostics above; and the versions of Starsim and the data.
 
 ## Further reading
 
@@ -328,7 +269,9 @@ When reporting a fit, say enough for someone else to repeat it and judge it: wha
 - [pomp: Getting started](https://kingaa.github.io/pomp/vignettes/getting_started.html): diagnostics of fits of stochastic models, including iterated filtering and profiles
 - [Stan: Problematic posteriors](https://mc-stan.org/docs/stan-users-guide/problematic-posteriors.html): ridges and non-identified parameters in a posterior, and what to do about them
 
-## Appendix: when each method has converged
+## Appendix
+
+### When each method has converged
 
 The rule by which each method sets `fit.converged` (and says why in `fit.why`), and what to try if it hasn't:
 
@@ -339,26 +282,19 @@ The rule by which each method sets `fit.converged` (and says why in `fit.why`), 
 | Iterated filtering (`'if2'`) | Chains from different starts end within 2 of the best log-likelihood | More passes (`iterations=`) or particles (`particles=`); better bounds, if a chain has wandered off where the outbreak dies out |
 | NUTS (`'nuts'`) | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`) and draws; check identifiability |
 | Particle MCMC (`'pmcmc'`) | The chains agree (R-hat at most 1.01) | More draws and warm-up; more particles, if the acceptance is low |
-| ABC-SMC (`'abc-smc'`) | Not assessed (`fit.converged` is None): its result approximates the posterior, as closely as the final tolerance allows, and no rule says when that is close enough. `fit.why` and `fit.diagnostics` give the final tolerance, the share of the last generation's proposals accepted, and the number of generations | More generations (`generations=`) for a smaller tolerance, or more samples (`samples=`); with a likelihood, `'pmcmc'` |
+| ABC-SMC (`'abc-smc'`) | Not assessed (`fit.converged` is None): no rule says when its final tolerance is close enough; `fit.why` and `fit.diagnostics` give it | More generations (`generations=`) or samples (`samples=`); with a likelihood, `'pmcmc'` |
 | A list of methods | Its last stage converged; a stage that doesn't stops the list, with a warning, and its fit (or the last that converged) is returned | Make that stage converge, by its own rule |
 
-A best fit of a stochastic model that converged is also marked as not converged if, rerun with the same seeds, its best values score worse than the starting values: the best trial may have been a lucky run.
+A best fit of a stochastic model is also marked as not converged if, rerun with the same seeds, its best values score worse than the starting values.
 
-## Appendix: the warnings and notes a fit gives
+### Other warnings and notes
 
-Each message a fit can print, what it means, and what to do. Warnings are Python warnings (some of a class of their own, which `warnings.filterwarnings()` can select); notes are printed, and are silenced with `verbose=False`.
+The messages a fit can give that are not covered above. Warnings are Python warnings (some of a class of their own, which `warnings.filterwarnings()` can select); notes are printed, and are silenced with `verbose=False`.
 
 | Message | Kind | Means | What to do |
 |---|---|---|---|
-| The best-fit value is at one of its bounds | Warning, `ss.errors.AtBound` | The best value may lie beyond the bound, or the data don't determine the parameter, or it is making up for something missing | [Above](#is-a-best-value-at-a-bound): widen the bounds only if larger (or smaller) values are plausible |
 | The profile stays within the threshold up to a bound | Warning, `ss.errors.AtBound` | A profile likelihood's interval may extend beyond the bounds | Wider bounds, or more values |
-| Not converged, with the reason | Printed, and in `fit.why` | The method's own rule (above) was not met | As in the table above |
-| The chains disagree (R-hat above 1.01), or draws diverged | Warning, `ss.errors.NotConverged` | A posterior that is not yet reliable | More warm-up; check identifiability ([above](#is-the-posterior-reliable)) |
-| A stage did not converge, so the stages after it were not run | Warning | A list of methods stopped early | Make that stage converge (e.g. more trials) |
-| Rerun with the same seeds, the best values score worse than the initial values | Printed, and in `fit.why` | In a stochastic fit, the best trial may have been a lucky run | More trials (`n_trials=`), or more runs or particles per trial (`n_runs=`, `particles=`) |
-| Two parameters appear in the model only multiplied together (or one divided by the other) | Note | Structurally unidentifiable: the data determine only their product | Fit one and fix the other ([Parameters that appear only together](#parameters-that-appear-only-together)) |
-| Two parameters are almost perfectly correlated in the posterior (r above 0.95), or change the fitted results in almost the same way | Note | Practically unidentifiable from these data | More data, or data of another kind, or fix one |
 | The scan tries fewer than 10 points for each parameter | Note | With more than 10 parameters, the scan is capped at 100 points | `scan=` to change it |
 | The R-hat and effective sample size need JAX | Note | Without BlackJAX, they are NaN, so a posterior can't be checked | `pip install "starsim[jax]"` |
-| The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or the likelihood can't be run in JAX (e.g. a likelihood given as a function, or an initial value or share that is not linear in the fitted parameters), so they would be much slower (the default method falls back to Nelder-Mead by itself) | A method without gradients (e.g. `method='nelder-mead'`, or no `method=`), or `require_jax=False` to accept the slower way |
+| The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or likelihood can't be run in JAX (e.g. a likelihood given as a function, or an initial value that is not linear in the fitted parameters) | A method without gradients (e.g. `'nelder-mead'`, or no `method=`), or `require_jax=False` to accept the slower way |
 | A data column matches no result | Note when the sim is initialized, and an error when it is fitted | A typo in a header, or a result that doesn't exist | Rename the column (`ss.SimData(aliases=...)`) |
