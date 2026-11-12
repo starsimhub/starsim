@@ -424,6 +424,8 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
+    grid:
+      body-width: 1000px # Wider than Quarto's 800px, for code and figures; narrower screens collapse the sidebars first
     include-after-body: [./assets/collapse_sections.html, ./assets/tabset_fallback.html]
     toc: true
     toc-expand: true

@@ -57,3 +57,13 @@ table td:first-child a {
 .sidebar-expand-all button:hover {
   text-decoration: underline;
 }
+
+/* Figures shrink with the page down to a minimum width, then scroll; Quarto gives each a fixed width (e.g. width="758"), which otherwise always scrolls when the column is narrower */
+.cell-output-display img, .quarto-figure img {
+  max-width: 100%;
+  min-width: 360px;
+  height: auto;
+}
+.cell-output-display {
+  overflow-x: auto;
+}

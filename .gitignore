@@ -17,6 +17,8 @@ docs/api/
 objects.json
 objects.txt
 *.html
+# The docs' own scripts, included in every page
+!docs/assets/*.html
 *_files/
 docs/site_libs/
 
