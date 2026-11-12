@@ -71,6 +71,6 @@ fit.pars
 
 ## Going further
 
-- [T7 – Data and calibration](../tutorials/t7_calibration.qmd) fits the measles model to weekly case data, and projects from the fit.
+- [T6 – Data and calibration](../tutorials/t6_data.qmd) fits the measles model to weekly case data, and projects from the fit.
 - [Outcomes](../user_guide/building_outcomes.qmd) covers outcomes, and [Fitting a model](../user_guide/calibration_fitting.qmd) the options of `sim.fit()`.
-- [camdl](../user_guide/conversion/camdl.qmd) and [flepiMoP](../user_guide/conversion/flepimop.qmd) show models that are fitted to outcomes in those frameworks.
+- [camdl](https://starsim.org/lingua_franca/models/camdl/) and [flepiMoP](https://starsim.org/lingua_franca/models/flepimop/) show models that are fitted to outcomes in those frameworks.

@@ -1,17 +1,17 @@
 ---
-title: Results
+title: Results and plotting
 jupyter: python3
 authorship:
-  human: 20
-  ai: 80
-  note: Written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results; examples made realistic and an appendix added by AI
+  human: 12
+  ai: 88
+  note: Merged on Nov 11 by AI from "Results" (written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results) and "Plotting" (written by AI, from the plotting functions in the Starsim code); examples made realistic and appendices added by AI; shortened on Nov 11 by AI
 ---
 
-A run produces results: for each disease, the number of people in each state at each time point, and the number who made each transition in each step, plus any other quantities the model declares (prevalence, reported cases). This page covers what the results are, how to read them, how to change their time step, split them by group, compare them with data, plot them, and export them.
+A run produces results: for each disease, the number of people in each state at each time point, the number who made each transition in each step, and any other quantities the model declares. This page covers reading, resampling, grouping, summarizing, exporting, and plotting them. Results know their labels, time points, and kinds, so most plots take one line.
 
-## Where results are
+## Reading results
 
-After a run, `sim.results` holds the results of each module by name, and the sim's own (such as `alive`, the population size):
+After a run, `sim.results` holds the results of each module by name, and the sim's own (such as `alive`, the population size). The examples on this page use a measles outbreak in a town where 90% are immune, written as a function so that scenarios can be compared later:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -19,12 +19,14 @@ After a run, `sim.results` holds the results of each module by name, and the sim
 ```{python}
 import starsim as ss
 
-S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # β = 1.9 per day
-recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=10)) # 90% immune, 10 infectious
+def make_measles(immune=0.9):
+    S, I, R = ss.states('S I R')
+    infection  = S >> I @ 1.9*I        # β = 1.9 per day
+    recovery   = I >> R @ ss.days(8)   # Infectious for 8 days on average
+    prevalence = I/(S + I + R)         # The share of people infectious
+    return ss.Disease(infection, recovery, prevalence, init=dict(R=immune), init_n=dict(I=10), name='measles')
 
-sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
+sim = ss.Sim(make_measles(), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
 sim.run()
 
 res = sim.results.measles
@@ -36,15 +38,19 @@ print(res)
 ```r
 library(starsim)
 
-states("S I R")
-measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
-  recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  init   = list(R = 0.9), # 90% immune
-  init_n = list(I = 10)   # 10 infectious
-)
+make_measles <- function(immune = 0.9) {
+  states("S I R")
+  Disease(
+    infection  = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+    recovery   = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+    prevalence = I / (S + I + R),                  # The share of people infectious
+    init   = list(R = immune),
+    init_n = list(I = 10),
+    name = "measles"
+  )
+}
 
-sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
+sim <- Sim(make_measles(), total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
 sim$run()
 
 res <- sim$results$measles
@@ -52,13 +58,9 @@ res
 ```
 :::
 
-A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from. `res.I` and `res['I']` are the same. A disease with transmission also has `infected` and `prevalence`, added by Starsim; [Names with special meaning](building_diseases.qmd#names-with-special-meaning) lists the results every disease gets.
+A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from, plus any ratio or outcome declared with it, such as `prevalence` here. `res.I` and `res['I']` are the same. [Names with special meaning](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the results every disease and the sim get, and [Outcomes](building_outcomes.qmd) covers declaring more, such as reported cases.
 
-The sim's own results are those of the people: `alive`, `died`, and `emigrated` (and, as agents, `female`), each step. `record_people=False` on the sim skips them, which saves a little time in a light model that doesn't need them (demographics read `alive`).
-
-## Reading a result
-
-Each result is an `ss.Result`. It behaves like a NumPy array, one number per time point (so you can index, slice, and do arithmetic on it directly), but it also carries what it is:
+Each result is an `ss.Result`. It behaves like a NumPy array, one number per time point, but also carries what it is:
 
 | Attribute | Meaning |
 |-----------|---------|
@@ -72,11 +74,10 @@ Each result is an `ss.Result`. It behaves like a NumPy array, one number per tim
 ```{python}
 print('Peak infectious:', round(res.I.max()))
 print('Total infections:', round(res.infection.sum()))
-print('Infectious at the end:', round(res.I[-1]))
 print('First time points:', res.I.timevec[:3])
 ```
 
-Each result says what kind of quantity it is, as its `kind`, which decides how it is added up over time (its `summarize_by`), whether it has a running total, and how it is compared with data:
+A result's `kind` decides how it is added up over time (its `summarize_by`), whether it has a running total, and how it is compared with data:
 
 | `kind` | `summarize_by` | What it is | Examples | Over a period |
 |---|---|---|---|---|
@@ -84,187 +85,40 @@ Each result says what kind of quantity it is, as its `kind`, which decides how i
 | `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
 | `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
 
-A result of your own gives it as `ss.Result('protected', kind='stock')`. The name can say it instead (`new_...` is a flow, `n_...` and `cum_...` are stocks, and a name ending in `prevalence` is a ratio); with neither, `ss.Result('doses')` is taken as a flow if its type is an integer and as a ratio otherwise, with a warning, so give `kind=`. The kind also says whether the result is scaled by the number of people each agent stands for: a flow or stock is, and a ratio isn't (`scale=` overrides this). `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
+A result of your own gives it as `ss.Result('protected', kind='stock')`, or by its name ([appendix](building_writing.qmd#appendix-what-starsim-names-and-fills-in)). `scale=` overrides whether it is scaled, and `kind=None` is for a result with no meaning over time, which isn't summarized. `summarize_by=` summarizes it another way without changing what it is: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is still a flow, whose summary over the run is its mean per step.
 
-A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Two cautions: summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not new infections during the run, so `infection.sum()` leaves them out; add them if your definition of outbreak size includes everyone ever infected.
+A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not in `infection.sum()`.
 
-### Time points
+A result has one value for each time point, from `start` to `stop`, and each time point is the step that starts there: `I[0]` is the number infectious at the start, and `infection[0]` the infections during the first step ([Time](building_time.qmd#the-time-span-the-step-and-units)).
 
-A result has one value for each time point of the sim, from `start` to `stop`, and a step is taken from each, the last included, so each time point is a period: the step that starts there. `I[0]` is the number infectious at the start, and `infection[0]` is the number of infections during the first step. A flow is dated by the start of its step: with daily steps, the infections dated 1 January are those during 1 January. The state after the last step is not recorded, so after a run, `sim.people` is one step past the last time point of the results.
+### Changing the time step of a result
 
-```{python}
-print('Infectious at the start:', res.I[0])
-print('Infections in the first step:', round(res.infection[0], 2))
-print('Infectious after the first step:', round(res.I[1], 2))
-```
-
-## More results: ratios and outcomes
-
-A model can declare more results. A ratio of states, such as prevalence, is given to the disease along with the transitions, and an outcome (`ss.outcome()`) is a quantity worked out from flows, such as the cases that are reported: here, half of infections, three days after they happen:
-
-::: {.panel-tabset group="language"}
-## Python
+`resample()` gives a result over longer periods (`'day'`, `'week'`, `'month'`, `'year'`, or a duration such as `ss.weeks(2)`), adding it up by its `summarize_by`: weekly infections are the total over each week, monthly numbers infectious are the value at the start of each month, and a running total is the value at the end of each period. Each period is labeled by its start. `to_series()` gives a pandas series with the dates as its index:
 
 ```{python}
-S, I, R = ss.states('S I R')
-N = S + I + R
-infection  = S >> I @ 1.9*I
-recovery   = I >> R @ ss.days(8)
-prevalence = I / N                                   # The share of people infectious
-cases      = ss.outcome(0.5*infection, delay=ss.days(3)) # Half of infections are reported, 3 days later
-measles = ss.Disease(infection, recovery, prevalence, cases, init=dict(R=0.9), init_n=dict(I=10))
-
-sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
-sim.run()
-res = sim.results.measles
-sim.plot('measles')
-```
-
-## R
-
-```r
-states("S I R")
-N <- S + I + R
-infection <- Transition(S, I, rate = 1.9 * I)
-measles <- Disease(
-  infection  = infection,
-  recovery   = Transition(I, R, dur = days(8)),
-  prevalence = I / N,                                     # The share of people infectious
-  cases      = outcome(0.5 * infection, delay = days(3)), # Half of infections are reported, 3 days later
-  init   = list(R = 0.9),
-  init_n = list(I = 10)
-)
-
-sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
-sim$run()
-res <- sim$results$measles
-sim$plot("measles")
-```
-:::
-
-Each result is named after its variable (`prevalence`, `cases`). See [Outcomes](building_outcomes.qmd) for reporting, delays, and how long people stay in an outcome such as hospital.
-
-## Changing the time step of a result
-
-`resample()` gives a result over longer periods (`'day'`, `'week'`, `'month'`, `'year'`, or a duration such as `ss.weeks(2)`), adding it up by its `summarize_by` without being told: weekly cases are the total over each week, monthly numbers infectious are the value at the start of each month, and a running total (`.cum`) is the value at the end of each period. Each period is labeled by its start (1 January for a year, the 1st for a month, otherwise its first time point). `to_series()` gives a pandas series with the dates as its index:
-
-```{python}
-res.cases.resample('week').to_series().head()
-```
-
-```{python}
-res.I.resample('month').to_series()
+res.infection.resample('week').to_series().head()
 ```
 
 ## Results by group
 
-A disease stratified by age (see [Stratification](building_stratification.qmd)) still has one result for each state and transition; each is the total over the groups, and has the groups inside it. `select()` picks groups, and `by()` gives one line for each. Here the measles model is stratified by age, with the contact matrix of [Stratification](building_stratification.qmd#age-groups-and-contacts), in which children have the most contacts; with contacts, β is per contact, so it is given its value per contact by name:
+A disease stratified by age (see [Stratification](building_stratification.qmd)) still has one result for each state and transition; each is the total over the groups, and has the groups inside it. `select()` picks groups, and `by()` gives one line for each. Here the model is stratified by age, with the contact matrix of [Stratification](building_stratification.qmd#age-groups-and-contacts); with contacts, β is per contact, so it is given by name:
 
 ```{python}
-by_age = measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, inplace=False) # A stratified copy
+by_age = make_measles().stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, inplace=False)
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
-sim = ss.Sim(by_age, networks=contacts, pars=dict(beta=0.14), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
-sim.run()
+strat = ss.Sim(by_age, networks=contacts, pars=dict(beta=0.14), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
+strat.run()
 
-res = sim.results.measles
-print('Peak infectious, all ages:', round(res.I.max()))
-print('Peak infectious, aged 0-14:', round(res.I.select(age='0-14').max()))
-res.prevalence.by('age').plot()
+sres = strat.results.measles
+print('Peak infectious, aged 0-14:', round(sres.I.select(age='0-14').max()))
+sres.prevalence.by('age').plot()
 ```
 
-The share of children infectious peaks earlier and higher than among adults, since children meet the most people. (Adults and people 65 and over have the same number of contacts in all, 12 a day, so their lines lie on top of each other.) A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided.
+A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. A module written as code can keep its results by group too: stratify the sim (`stratify=dict(sex=['female', 'male'])`), make the result with `ss.Result(..., groups=True)`, and set it at each step with `set_groups()` from `sim.groups.count()`, which counts the people in each group for whom a condition holds. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone.
 
-A module written as code can keep its results by group too, rather than one result for each group (`prevalence_f_15_20` and so on). Stratify the sim, make the result with `groups=True`, and set it at each step from `sim.groups.count()`, which counts the people alive in each group for whom a condition holds, in one pass. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone:
+### Results with several columns
 
-```{python}
-class ByGroup(ss.Analyzer):
-    def init_results(self):
-        super().init_results()
-        self.define_results(ss.Result('prevalence', groups=True))
-
-    def record_stocks(self): # At the start of each step, as the other stocks are
-        super().record_stocks()
-        groups = self.sim.groups
-        self.results.prevalence.set_groups(self.ti, groups.count(self.sim.diseases.sis.I), groups.count()) # The infected over everyone, in each group
-
-sim = ss.Sim(ss.SIS(), networks='random', analyzers=ByGroup(), stratify=dict(sex=['female', 'male'], age=[0, 15, 50]), verbose=0)
-sim.run()
-sim.results.bygroup.prevalence.select(sex='female', age='15-49').plot()
-```
-
-Nothing in this SIS model depends on sex or age, so the prevalence among women aged 15–49 is the same as in anyone else, but for chance; the example shows the mechanics, which are the same for a model in which they differ.
-
-## Comparing with data
-
-Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it, and weekly data is compared with the total of a flow over each week. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data, including making data from a run of the model with `sim.to_synthetic_data()`; it is the data that [calibration](calibration_fitting.qmd) fits to.
-
-## Plotting
-
-`sim.plot()` plots the main results of every module, `sim.plot('measles')` those of one module, and `res.I.plot()` a single result, each labeled and dated from the results themselves. A result stratified by place can be drawn on a map, `res.prevalence.map()`, at several times or as an animation ([Geography](populations_geography.qmd#maps)). [Plotting](building_plotting.qmd) covers choosing what to plot, comparing runs, styles, and saving figures.
-
-## Summaries and export
-
-`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow (`'sum'`), the final value of a stock (`'last'`), and the mean of a ratio (`'mean'`). It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs (see below), so one run and many read the same way; results that are 0 throughout are kept, so the tables of different runs line up row for row. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak (`how=` takes `'mean'`, `'median'`, `'sum'`, `'last'`, `'max'`, `'min'`, or a function).
-
-::: {.panel-tabset group="language"}
-## Python
-
-```{python}
-sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0) # The measles model with prevalence and reported cases, not stratified
-sim.run()
-sim.summarize()
-```
-
-## R
-
-```r
-sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
-sim$run()
-summary(sim) # As sim$summarize(), as a named vector
-```
-:::
-
-`to_df()` gives results as a table (a pandas dataframe), for one module or for the whole sim, with one column per result; it can then be saved with `df.to_csv()` or `df.to_excel()`:
-
-::: {.panel-tabset group="language"}
-## Python
-
-```{python}
-df = sim.to_df()
-df.head()
-```
-
-## R
-
-```r
-df <- as.data.frame(sim) # As sim$to_df(), as an R data frame
-head(df)
-```
-:::
-
-A single module's results, or a single result, give a table the same way: `sim.results.measles.to_df()`, or `res.I.to_df()`. `sim.results.flatten()` gives the same results as a flat dict, keyed like the columns (`measles_I`).
-
-## Results of many runs
-
-The runs of a stochastic model together (see [Scenarios](running_scenarios.qmd)) have the same results as one run, with every run inside each. The usual summaries are built in:
-
-```{python}
-msim = ss.parallel(sim.new(solver='binomial'), n_runs=20)
-res = msim.results.measles.I
-
-median = res.median()            # The median of the runs at each time point
-low, mid, high = res.quantiles() # The 2.5%, 50%, and 97.5% quantiles at each time point
-first = res.select(run=0)        # One run
-res.plot()                       # The median, and the range of 95% of the runs
-```
-
-A result of many runs knows its runs: `res.take([0, 1])` keeps some of them, `res.scenarios()` gives the positions of the runs of each scenario, and `res.axes()` its dimensions (the runs, the groups) and their levels. `res.diff('baseline')` is the difference of each other scenario from the one labeled `'baseline'`, run by run (such as the infections a vaccine averted), and `msim.diff('baseline')` the same for every result; see [Scenarios](running_scenarios.qmd).
-
-`msim.summarize()` gives the median and interval of each result over the whole run (the total infections of each run, for example), which is not the same as the median at each time point: the quantiles at each time point summarize the runs time point by time point, so they don't give the quantiles of the epidemic's peak or of its total size.
-
-## Results with several columns
-
-Sometimes a result naturally has several values at each time point, such as new infections by variant or by age group. For a declared disease, [stratifying](#results-by-group) does this. In a module written as code, rather than defining one result per group, give `columns=` to `ss.Result`, which makes a result with a column for each. Here an analyzer counts new infections among children and adults separately:
+In a module written as code, a result with several values at each time point, such as new infections by age group, is made with `columns=`. Here an analyzer counts new infections among children and adults:
 
 ```{python}
 import numpy as np
@@ -282,37 +136,158 @@ class InfectionsByAge(ss.Analyzer):
         children = self.sim.people.age[new] < 15
         self.results.new_infections[self.ti] = [np.count_nonzero(children), np.count_nonzero(~children)]
 
-sim = ss.Sim(ss.SIS(), networks='random', analyzers=InfectionsByAge(), n_agents=2000, start='2000-01-01', stop='2000-12-31', verbose=0)
-sim.run()
-res = sim.results.infectionsbyage.new_infections
-print('Shape:', res.shape)
-print('Columns:', res.columns)
+cols = ss.Sim(ss.SIS(), networks='random', analyzers=InfectionsByAge(), n_agents=2000, start='2000-01-01', stop='2000-12-31', verbose=0)
+cols.run()
+infs = cols.results.infectionsbyage.new_infections
+infs.resample('month').to_df().head()
 ```
 
-Each column is available as a result of its own, as `res.adults`, `res['adults']`, or `res.select(column='adults')`. These share their data with the whole result, so changing one changes the other. Most operations handle each column separately: they are scaled by the number of people each agent stands for, `to_df()` gives one column of the table each, `sim.summarize()` summarizes each, and `resample()` sums each over the period (since this result is a flow):
+Each column is a result of its own, as `infs.adults`, `infs['adults']`, or `infs.select(column='adults')`, sharing its data with the whole. Most operations handle each column separately: scaling, `to_df()`, `sim.summarize()`, `resample()`, and `plot()`, which draws one line per column.
+
+## Summaries, export, and many runs
+
+Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data; it is the data that [calibration](calibration_fitting.qmd) fits to.
+
+`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow, the final value of a stock, and the mean of a ratio. It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs, so the two read the same way. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak.
+
+`to_df()` gives results as a table (a pandas dataframe), for the whole sim, one module (`sim.results.measles.to_df()`), or one result (`res.I.to_df()`), to save with `df.to_csv()` or `df.to_excel()`. `sim.results.flatten()` gives them as a flat dict, keyed like the columns (`measles_I`).
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
-monthly = res.resample('month')
-monthly.to_df().head()
+sim.summarize()
 ```
-
-Plotting the result shows one line per column:
 
 ```{python}
-res.plot()
+df = sim.to_df()
+df.head()
 ```
 
-## Pitfalls
+## R
 
-- **The flow at a time point is the step that starts there.** The peak in infections dated 10 March is the infections during 10 March, with daily steps, and the weekly total dated 3 March is the week from 3 March. Data dated by the end of each period ("week ending") needs its dates moved back by one period to be compared.
-- **A ratio is not a mean over groups.** Use `res.prevalence.select(age='65+')`, not the mean of the prevalence in each group.
+```r
+summary(sim) # As sim$summarize(), as a named vector
+df <- as.data.frame(sim) # As sim$to_df(), as an R data frame
+head(df)
+```
+:::
+
+### Results of many runs
+
+The runs of a stochastic model together (see [Scenarios](running_scenarios.qmd)) have the same results as one run, with every run inside each:
+
+```{python}
+msim = ss.parallel(sim.new(solver='binomial'), n_runs=20)
+mres = msim.results.measles.I
+
+median = mres.median()            # The median of the runs at each time point
+low, mid, high = mres.quantiles() # The 2.5%, 50%, and 97.5% quantiles at each time point
+first = mres.select(run=0)        # One run
+```
+
+`take()` keeps some runs, `scenarios()` and `axes()` say how they are arranged, and `diff('baseline')` is the difference of each other scenario from the one labeled `'baseline'`, run by run (`msim.diff('baseline')` does it for every result). `msim.summarize()` gives the median and interval of each result over the whole run, which is not the same as the median at each time point: the quantiles at each time point don't give the quantiles of the peak or of the total size.
+
+## Plotting
+
+### Plotting a sim
+
+`sim.plot()` plots every result that is plotted by default, each in axes of its own, labeled and dated from the results, with any data as points (`show_data=False` leaves it out). The sim's own results that never change are left out; `show_skipped=True` includes them.
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+sim.plot()
+```
+
+## R
+
+```r
+plot(sim) # The same as sim$plot()
+```
+:::
+
+What to plot is given by name, as the first argument:
+
+| Argument | Plots |
+|---|---|
+| None (the default) | Every result plotted by default, each in its own axes |
+| `'measles'` | The results of one module |
+| `'measles.I'` (or `'measles_I'`) | One result |
+| `['measles.I', 'measles.infection']` | Exactly these results, each in its own axes |
+| `[['measles.S', 'measles.I', 'measles.R'], 'measles.infection']` | The results in an inner list together in one axes, with a legend |
+
+A name that matches no result is an error that lists the names there are. Put together only results of the same kind on a similar scale, such as the two flows here:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+sim.plot([['measles.infection', 'measles.recovery'], 'measles.I'], figsize=(8, 6))
+```
+
+## R
+
+```r
+sim$plot(list(list("measles.infection", "measles.recovery"), "measles.I"), figsize = c(8, 6)) # A list in a list: together in one axes
+```
+:::
+
+A module plots its own results with `plot()`: `'states'` (the default, together in one axes), `'flows'`, `'all'`, or the names of results, e.g. `sim.diseases.measles.plot('I', 'prevalence')`. A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind.
+
+### Plotting results
+
+A single result plots itself, with its label as the title, and so does anything made from one: a resampled result, one group (`select(age='0-14')`), or one line per group (`by('age')`). Each plotting function takes the common Matplotlib settings by name (`color`, `lw`, `alpha`, `figsize`, and the others of `ss.plot_args()`), and anything else in a dict: `plot_kw=` to `plt.plot()`, `fig_kw=` to `plt.figure()`, `data_kw=` to `plt.scatter()`. `log=True` gives a log scale.
+
+```{python}
+res.infection.resample('week').plot(color='k', lw=3, figsize=(6, 3))
+```
+
+### Comparing scenarios and runs
+
+Sims run together, with `ss.parallel()` or `ss.MultiSim`, plot together: each result is one axes, with a line for each scenario, labeled by the sims' labels. The runs of a stochastic model are plotted as their median at each time point, with a band holding 95% of the runs; `lines=True` plots every run instead:
+
+```{python}
+scenarios = {
+    '85% immune': ss.Sim(make_measles(0.85), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0),
+    '90% immune': ss.Sim(make_measles(0.90), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0),
+}
+ss.parallel(scenarios).plot('measles.I')
+msim.plot('measles.I') # The 20 runs above: the median and the range of 95% of them
+```
+
+Plots mark when interventions act (a dashed line at each round of a delivery, a shaded span for an `ss.modify()` or routine delivery), in gray for marks every scenario shares and in a scenario's color for its own; `show_interventions=False` leaves them out. `msim.plot_each()` plots each run on its own time axis, for sims with different time points.
+
+### Styles, saving, and Matplotlib
+
+Plots use Starsim's style (`'starsim'`, with the Mulish font) by default; `style=` takes `'simple'`, `'fancy'`, or any Matplotlib style such as `'ggplot'`, and `font=` another font (`'sans-serif'` for Matplotlib's default). `ss.options(style='simple')` changes every plot.
+
+In Jupyter, a plotting function shows the figure and returns nothing; `filename=` saves it as well, and `do_show=False` returns the figure without showing it. In a script, the figure is always returned (and shown as `ss.options.show` says), so it can be saved with `fig.savefig()`. A figure or axes given with `fig=` or `ax=` is not shown, so more can be plotted into it.
+
+Anything else can be plotted with Matplotlib from the results, since a result is an array with its time points. `ss.style()` applies Starsim's style to plots of your own, and `sc.commaticks()` from [Sciris](https://docs.sciris.org/) puts commas in large numbers on an axis:
+
+```{python}
+import matplotlib.pyplot as plt
+
+with ss.style():
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for label, scenario in scenarios.items():
+        sres = scenario.results.measles
+        ax.plot(sres.infection.timevec, sres.infection.cum/100_000, label=label) # Infected since the start, as a share
+    ax.set_title('Share of people infected since the start')
+    ax.legend()
+    plt.show()
+```
+
+`msim.to_df(quantiles=[0.025, 0.5, 0.975])` gives the quantiles of every result across runs, in long form, for pandas, seaborn, or any library that works with tables. Besides results over time, Starsim draws maps, diagrams, people and contacts, distributions, fits, and timings; the [appendix](#appendix-every-plotting-function) lists every plotting function.
+
+## Pitfalls and further reading
+
+- **The flow at a time point is the step that starts there.** The weekly total dated 3 March is the week from 3 March. Data dated by the end of each period ("week ending") needs its dates moved back by one period to be compared.
 - **Agents' results are scaled.** With each agent standing for several people, counts are multiplied by that number when the run ends; a count read in the middle of a run is in agents (see [Branching and rescaling](running_branching.qmd)).
 
-## Further reading
-
-- [pandas: 10 minutes to pandas](https://pandas.pydata.org/docs/user_guide/10min.html): working with the tables that `to_df()` gives
-- [pandas: time series and date functionality](https://pandas.pydata.org/docs/user_guide/timeseries.html): resampling and dates, as `to_series()` gives them
-- [Sciris](https://docs.sciris.org/): the utilities that Starsim's results and dataframes are built on
+Further reading: [10 minutes to pandas](https://pandas.pydata.org/docs/user_guide/10min.html) (the tables `to_df()` gives), [Matplotlib style sheets](https://matplotlib.org/stable/gallery/style_sheets/style_sheets_reference.html) (the styles `style=` accepts), and [Ten simple rules for better figures](https://doi.org/10.1371/journal.pcbi.1003833).
 
 ## Appendix: everything a result can do
 
@@ -328,3 +303,28 @@ for name, attr in ss.Result.__dict__.items():
     doc = ' '.join((attr.__doc__ or '').split('\n\n')[0].split()) # The first paragraph, on one line
     print(name.ljust(16), doc)
 ```
+
+## Appendix: every plotting function
+
+Every plotting function takes the settings of `ss.plot_args()` (`figsize`, `filename`, `do_show`, `style`, and the others above).
+
+| Plot | What it shows | See |
+|---|---|---|
+| `sim.plot()` | The results of a sim, each in its own axes, with any data | [Plotting a sim](#plotting-a-sim) |
+| `module.plot()` | The results of one module, its states together by default | [Plotting a sim](#plotting-a-sim) |
+| `res.plot()` | One result (one line per column or group), or across runs, the median and a 95% interval | [Plotting results](#plotting-results) |
+| `res.map()` | A result stratified by place, on a map of its places, at several times or as an animation | [Places and data](populations_places.qmd) |
+| `geo.plot()` | A map of the places of a geography, colored by a value for each place if given (`values=`) | [Places and data](populations_places.qmd) |
+| `msim.plot()` | The results of many runs or scenarios: the median and a 95% interval of each, or every run (`lines=True`) | [Comparing scenarios and runs](#comparing-scenarios-and-runs) |
+| `msim.plot_each()` | Each run on its own time axis, for sims with different time points | [Scenarios](running_scenarios.qmd) |
+| `msim.branching.plot()` | For a branching process, the distribution of the chains' sizes (and, as agents, their lengths in generations) | [Branching and rescaling](running_branching.qmd) |
+| `disease.diagram()`, `sim.diagram()` | A declared disease's states and transitions (or every disease's, and how they act on each other), drawn; `diagram('text')` gives a Mermaid flowchart | [Writing models](building_writing.qmd#equations-diagram-and-transitions) |
+| `sim.people.plot()`, `sim.people.plot_ages()` | Agents' attributes, as histograms; the age pyramid | [People and demographics](populations_people.qmd) |
+| `network.plot()` | The contacts of a network of agents | [Mixing](populations_mixing.qmd) |
+| `dist.plot_hist()` | Draws from a distribution, as a histogram | [Distributions](mechanics_distributions.qmd) |
+| `fit.plot()` | A fit: the data against the model before and after fitting, and with `residuals=True`, the differences | [Fitting a model](calibration_fitting.qmd), [Fit diagnostics](calibration_diagnostics.qmd) |
+| `comparison.plot()` | Each model's fit and prediction against held-out data, from `ss.fitting.compare_models()` | [Fit diagnostics](calibration_diagnostics.qmd) |
+| `infection_log.plot()` | When each agent was infected, from the `ss.infection_log` analyzer (and `animate()`, as an animation) | [Analyzers](interventions_analyzers.qmd#the-infection-log) |
+| `icer.plot()`, `icer.plot_ceac()` | The cost-effectiveness plane, and the cost-effectiveness acceptability curve, from `ssl.econ.ICER` | [Health economics](library_econ.qmd) |
+| `sim.loop.plot()` | The order in which modules are called in each step | [From declaration to run](architecture_run.qmd) |
+| `sim.loop.plot_cpu()` | The time spent on each event of the loop (each module's methods) during a run | [Debugging](running_debugging.qmd) |

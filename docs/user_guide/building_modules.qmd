@@ -4,12 +4,10 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted
+  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI
 ---
 
-Most of a Starsim model is declared: its states, its transitions and their rates, the interventions given to it, and the results it reports. Some parts of a model are easier to say as code: a quantity that each person carries and that changes continuously (an antibody level, a CD4 count, a viral load), a rule of behavior of your own, or a result worked out in a way of your own. A module written as code is a Python class with a `step()` method, which Starsim calls once each step. It can read and change the rest of the sim, and it sits in the same sim as declared diseases.
-
-This page covers when to write a module as code, a worked example, the parts of a module, the order in which Starsim calls them, and modules made from a single function. [T9 – Custom modules](../tutorials/t9_modules.qmd) builds one up a step at a time, [A5 – Custom modules](../tutorials/a5_modules.qmd) does the same for modules among agents, and [Model execution](architecture_execution.qmd) explains the loop that calls them.
+Most of a Starsim model is declared, but some parts are easier to say as code: a quantity that each person carries and that changes continuously (an antibody level, a CD4 count), a rule of behavior of your own, or a result worked out in a way of your own. A module written as code is a Python class with a `step()` method, which Starsim calls once each step. It can read and change the rest of the sim, and sits in the same sim as declared diseases. [T8 – Custom modules](../tutorials/t8_modules.qmd) builds modules up a step at a time.
 
 ## Before writing code
 
@@ -25,22 +23,19 @@ Many things that once needed a module of their own are declared, and a declared 
 | One disease changing the risk of another | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` | [Connectors](interventions_connectors.qmd) |
 | A number to report, such as cases from infections | `ss.outcome()` | [Outcomes](building_outcomes.qmd) |
 | A value for each person, drawn or recorded at an event, or a trait (a CD4 count at infection, each person's infectiousness) | `ss.attr()`, e.g. `ss.attr(ss.normal(500, 50), when=infection)` | [`ss.attr`](../api/expressions.qmd) |
-| A move as soon as a condition holds, or when an event happens to the person (debut at 15, a change at diagnosis) | A trigger, `ss.on()` | [Diseases](building_diseases.qmd#other-rates) |
+| A move as soon as a condition holds, or when an event happens to the person (debut at 15, a change at diagnosis) | A trigger, `ss.on()` | [Diseases](building_diseases.qmd#other-transitions) |
 | Moving people between groups, such as vaccination or a change of risk | `ss.transfer()` | [Stratification](building_stratification.qmd#moving-between-groups) |
-| Protection that depends on the time since an event, such as immunity that halves every 60 days after recovery | `ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60)))` | [What can be declared](building_declared.qmd#a-declared-disease-with-immunity-written-as-code) |
+| Protection that depends on the time since an event, such as immunity that halves every 60 days after recovery | `ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60)))` | [The example below](#an-example-immunity-that-builds-up) |
 | Counting events in each person, such as past infections or doses | `increment=` on a transition | [Stratification](building_stratification.qmd#moving-between-groups) |
 
-Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim. A module can also say so in its class: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too, so that a compartmental run can include it ([Modules](architecture_modules.qmd)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents, and costs the loop only its own methods; [Measles in London, two ways](../gallery/measles_london.qmd) works through an example, declared and as code.
+Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, makes the sim run as agents (`n_agents=` says how many). A class can also say so itself: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too ([Modules](architecture_index.qmd#what-a-module-is)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents; [Measles in London, two ways](../gallery/measles_london.qmd) works through an example.
 
-## An example: immunity that fades gradually
+## An example: immunity that builds up
 
-In a declared SIRS model, immunity is all or nothing: people are fully protected in `R` until they move back to `S`, and then not protected at all. For many respiratory infections, protection fades gradually as antibodies decline, so each person's susceptibility depends on how long ago they recovered. That is a per-person quantity that changes continuously, which is what code is for. (This simple form, a level of 1 at recovery that halves every 60 days, could also be declared, from the time since each person's last recovery; the module shows how the parts of a module fit together, and [What can be declared](building_declared.qmd#a-declared-disease-with-immunity-written-as-code) has a version that needs code.)
-
-(Measles, the example in the tutorials, is a poor fit here: immunity to measles lasts for life. This page uses a generic respiratory infection instead.)
-
-Here is the infection, with no immunity at all: people go back to `S` when they recover (an SIS model). Its R0 is 0.4 per day × 7 days = 2.8:
+For many respiratory infections, protection depends on past infections: antibodies rise with each one and decline in between. Protection that depends only on the time since the last recovery can be declared (the table above), but a level boosted by every infection is a per-person quantity, which is what code is for. Here is the infection, a generic cold with no immunity of its own (an SIS model, R0 = 0.4 × 7 = 2.8):
 
 ```{python}
+import numpy as np
 import starsim as ss
 
 S, I = ss.states('S I')
@@ -49,16 +44,17 @@ recovery  = I >> S @ ss.days(7)  # Infectious for 7 days on average
 cold = ss.Disease(infection, recovery, init_prev=0.01)
 ```
 
-The module holds each person's antibody level. It is 1 just after recovery and halves every `half_life`:
+The module holds each person's antibody level, which rises by `boost` at each recovery, up to 1, and halves every `half_life`:
 
 ```{python}
 class Antibodies(ss.Module):
-    """ Each person's antibody level: 1 on recovery, then halving every half_life """
+    """ Each person's antibody level: boosted by each recovery, up to 1, and halving every half_life in between """
 
-    def __init__(self, half_life=ss.days(60), **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            half_life = half_life,
+            half_life = ss.days(60), # How quickly antibodies decline
+            boost     = 0.5,         # The rise in the level at each recovery
         )
         self.update_pars(**kwargs)
         self.define_states(
@@ -77,7 +73,7 @@ class Antibodies(ss.Module):
         decay = 0.5**(self.t.dt/self.pars.half_life) # The share left after one step
         self.level[:] = self.level*decay
         recovered = self.sim.diseases.cold.recovery.uids # Those who recovered in the last step
-        self.level[recovered] = 1.0
+        self.level[recovered] = np.minimum(1.0, self.level[recovered] + self.pars.boost)
         return
 
     def record_stocks(self):
@@ -86,44 +82,30 @@ class Antibodies(ss.Module):
         return
 ```
 
-The module keeps the level, and a modifier says what it does: it multiplies each person's susceptibility to the infection by what the antibodies leave of it. A modifier never overwrites the quantity it changes, so the disease's own `rel_sus` is kept, and `describe()` lists the modifier as part of the model:
+The module keeps the level, and a modifier says what it does: it multiplies each person's susceptibility by what the antibodies leave of it. A modifier never overwrites the quantity it changes, and `describe()` lists it as part of the model. Here the infection is run with no immunity, with protection declared from the time since the last recovery, and with the antibodies:
 
 ```{python}
 def susceptibility(sim):
     """ Each person's susceptibility: 1 minus their antibody level """
     return 1 - sim.custom.antibodies.level
 
-protection = ss.modify(cold.rel_sus, multiply=susceptibility)
-```
+by_recovery = ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60))) # Halves every 60 days since the last recovery
+coded    = ss.modify(cold.rel_sus, multiply=susceptibility)
 
-To compare, run the infection with no immunity, with all-or-nothing immunity that lasts 60 days on average (a declared SIRS), and with antibodies that halve every 60 days:
-
-```{python}
-S, I, R = ss.states('S I R')
-sirs = ss.Disease(
-    infection = S >> I @ 0.4*I,
-    recovery  = I >> R @ ss.days(7),
-    waning    = R >> S @ ss.days(60), # Fully immune, then fully susceptible
-    init_prev = 0.01,
-    name = 'cold',
-)
-
-pars = dict(n_agents=10_000, stop=ss.days(365))
+pars = dict(n_agents=10_000, stop=ss.days(365), verbose=0)
 sims = {
     'No immunity': ss.Sim(cold, **pars),
-    'All or nothing': ss.Sim(sirs, **pars),
-    'Antibodies that fade': ss.Sim(cold, Antibodies(), connectors=protection, **pars),
+    'Declared: since the last recovery': ss.Sim(cold, connectors=by_recovery, **pars),
+    'Code: boosted by each recovery': ss.Sim(cold, Antibodies(), connectors=coded, **pars),
 }
 msim = ss.parallel(sims)
 msim.plot('cold_I')
 ```
 
-With no immunity, the infection settles at once at an endemic level. With either kind of immunity, the first wave leaves many people protected, so the number infectious falls and then rises again as protection is lost. With antibodies that fade, people regain some susceptibility soon after recovering, instead of none at all until they lose their protection entirely, so the later waves are larger and the infection settles at a higher level.
-
-`ss.parallel()` runs the sims in place, so each one has its results. The module's result is among them, under the module's name:
+`ss.parallel()` runs the sims in place, so each one has its results, and the module's are under its name:
 
 ```{python}
-sims['Antibodies that fade'].results.antibodies.mean_level.plot()
+sims['Code: boosted by each recovery'].results.antibodies.mean_level.plot()
 ```
 
 ## Choosing a base class
@@ -143,22 +125,22 @@ A module subclasses one of Starsim's module types, so that it runs at the right 
 
 The sim keeps each kind in its own list, e.g. `sim.custom.antibodies` and `sim.interventions[0]`. A module is named after its class in lower case (`antibodies`), unless it is given `name=`. To give a module of your own to a sim by name, as a string (`diseases='mydisease'`), as Starsim's own can be, register the Python module it is in with `ss.register_modules(my_package)` ([`ss.register_modules`](../api/internals.modules.qmd)).
 
-## Parameters: `define_pars()` and `update_pars()`
+## The parts of a module
 
-In `__init__()`, call `super().__init__()` first, with no arguments; then give the parameters and their defaults with `define_pars()`; then apply the values the user gave with `update_pars()`:
+### Parameters
 
-```python
-def __init__(self, half_life=ss.days(60), **kwargs):
-    super().__init__()
-    self.define_pars(
-        half_life = half_life,
-    )
-    self.update_pars(**kwargs)
+In `__init__()`, call `super().__init__()` first, with no arguments; then give the parameters and their defaults with `define_pars()`; then apply the values given with `update_pars()`, as above. The values are checked against the defaults, so a misspelled name is an error:
+
+```{python}
+try:
+    Antibodies(half_lfe=ss.days(90))
+except Exception as e:
+    print(type(e).__name__, e)
 ```
 
-`update_pars()` raises an error for a parameter that `define_pars()` didn't give, which catches misspelled names. The parameters are in `self.pars`. Give rates and durations as Starsim's [time parameters](building_time.qmd) (e.g. `ss.days(60)`, `ss.peryear(0.1)`), so that they mean the same whatever the step of the sim: `self.t.dt/self.pars.half_life` above is a number of half-lives per step, whether the step is a day or a week.
+The parameters are in `self.pars`. Give rates and durations as Starsim's [time parameters](building_time.qmd) (e.g. `ss.days(60)`), so that they mean the same whatever the step: `self.t.dt/self.pars.half_life` is a number of half-lives per step, whether the step is a day or a week. For a default that is a distribution, a number sets its main value (`ssl.AgentSIR(p_death=0.02)`), and another distribution of the same kind replaces it. A parameter of a distribution can itself be a function of the sim and the people ([Distributions](mechanics_distributions.qmd)).
 
-## States: `define_states()`
+### States
 
 A state of a module is an array with one value for each agent. Give the module's states with `define_states()`, as `ss.FloatArr` (numbers), `ss.BoolState` (true or false), or `ss.IntArr` (whole numbers). (`ss.State` is different: it is a state of a declared disease.)
 
@@ -169,69 +151,45 @@ self.define_states(
 )
 ```
 
-Each state becomes an attribute of the module (`self.level`) and is added to the people (`sim.people.antibodies.level`). A state that most agents never change from its default, such as a relative risk of 1, can be made with `shared=True`, so that it takes no memory per agent until a value is set. [People and agents](populations_people.qmd#appendix-the-kinds-of-array) lists the kinds of array, and what each is for. States grow as agents are born, and a dead agent's values are kept but left out of sums and means. Keep every value that belongs to a person in a state, never in a plain NumPy array of your own, which wouldn't grow with the population. Each `ss.BoolState` also gives a result of the same name, the number of people for whom it is true. A state can also have several columns, e.g. immunity to each of several strains: see [People](populations_people.qmd#states-with-several-columns). To read and write states, see [Array indexing](mechanics_indexing.qmd).
+Each state becomes an attribute of the module (`self.level`) and is added to the people (`sim.people.antibodies.level`). States grow as agents are born, and a dead agent's values are kept but left out of sums and means, so keep every value that belongs to a person in a state, not in a NumPy array of your own. Each `ss.BoolState` also gives a result of the same name, the number of people for whom it is true. [Array indexing](mechanics_indexing.qmd) covers reading and writing states, the [kinds of array](mechanics_indexing.qmd#appendix-the-kinds-of-array), and states with [several columns](mechanics_indexing.qmd#arrays-with-several-columns). A state that most agents never change from its default can be made with `shared=True`, so that it takes no memory per agent until a value is set.
 
 A property of each person that several modules read, rather than a state of one module (e.g. a social determinant of health that two conditions depend on), is added to the people themselves, from `init_pre()`, with `sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.2)))`. Adding one that is there already returns it, so each module that reads it can add it. A declared rate reads it as `ss.person.housing`, or as `ss.person.get('housing', 0)` to have a value when no module adds it.
 
 Code reads the same names a declaration does: a condition or an event's memory of a running sim, indexed by UID, gives its values, e.g. `preg.since_birth[uids]` (the time since each woman's last live birth) or `(hiv.I & preg.P)[uids]`, and `.values` gives them for everyone alive. A declared transition's current rate for some agents, with its modifiers, is `dis.death.hazard(uids)`.
 
-### Aliases
+`define_aliases()` gives a name that stands for another state (`infectious='infected'`) or for a function of the module (`asymptomatic=lambda self: self.infected & ~self.symptomatic`, read-only, with a result of its count); an alias is used only where the module has no attribute of that name, so a subclass can replace it with a state. `overwrite=True` on `define_states()` replaces an inherited state or alias, and `reset=` removes one.
 
-`define_aliases()` gives a name that stands for something else: the name of another state, or a function of the module.
+### Results
 
-```python
-self.define_aliases(infectious='infected') # Another name for a state
-self.define_aliases(asymptomatic=lambda self: self.infected & ~self.symptomatic) # Worked out from other states
-```
+To report a result of your own, override `init_results()` and give it with `define_results()`, as above. `kind=` says how it is summed over time, compared with data, and scaled when the population is [rescaled](running_branching.qmd): `'flow'` for a number of events in each step, `'stock'` for a quantity at each time point, and `'ratio'` for a share or a mean, which isn't scaled ([Results](building_results.qmd)). Fill results at `self.ti`: a stock in `record_stocks()`, so that it is the state at the time point, and a flow in `record_flows()`, after every module has stepped (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once ([why](architecture_run.qmd#why-stocks-and-flows-are-recorded-separately)).
 
-Keyword arguments to `define_states()` are passed on to `define_aliases()`, so a module can give its states and aliases together. An alias is used only when the module has no attribute of that name, so a base class can use one as a default that a subclass replaces by defining a state of the same name; this is how `ss.AgentDisease` counts everyone infected as infectious unless a subclass says otherwise (see [Diseases](building_diseases.qmd)). An alias given as a function is worked out each time it is read, can't be written to, and gives a result (its count). To replace an inherited state or alias, pass `overwrite=True` to `define_states()`; to remove one, name it in `reset=`.
-
-## Results: `define_results()`
-
-To report a result of your own, override `init_results()` and give it with `define_results()`. A result has one value for each time point of the sim:
-
-```python
-def init_results(self):
-    super().init_results()
-    self.define_results(
-        ss.Result('mean_level', label='Mean antibody level', kind='ratio'),
-        ss.Result('n_protected', kind='stock', label='Number protected'),
-    )
-```
-
-`kind=` says how the result is summed over time and compared with data: `'flow'` for a number of events in each step (e.g. new infections), `'stock'` for a quantity at each time point (e.g. the number infected), and `'ratio'` for a share or a mean. Give it unless the name says it (`new_...` is a flow, `n_...` and `cum_...` are stocks, a name ending in `prevalence` is a ratio). With neither, the kind is guessed from the type, with a warning: an integer is taken as a flow, and anything else as a ratio, which would leave a count unscaled. [Names with special meaning](building_diseases.qmd#names-with-special-meaning) lists the other names Starsim reads. A flow or stock is a count, which is multiplied by the number of people each agent stands for when the population is [rescaled](running_branching.qmd); a ratio (a share, a mean, or a level) isn't. `scale=` overrides this. Fill results at `self.ti`: a stock in `record_stocks()`, called at the start of each step before any module steps, so that it is the state at the time point; a flow in `record_flows()`, called at the end of the step after every module has stepped and the deaths have happened (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as a rate of births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once. A class that defines `update_results()`, as Starsim 3 and early versions of Starsim 4 did, raises a `TypeError` saying to split it. [Steps and time points](architecture_steps.qmd#why-stocks-and-flows-are-recorded-separately) explains why.
-
-## The work: `step()`
+### The work of each step
 
 `step()` is called once each step, and is where the module does its job. Inside it:
 
 - `self.sim` is the whole sim: its people (`self.sim.people`), diseases (`self.sim.diseases.cold`), and so on. A plain `ss.Module` given as `modules=` is in `self.sim.custom` (`sim.modules` is every module of the sim, of every kind).
-- `self.pars` are the module's parameters. A time parameter stays one (`self.pars.half_life`), as above. A value that varies, in time (`ss.timeseries`, `ss.seasonal`) or by level (`ss.by(node=[...])`), is its value now in arithmetic and NumPy (`self.pars.emergence*n`, `np.exp(-self.pars.k)`, `float(self.pars.k)`): a number in the sim's unit, or one for each level. If its values are typed, its value now is typed too, so `self.pars.rate.to_prob()` works whether `rate` is `ss.peryear(0.1)` or `ss.timeseries({2000: ss.peryear(0.1), 2010: ss.peryear(0.2)})`. So is a parameter of a declared disease, with what modifies it applied (`acts*(1 - hiv.pars.eff_condom)`).
+- `self.pars` are the module's parameters. A time parameter stays one (`self.pars.half_life`), as above. A value that varies, in time (`ss.timeseries`, `ss.seasonal`) or by level (`ss.by()`), is its value now in arithmetic (`self.pars.emergence*n`), with its unit if typed, so `self.pars.rate.to_prob()` works for a time series of rates too. So is a parameter of a declared disease, with what modifies it applied.
 - `self.t.dt` is the length of a step, `self.now` is the date or time of the step (the time point it starts from), and `self.ti` is the index of that time point, where the step's results are recorded. The first step is `self.ti == 0`. A stock recorded at `self.ti` is already there (e.g. `self.sim.results.cold.I[self.ti]`, the number infectious now), but this step's flows are not, so `[self.ti - 1]` of a flow is the last step's.
-- A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.n_times`, and `.since` say whether, how often, and how long ago each person did; to save memory, a disease keeps this history only for the transitions something in the model reads, so to read one after the run (e.g. `sir.infection.n_times.values`), make the sim with `ss.Sim(..., keep_times=True)` (or set `ss.options.keep_times = True` for every sim).
-- To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five susceptible people infectious, `ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5)` protects 80% of the susceptible children under 5 (a condition on a group, as in `who=` elsewhere), and `sir.move(uids, sir.R)` moves particular agents from wherever they are (as agents only; the arguments can come in any order, with the source before the destination, so `ss.move(sir, uids, 'R')` is the same). It runs the same under every solver, and since people are moved rather than made or lost, every disease keeps the same people; the number in a state of people (`sir.I.n`) is read, not set. A count that is not people (mosquitoes, `ss.State(people=False)`) can also be set (`W.n = 0`) or moved from and to outside the model (`ss.move(ss.dead, mosq.Sv, n=1000)`).
+- A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.n_times`, and `.since` say whether, how often, and how long ago each person did; a disease keeps this only for the transitions the model reads, so to read one after the run, give `keep_times=True` to the sim.
+- To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five people infectious, `ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5)` takes a condition, and `sir.move(uids, sir.R)` moves particular agents. It runs under every solver; the number in a state of people is read, not set, but a count that is not people can be set (`W.n = 0`) or moved from outside (`ss.move(ss.dead, mosq.Sv, n=1000)`).
 
-A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [Model execution](architecture_execution.qmd#the-loop) lists the full order.
+A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [Model execution](architecture_run.qmd#the-order-of-a-step) lists the full order.
 
-### Exits and arrivals within a step
-
-As agents, a module written as code takes each step whole, as Starsim's own solvers do, and two habits keep its results from depending on the length of the step (see [Solvers](running_solvers.qmd#the-length-of-a-step)). Draw competing exits from a state together: if a mosquito can die or become infectious, draw one exit with the total rate and then which one it was (in proportion to the rates), rather than first the deaths and then the progression of the survivors, which counts the second against a smaller group. And let those who arrive in a state during a step face only the rest of the step: a mosquito that emerges or is infected mid-step should have, on average, half a step's chance of leaving it, not a whole one. Both biases are of the order of the rate times the step, so they matter when rates are a sizable fraction of a step; `sim.check_dt()` shows them.
+Two habits keep a module's results from depending on the length of the step ([Solvers](running_solvers.qmd#the-length-of-a-step)): draw competing exits from a state together (one exit at the total rate, then which one it was), rather than one after the other; and give those who arrive in a state during a step only half a step's chance of leaving it. `sim.check_dt()` shows both biases.
 
 For anything random, give the module a distribution in `__init__()` (e.g. `self.p_isolate = ss.bernoulli(p=0.5)`) and draw from it in `step()` (`self.p_isolate.filter(uids)`), rather than calling NumPy's random numbers. Each distribution then has its own stream of random numbers, so the module's draws don't change when the rest of the model does, and comparisons between scenarios stay free of noise from the random numbers: see [Random numbers](mechanics_random.qmd).
 
-## When each method is called
+### When each method is called
 
 When a sim is built and run, each module goes through these stages:
 
 1. **`__init__()`**: the module is made; its parameters and states are given.
-2. **`init_pre(sim)`**: called once when the sim is built. It links the module to the sim and the people, sets up its time steps, and calls `init_results()`. Override it rarely, and call `super().init_pre(sim)` if you do.
+2. **`init_pre(sim)`**: called once when the sim is built. It links the module to the sim and the people, sets up its time steps, and calls `init_results()`. Override it rarely.
 3. **`init_post()`**: called once the people exist and their states have their initial values; for setup that needs them.
 4. **`record_stocks()`**: called at the start of each step, before any module has stepped, to record the state then.
 5. **`step()`**: called once each step.
 6. **`record_flows()`**: called at the end of each step, after every module has stepped, to record what happened in it.
 7. **`finalize()`** and **`finalize_results()`**: called once at the end of the run, e.g. to work out a result from others.
-
-Always call the base class's method (`super().init_results()`, `super().record_stocks()`, and so on) when you override one that the base class has.
 
 ## Modules from functions
 
@@ -284,15 +242,11 @@ A function module is called at every step, so it has to check the time itself if
 
 ## Pitfalls
 
-- **Writing code for something that is declared.** Check the table at the top of this page first: a declared part runs under every solver and shows in `describe()`.
 - **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `record_stocks()`, `record_flows()`, `init_post()`, and the like. Leaving one out gives a warning after the run that a required method was not called, not an error.
-- **Keeping per-person values outside a state.** A plain array doesn't grow when agents are born; a state does, and appears in `sim.people.to_df()`.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.
 - **Writing into another module's arrays at your own `ti`.** Write into another module's results and time arrays at its index, not yours: `disease.results.treated[disease.ti]`, and `disease.ti_recovered[uids] = disease.ti`. With a yearly sim and a monthly disease, `self.ti` is the wrong row.
-- **Using NumPy's random numbers.** Draw from Starsim's distributions instead, as above, so that runs can be repeated and scenarios compared without noise from the random numbers.
-- **Reading `rel_sus` without its modifiers.** A disease written as code that is not transmitted (not an `ss.AgentDisease` with a `beta`) and reads its own `rel_sus` or `rel_trans` reads them with `self.current_value('rel_sus', uids)`, which applies `ss.modify(dis.rel_sus, ...)` and products, and says so in its class, `allow_modifiers = ('rel_sus',)`; otherwise a modifier of them is refused, since nothing would apply it.
-- **Reading a parameter that differs between people.** `ss.modify(dis.pars.rate, ...)` works on any module written as code (a disease, an intervention, ...), and `self.pars.rate` is the modified value while it applies. That is one value, so a modifier with `who=` needs `self.current_value('rate', uids)` and `allow_modifiers = ('rate',)`; otherwise it is refused.
+- **Reading a value without its modifiers.** `self.pars.rate` is the modified value while an `ss.modify()` applies, but it is one value. To read a parameter modified for some people (`who=`), or the `rel_sus` or `rel_trans` of a disease that is not an `ss.AgentDisease`, use `self.current_value('rate', uids)` and list it in the class, `allow_modifiers = ('rate',)`; otherwise the modifier is refused, since nothing would apply it.
 - **Several causes of death in one step.** If several modules request the death of the same person in a step (`sim.people.request_death(uids, cause=self)`), one cause is chosen at random; give each claim its hazard (`hazard=`) to choose in proportion to them.
 - **Writing to `.raw`.** Write to states by UID (`self.level[uids] = 1`); see [Array indexing](mechanics_indexing.qmd).
 

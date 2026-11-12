@@ -54,6 +54,6 @@ msim.summarize().loc[['sti_I', 'sti_infection']]
 
 ## Going further
 
-- [A2 – Networks](../tutorials/a2_networks.qmd) covers random, sexual, and maternal networks, and when a model needs one.
-- [T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) runs two diseases in one model, with one changing the other.
-- [EpiModel](../user_guide/conversion/epimodel.qmd) shows EpiModel's SIS on a network in Starsim.
+- [T4 – Mixing](../tutorials/t4_mixing.qmd) covers random, sexual, and maternal networks, and when a model needs one.
+- [T7 – Stratification and co-transmission](../tutorials/t7_strata.qmd) runs two diseases in one model, with one changing the other.
+- [EpiModel](https://starsim.org/lingua_franca/models/epimodel/) shows EpiModel's SIS on a network in Starsim.

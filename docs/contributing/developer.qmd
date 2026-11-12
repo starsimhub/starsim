@@ -51,7 +51,7 @@ python -c "import jax; print(jax.devices())"  # Whether JAX works, and which dev
 
 ## The kernels
 
-The inner loops of Starsim are *kernels*: small compiled functions that step compartments, pass over agents and network edges, and make random draws. The same code exists several times, and which copy runs depends on the run. They are described for users in [solvers and backends](../user_guide/architecture_solvers.qmd); what follows is what a developer needs to change them.
+The inner loops of Starsim are *kernels*: small compiled functions that step compartments, pass over agents and network edges, and make random draws. The same code exists several times, and which copy runs depends on the run. They are described for users in [solvers and backends](../user_guide/architecture_engines.qmd); what follows is what a developer needs to change them.
 
 | Set | Where | Compiled | Role |
 |---|---|---|---|
@@ -147,9 +147,9 @@ The tests are in `tests/`, in two sets. The core tests (`tests/test_*.py`, about
 | Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
 | `devtests/io/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
 
-Tests that need other frameworks are in the [lingua_franca](https://github.com/starsimhub/lingua_franca) repository. `tests/switching/` has thirteen acceptance demos, each in the terms of a framework Starsim is compared with: bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. `lingua_franca benchmark` checks the north star, that a model should never be easier to write without Starsim than with it: for each translated model, a table of lines of model code and run time, original against Starsim, published on the [modeling landscape](../user_guide/library_landscape.qmd) page.
+Tests that need other frameworks are in the [lingua_franca](https://github.com/starsimhub/lingua_franca) repository. `tests/switching/` has thirteen acceptance demos, each in the terms of a framework Starsim is compared with: bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. `lingua_franca benchmark` checks the north star, that a model should never be easier to write without Starsim than with it: for each translated model, a table of lines of model code and run time, original against Starsim, published on the [modeling landscape](../user_guide/intro_starsim.qmd) page.
 
-The agreement between solvers is layered from exact to statistical. Conservation is checked to 1e-9; the ODE is checked against SciPy and the analytic final size of an SIR; the JAX ODE against the kernels to 1e-9; and the chain binomial, Gillespie and agents against the ODE, as the mean over a few runs at a quarter-day step, within 5% (or a wider tolerance, given with its reason in the test). [Engines and kernels](../user_guide/architecture_solvers.qmd) has the table of execution paths and the test that pins each one.
+The agreement between solvers is layered from exact to statistical. Conservation is checked to 1e-9; the ODE is checked against SciPy and the analytic final size of an SIR; the JAX ODE against the kernels to 1e-9; and the chain binomial, Gillespie and agents against the ODE, as the mean over a few runs at a quarter-day step, within 5% (or a wider tolerance, given with its reason in the test). [Engines and transmission](../user_guide/architecture_engines.qmd) has the table of execution paths and the test that pins each one.
 
 #### Running them
 

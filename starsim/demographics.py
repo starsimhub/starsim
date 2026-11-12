@@ -1,10 +1,15 @@
 """
 Births, deaths, migration, and pregnancy
 
-These exist so that the population can change during a run. `ss.Births` and `ss.Deaths` are written as code, `ss.birth()` and the like declare the same flows for the whole population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions that other modules can modify or respond to.
+These exist so that the population can change during a run. `ss.Births` and `ss.Deaths`
+are written as code, `ss.birth()` and the like declare the same flows for the whole
+population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions
+that other modules can modify or respond to.
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by humans, heavily rewritten by AI, reviewed by humans
+
 import numpy as np
 import starsim as ss
 import sciris as sc
@@ -12,7 +17,6 @@ import pandas as pd
 
 ss_float = ss.dtypes.float
 _ = None
-
 
 
 def rate_size(rates):
@@ -219,7 +223,7 @@ class Flows(Demographics):
     transitions of the first declared disease (or the first with the state that births name), whose
     people are everyone's, since as agents the diseases share the people, and in a compartmental run
     with several declared diseases, their states are tracked jointly (see `ss.solvers.choose.init_flows()`).
-    With no declared disease, the sim adds one of everyone alive to hold them (`ss.demographics.Population`), so
+    With no declared disease, the sim adds one of everyone alive to hold them (`ss.SimPars.population()`), so
     they are a declared model like any other. This class is not usually used directly.
 
     Note: CRN safe as agents.
@@ -1383,24 +1387,6 @@ class Pregnancy(Demographics, ss.Disease):
             return ss.peryear(out)
         rate = vals[bins]*scale*np.divide(n_np + n_p, n_np, out=np.zeros(len(age)), where=n_np > 0)
         return ss.peryear(np.where(fertile, rate, 0)*fertile)
-
-
-class Population(Demographics, ss.Disease):
-    """
-    Everyone alive, as one declared state (`N`), to hold the births, deaths, and migration declared for the whole population
-    (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`) when there is no declared disease, so they are a declared model
-    like any other, which `solver='auto'` chooses for as for a disease. Added by the sim.
-
-    Note: CRN safe as agents.
-    """
-    N = ss.State(label='Alive')
-    default_state = 'N'
-    sets_unit = False
-
-    def __init__(self, **kwargs):
-        kwargs.setdefault('name', 'population')
-        super().__init__(**kwargs)
-        return
 
 
 def standardize_fertility_data(mod):

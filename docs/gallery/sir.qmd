@@ -83,7 +83,7 @@ msim = ss.parallel(sims)
 msim.plot('sir')
 ```
 
-The three stochastic runs follow the ODE closely, each a little differently by chance. With 10,000 people and 10 infected at the start, chance mostly moves the timing of the peak; with fewer people, or fewer infected at the start, the runs differ more (see [The chance of a major outbreak](major_outbreak.qmd)). In all of them about 94% of people are infected in the end, as the final-size equation predicts for R0 = 3 (see [Final size](final_size.qmd)):
+The three stochastic runs follow the ODE closely, each a little differently by chance. With 10,000 people and 10 infected at the start, chance mostly moves the timing of the peak; with fewer people, or fewer infected at the start, the runs differ more (see [The chance of a major outbreak](theory_checks.qmd#the-chance-of-a-major-outbreak)). In all of them about 94% of people are infected in the end, as the final-size equation predicts for R0 = 3 (see [Final size](theory_checks.qmd#final-size)):
 
 ```{python}
 msim.summarize().loc['sir_infection']

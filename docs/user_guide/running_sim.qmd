@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 20
   ai: 80
-  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI
+  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI
 ---
 
-A sim (`ss.Sim`) is one model put together with everything needed to run it: the diseases, the population, the time span, how people mix, and any births and deaths, interventions, and analyzers. It runs them in the right order, and holds the results afterwards. This page covers what a sim takes, what it prints, what happens when it is built, and the ways of running it: in full, part of the way, and again with something changed. It ends with saving sims and with the `make_sim()` pattern that larger projects are built around. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd) build and run the measles model used here; running many sims and comparing them is in [Scenarios](running_scenarios.qmd).
+A sim (`ss.Sim`) is one model put together with everything needed to run it: the diseases, the population, the time span, how people mix, and any births and deaths, interventions, and analyzers. It runs them in the right order, and holds the results afterwards. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd) build and run the measles model used here; running many sims and comparing them is in [Scenarios](running_scenarios.qmd).
 
 ## The smallest sim
 
@@ -82,35 +82,16 @@ sim_explicit.plot()
 A run prints:
 
 - **What it runs, and how:** the diseases, the population, the solver (here an ODE, since nothing in the model needs individual people; see [Solvers and backends](running_solvers.qmd)), and the time span.
-- **R0 of each disease** with the number infectious at the start, as a check that the model is the one you meant: here R0 = β × the infectious period = 1.9 × 8 ≈ 15, as for measles. If some people start immune, the line gives the reproduction number at the start too, e.g. "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
+- **R0 of each disease** with the number infectious at the start, as a check that the model is the one you meant (here 1.9 × 8 ≈ 15); if some people start immune, the reproduction number at the start too.
 - **Notes**, if any: something Starsim assumed, approximated, or wants you to check, such as a step that is long for the rates in the model. Notes are kept in `sim.notes` too.
 - **Progress**, for a run that goes a step at a time (as agents, say), rather than all at once.
 - **A closing line**: how long it took, the total number of infections, and the size and timing of the peak.
 
-How much is printed is set by `verbose`, given to the sim or to `sim.run()`: 0 prints nothing (the usual choice inside loops and fits), 1 the lines above (the default), and 2 everything, including a line for each step. A fraction between 0 and 1 prints the progress of a long run every that share of it: `verbose=0.1` every 10%.
+How much is printed is set by `verbose`, given to the sim or to `sim.run()`: 0 prints nothing (the usual choice inside loops and fits), 1 the lines above (the default), 2 everything, and a fraction such as 0.1 the progress every 10% of the run.
 
 ## What a sim takes
 
-The settings of a sim are its keywords. The ones most models use:
-
-| Setting | What it is |
-|---|---|
-| `diseases` (or the first argument) | The disease or diseases; several are given as a list |
-| `total_pop` | The size of the population (default 10,000) |
-| `n_agents` | The number of agents, for a run as agents; giving it makes the sim run as agents (see [Branching and rescaling](running_branching.qmd)) |
-| `start`, `stop` | The time span: dates (`'2025-01-01'`), years (`2025`), or, with no calendar, durations from 0 (`ss.days(50)`) |
-| `dur` | The length of the run (`ss.years(10)`, or a bare number in the sim's unit): any two of `start`, `stop`, and `dur` define the third (`stop=2035, dur=10` starts in 2025) |
-| `dt`, `unit` | The time step, and the unit of bare numbers (see [Time](building_time.qmd)) |
-| `networks` | How people mix: a contact matrix (`ss.contacts()`), a network, or a mixing pool (default: everyone mixes with everyone); see [Contact networks](populations_networks.qmd) |
-| `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
-| `interventions`, `analyzers`, `connectors` | Interventions, analyzers, and connectors between modules (see [Interventions](interventions_interventions.qmd)) |
-| `data` | Data to compare the results with, by name (see [Results](building_results.qmd)) |
-| `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options, `ss.solvers.ode()`, `ss.solvers.binomial()`, or `ss.solvers.abm()` |
-| `rand_seed` | The random seed, for a stochastic run (default 1; see [Scenarios](running_scenarios.qmd)) |
-| `label` | A name for the sim, used in plots and comparisons |
-| `verbose` | How much to print (above) |
-
-`sim.pars` holds all of them after the sim is made, including the ones not given; every setting is listed in the [appendix](#appendix-every-sim-setting). `sim.describe()` shows the whole model as Starsim has built it, with each value it chose itself marked (see [Writing models](building_writing.qmd)).
+The settings of a sim are its keywords. Most models use only a few: the diseases (the first argument), `total_pop`, `start` and `stop` (or `dur`), `dt`, and the modules that say how people mix (`networks`) and what else happens (`demographics`, `interventions`, `analyzers`, `connectors`). Every setting, with its default, is in the [appendix](#appendix-every-sim-setting); `sim.pars` holds them all once the sim is made, and `sim.describe()` shows the whole model as Starsim has built it, with each value it chose itself marked (see [Writing models](building_writing.qmd)).
 
 `total_pop` and `n_agents` are separate on purpose. `total_pop` is the number of people the model stands for, and is the same under every solver; `n_agents` is how many individuals are followed when the sim runs as agents. Given both, each agent stands for `total_pop/n_agents` people, which saves time at the cost of coarser random events (see [Branching and rescaling](running_branching.qmd)):
 
@@ -119,7 +100,7 @@ agents = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
 agents.run()
 ```
 
-The first line now says "as 10,000 agents, each 10 people". The epidemic is much the same as the ODE's, but not identical: each agent's infection is a random event.
+The first line now says "as 10,000 agents, each 10 people".
 
 ### Settings in a dict
 
@@ -132,68 +113,29 @@ town = ss.Sim(measles, **pars)
 city = ss.Sim(pars, diseases=measles, total_pop=1_000_000) # The same settings, with one changed
 ```
 
-A dict given as the first argument is read as settings, and a keyword given as well overrides the same setting in the dict, as `total_pop` does for `city`. In such a dict, a module from Starsim's library can be given as a dict of its own parameters, with its name as `type`. This is a shorthand found in many existing scripts, for example for an agent-based SIR on a random network (the "Explicit" tab gives the modules themselves, and runs the same sim):
+A dict given as the first argument is read as settings, and a keyword given as well overrides the same setting in the dict, as `total_pop` does for `city`. In such a dict, a module from Starsim's library can be given by name (`diseases='sir'`, with its default parameters) or as a dict of its parameters with its name as `type` (`diseases=dict(type='sir', beta=ss.perday(0.1))`, the same as `diseases=ss.SIR(beta=ss.perday(0.1))`), a shorthand found in many existing scripts.
 
-::: {.panel-tabset group="language"}
-## Python
+## What happens when a sim runs
 
-```{python}
-pars = dict(
-    diseases = dict(type='sir', beta=ss.perday(0.1), dur_inf=ss.days(10)),
-    networks = dict(type='random', n_contacts=4),
-    n_agents = 2_000,
-    start = '2025-01-01',
-    stop = '2025-07-01',
-)
-sim = ss.Sim(pars)
-sim.run()
-```
-
-## R
-
-```r
-pars <- list(
-  diseases = list(type = "sir", beta = ss$perday(0.1), dur_inf = days(10)),
-  networks = list(type = "random", n_contacts = 4),
-  n_agents = 2000,
-  start = "2025-01-01",
-  stop = "2025-07-01"
-)
-sim <- Sim(pars)
-sim$run()
-```
-
-## Explicit
-
-```{python}
-sim = ss.Sim(
-    diseases = ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10)), # The module itself, for dict(type='sir', ...)
-    networks = ss.RandomNet(n_contacts=4),                       # And for dict(type='random', ...)
-    n_agents = 2_000,
-    start = '2025-01-01',
-    stop = '2025-07-01',
-)
-sim.run()
-```
-:::
-
-A name on its own (`diseases='sir'`) uses the module's default parameters.
-
-## What happens before the first step
+### What happens before the first step
 
 Nothing is computed when a sim is made. `sim.init()`, which `sim.run()` calls if it hasn't been called, builds the sim:
 
 - It fills in whatever was left out (the unit of time from the values in the model, how long each state lasts beyond its average, how people mix, where people start) and records each choice, so that `describe()` can show it.
 - It checks the model: unknown parameter names, values outside their bounds, and shapes that don't match the model's groups are errors here, before the run.
-- It chooses the solver, makes the people (with a default age and sex structure, unless a population is given; see [People and agents](populations_people.qmd)), adds each module's states, parameters, and results, sets up the time steps, and starts the random number generators.
+- It chooses the solver, makes the people (with a default age and sex structure, unless a population is given; see [People and demographics](populations_people.qmd)), adds each module's states, parameters, and results, sets up the time steps, and starts the random number generators.
 
 Calling `sim.init()` yourself is useful for looking at the people or the model before a long run, or for finding an error without waiting for one.
 
 A sim copies the modules it is given, so the same disease can be given to several sims. After a run, use the sim's own copy: `sim.diseases.measles`, not the variable `measles`, which is never run.
 
+### The order of each step
+
+For a declared model, Starsim works out the order of everything in a step from the model itself. Modules written as code run at fixed points in the step: demographics, then disease progression, connectors, networks, interventions, transmission, and analyzers, so a child born in a step can be infected in it, and a new partnership can transmit in the step it forms. Take a woman with pre-symptomatic COVID who, in one busy day, develops symptoms, gets tested, moves out of her parents' house into her husband's, and becomes pregnant. Starsim orders her day: she (1) becomes pregnant, (2) develops symptoms, (3) moves house, (4) gets tested, and (5) transmits COVID to her contacts, who by now include her husband but not her parents. (That is for a disease written as code; a declared disease takes all its transitions at step 5.) `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it; [Steps and time points](architecture_run.qmd#the-order-of-a-step) explains the order in full.
+
 ## Running again, and variants
 
-`sim.run()` on a sim that has already run runs it again from the start, as it was before it was first run: changes made to a sim once it has been initialized belong to that run only. To run it again with something changed, use `sim.new()`, which makes a new sim as this one was before it was run, with whatever is given changed. Here the same outbreak with a lower transmission rate, as if contacts were fewer, compared with the original:
+`sim.run()` on a sim that has already run runs it again from the start. To run it again with something changed, use `sim.new()`, which makes a new sim as this one was before it was run, with whatever is given changed. Here the same outbreak with a lower transmission rate, as if contacts were fewer:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -221,17 +163,11 @@ msim$plot("measles.I")
 ```
 :::
 
-With β = 1.2, R0 is about 10 rather than 15, and the peak comes later and lower. What `sim.new()` changes can be settings (`sim.new(total_pop=1_000_000)`), parameters of the model by name (`sim.new(pars=dict(beta=1.2))`, for a parameter made with `ss.par()` and so given a name; see [Parameters](building_parameters.qmd)), or modules (`sim.new(interventions=campaign)`). This is the usual way to make the scenarios of a comparison (see [Scenarios](running_scenarios.qmd)).
+What `sim.new()` changes can be settings (`sim.new(total_pop=1_000_000)`, `sim.new(solver='abm')`), parameters of the model by name (`sim.new(pars=dict(beta=1.2))`, for a parameter made with `ss.par()`; see [Parameters](building_parameters.qmd)), or modules (`sim.new(interventions=campaign)`). This is the usual way to make the scenarios of a comparison (see [Scenarios](running_scenarios.qmd)). `sim.run()` itself takes only `until=` and `verbose=`; two other ways of running again are `sim.copy()`, an exact copy, including the state of a sim part of the way through a run (below), and `sim.restart(pars=dict(beta=1.2)).run()`, which runs a sim again from its start with new parameter values (or `rand_seed=`), without building a compartmental model again, so many times faster.
 
-Three other ways of running again:
+### Running part of the way
 
-- `sim.copy()` makes an exact copy, including the state of a sim part of the way through a run (below).
-- `sim.new(solver='abm').run()` runs the same sim as agents, built again for the new solver, and `ss.parallel(sim, n_runs=20)` runs it 20 times with different seeds, returning the runs together as an `ss.MultiSim` (see [Scenarios](running_scenarios.qmd)).
-- `sim.restart(pars=dict(beta=1.2)).run()` runs a sim again from its start with new parameter values (and `rand_seed=` another seed), which are kept for its later runs. `sim.run()` itself takes only `until=` and `verbose=`, and always returns the sim, so a variant is given first, to `sim.restart()` or `sim.new()`. For a model that is nothing but compartments it does so without building the sim again, which makes repeated runs many times faster; `ss.parallel(sim, n_runs=...)` and `sim.fit()` do this too.
-
-## Running part of the way
-
-`sim.run(until=...)` runs up to a given time and stops, after the step that starts at that time (so the people are then as they are at the end of that step); a later `sim.run()` carries on from there, with the next step. This is useful for looking at the state of a sim in the middle of a run, for changing it before going on, and for running a shared start once and then branching into scenarios. In a stochastic run, the scenarios then share not only their start but the chance events up to the branch point: they begin from the same epidemic, as a response would in reality, rather than from different epidemics that happen to have the same parameters. Here, measles reaches a town of 100,000 people in which 90% are immune, run as 10,000 agents (with quarter-day steps, which measles's fast rates need as agents). A month in, the scenarios differ by how much contacts are reduced from then on (by closing schools, say), each a copy of the sim at that point with an `ss.modify()` added:
+`sim.run(until=...)` runs up to a given time and stops, after the step that starts at that time; a later `sim.run()` carries on from there. This is useful for looking at a sim in the middle of a run, for changing it before going on, and for running a shared start once and then branching into scenarios, which in a stochastic run then share the chance events up to the branch point. Here measles, run as agents, reaches a town in which 90% are immune, and a month in, each scenario is a copy of the sim with contacts reduced by an `ss.modify()`:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -252,39 +188,9 @@ msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
 
-A module added this way (`sim.add_module()`) acts from the time it is added; its results cover the whole run, but are filled in only from then. Only modules that leave the layout of the model as it is can be added part of the way: a vaccine adds a state for the people who hold it, so `ss.vaccinate()` must be given when the sim is made (with a start date), and Starsim says so if you try.
+A module added with `sim.add_module()` acts from the time it is added. Only modules that leave the layout of the model as it is can be added part of the way: a vaccine adds a state for the people who hold it, so `ss.vaccinate()` is given when the sim is made (with a start date). A parameter of the copy can also be set directly before it carries on (`sim.diseases.measles.pars.beta = 1.9*0.6`).
 
-All three runs are the same epidemic until February, and differ only from then on. A parameter of the copy can also be set directly before it carries on, which here has the same effect as the 40% reduction:
-
-```{python}
-sim = base.copy()
-sim.diseases.measles.pars.beta = 1.9*0.6
-sim.run()
-print('Peak infectious:', round(sim.results.measles.I.max()))
-```
-
-A shared start also saves time when it is long compared with the rest of the run: a burn-in of decades of endemic transmission, say, before a few years of scenarios. For a deterministic model that runs in a fraction of a second, an ODE say, the scenarios would share their start anyway, and it is simpler to run each scenario in full with `sim.new()` and an intervention that starts on the date.
-
-## The order of each step
-
-For a declared model, Starsim works out the order of everything in a step from the model itself. For modules written as code it matters, because each module's code runs at a fixed point in the step:
-
-1. Each module's `start_step()`, which mostly moves the random number generators on.
-2. The stocks are recorded (`record_stocks()`): the state at the start of the step.
-3. Modules of your own (of no standard kind, given as `modules=`), then births, deaths, and other demographics.
-4. Progression of each disease (`step_state()`: recoveries, deaths, and other moves that don't depend on contact).
-5. Connectors (which change one module according to another).
-6. Networks (contacts form and end).
-7. Interventions.
-8. Transmission (each disease's `step()`).
-9. Deaths are carried out (`people.step_die()`), with each death assigned to one cause, so that every death is counted once.
-10. The flows are recorded (`record_flows()`): what happened in the step.
-11. Analyzers (which see the step's results).
-12. Each module's, the people's, and the sim's `finish_step()`.
-
-So on a single day, a woman who becomes pregnant, develops symptoms, moves house, takes a test, and transmits an infection does them in that order, and transmits to her new household rather than her old one. Putting demographics first means that a child born during a step can be infected during that step (for example, by her mother), and that the effect of an infection during pregnancy is captured. Putting networks before transmission means that a new partnership can transmit in the step it forms, which matters for sexually transmitted infections with short partnerships.
-
-Modules can have time steps of their own (demographics once a year and a disease once a day, say); the sim keeps a plan of which module runs on which step. `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it. A declared model with nothing but compartments is run in one go rather than step by step, which is why its run is so fast; see [Custom modules](building_modules.qmd). [Steps and time points](architecture_steps.qmd) explains the order in full: why each thing comes where it does, why stocks and flows are recorded at different points in the step, and how the state is updated within a step.
+A shared start also saves time when it is long, such as a burn-in of decades before a few years of scenarios. For an ODE, it is simpler to run each scenario in full with `sim.new()` and an intervention that starts on the date.
 
 ## Saving and loading
 
@@ -296,13 +202,11 @@ loaded = ss.load('my-measles.sim')
 loaded.plot('measles')
 ```
 
-By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table, which can be saved as a CSV or Excel file, and `sim.to_json()` gives the results and settings as JSON (see [Results](building_results.qmd)). To write the model itself in another format (SBML, odin), see [Import and export](conversion/index.qmd).
-
-`sim.shrink()` does the same in memory: it removes the people and the other per-agent arrays from a finished sim, keeping the results. For a sim of agents this is most of its size, so it is worth doing when keeping many runs. `ss.MultiSim` and `ss.parallel()` already shrink the sims they run.
+By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). `sim.shrink()` does the same in memory (`ss.parallel()` already does it). A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table and `sim.to_json()` as JSON (see [Results](building_results.qmd)); to write the model itself in another format (SBML, odin), see [Import and export](building_import.qmd).
 
 ## Larger projects: `make_sim()`
 
-A project with more than a few scenarios is usually built around one function that makes the sim, with an argument for each thing that varies, so that every scenario, seed, and calibration run is made the same way. A sketch of the pattern, as an HIV project might have it:
+A project with more than a few scenarios is usually built around one function that makes the sim, with an argument for each thing that varies, so that every scenario, seed, and calibration run is made the same way. It can get long: this is, after all, where most of the science happens. A sketch of the pattern, as an HIV project might have it:
 
 ```python
 import starsim as ss
@@ -342,31 +246,19 @@ def make_sim(seed=1, n_agents=10_000, start=1990, stop=2030, scenario='baseline'
     return sim
 ```
 
-The scenarios and seeds are then a loop over its arguments, run together with `ss.parallel()` (see [Scenarios](running_scenarios.qmd)). If making the sim is itself slow (reading large files, say), the sims can be made in parallel too, with Sciris:
-
-```python
-import sciris as sc
-
-iterkwargs = [dict(seed=seed, scenario=scen) for seed in range(20) for scen in ['baseline', 'treat']]
-sims = sc.parallelize(make_sim, iterkwargs=iterkwargs)
-msim = ss.parallel(sims)
-```
-
-Keep anything that differs between scenarios as an argument rather than editing the sim afterwards, and keep `debug=True` as a quick way to check the code end to end. For running such a project on a cluster or as a web app, see [Deployment](running_deploy.qmd).
+The scenarios and seeds are then a loop over its arguments, run together with `ss.parallel()` (see [Scenarios](running_scenarios.qmd)); if making each sim is slow, they can be made in parallel too (see [Speed and scale](running_performance.qmd#on-one-large-computer)). Keep anything that differs between scenarios as an argument rather than editing the sim afterwards, and keep `debug=True` as a quick way to check the code end to end. For running such a project from a script or on a cluster, see [Speed and scale](running_performance.qmd#from-a-notebook-to-a-script).
 
 ## Pitfalls
 
-- **Using the module you made rather than the sim's copy.** After a run, `sim.diseases.measles` has the run's state; the `measles` you made does not. Likewise, a function given to a sim should read what it needs from the sim it is given (`lambda sim: sim.diseases.measles.I.n`), not from a variable.
+- **Reading a variable rather than the sim.** A function given to a sim should read what it needs from the sim it is given (`lambda sim: sim.diseases.measles.I.n`), not from the `measles` you made, which is never run.
 - **Changing a setting after the sim is built.** Once a sim is initialized its settings belong to that run, and setting one (`sim.pars.stop = 30`) raises an error; give it to `sim.new(stop=30)` instead.
-- **Settings given twice.** A setting given in a `pars` dict and again as a keyword takes the keyword's value, without a word.
-- **A sim that isn't what you meant.** Read the first lines a run prints, and `sim.describe()`: R0, the unit of time, and the solver catch most mistakes before any result is read. More are in [Profiling and debugging](running_debugging.qmd).
+- **A sim that isn't what you meant.** Read the first lines a run prints, and `sim.describe()`: R0, the unit of time, and the solver catch most mistakes (see [Profiling and debugging](running_debugging.qmd)).
 
 ## Further reading
 
 - [Covasim: Getting started](https://docs.covasim.org/tutorials/tut_intro.html): creating, running, and plotting a sim in Starsim's predecessor
 - [Mesa: Creating your first model](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html): the model, agents, and step loop of a general-purpose agent-based framework
 - [EpiModel: Training materials](https://epimodel.github.io/sismid/): building and running deterministic, stochastic, and network epidemic models in R
-- [Sciris: Parallelization](https://docs.sciris.org/tutorials/tut_parallel.html): `sc.parallelize()`, used above to make sims in parallel
 
 ## Appendix: every sim setting
 
@@ -376,12 +268,12 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 |---|---|---|
 | **The model** | | |
 | first argument | | The model: a module, transitions, or a list of them; or a dict of settings |
-| `diseases`, `networks`, `demographics`, `interventions`, `analyzers`, `connectors` | none | Modules of each kind: a module, a name (`'sir'`), a dict with `type`, or a list; `demographics=True` gives births and deaths at 20 and 10 per 1,000 people per year |
+| `diseases`, `networks`, `demographics`, `interventions`, `analyzers`, `connectors` | none | Modules of each kind: a module, a name (`'sir'`), a dict with `type`, or a list. `networks` default to everyone mixing with everyone ([Mixing](populations_mixing.qmd)); `demographics=True` gives births and deaths at 20 and 10 per 1,000 people per year |
 | `modules` | none | Modules of any kind together, sorted by kind; those of your own of no standard kind are in `sim.custom` |
 | `step_order` | 'type' | The order the modules step in: `'type'`, each kind at its place in the step, or `'given'`, in the order they were given (the model and `modules=` first) |
-| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; the settings in this table are keywords of their own (a parameter of the model given as a keyword says to put it in `pars=`), but as in Starsim 3 `pars=` can hold them too, e.g. `pars=dict(start=2000, dur=10, n_agents=1000, beta=0.1)`, told apart by name (a name is a setting if no parameter of the model has it; a keyword given outright wins), or be a whole `ss.SimPars` |
+| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; it can hold settings too (`pars=dict(start=2000, beta=0.1)`), told apart by name, or be a whole `ss.SimPars` |
 | `data` | none | Data to plot with the results and to fit to, with a `time` column and columns named like `measles.infection` |
-| `people` | none | An `ss.People` to use, rather than making one (see [People and agents](populations_people.qmd)) |
+| `people` | none | An `ss.People` to use, rather than making one (see [People and demographics](populations_people.qmd)) |
 | **The population** | | |
 | `total_pop` | 10,000 | The size of the population modeled |
 | `n_agents` | as `total_pop`, up to 10,000 | The number of agents, for a run as agents; giving it makes the sim run as agents (and without `total_pop`, it is an error for a compartmental run). Each agent then stands for `sim.pop_scale = total_pop/n_agents` people |

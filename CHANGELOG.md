@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
-## Version 4.0.0 (2026-11-07)
+## Version 4.0.0 (2026-11-11)
 
 Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (custom `step()` methods, `ssl.AgentSIR`) still run, but their stocks (the counts in each state) are recorded one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->

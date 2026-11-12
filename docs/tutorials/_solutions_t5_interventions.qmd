@@ -67,3 +67,71 @@ print('Outbreak died out in', sum(totals < 100), 'of 50 runs; (1/R)^2 =', round(
 ```
 
 With 2 people infectious at the start, the outbreak dies out in about one run in seven, close to (1/R)² ≈ 17%: the chains of infection started by each first case must all die out, each with a chance of roughly 1/R. The match is rough, since R = 2.46 is an average over age groups: a child, with many contacts, is more likely to start an outbreak than an adult. In the runs that take off, the size hardly varies; chance matters at the start, when cases are few.
+
+**4. Notifying the partners of people who seek care.** Exercises 4 and 5 use the model and interventions of the section on agents:
+
+```{python}
+S, I = ss.states('S I')
+infection = S >> I @ ss.peract(m2f=0.1, f2m=0.05)*I
+recovery  = I >> S @ ss.months(6)
+sti = ss.Disease(infection, recovery, init_prev=0.05)
+
+settings = dict(
+    networks     = ss.SexualNet(dur=ss.months(1), memory=ss.years(1), participation=ss.bernoulli(0.15)),
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))],
+    n_agents     = 10_000,
+    start        = 2000,
+    stop         = 2020,
+    dt           = ss.months(1),
+    verbose      = 0,
+)
+
+drug = ss.Treatment(cure=0.95)
+care = ss.treat(drug, when=ss.on(sti.infection, delay=ss.uniform(ss.weeks(1), ss.months(2))), coverage=0.3)
+young = (ss.person.age >= 15) & (ss.person.age < 30)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, who=young, when=ss.schedule(every=ss.months(6), start='2010'), coverage=0.5)
+treatment = ss.treat(drug, when=screening.positive)
+notification = ss.treat(drug, when=screening.positive, coverage=0.5, trace='sexualnet')
+```
+
+A delivery is an event too, so `when=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
+
+```{python}
+care_notification = ss.treat(drug, when=care, coverage=0.5, trace='sexualnet')
+
+scenarios = {
+    'Screening and notification':  [care, screening, treatment, notification],
+    'Also notifying after care':   [care, screening, treatment, notification, care_notification],
+}
+sims = {label: ss.Sim(sti, interventions=interventions, **settings) for label, interventions in scenarios.items()}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+msim.summarize().loc['sti_infection']
+```
+
+**5. Screening everyone aged 15 to 49.**
+
+We compare each with treatment when seeking care alone (without partner notification, so that the effect is that of screening):
+
+```{python}
+adults = (ss.person.age >= 15) & (ss.person.age < 50)
+screening_adults = ss.screen(sensitivity=0.9, specificity=0.98, who=adults, when=ss.schedule(every=ss.months(6), start='2010'), coverage=0.5, name='screening')
+treatment_adults = ss.treat(drug, when=screening_adults.positive, name='treatment')
+
+sims = {
+    'Treatment when seeking care': ss.Sim(sti, interventions=care, **settings),
+    'Screening 15-29':             ss.Sim(sti, interventions=[care, screening, treatment], **settings),
+    'Screening 15-49':             ss.Sim(sti, interventions=[care, screening_adults, treatment_adults], **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+
+baseline = msim.sims['Treatment when seeking care'].results.sti.infection.sum()
+for label in ['Screening 15-29', 'Screening 15-49']:
+    sim = msim.sims[label]
+    prevented = baseline - sim.results.sti.infection.sum()
+    tests = sim.results.screening.delivered.sum()
+    print(label, '- tests:', tests, '- infections prevented:', prevented, '- per 100 tests:', round(100*prevented/tests, 1))
+```
+
+Screening everyone aged 15 to 49 takes a little over twice as many tests and prevents about twice as many infections, so about as many per test. Here partnerships don't depend on age beyond debut, so people over 30 are as much at risk; where infection is concentrated in the young, the answer could be the reverse. Each is a single stochastic run; with several (`n_runs=`), the comparison would be clearer.

@@ -82,18 +82,16 @@ website:
         - href: gallery.qmd
           text: "**Gallery**"
         - gallery/sir.qmd
+        - gallery/theory_checks.qmd
         - gallery/seir_erlang.qmd
-        - gallery/final_size.qmd
-        - gallery/major_outbreak.qmd
-        - gallery/branching.qmd
+        - gallery/hospitalization.qmd
+        - gallery/cholera.qmd
         - gallery/age_contacts.qmd
         - gallery/vaccination_strata.qmd
-        - gallery/sexual_network.qmd
-        - gallery/school_closures.qmd
-        - gallery/measles_london.qmd
-        - gallery/cholera.qmd
         - gallery/outcomes_fit.qmd
-        - gallery/custom_code.qmd
+        - gallery/sexual_network.qmd
+        - gallery/measles_london.qmd
+        - gallery/beyond_disease.qmd
     - id: tutorials
       contents:
         - href: index.qmd#top
@@ -103,19 +101,11 @@ website:
         - tutorials/t1_intro.qmd
         - tutorials/t2_model.qmd
         - tutorials/t3_disease.qmd
-        - tutorials/t4_ages.qmd
+        - tutorials/t4_mixing.qmd
         - tutorials/t5_interventions.qmd
-        - tutorials/t6_places.qmd
-        - tutorials/t7_calibration.qmd
-        - tutorials/t8_strata.qmd
-        - tutorials/t9_modules.qmd
-        - section: "Agent-based modeling"
-          contents:
-            - tutorials/a1_diseases.qmd
-            - tutorials/a2_networks.qmd
-            - tutorials/a3_demographics.qmd
-            - tutorials/a4_interventions.qmd
-            - tutorials/a5_modules.qmd
+        - tutorials/t6_data.qmd
+        - tutorials/t7_strata.qmd
+        - tutorials/t8_modules.qmd
         - tutorials/solutions.qmd
     - id: user_guide
       collapse-level: 1
@@ -125,40 +115,39 @@ website:
         - href: user_guide.qmd
           text: "**User guide**"
         - section: "Introduction"
+          href: user_guide.qmd#introduction
           contents:
             - user_guide/intro_starsim.qmd
-            - user_guide/intro_why.qmd
-            - user_guide/intro_models.qmd
             - user_guide/intro_concepts.qmd
             - user_guide/intro_faq.qmd
         - section: "Building models"
+          href: user_guide.qmd#building-models
           contents:
             - user_guide/building_writing.qmd
             - user_guide/building_declared.qmd
-            - user_guide/building_solvers.qmd
             - user_guide/building_diseases.qmd
             - user_guide/building_parameters.qmd
             - user_guide/building_time.qmd
             - user_guide/building_stratification.qmd
             - user_guide/building_outcomes.qmd
             - user_guide/building_results.qmd
-            - user_guide/building_plotting.qmd
             - user_guide/building_modules.qmd
+            - user_guide/building_import.qmd
         - section: "Populations and data"
+          href: user_guide.qmd#populations-and-data
           contents:
             - user_guide/populations_people.qmd
-            - user_guide/populations_demographics.qmd
-            - user_guide/populations_networks.qmd
-            - user_guide/populations_data.qmd
-            - user_guide/populations_geography.qmd
+            - user_guide/populations_mixing.qmd
+            - user_guide/populations_places.qmd
         - section: "Interventions and analyzers"
+          href: user_guide.qmd#interventions-and-analyzers
           contents:
             - user_guide/interventions_products.qmd
             - user_guide/interventions_interventions.qmd
             - user_guide/interventions_analyzers.qmd
             - user_guide/interventions_connectors.qmd
-            - user_guide/interventions_costs.qmd
         - section: "Running models"
+          href: user_guide.qmd#running-models
           contents:
             - user_guide/running_sim.qmd
             - user_guide/running_scenarios.qmd
@@ -166,57 +155,32 @@ website:
             - user_guide/running_performance.qmd
             - user_guide/running_branching.qmd
             - user_guide/running_debugging.qmd
-            - user_guide/running_deploy.qmd
         - section: "Calibration"
+          href: user_guide.qmd#calibration
           contents:
             - user_guide/calibration_fitting.qmd
             - user_guide/calibration_methods.qmd
             - user_guide/calibration_diagnostics.qmd
-            - user_guide/calibration_identification.qmd
             - user_guide/calibration_gradients.qmd
             - user_guide/calibration_optimization.qmd
-        - section: "Model library"
+        - section: "Library"
+          href: user_guide/library_index.qmd
           contents:
-            - user_guide/library_landscape.qmd
-            - section: "Library"
-              contents:
-                - user_guide/library_diseases.qmd
-                - user_guide/library_networks.qmd
-                - user_guide/library_mnch.qmd
-            - section: "Conversion"
-              contents:
-                - user_guide/conversion/index.qmd
-                - user_guide/conversion/starsim3.qmd
-                - user_guide/conversion/atomica.qmd
-                - user_guide/conversion/camdl.qmd
-                - user_guide/conversion/emulsion.qmd
-                - user_guide/conversion/epimodel.qmd
-                - user_guide/conversion/epipack.qmd
-                - user_guide/conversion/epydemix.qmd
-                - user_guide/conversion/epymorph.qmd
-                - user_guide/conversion/flepimop.qmd
-                - user_guide/conversion/laser.qmd
-                - user_guide/conversion/memilio.qmd
-                - user_guide/conversion/numpy.qmd
-                - user_guide/conversion/odin.qmd
-                - user_guide/conversion/siminf.qmd
-                - user_guide/conversion/summer2.qmd
+            - user_guide/library_diseases.qmd
+            - user_guide/library_networks.qmd
+            - user_guide/library_mnch.qmd
+            - user_guide/library_econ.qmd
         - section: "Mechanics"
+          href: user_guide.qmd#mechanics
           contents:
             - user_guide/mechanics_indexing.qmd
             - user_guide/mechanics_distributions.qmd
             - user_guide/mechanics_random.qmd
-            - user_guide/mechanics_nonstandard.qmd
         - section: "Architecture"
           href: user_guide/architecture_index.qmd
           contents:
-            - user_guide/architecture_declaration.qmd
-            - user_guide/architecture_execution.qmd
-            - user_guide/architecture_steps.qmd
-            - user_guide/architecture_solvers.qmd
-            - user_guide/architecture_transmission.qmd
-            - user_guide/architecture_randomness.qmd
-            - user_guide/architecture_modules.qmd
+            - user_guide/architecture_run.qmd
+            - user_guide/architecture_engines.qmd
     - id: contributing
       contents:
         - href: index.qmd#top
@@ -232,72 +196,93 @@ website:
           text: "**Home**"
         - href: api/index.qmd
           text: "**API**"
-        - section: "**Basics**"
+        - section: "**Starsim**"
           contents:
-            - api/sim.qmd
-            - api/internals.loop.qmd
-            - api/people.qmd
-            - api/internals.parameters.qmd
-            - api/results.qmd
-        - section: "**Models**"
-          contents:
-            - api/transitions.qmd
-            - api/internals.conditions.qmd
-            - api/internals.dimensions.qmd
-            - api/strains.qmd
-        - section: "**Modules**"
-          contents:
-            - api/internals.modules.qmd
-            - api/diseases.qmd
-            - api/networks.qmd
-            - api/demographics.qmd
-            - api/interventions.qmd
-            - api/products.qmd
             - api/analyzers.qmd
             - api/connectors.qmd
-        - section: "**Workflows**"
-          contents:
-            - api/run.qmd
-            - api/internals.fitting.qmd
-            - api/geo.qmd
             - api/data.qmd
-        - section: "**I/O**"
+            - api/demographics.qmd
+            - api/diseases.qmd
+            - api/distributions.qmd
+            - api/geo.qmd
+            - api/interventions.qmd
+            - api/networks.qmd
+            - api/people.qmd
+            - api/products.qmd
+            - api/results.qmd
+            - api/run.qmd
+            - api/settings.qmd
+            - api/sim.qmd
+            - api/strains.qmd
+            - api/transitions.qmd
+            - api/utils.qmd
+        - section: "**Converters**"
           contents:
             - api/converters.qmd
-        - section: "**Library**"
-          contents:
-            - api/library.diseases.qmd
-            - api/library.econ.qmd
-            - api/library.mnch.qmd
-            - api/library.networks.qmd
-        - section: "**Utilities**"
-          contents:
-            - api/internals.arrays.qmd
-            - api/internals.time.qmd
-            - api/internals.dates.qmd
-            - api/internals.timeline.qmd
-            - api/distributions.qmd
-            - api/settings.qmd
-            - api/utils.qmd
         - section: "**Internals**"
           contents:
-            - api/internals.dists.qmd
-            - api/internals.expressions.qmd
-            - api/internals.graph.qmd
-            - api/internals.display.qmd
-            - api/internals.errors.qmd
-            - api/internals.debugtools.qmd
-            - api/internals.gradients.qmd
+            - href: api/internals.arrays.qmd
+              text: arrays
+            - href: api/internals.conditions.qmd
+              text: conditions
+            - href: api/internals.dates.qmd
+              text: dates
+            - href: api/internals.debugtools.qmd
+              text: debugtools
+            - href: api/internals.dimensions.qmd
+              text: dimensions
+            - href: api/internals.display.qmd
+              text: display
+            - href: api/internals.dists.qmd
+              text: dists
+            - href: api/internals.errors.qmd
+              text: errors
+            - href: api/internals.expressions.qmd
+              text: expressions
+            - href: api/internals.fitting.qmd
+              text: fitting
+            - href: api/internals.gradients.qmd
+              text: gradients
+            - href: api/internals.graph.qmd
+              text: graph
+            - href: api/internals.loop.qmd
+              text: loop
+            - href: api/internals.modules.qmd
+              text: modules
+            - href: api/internals.parameters.qmd
+              text: parameters
+            - href: api/internals.time.qmd
+              text: time
+            - href: api/internals.timeline.qmd
+              text: timeline
+        - section: "**Library**"
+          contents:
+            - href: api/library.diseases.qmd
+              text: diseases
+            - href: api/library.econ.qmd
+              text: econ
+            - href: api/library.mnch.qmd
+              text: mnch
+            - href: api/library.networks.qmd
+              text: networks
         - section: "**Solvers**"
           contents:
-            - api/solvers.agents.qmd
-            - api/solvers.choose.qmd
-            - api/solvers.compartmental.qmd
-            - api/solvers.joint_states.qmd
-            - api/solvers.deliveries.qmd
-            - api/solvers.engine.qmd
-            - api/solvers.mixing.qmd
-            - api/solvers.particles.qmd
+            - href: api/solvers.agents.qmd
+              text: agents
+            - href: api/solvers.choose.qmd
+              text: choose
+            - href: api/solvers.compartmental.qmd
+              text: compartmental
+            - href: api/solvers.deliveries.qmd
+              text: deliveries
+            - href: api/solvers.engine.qmd
+              text: engine
+            - href: api/solvers.joint_states.qmd
+              text: joint_states
+            - href: api/solvers.mixing.qmd
+              text: mixing
+            - href: api/solvers.particles.qmd
+              text: particles
     - id: main # The pages that aren't in a section of their own (e.g. Home and Tour): the same links as the navbar. Last, so the pages above keep their own sidebars
       contents:
         - href: index.qmd
@@ -347,7 +332,7 @@ quartodoc:
         - strains
         - transitions
         - utils
-    - title: I/O
+    - title: Converters
       desc: Importing models from other frameworks, and exporting sims to them.
       contents:
         - kind: page
@@ -366,6 +351,7 @@ quartodoc:
         - internals.dates
         - internals.debugtools
         - internals.dimensions
+        - internals.display
         - internals.dists
         - internals.errors
         - internals.expressions
@@ -375,7 +361,6 @@ quartodoc:
         - internals.loop
         - internals.modules
         - internals.parameters
-        - internals.display
         - internals.time
         - internals.timeline
     - title: Library
@@ -428,9 +413,9 @@ quartodoc:
         - solvers.agents
         - solvers.choose
         - solvers.compartmental
-        - solvers.joint_states
         - solvers.deliveries
         - solvers.engine
+        - solvers.joint_states
         - solvers.mixing
         - solvers.particles
 format:

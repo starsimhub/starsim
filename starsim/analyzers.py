@@ -5,6 +5,8 @@ For example, the number infected by age or by sex, or who infected whom (`ss.inf
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by humans, lightly edited by AI
+
 import numpy as np
 import sciris as sc
 import starsim as ss

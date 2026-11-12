@@ -1,6 +1,6 @@
 # Importing and exporting
 
-Reading models from other frameworks into Starsim, writing Starsim models out to them, and rewriting Starsim 3 code. See the user guide's [Importing and exporting models](https://docs.starsim.org/user_guide/conversion/index.html).
+Reading models from other frameworks into Starsim, writing Starsim models out to them, and rewriting Starsim 3 code. See the user guide's [Import/export](https://starsim.org/v4/user_guide/building_import.html).
 
 ```python
 sim = ss.import_from('model.yaml')                       # The format is told from the file where it can be

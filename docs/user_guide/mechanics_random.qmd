@@ -2,38 +2,25 @@
 title: Random numbers
 jupyter: python3
 authorship:
-  human: 50
-  ai: 50
-  note: Adapted from the Starsim 3 user guide page on common random numbers; ported to v4, with the limits and the rules for modules expanded by AI
+  human: 35
+  ai: 65
+  note: Adapted from the Starsim 3 user guide page on common random numbers; ported to v4, with the limits and the rules for modules expanded by AI. "How it works" written by AI from the Claude draft of "Randomness and fitting", checked against the current code. Merged with the architecture page "Randomness" on Nov 11 by AI, and shortened on Nov 11 by AI
 ---
 
 A stochastic model uses random numbers to decide what happens to each person: whether they are infected on a step, how long they stay infectious, whether a vaccine takes. When two scenarios are compared, such as with and without an intervention, the difference between them should come from the intervention, not from the scenarios happening to draw different random numbers. Starsim arranges its random numbers so that, as far as possible, the same person making the same decision gets the same random number in both scenarios. This is known as **common random numbers**.
 
-Every declared model and built-in module gets this without anything being done. This page is for writing [modules as code](building_modules.qmd): it shows what common random numbers do, and how to draw random numbers in a module so that it keeps them. For seeds, repeated runs, and how much results vary by chance, see [Scenarios](running_scenarios.qmd#seeds), which also shows what pairing the runs of two scenarios buys. The method is described in [Klein et al., "Noise-free comparison of stochastic agent-based simulations using common random numbers" (2024)](https://arxiv.org/abs/2409.02086), and how Starsim implements it is in [Randomness](architecture_randomness.qmd).
+Every declared model and built-in module gets this without anything being done. This page is for writing [modules as code](building_modules.qmd): how to draw random numbers in a module so that it keeps them, and how Starsim does it. For seeds and repeated runs, see [Scenarios](running_scenarios.qmd#seeds). The method is described in [Klein et al. (2024)](https://arxiv.org/abs/2409.02086).
 
-## The problem
+## The problem, with an example
 
-A computer's random numbers come from a generator that, given a starting seed, always produces the same sequence:
-
-```{python}
-import numpy as np
-
-np.random.seed(42)
-print('First draws: ', np.random.random(size=5).round(2))
-
-np.random.seed(42)
-print('Second draws:', np.random.random(size=5).round(2))
-```
-
-Many simulation frameworks hand out numbers from one such sequence, in turn, to whichever person needs one next. Then two scenarios with the same seed still differ by more than the change between them: once one scenario makes one more or one fewer draw, every later draw goes to a different person or a different decision. The difference between the scenarios is then a mix of the real effect of the change and noise from the random numbers.
-
-## An example: fishing
+Many simulation frameworks hand out random numbers from one seeded sequence, in turn, to whichever person needs one next. Then two scenarios with the same seed still differ by more than the change between them: once one scenario makes one more or one fewer draw, every later draw goes to a different person or a different decision, and the difference between the scenarios mixes the real effect with noise.
 
 To see this without an epidemic in the way, take a model with no interaction between people at all. Each of 20 people goes fishing on a day with a chance of 50%, and catches a fish with a chance of 20% if they go. In a second scenario, person 0 is banned from fishing. Since nobody competes for the fish, the only difference should be that person 0 catches nothing.
 
 The module draws from two Starsim distributions, one for each decision:
 
 ```{python}
+import numpy as np
 import starsim as ss
 
 class Fishing(ss.Module):
@@ -75,7 +62,7 @@ print('Person 0 is banned')
 ss.Sim(Fishing(banned=[0]), **pars).run();
 ```
 
-Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned, which can't be a real effect of the ban. Now the same with common random numbers, as Starsim runs by default:
+Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned: fewer people fishing, more fish caught, which is impossible. That is the noise. Now the same with common random numbers, as Starsim runs by default:
 
 ```{python}
 ss.options.crn = True # The default
@@ -87,21 +74,7 @@ print('Person 0 is banned')
 ss.Sim(Fishing(banned=[0]), **pars).run();
 ```
 
-Now the only difference is that person 0, who caught a fish on day 3, catches nothing: everyone else makes the same decisions in both scenarios.
-
-## How it works, and its limits
-
-Each distribution has its own stream of random numbers, seeded from the sim's `rand_seed` and the distribution's name (its place in the sim, e.g. `fishing.p_catch`). Within a stream, each person's random number depends only on that person, not on how many others drew from it. So adding a module, or a person not drawing, doesn't change what anyone else draws.
-
-Common random numbers pair the draws, not the outcomes. In an epidemic, an intervention changes who is infected, and so who infects whom, and the two scenarios drift apart; the noise in the difference then grows back, more so for a large change or late in an epidemic. The pairing is closest for a small change, which is also where noise would hide the effect most. People born after the scenarios differ may have no counterpart in the other scenario. A network can undo the pairing too: `ss.RandomNet` pairs people up from the whole population, so one death or birth in a scenario changes many people's contacts, and `ss.RandomNet(method='safe')` is the version that keeps them (see [Networks](library_networks.qmd), whose [appendix](library_networks.qmd#appendix-every-library-network) says which of the library's networks keep them). In a stochastic compartmental run there are no people to pair, so two scenarios start from the same draws but drift apart once their counts differ. So common random numbers can reduce the number of runs needed to see a difference, but don't replace running several seeds: see [Scenarios](running_scenarios.qmd#comparing-scenarios-with-many-runs).
-
-`ss.options.crn = False` turns them off, e.g. to check how much they help in a given model. It is a global option, so set it back to `True` afterwards. Even turned off, Starsim draws one number for each person from each distribution, in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios: a subset that draws (as in the fishing example), people born or removed, or an intervention that draws for those it reaches. How much this narrows the difference between two epidemics depends on the model, and is worth checking: compare the spread of the paired differences over a few seeds with `crn` on and off.
-
-## Reducing the variance between runs
-
-With agents, `ss.Sim(even_draws=True)` makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time, and fewer runs are needed for the same precision. Each agent's number is still uniform, and common random numbers still pair scenarios. In a simple SIR, the variance of the final size between runs fell by about 10 times with even mixing and 3 to 6 times on networks.
-
-This changes the model slightly, so it suits comparing scenarios better than estimating absolute numbers. Small outbreaks die out less often than they should, and the mean of a result can shift: the peak of the same SIR on a network fell by about 6 to 13%. It also takes longer, about 30 to 90% in the same model. It has no effect on compartmental solvers, and needs `ss.options.crn`.
+Now the only difference is that person 0 catches nothing: everyone else makes the same decisions in both scenarios. In an epidemic the pairing is less perfect: see [Common random numbers and their limits](#common-random-numbers-and-their-limits).
 
 ## Drawing random numbers in a module
 
@@ -113,7 +86,7 @@ A module keeps common random numbers if it draws every random number from a Star
 4. **Put what varies in the parameter.** If a probability differs by person or by time, give the distribution a function as its parameter, rather than setting it anew each step.
 5. **Choose a fixed number of people with `ss.choose_n()`.** To pick exactly 20 people, `ss.choose_n(20)` keeps the pairing: if the candidates change slightly, most of the same people are still chosen. `ss.choice()` and NumPy's random choice don't.
 6. **Choose one of several options per person with a row each.** If the probabilities of the options differ by person (e.g. a contraceptive method by age group and current method), give `ss.choice()` a function that returns a row of probabilities for each person, `p=lambda self, sim, uids: table[group[uids]]`, and draw once for all of them, rather than setting `p` and drawing for each group.
-7. **Draw for pairs of people with `ss.multi_random()`.** A decision about a pair, such as whether a contact between two people transmits, needs a random number that depends on both of them, and on no one else: `ss.multi_random('source', 'target')`, made once like any other distribution, gives one for each pair with `rvs(source_uids, target_uids)`. It is what Starsim's own transmission on networks uses.
+7. **Draw for pairs of people with `ss.multi_random()`.** A decision about a pair, such as whether a contact transmits, needs a number that depends on both of them: `ss.multi_random('source', 'target')` gives one for each pair with `rvs(source_uids, target_uids)`.
 
 In code:
 
@@ -181,8 +154,83 @@ def first_success(states, p, n_max): # For each person, the act (up to n_max) th
 acts = first_success(self.acts.streams(uids), 0.1, 20) # self.acts is any distribution made in __init__(), e.g. ss.random()
 ```
 
+## How it works
+
+This is the view from inside; you don't need it to write a module that keeps common random numbers.
+
+### Random streams
+
+**Every distribution has its own random number stream**, seeded from the sim's `rand_seed` and the distribution's name, which is its path in the sim (e.g. `fishing.p_catch`). Within a stream, each person's random number depends only on that person, not on how many others drew from it, so a person not drawing doesn't change what anyone else draws. In a stochastic compartmental run (`binomial`, `tau`, `gillespie`), each module has its own generator, seeded from `rand_seed` and the module's name, and draws its flows in an order set by the names of its states and transitions rather than the order they were declared in. The streams of a declared disease are named after its states and transitions:
+
+```{python}
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+sim = ss.Sim(sir, networks=ss.RandomNet(), n_agents=1000, verbose=0)
+sim.init()
+print([name for name in sim.dists.dists if 'infection' in name or 'recovery' in name])
+```
+
+So:
+
+- Adding a module doesn't change the draws of any other module.
+- Reordering modules doesn't change which random numbers each distribution receives (though it can still change results, since a module may then act on different state).
+- The runs of a MultiSim are identical whether run in parallel or in serial.
+
+The first is easy to check:
+
+```{python}
+def make_sir():
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+
+def make_flu():
+    S, I = ss.states('S I')
+    return ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> S @ ss.days(5), init_prev=0.05, name='flu')
+
+for kw in [dict(networks=ss.RandomNet(n_contacts=4), n_agents=2000), dict(solver='binomial', total_pop=10_000)]:
+    alone = ss.Sim(make_sir(), unit='day', stop=ss.days(60), verbose=0, **kw).run()
+    both  = ss.Sim([make_sir(), make_flu()], unit='day', stop=ss.days(60), verbose=0, **kw).run()
+    same = np.array_equal(alone.results.sir.infection.values, both.results.sir.infection.values)
+    print(f'{alone.solver}: SIR results unchanged by adding flu:', same)
+```
+
+Uniforms are counter-based (a hash of a key and an index), so a draw doesn't depend on what was drawn before it, or on how the work is split across threads. Most distributions are drawn by inverting their CDF at one uniform, so a small change to a parameter moves each draw a little, rather than reshuffling them.
+
+### Common random numbers and their limits
+
+Common random numbers (CRN) are on by default. Since the same agent making the same decision gets the same random number in the baseline and in the intervention scenario, much of the Monte Carlo noise cancels in the difference, so small effects can be seen with fewer runs.
+
+The key is the agent's *slot*, a persistent index: an agent's uniform for a given decision depends only on its slot and the distribution's stream. A newborn's slot is drawn from its parent's stream, so the same birth gets the same slot in both scenarios; agents born after the scenarios diverge may have no counterpart.
+
+Common random numbers pair the draws, not the outcomes. In an epidemic, an intervention changes who infects whom, and the two scenarios drift apart, more so for a large change or late in an epidemic. A network can undo the pairing too: `ss.RandomNet` pairs people up from the whole population, so one death or birth in a scenario changes many people's contacts, and `ss.RandomNet(method='safe')` is the version that keeps them (see [Networks](library_networks.qmd), whose [appendix](library_networks.qmd#appendix-every-library-network) says which of the library's networks keep them). Nor do they cover sampling without replacement or joint draws across agents. In a stochastic compartmental run there are no people to pair, so two scenarios start from the same draws but drift apart once their counts differ. So common random numbers can reduce the number of runs needed to see a difference, but don't replace running several seeds: see [Scenarios](running_scenarios.qmd#comparing-scenarios-with-many-runs).
+
+`ss.options.crn = False` turns them off, e.g. to check how much they help in a given model (compare the spread of the paired differences over a few seeds with `crn` on and off). It is a global option, so set it back to `True` afterwards. Even turned off, each person draws from each distribution in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios.
+
+With agents, `ss.Sim(even_draws=True)` also makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time: in a simple SIR, the variance of the final size between runs fell 3 to 10 times. It changes the model slightly (small outbreaks die out less often, and a peak can shift by around 10%) and runs slower, so it suits comparing scenarios better than estimating absolute numbers; it has no effect on compartmental solvers.
+
+### Run identity
+
+A seed makes a run repeatable, but doesn't say what was run. The record of that is the code (the commit of the script), with the seed (`rand_seed`): the same code and seed give the same results on every machine. Two versions of a model are compared by their code (in a text editor), their `describe()`, or their results.
+
+A related check is `sim.check_dt()`, which reruns the sim at half the timestep and reports how much each result moves. That covers every effect of order `dt` at once: converting rates to probabilities, the one-step delay between modules, and module order.
+
+### Randomness in fitting
+
+`sim.fit()` scores a stochastic model, whose every run is different, with the same machinery ([Fitting a model](calibration_fitting.qmd) shows it at work):
+
+- **Common seeds.** A stochastic sim is scored at each point by the mean of several runs (4 for a stochastic compartmental sim, 1 for agents), with the same seeds at every point, so a local method such as Nelder-Mead follows the values rather than the noise. Optuna, the default for stochastic models, takes fresh seeds at each point instead (`reseed=False` turns this off), and where every series has a likelihood, scores each point by a particle filter.
+- **Many runs at once.** A stochastic compartmental run taken by the kernels in one call can be run as many runs that differ only in their seed, and as many *particles* stepped forward together, each with its own random numbers, weighted by the likelihood and resampled at each data point. This is what particle MCMC (`'pmcmc'`) and iterated filtering (`'if2'`) need, and why they are offered only when the kernels take the run whole.
+- **No randomness at all.** For an ODE, `sim.gradient()` and `sim.log_density()` run the same steps in JAX, which differentiates them, with the cheap steps on either side by central differences (accurate to about 1e-9). A run the kernels can't take whole (a `when=` function, a movement register, or code of your own) rules gradients out, and the printed reason says which (see [Gradients](calibration_gradients.qmd)).
+
+The method a fit uses by default follows from what the sim is, and every fit says whether it converged; see [Fitting methods](calibration_methods.qmd) and [Fit diagnostics](calibration_diagnostics.qmd).
+
 ## Further reading
+
+- [Design record: Randomness and reproducibility](https://starsim.org/lingua_franca/design/11-random.html): streams, common random numbers, run identity, and `check_dt()`
+- [Design record: Inference](https://starsim.org/lingua_franca/design/13-inference.html): calibration, the choice of method, gradients, staged fitting, sensitivity, and model comparison
 
 - [Klein et al.: Noise-free comparison of stochastic agent-based simulations using common random numbers](https://arxiv.org/abs/2409.02086): the method, with examples in Starsim
 - [Wikipedia: Variance reduction](https://en.wikipedia.org/wiki/Variance_reduction): common random numbers among the other ways of reducing the noise in simulation estimates
 - [NumPy: parallel random number generation](https://numpy.org/doc/stable/reference/random/parallel.html): independent streams from one seed, as each Starsim distribution has
+- [Vivarium: Common random numbers](https://vivarium.readthedocs.io/en/latest/concepts/crn.html): how another microsimulation framework keys random draws to individuals, so that scenarios can be compared with less noise
+- [JAX: Quickstart](https://docs.jax.dev/en/latest/quickstart.html): the library behind Starsim's gradients and many runs at once

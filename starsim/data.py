@@ -16,13 +16,15 @@ record of where it came from (`ref`; for a table, in `.attrs['ref']`), which `si
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by AI, reviewed by humans
+
 import re
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'age_labels', 'age_edges', 'provider']
+__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'age_labels', 'age_edges', 'starsim_data']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
 
@@ -117,8 +119,8 @@ def age_split(edges, ages, counts):
     return out/out.sum()
 
 
-def provider():
-    """ The data provider, `starsim_data`, imported when it is first used """
+def starsim_data():
+    """ The `starsim_data` package, which has the data by place, imported when it is first used """
     try:
         import starsim_data as ssd
     except ImportError as E:
@@ -128,7 +130,7 @@ def provider():
 
 
 def unknown(place, E, what='place'):
-    """ Raise a `KeyError` for a place that the provider cannot resolve, with its suggestions """
+    """ Raise a `KeyError` for a place that starsim_data cannot resolve, with its suggestions """
     msg = str(E).strip('"\'')
     raise sc.KeyNotFoundError(f'the {what} "{place}" was not found in starsim_data: {msg}.')
 
@@ -151,7 +153,7 @@ def fetch(ssd, place, which, **kwargs):
 
 
 def ref(ssd, df, **kwargs):
-    """ Where the data came from: the provider, its version, and the dataset's own provenance """
+    """ Where the data came from: the package, its version, and the dataset's own provenance """
     prov = df.attrs.get('provenance', {})
     out = dict(provider='starsim_data', version=ssd.__version__, **kwargs)
     for key,name in dict(source='study', license='license', population_source='population', population_year='population_year').items():
@@ -195,7 +197,7 @@ def geography(place, level=1, year=None, places=None):
     Returns:
         A dict of `names`, `pop`, `lat`, `lon`, `area` (km²), `codes` (p-codes), `adjacency` (or None), and `ref`
     """
-    ssd = provider()
+    ssd = starsim_data()
     level = ssd.parse_level(level)
     many = isinstance(place, (list, tuple))
     frames = [nodes(ssd, p, level, year) for p in sc.tolist(place)]
@@ -214,7 +216,7 @@ def geography(place, level=1, year=None, places=None):
     else: # The path below the country, e.g. 'Nairobi:Westlands'
         names = [n.split(':', 1)[-1] for n in df.dot_name]
     adjacency = None
-    if level > 0 and hasattr(ssd, 'adjacency'): # Which units share a border, where the provider has it (within each country)
+    if level > 0 and hasattr(ssd, 'adjacency'): # Which units share a border, where starsim_data has it (within each country)
         pos = {key:i for i,key in enumerate(df.dot_name)}
         adjacency = np.zeros((len(df), len(df)), dtype=bool)
         try:
@@ -247,7 +249,7 @@ def rates(place, which, revision=None):
         which (str): 'births', 'deaths', 'fertility', or 'migration' (see above)
         revision (str): the WPP revision (default: the latest bundled)
     """
-    ssd = provider()
+    ssd = starsim_data()
     if which not in ssd.list_datasets(): # A series added in a later version, e.g. fertility (2.1.0)
         errormsg = f'The data "{which}" are not in starsim_data {ssd.__version__}; a newer version has them: pip install -U starsim_data'
         raise ImportError(errormsg)
@@ -281,7 +283,7 @@ def population(place, year=None, revision=None):
         pop.attrs['ref']['study'] # The source
         ```
     """
-    ssd = provider()
+    ssd = starsim_data()
     if subnational(ssd, place):
         if revision is not None:
             errormsg = f'revision={revision} is a revision of the UN World Population Prospects, which are national; the population of {place} is from the US Census'
@@ -351,7 +353,7 @@ def contacts(place, study=None, layer='all'):
         mixing = ss.contacts(school) # The same as ss.contacts('Kenya', layer='school')
         ```
     """
-    ssd = provider()
+    ssd = starsim_data()
     source = study # The dataset's key in starsim_data
     if source is None and subnational(ssd, place):
         source = 'mistry2021_us'

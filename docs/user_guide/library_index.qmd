@@ -1,0 +1,24 @@
+---
+title: Library
+authorship:
+  human: 30
+  ai: 70
+  note: The introduction is from the Starsim 3 user guide page on library modules, by way of the v4 page on library diseases; the table was written by AI
+---
+
+Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.Disease`, `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of specific modules built on those:
+
+| Submodule | What it has | Page |
+| --- | --- | --- |
+| `ssl.diseases` | Particular diseases: measles, Ebola, cholera, HIV, and short versions of published models of others | [Diseases](library_diseases.qmd) |
+| `ssl.networks` | Networks for households and other clusters, for space, and for theoretical work | [Networks](library_networks.qmd) |
+| `ssl.mnch` | Maternal, newborn, and child health: worked examples of harder patterns such as congenital infection | [Maternal-child health](library_mnch.qmd) |
+| `ssl.econ` | Health economics: costs, DALYs, discounting, and cost-effectiveness | [Health economics](library_econ.qmd) |
+
+Every class is also at the top level (`ssl.Measles` is `ssl.diseases.Measles`), and the [API reference](../api/index.qmd) lists them all.
+
+The library ships with Starsim, but is held to a lower bar than the core package. Its modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and their interfaces may change between versions. Treat them as starting points to copy and adapt, not as ready-made models of a particular setting. If you find yourself copying one wholesale and editing it, that's a perfectly good outcome: it's what they're for.
+
+## Contributing to the library
+
+New library modules are welcome, particularly ones that show a modeling pattern that is otherwise hard to work out. See [`starsim/library/README.md`](https://github.com/starsimhub/starsim/blob/main/starsim/library/README.md) for its conventions, and [How to contribute](../contributing/index.qmd) for the general process.

@@ -1,0 +1,208 @@
+## T8 – Custom modules
+
+```{python}
+import starsim as ss
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 0.16*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+cases       = ss.outcome(0.4*infection)
+measles = ss.Disease(infection, progression, recovery, cases,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=10),
+    name = 'measles',
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+
+class VaccineDemand(ss.Intervention):
+    """ Unvaccinated people seek vaccination at a rate that rises with the outbreak cases they remember """
+
+    def __init__(self, memory=ss.days(30), half=300, max_rate=ss.perweek(0.1), capacity=None, efficacy=0.93, **kwargs):
+        super().__init__()
+        self.define_pars(memory=memory, half=half, max_rate=max_rate, capacity=capacity, efficacy=efficacy)
+        self.update_pars(**kwargs)
+        self.remembered = 0.0
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('doses', kind='flow', scale=False, label='Doses given'),
+            ss.Result('remembered', kind='stock', scale=False, label='Cases remembered'),
+        )
+        return
+
+    def share(self):
+        """ The share of the highest demand, from the cases remembered """
+        return self.remembered/(self.remembered + self.pars.half)
+
+    def step(self):
+        measles = self.sim.diseases.measles
+        dt = self.t.dt
+        self.remembered += self.sim.results.measles.cases[self.ti-1] - self.remembered*(dt/self.pars.memory)
+        doses = (self.pars.max_rate*self.share()).to_prob(dt)*measles.S.n
+        if self.pars.capacity is not None:
+            doses = min(doses, self.pars.capacity.to_events(dt))
+        ss.move(measles.S, measles.R, n=doses*self.pars.efficacy)
+        self.results.doses[self.ti] = doses
+        self.results.remembered[self.ti] = self.remembered
+        return
+```
+
+The module is the one from the tutorial, with the share of the highest demand as a method of its own (`share()`), so that exercise 2 can use it too.
+
+**1. How long people remember.**
+
+```{python}
+baseline = ss.Sim(measles, **settings).run().results.measles.infection.sum()
+sims = {str(days) + ' days': ss.Sim(measles, interventions=VaccineDemand(memory=ss.days(days)), **settings) for days in [10, 30, 90]}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results
+    doses = res.vaccinedemand.doses.sum()
+    prevented = baseline - res.measles.infection.sum()
+    print('Memory of', sim.label, '- doses:', round(doses), '- infections prevented:', round(prevented), '- per dose:', round(prevented/doses, 2))
+```
+
+The longer people remember, the more doses are sought (about 3,500 with a memory of 10 days, 4,900 with 30, and 6,100 with 90), and the more infections are prevented (about 3,100, 4,000, and 4,300). But each extra dose prevents fewer: about 0.9 infections a dose with a memory of 10 days, and 0.7 with 90. A longer memory adds doses mostly after the peak, when most of those the outbreak would infect already have been, so a dose then protects someone unlikely to be infected anyway.
+
+**2. Avoiding contact as well.**
+
+```{python}
+def avoidance(sim):
+    """ Susceptibility falls by up to 30% as people remember more cases """
+    return 1 - 0.3*sim.interventions.vaccinedemand.share()
+
+sims = {
+    'Vaccine demand':               ss.Sim(measles, interventions=VaccineDemand(), **settings),
+    'Vaccine demand and avoidance': ss.Sim(measles, interventions=[VaccineDemand(), ss.modify(measles.rel_sus, multiply=avoidance)], **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+msim.summarize().loc['measles_infection']
+```
+
+Avoiding contact makes the outbreak about a fifth smaller again (about 4,400 infections rather than 5,400). The function reads the module from the sim (`sim.interventions.vaccinedemand`), not a variable outside it, since the sim works on its own copy; and since neither the module nor the modifier keeps anything for each person, the sim still runs as an ODE.
+
+**3. As agents.**
+
+```{python}
+sims = {
+    'ODE':    ss.Sim(measles, interventions=VaccineDemand(), **settings),
+    'Agents': ss.Sim(measles, interventions=VaccineDemand(), n_agents=100_000, **settings),
+}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results
+    print(sim.label, f'({sim.solver}) - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
+```
+
+The module runs unchanged as agents, and the two agree to within a few percent (agents vary a little from run to run). It needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.S.n`), and `ss.move()` with a number of people, which as agents moves that many randomly chosen agents from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents (as in the second half of the tutorial).
+
+**4. The half-life of the antibodies.** We define the infection and the `Antibodies` module from the tutorial again, and run them with each half-life:
+
+```{python}
+import numpy as np
+import starsim.library as ssl
+
+class Antibodies(ss.Module):
+    """ Each person's antibody level: 1 on recovery, then halving every half_life """
+    def __init__(self, half_life=ss.days(90), **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(half_life=half_life)
+        self.define_states(ss.FloatArr('level', default=0.0, label='Antibody level'))
+        return
+
+    def step(self):
+        self.level[:] = self.level*0.5**(self.t.dt/self.pars.half_life)
+        self.level[self.sim.diseases.cold.recovery.uids] = 1.0
+        return
+
+S, I = ss.states('S I')
+sis = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> S @ ss.days(7), init_prev=0.01, name='cold')
+
+def susceptibility(sim):
+    return 1 - sim.custom.antibodies.level
+
+pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), verbose=0)
+S, I, R = ss.states('S I R')
+sirs = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> R @ ss.days(7), waning=R >> S @ ss.days(180), init_prev=0.01, name='cold')
+
+sims = {'No immunity': ss.Sim(sis, **pars), 'All or nothing': ss.Sim(sirs, **pars)}
+for label, half_life in {'Half-life of 30 days': ss.days(30), 'Half-life of 365 days': ss.days(365)}.items():
+    protection = ss.modify(sis.rel_sus, multiply=susceptibility)
+    sims[label] = ss.Sim(sis, Antibodies(half_life=half_life), connectors=protection, **pars)
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+```
+
+The longer the antibodies last, the lower the endemic level. With a half-life of 30 days, people regain most of their susceptibility within a couple of months, so the infection settles at about a quarter of its level with no immunity, but well above its level with the all-or-nothing SIRS (whose protection lasts 180 days on average). With a half-life of a year, almost everyone is still well protected long after the first wave, and the infection dies out.
+
+**5. Some contacts at random.** The simplest way is to keep `AgeNet` as it was, and add a random network beside it, splitting the 4 contacts a day between the two:
+
+```{python}
+class AgeNet(ss.Network):
+    """ Contacts each day with people close in age """
+    def __init__(self, n_contacts=4, spread=ss.years(2), **kwargs):
+        super().__init__()
+        self.define_pars(n_contacts=n_contacts, spread=spread)
+        self.update_pars(**kwargs)
+        self.noise = ss.normal(0, 1)
+        return
+
+    def add_pairs(self):
+        uids = self.sim.people.alive.uids
+        age = self.sim.people.age[uids] + self.pars.spread.years*self.noise.rvs(uids)
+        order = uids[np.argsort(age, kind='stable')]
+        p1 = np.concatenate([order[:-k] for k in range(1, self.pars.n_contacts//2 + 1)])
+        p2 = np.concatenate([order[k:] for k in range(1, self.pars.n_contacts//2 + 1)])
+        self.append(p1=p1, p2=p2, weight=np.ones(len(p1)))
+        return
+
+    def step(self):
+        self.remove_edges(np.ones(len(self), dtype=bool))
+        self.add_pairs()
+        return
+
+S, I, R = ss.states('S I R')
+cold = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(7), init_prev=0.001, name='cold')
+
+pars = dict(n_agents=5000, stop=ss.days(250), verbose=0)
+sims = {
+    'All random':           ss.Sim(cold, networks=ss.RandomNet(n_contacts=4), **pars),
+    'All close in age':     ss.Sim(cold, networks=AgeNet(n_contacts=4), **pars),
+    'Half at random':       ss.Sim(cold, networks=[AgeNet(n_contacts=2), ss.RandomNet(n_contacts=2)], **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+```
+
+With half of the 4 contacts at random, the epidemic is almost the same as with all contacts random: a few long-range contacts are enough to carry the infection across the ages, as in a "small-world" network. (`AgeNet` pairs each person with an even number of neighbors, so to try smaller shares, give it more contacts and the random network fewer, keeping the total the same, e.g. 6 and 2.)
+
+**6. Losing immunity with a constant chance each step.** A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(mean=ss.days(180))` if the chance per day is 1/180, so the waning works the same way, and the epidemic is the same up to chance:
+
+```{python}
+class SIRS(ssl.AgentSIR):
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.define_pars(p_wane=ss.bernoulli(p=1/180)) # The chance of losing immunity each day
+        self.update_pars(pars, **kwargs)
+        return
+
+    def step_state(self):
+        super().step_state()
+        waning = self.pars.p_wane.filter(self.recovered.uids) # Each recovered agent loses immunity with this chance
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
+        return
+
+coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
+sim = ss.Sim(coded, networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), dt=ss.days(1), verbose=0)
+sim.run()
+sim.results.cold.infected.plot()
+```
+
+The chance is per step, so it is only right for a step of one day; a version that works for any step would convert a rate to a chance per step (e.g. `ss.peryear(2).to_prob()`), or schedule the time of waning at recovery, as the tutorial's version does.

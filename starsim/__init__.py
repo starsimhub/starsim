@@ -4,6 +4,7 @@ Import all Starsim modules
 The order matters: each group builds on the ones before it, and within a group,
 later modules use earlier ones as they are imported.
 """
+# Authorship: written by humans, edited by AI
 
 # Ask for one BLAS thread (see ss.options.blas_threads) before Sciris imports NumPy, which starts them; if something else already has, the options limit them
 import os as _os
