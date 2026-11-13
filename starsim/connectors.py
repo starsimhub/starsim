@@ -1,107 +1,723 @@
 """
-Define connectors, which are used to mediate interactions between modules when the sim is run.
+Connectors, which link modules as the sim runs: e.g. one disease making another more likely
 
-While most of the coupling between disease modules happens automatically via shared states
-(e.g., shared susceptibility), connectors allow explicit cross-module logic such as seasonal
-forcing or co-infection effects.
+Most links between diseases need no connector, since diseases can read each other's states (e.g. in a rate).
+A connector is for the rest, e.g. seasonal forcing or the effect of a coinfection. The one most used is
+`ss.modify()`, which changes a named quantity while a condition holds, e.g. a seasonal
+`ss.modify(sir.rel_trans, multiply=ss.seasonal(amplitude=0.2, peak='January'))`.
+
+Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by AI, reviewed by humans
+
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
 
 
 class Connector(ss.Module):
     """
-    Base class for Connectors, which mediate interactions between disease (or other) modules
+    Base class for connectors, which link diseases (or other modules) to each other
 
-    Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.
+    A connector can do anything, so it has no fixed structure: its `step()` says what it does.
     """
     pass
 
 
-class seasonality(Connector):
-    """
-    Example connector -- apply sine-wave seasonality of transmission to one or more diseases
-
-    This works by modifying the disease's `rel_trans` state; note that it replaces
-    it with the seasonality variable, and will overwrite any existing values.
-    (Note: this function would work more or less identically as an intervention,
-    but it is closer in spirit to a connector.)
+class Target:
+    """ A reference to a quantity of a module that is not a parameter, e.g. `sir.rel_sus`; used as the target of `ss.modify()`
 
     Args:
-        diseases (str/list): disease or list of diseases to apply seasonality to
-        scale (float): how strong of a seasonality effect to apply (0.1 = 90-110% relative transmission rate depending on time of year)
-        shift (float): offset by time of year (0.5 = 6 month offset)
+        module (Module/str): the module the quantity belongs to, or its name
+        kind (str): the kind of quantity, e.g. `'rel_sus'`, `'transition'`, or `'branch'`
+        name (str): the name of the quantity, if the kind has several
+    """
+    def __init__(self, module, kind, name=None):
+        self.module = module
+        self.kind = kind
+        self.name = name
+        return
+
+    def __repr__(self):
+        return f'{self.module.name}.{self.name or self.kind}'
+
+
+def parse_target(target):
+    """ Work out what a modifier changes: returns the module (or its name), the kind of quantity, and its name """
+    if isinstance(target, ss.par):
+        return target.module, 'par', target if target.module is None else target.name # Not a module's yet: named by the disease that holds the modifier (see modify.own())
+    elif isinstance(target, Target):
+        return target.module, target.kind, target.name
+    elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
+        return target.module, 'attr', target.name
+    elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # The array itself, once the sim exists (or, for a disease written as code, e.g. hiv.rel_trans, at once)
+        return target.mod, target.name, None
+    elif isinstance(target, (ss.Transition, ss.dimensions.Transfer)): # A transfer's rate is modified as a transition's is
+        module = getattr(target, 'module', None)
+        return module, 'transition', target if module is None else target.name # As for a parameter
+    elif isinstance(target, str) and target in ['rel_sus', 'rel_trans']: # Of the disease that holds the modifier
+        return None, target, None
+    elif isinstance(target, ss.networks.Route) and target.name and 'n_contacts' in target.pars: # A network or a contact layer means its number of contacts, as "school.pars.n_contacts"
+        return target.name, 'par', 'n_contacts'
+    elif isinstance(target, str) and '.' in target:
+        parts = target.split('.')
+        kind = parts[-1] if parts[-1] in ['rel_sus', 'rel_trans'] else 'par' if 'pars' in parts else None # If None, it is whichever the module has
+        if kind is None and len(parts) == 3: # One destination of a transition with several, e.g. 'hpv.progression.C'
+            return parts[0], 'transition', '.'.join(parts[1:])
+        return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
+    what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
+    raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
+                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a module written as code is a plain value, so it is named by its path too, e.g. ss.modify("hiv.pars.beta", multiply=0.5); the rel_sus and rel_trans of a disease by themselves, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
+
+
+def to_time(sim, val):
+    """
+    Convert a time (a date, a number, or a duration) to the same kind of time as the sim's timeline
+
+    How a bare number is read is decided once, from the sim's start (see `ss.timeline.calendar_of()`): if the sim has a
+    calendar (its start is a date or a year), a number is a calendar year (`2005` is the start of 2005, `2005.5` the
+    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is that long after the sim's start if the
+    sim has a calendar (`ss.days(30)` is 30 days in), and with none a point on the sim's own axis, counted from 0 as
+    `sim.t.tvec` is (`ss.days(30)` is day 30, the same when the start is 0); see `ss.Timeline.to_time()`.
+    """
+    return sim.t.to_time(val)
+
+
+def reached(now, time):
+    """ Whether a time on the timeline is at or after another, allowing for rounding: the timeline keeps its times to 9 decimals, so e.g. `ss.months(7)` is a hair after step 7 of monthly steps """
+    if now >= time:
+        return True
+    gap = time - now
+    return hasattr(gap, 'years') and abs(float(gap.years)) < 1e-6
+
+
+def to_ti(sim, val, name='time', after=False):
+    """
+    The first step that starts at or after a time, which must be within the sim
+
+    Step `ti` runs from time point `ti` to the next (see `ss.loop.Loop`), so a time at the start of the sim is step 0.
+
+    Args:
+        sim (Sim): the sim
+        val (date/dur/float): the time; see `to_time()`
+        name (str): what the time is, for the error message (e.g. 'the start of "masks"')
+        after (bool): whether a time after the end is allowed (e.g. for a stop, meaning it never stops)
+    """
+    time = sim.t.to_time(val, name=name)
+    tvec = sim.t.tvec
+    if time < tvec[0] or (time > tvec[-1] and not after):
+        hint = f'; {ss.timeline.how_bare(sim.t)}' if sc.isnumber(val) else ''
+        when = f'{val}, which is {time}' if sc.isnumber(val) else f'{val}'
+        raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
+    ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
+    return ti # The step from that time point
+
+
+def to_steps(sim, dur):
+    """ The number of steps in a duration (a bare number is in the sim's unit), at least one """
+    val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.TimePar) else dur
+    dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.TimePar) else sim.t.dt
+    return max(int(round(val/dt)), 1)
+
+
+def combine(mods, value, engine):
+    """ Apply the modifiers that are active on a quantity: set, then multiply, then add """
+    active = [mod for mod in mods if mod.active]
+    sets = [mod.name for mod in active if mod.op == 'set']
+    if len(sets) > 1 and (sets[0], sets[1]) not in engine.sim.overlaps: # Said once
+        engine.sim.overlaps.append((sets[0], sets[1]))
+        ss.note(f'the modifiers {sc.strjoin(sets)} both set the same quantity at the same time; the last one wins', sim=engine.sim)
+    for op in ['set', 'multiply', 'add']:
+        for mod in active:
+            if mod.op == op:
+                if isinstance(value, dict): # A value for each route, and for a pair of directions on one
+                    value = {k:[mod.apply(x, engine) for x in v] if isinstance(v, (list, tuple)) else mod.apply(v, engine) for k,v in value.items()}
+                else:
+                    value = mod.apply(value, engine)
+    return value
+
+
+def contact_mult(engine, name, mods):
+    """ The multiplier on the contacts of a network from the modifiers of its `n_contacts`, for an engine (see `Engine.contact_mult()`) """
+    val = engine.sim.all_networks()[name].pars.n_contacts
+    base = ss.solvers.Mixing.mean(val, engine.sim.unit_base) if np.ndim(val) == 0 else 1.0 # A matrix of contacts can only be scaled
+    base = base if base > 0 else 1.0
+    value = engine.reduce(combine(mods, base, engine), what=f'{name}.pars.n_contacts')
+    return engine.clip(value, f'{name}.pars.n_contacts')/base
+
+
+def scaled_transmissions(graph, par, what):
+    """
+    The transmissions (by name) whose rates a parameter scales, for a modifier of it on a route (`ss.modify(sir.pars.beta, network=...)`): those
+    in which it is a factor of the rate from every source of infection (e.g. `beta` in `beta*(k*A + S)`), so that scaling the transmission on
+    the route is scaling the parameter
+
+    Args:
+        graph (`ss.graph.Graph`): the graph of the disease
+        par (`ss.par`): the parameter
+        what (str): the modifier, for the errors
+    """
+    def factors(expr):
+        return factors(expr.a) + factors(expr.b) if isinstance(expr, ss.expressions.BinOp) and expr.op == '*' else [expr]
+    names = []
+    for trname,tr in graph.transitions.items():
+        if tr.contact and any(part is par for part in ss.expressions.nodes(tr.rate)):
+            if not all(any(f is par for f in factors(coef)) for coef in tr.terms.values()):
+                errormsg = f'{what} acts on the transmissions that {par.name} scales, but it is not a factor of every term of the rate of "{trname}" ({tr.rate}); give the transmission instead, e.g. {graph.module.name}.{trname}'
+                raise ValueError(errormsg)
+            names.append(trname)
+    if not names:
+        errormsg = f'{what} acts on the transmissions that {par.name} scales, but no transmission of "{graph.module.name}" reads it; give a transmission instead, e.g. ss.modify({graph.module.name}.infection, network=...)'
+        raise ValueError(errormsg)
+    return names
+
+
+def route_mult(engine, name, route, inds, trg):
+    """
+    The multiplier on a transmission over one route to the people who would be infected (`trg`), 1 if there are none: from the modifiers
+    of the route's contacts (`n_contacts`), and from those given the network (`ss.modify(..., network=)`), each `1 − frac·(1 − multiply)` for the
+    people it applies to (`who=`, of the people who would be infected)
+
+    Args:
+        engine (`ss.solvers.Transmission`): the engine of the disease, as agents
+        name (str): the name the modifiers on the route are under: a declared disease's transmission, or `rel_sus` for a disease written as code
+        route (Route): the route
+        inds (array): the edges of a network (Ellipsis for all), for a fraction given per edge; None for a route with no edges
+        trg (array): the people who would be infected, by UID (or a slice of every agent)
+    """
+    at = lambda val: val[trg] if np.ndim(val) else val # Per agent, for the people who would be infected
+    out = at(engine.contact_mult(route.name))
+    for m in engine.sim.modifiers.get((engine.mod.name, 'route', f'{name}@{route.name}')) or []:
+        if not m.active:
+            continue
+        amount = at(np.asarray(m.current(engine, frac=False), dtype=float))
+        if m.frac is None:
+            frac = 1.0
+        elif m.per_edge:
+            if inds is None:
+                raise ss.CapabilityError(f'frac= of the modifier "{m.name}" is a function of the network, one value per edge, but "{route.name}" has no edges; give a number, an ss.timeseries, or an ss.by')
+            frac = np.asarray(m.frac_of(engine, route), dtype=float)[inds]
+        else:
+            frac = at(np.asarray(m.frac_of(engine), dtype=float))
+        mult = 1 - frac*(1 - amount)
+        if m.where is not None:
+            mask = engine.selector.select(m.where)
+            if m.holding:
+                mask = m.held_mask(mask, engine)
+            mult = np.where(at(mask) > 0, mult, 1.0)
+        out = out*mult
+    return out
+
+
+def check_applied(sim):
+    """
+    Raise a `ValueError` for any modifier or efficacy of a product that nothing in the sim would apply, naming it and why
+
+    Called once by `sim.init()`, after every module has registered its modifiers in `sim.modifiers` (by module, kind of
+    quantity, and name). For each quantity modified, the module it belongs to says whether it reads it: a declared module
+    from its graph (`unapplied()`), and a module written as code from what its own code reads (`ss.solvers.Effects.unapplied_par()`, and for a disease `ss.solvers.Undeclared.unapplied()`).
+    A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
+    """
+    modules = {mod.name:mod for mod in sim.modules}
+    for (modname, kind, name), mods in sim.modifiers.items():
+        if not mods:
+            continue
+        mod = modules.get(modname)
+        if getattr(mod, 'graph', None) is not None:
+            why = unapplied(mod.graph, modname, kind, name, mods)
+        elif isinstance(mod, ss.Disease):
+            why = mod.engine.unapplied(kind, name, mods)
+        elif mod is not None and name in mod.pars and name != 'n_contacts': # A parameter of a module written as code, whose code reads it from self.pars
+            why = ss.solvers.Effects(mod, sim).unapplied_par(name, mods)
+        else: # A network's contacts, read by every transmission over it
+            continue
+        if why:
+            path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'.split('@')[0]
+            raise ValueError(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
+    return
+
+
+def describe_mod(m):
+    """ What a modifier is, for a message: `ss.modify()`, a product's efficacy, or another's (e.g. a strain's immunity) """
+    if isinstance(m, modify):
+        return f'ss.modify() "{m.name}"'
+    elif isinstance(m, ss.products.Effect):
+        return f'the {m.key} efficacy of "{m.name}"'
+    return f'"{m.name}"'
+
+
+def unapplied(graph, modname, kind, name, mods):
+    """ Why a declared module (its graph and name) would not apply the modifiers (`mods`) on one of its quantities (`kind` and `name`, as keyed in `sim.modifiers`), or None if it would """
+    if kind == 'par':
+        if name not in graph.pars:
+            return (f'"{name}" is a plain parameter of "{modname}", not one of its model\'s parameters (ss.par), so only the module\'s own code reads it, and a modifier cannot change it. '
+                    f'Modify a parameter or transition of its model instead (e.g. {modname}.{next(iter(graph.transitions), "transition")}), or give the value when the module is made.')
+    elif kind in ['rel_sus', 'rel_trans']:
+        trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_infectious)
+        if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious) and not trans_read:
+            return f'"{modname}" has no {"acquisition" if kind == "rel_sus" else "transmission"} for it to scale. Modify one of its transitions by name instead: {sc.strjoin(graph.transitions)}.'
+    elif kind in ['transition', 'branch']:
+        tr = graph.transitions.get(name)
+        if tr is None: # A transfer, or one destination of a transition with several
+            return None
+        if (not tr.source or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
+            return f'"{name}" ({tr._arrow}) is {"an inflow" if not tr.source else "a transition of counts"}, which has no people for a condition on people (who=, or holding a product) to select. Give the modifier no who=, or a when= on time.'
+        if kind == 'transition' and tr._split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
+            dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dest)
+            return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.source)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
+    return None
+
+
+def parse_when(when, start=None, stop=None):
+    """
+    The `when=` of a modifier, as (start, stop, schedule): a window, and an `ss.schedule()` of the steps within it it applies on, if not all;
+    a function of the date is the schedule of the steps it is true on. `start=` and `stop=` of `ss.modify()` are the window, as in `ss.schedule()`
+    """
+    if start is not None or stop is not None:
+        if isinstance(when, ss.schedule) and (when.start is not None or when.stop is not None):
+            errormsg = f'ss.modify() was given start= or stop=, and when={when!r}, which has a window of its own; give the window once, as start= and stop= or in ss.schedule()'
+            raise ValueError(errormsg)
+        return (start, stop, parse_when(when)[2])
+    if when is None:
+        return None, None, None
+    if isinstance(when, ss.schedule):
+        steps = None if (when.every is None and when.at is None and when.when is None) else when
+        return when.start, when.stop, steps
+    if callable(when) and not isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition, ss.on, ss.TimePar)):
+        return None, None, ss.schedule(when)
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.on)):
+        errormsg = f'when= of ss.modify() is when it applies, on time alone: ss.schedule(start=..., stop=...), or a function of the date; {when!r} is a condition on people or the population, which goes in who='
+        raise TypeError(errormsg)
+    first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
+    errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use start={first!r} to start then, or when=ss.schedule(at={when!r}) for those steps only'
+    raise TypeError(errormsg)
+
+
+class Due:
+    """ A modifier's `when=` as a function of the timeline: true on the steps its schedule is due (see `parse_when()`), as `ss.schedule()` itself works them out, once for the sim """
+    def __init__(self, schedule, sim):
+        self.schedule = schedule
+        self.__name__ = getattr(schedule.when, '__name__', None) or repr(schedule)
+        self.mask = sc.cp(schedule).init(sim).counts > 0 # A shallow copy, so the modifier's own schedule is not tied to this sim
+        return
+
+    def __call__(self, t):
+        return bool(self.mask[min(t.ti, len(self.mask) - 1)])
+
+
+class modify(Connector):
+    """
+    Change a named quantity while a condition holds: scale it, shift it, or set it
+
+    A modifier never overwrites the quantity it changes: the base value is kept, and
+    the value used is `(set value if any, else base) × multipliers + addends` over
+    the modifiers that are currently active. It can be passed to a sim in `connectors`
+    (interactions that are part of the model) or `interventions` (policy), or be a member of a
+    declared disease, as part of its natural history.
+
+    The target can be any of these (for a modifier that is a member of a disease, its own,
+    e.g. `beta`, `recovery`, or `'rel_trans'`):
+
+    - a parameter, e.g. `sir.pars.beta`, including a parameter of any module written as code
+    - a transition, e.g. `sir.recovery`, which scales its rate (or its probability, if it is a branch with `p=`)
+    - `sir.rel_sus` or `sir.rel_trans`, each person's susceptibility or infectiousness
+    - the contacts of a network, as the network itself (e.g. `ss.contacts('Kenya', layer='school')`, matched by its name) or as a path (`'school.pars.n_contacts'`)
+    - the path of any of these as a string, e.g. `'sir.pars.beta'`
+
+    For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
+    the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the
+    probability of that destination. With an outcome for each strain carried (`per_strain='each'`, with
+    the probability of the first destination), that is the probability for the whole set of strains a
+    person carries (e.g. that all are cured: Π c_k), not each strain's.
+
+    Note: CRN safe.
+
+    Args:
+        target (par/str): the quantity to change (see above)
+        multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
+        add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
+        set (float): replace the quantity with this (a parameter only)
+        efficacy (float): for protection such as a condom or a needle program, the fraction of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
+        frac (float): with `multiply=` or `efficacy=`, the fraction of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
+            `1 − frac·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
+            the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
+        network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
+        who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
+        start (date/float/dur): when it starts to apply (default: the start of the sim): a date, a bare number (a calendar year if the sim has a calendar, else a time in its unit from 0), or a duration, that long after the start of the sim; the same as `when=ss.schedule(start=...)`
+        stop (date/float/dur): when it stops applying, likewise (default: never; a stop after the end of the sim never stops it)
+        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, or a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); a condition on anything else goes in `who=`
+        until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=`; while both hold, `who=` wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
+        name (str): the name of the modifier
 
     Examples:
         ```python
-        import starsim as ss
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
+        masks = ss.modify(sir.pars.beta, multiply=0.6, start=30)
+        sim = ss.Sim(sir, interventions=masks, stop=100).run()
 
-        pars = dict(
-            n_agents = 10_000,
-            start = '2020-01-01',
-            stop = '2023-01-01',
-            dt = ss.weeks(1.0),
-            diseases = dict(
-                type = 'sis',
-                beta = ss.perweek(0.05),
-                dur_inf = ss.weeks(5),
-                waning = ss.perweek(0.1),
-                dt = ss.weeks(1),
-            ),
-            networks = 'random',
-        )
+        # Schools closed from day 200 to day 260 (in a sim with a calendar, that long after its start)
+        closure = ss.modify(sir.pars.beta, multiply=0.7, start=ss.days(200), stop=ss.days(260))
 
-        s1 = ss.Sim(pars, connectors=None, label='Random network')
-        s2 = ss.Sim(pars, connectors=ss.seasonality(), label='Seasonality')
-        s3 = ss.Sim(pars, connectors=ss.seasonality(scale=0.5, shift=0.2), label='Extreme seasonality')
+        # Changes at given times, each holding until the next; before the first, the quantity has its own value
+        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30)
 
-        msim = ss.parallel(s1, s2, s3)
-        msim.plot('sis')
+        # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
+        npi = ss.modify(sir.pars.beta, multiply=0.6, who=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, until=ss.days(14))
 
-        s3.connectors[0].plot()
+        # A lockdown that starts when 2% of people are infectious and ends when 1% are
+        lockdown = ss.modify(sir.pars.beta, multiply=0.5, who=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
+
+        # Condoms, 90% effective against gonorrhea, used in a fraction of acts that grows over time, on one network
+        use = ss.timeseries({2000: 0.05, 2020: 0.3})
+        condoms = ss.modify(ng.infection, efficacy=0.9, frac=use, network='sexualnet')
+
+        # A member of a disease, with the rest of its natural history
+        class Measles(ss.Disease):
+            S, I, R = ss.states('S I R')
+            infection = S >> I @ 0.5*I
+            recovery = I >> R @ ss.days(10)
+            fading = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), who=I)
+
+        # Summer only, every year
+        summer = ss.modify(sir.pars.beta, multiply=1.2, when=lambda now: now.month in [6, 7, 8])
         ```
     """
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            diseases = None,
-            scale = 0.2,
-            shift = 0.0,
-        )
-        self.update_pars(**kwargs)
-        self.factors = []
+    compartmental = True # It works on groups as well as on agents
+
+    timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
+
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, frac=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
+        if len(given) != 1:
+            errormsg = f'ss.modify() takes exactly one of multiply=, add=, set=, or efficacy= (which is multiply=1 - efficacy); you supplied {given or "none"}'
+            raise ValueError(errormsg)
+        if frac is not None and given[0] not in ['multiply', 'efficacy']:
+            errormsg = f'frac= of ss.modify() is the fraction of acts (or contacts) a multiplier acts on, so it goes with multiply= or efficacy=, not {given[0]}='
+            raise ValueError(errormsg)
+        self.target_module, self.target_kind, self.target_name = parse_target(target) # Resolved by name when the sim is built, since the sim works on copies
+        self.efficacy = efficacy
+        if efficacy is not None:
+            given, multiply = ['multiply'], efficacy
+        self.frac = frac
+        self.networks = None if network is None else sc.tolist(network)
+        self.op = given[0]
+        if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
+            self.name = self.label = f'{getattr(self.target_name, "name", self.target_name) or self.target_kind}_{self.op}'
+        self.amount = dict(multiply=multiply, add=add, set=set)[self.op]
+        if isinstance(self.amount, ss.Arr) and getattr(self.amount, 'mod', None) is not None: # A module's array, e.g. multiply=coded.factor: read from the sim by name, so it is not taken as a state of this modifier, and follows the sim's own copy
+            modname, arrname = self.amount.mod.name, self.amount.name
+            self.amount = lambda sim: getattr(sim.get_module(modname), arrname).raw
+            self.amount.__name__ = f'{modname}.{arrname}'
+        elif isinstance(self.amount, ss.par): # Also one of its parameters (multiply, add, set, or efficacy), so sim.fit(), sensitivity(), and ss.parallel(pars=) find it whatever it changes; its code uses the parameter, which keeps a value set by name
+            named = self.amount.name
+            self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
+            self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
+        where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
+        ss.conditions.check_not_time(where, 'ss.modify()')
+        self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
+        self.start, self.stop, self.schedule = parse_when(when, start, stop) # A window, and any steps within it (as an ss.schedule())
+        self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
+        hold = until if isinstance(until, ss.Duration) or sc.isnumber(until) else None # A duration: held for at least this long
+        until = None if hold is not None else until
+        if hold is not None and where is None and self.schedule is None:
+            errormsg = f'until= of ss.modify() as a duration keeps the modifier on for a while after it applies to someone, so it needs who= or when= (with times, or a function of the date)'
+            raise ValueError(errormsg)
+        if until is not None and where is None:
+            errormsg = f'until= of ss.modify() as a condition keeps the modifier on after who= selects someone, until the condition holds, so it needs who='
+            raise ValueError(errormsg)
+        self.hold = hold
+        self.until = None if until is None else ss.conditions.as_cond(ss.ref(until) if isinstance(until, str) else until)
+        self.held = {} # With until=: for each engine, the step until which each agent or group is held, and the value it was held at
+        self.when_until = -1 # With until=<a duration> and when=: the step until which it is held
+        self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
+        self.inlined = False # Whether it became part of the rates: see ss.solvers.Compartmental.inline_modifiers()
         return
 
-    def step(self, *args, **kwargs):
-        """ Apply seasonality """
-        # Handle input -- here to avoid defining init_pre()
-        p = self.pars
-        if p.diseases is None:
-            p.diseases = list(self.sim.diseases.keys())
+    @property
+    def target(self):
+        """ The target, as a path """
+        modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
+        kind, name = self.target_kind, self.target_name
+        return f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
 
-        # Apply seasonality
-        now = self.t.now('year')
-        frac_year = now % 1.0
-        rel_beta = 1.0 + np.cos((frac_year-p.shift)*2*np.pi)*p.scale
-        rel_beta = np.maximum(0, rel_beta) # Don't allow it to go negative
-        for key in sc.tolist(p.diseases):
-            disease = self.sim.diseases[key]
-            disease.rel_trans[:] = rel_beta
-        self.factors.append([now, rel_beta]) # Store if we want to plot later
+    def own(self, module, name):
+        """ Become a member of a declared module, whose states, parameters, and transitions have their names now
+
+        Args:
+            module (Module): the module
+            name (str): the name of the modifier in it
+        """
+        if self.target_module is None: # A quantity of its own; a target in another module (e.g. 'hiv.latency') stays there
+            self.target_module = module
+        self.target_name = getattr(self.target_name, 'name', self.target_name)
+        self.where = None if self.where is None else ss.conditions.as_cond(self.where)
+        self.name = self.label = name
         return
 
-    def plot(self, **kwargs):
-        x,y = list(map(list, zip(*self.factors))) # Swap from long to wide
-        kw = ss.plot_args(kwargs)
-        with ss.style(**kw.style):
-            fig = plt.figure(**kw.fig)
-            plt.plot(x, y, **kw.plot)
-            plt.legend(**kw.legend)
-            plt.xlabel('Model time')
-            plt.ylabel('Relative beta')
-            plt.ylim(bottom=0)
-        return ss.return_fig(fig)
+    def init_pre(self, sim):
+        """ Find the quantity this modifies, by name if it was given as a string, and register the modifier with the sim
 
+        Args:
+            sim (Sim): the sim being initialized
+        """
+        super().init_pre(sim)
+        if self.target_module is None:
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}" does not belong to a module yet. A modifier of a module\'s own quantities is a member of it; otherwise build the module first, then use e.g. sir.pars.beta.')
+        modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
+        mods = {mod.name:mod for mod in sim.declared}
+        nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
+        kind, name = self.target_kind, self.target_name
+        options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
+        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
+        options += [f'{net}.pars.n_contacts' for net in nets]
+        found = False
+        coded = {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
+        people = {key:[] if key not in sim.diseases else ['rel_sus', 'rel_trans'] for key in coded} # What a disease written as code has for each person, as well as its parameters
+        options += [f'{key}.{path}' for key,mod in coded.items() for path in [*[f'pars.{k}' for k in mod.pars], *people[key]]]
+        if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
+            found = kind in [None, 'par'] and name == 'n_contacts'
+            kind = 'par'
+        elif modname in coded: # A module written as code: its parameters, and for a disease its rel_sus and rel_trans, as agents
+            kind = kind or 'par'
+            found = kind in people[modname] or (kind == 'par' and name in coded[modname].pars)
+        elif modname in mods:
+            graph = mods[modname].graph
+            if kind is None:
+                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
+        if not found:
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
+        if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
+            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
+        if kind == 'transition' and name in graph.transitions:
+            ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
+        if kind == 'transition' and not getattr(self, 'on_rate', False):
+            kind = graph.modifier_kind(name)
+            msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
+            if msg:
+                ss.note(msg, sim=sim)
+        names = [name] # The transmissions a modifier with network= acts on
+        if self.networks is not None:
+            if modname in coded: # Written as code, it has no transmission to name: its susceptibility over the route, of the people who would be infected
+                if kind != 'rel_sus':
+                    raise ValueError(f'network= of the modifier "{self.name}" limits it to some networks; "{modname}" is written as code, so its target is {modname}.rel_sus (of the people who would be infected over them), not {self.target}')
+                name = self.target_name = 'rel_sus'
+                names = [name]
+            elif kind == 'par' and modname in mods: # A parameter: every transmission it scales, e.g. beta in each of a model's infection and reinfections
+                names = scaled_transmissions(mods[modname].graph, mods[modname].pars[name], f'network= of the modifier "{self.name}" of {self.target}')
+            elif kind != 'transition' or modname not in mods or not mods[modname].graph.transitions[name].contact:
+                raise ValueError(f'network= of the modifier "{self.name}" limits a modifier of a transmission to some networks, so its target is a transmission (e.g. {modname}.infection) or a parameter of transmissions (e.g. {modname}.pars.beta), not {self.target}')
+            routes = list(sim.all_networks())
+            for route in self.networks:
+                if route not in routes:
+                    raise ValueError(f'network= of the modifier "{self.name}" names "{route}", which is not a network of the sim; its networks are {sc.strjoin(routes) or "none"}')
+            kind = 'route'
+        if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
+            what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
+            errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta; add= is also for an inflow from ss.outside or ss.unborn)'
+            raise ValueError(errormsg)
+        self.target_module, self.target_kind = modname, kind
+        for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
+            sim.modifiers[(modname, kind, key)].append(self)
+        ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
+        if self.start is not None and to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True) >= sim.t.npts: # A start after the end never starts it, e.g. in a sim run to an earlier stop
+            ss.note(f'the modifier "{self.name}" starts after the end of the sim, so it never applies', sim=sim)
+        if self.stop is not None:
+            to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
+        self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
+        self.when = None if self.schedule is None else Due(self.schedule, sim) # The steps it applies on
+        self.held = {}
+        self.when_until = -1
+        return
+
+    def init_post(self):
+        """ A parameter of a module written as code with no engine of its own (an `ss.Module` or `ss.Connector`), whose code reads it from `self.pars`: written there at the start of each step, as the engine of a disease written as code does """
+        super().init_post()
+        mod = next((mod for mod in self.sim.modules if mod.name == self.target_module), None)
+        if self.target_kind == 'par' and getattr(mod, 'engine', None) is None and self.target_name in getattr(mod, 'pars', {}) and self.target_name != 'n_contacts':
+            self.writer = ss.solvers.Effects(mod, self.sim)
+            self.writer.init_pars()
+        return
+
+    def start_step(self):
+        """ Write the modified parameters of a module written as code, if any """
+        super().start_step()
+        if self.writer is not None:
+            self.writer.write_pars()
+        return
+
+    def finalize_results(self):
+        """ Parameters are back to their base values after the run """
+        super().finalize_results()
+        if self.writer is not None:
+            self.writer.reset_pars()
+        return
+
+    @property
+    def timed(self):
+        """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
+        return self.where is None and self.schedule is None and self.fixed_amount
+
+    @property
+    def holding(self):
+        """ Whether it stays on for people after `who=` selects them: for a while, or until a condition holds (`until=`) """
+        return self.hold is not None or self.until is not None
+
+    @property
+    def tabulated(self):
+        """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
+        return self.inlined or (not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim))
+
+    @property
+    def fixed_amount(self):
+        """ Whether the amount depends at most on time: not a function of the sim, nor an expression that reads states (e.g. `1 - 0.7*b.R.frac`), which is worked out at each step """
+        timed = lambda val: not callable(val) or isinstance(val, ss.parameters.TimeValue)
+        if isinstance(self.amount, ss.expressions.Expr):
+            return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
+        return timed(self.amount)
+
+    @property
+    def constant_amount(self):
+        """ Whether the amount and `frac` are the same at every step: numbers, or expressions of parameters with plain values """
+        plain = lambda val: not callable(val) and not isinstance(val, ss.by)
+        values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.frac] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
+        return all(plain(val) for val in values)
+
+    def marks(self):
+        """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no steps within them (`when=`); else none """
+        if self.schedule is not None or (self.start is None and self.stop is None):
+            return []
+        sim = self.sim
+        timevec = sim.results.timevec
+        start = 0 if self.start is None else to_ti(sim, self.start, after=True)
+        if start >= len(timevec): # It never starts
+            return []
+        stop = len(timevec) - 1 if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec) - 1)
+        return [(timevec[start], timevec[stop])]
+
+    @property
+    def active(self):
+        """ Whether the modifier applies on the current step """
+        sim = self.sim
+        now = sim.t.now()
+        start = to_time(sim, self.start)
+        stop = to_time(sim, self.stop)
+        if (start is not None and not reached(now, start)) or (stop is not None and reached(now, stop)):
+            return False
+        if self.when is None:
+            return True
+        on = ss.conditions.holds_now(self.when, sim)
+        if self.hold is not None: # Held on for a while after
+            if on:
+                self.when_until = sim.ti + self.hold_steps
+            on = on or sim.ti < self.when_until
+        return on
+
+    def held_mask(self, mask, engine):
+        """ With until=: who the modifier applies to, including those it still holds for """
+        ti = self.sim.ti
+        until, value = self.held.get(id(engine), (None, None))
+        if until is None or until.shape != mask.shape: # As agents, people born since grow the arrays
+            new_until, new_value = np.full(mask.shape, -1), np.zeros(mask.shape)
+            if until is not None and until.ndim == 1:
+                n = min(len(until), len(new_until))
+                new_until[:n], new_value[:n] = until[:n], value[:n]
+            until, value = new_until, new_value
+        on = mask > 0
+        if self.until is None:
+            until = np.where(on, ti + self.hold_steps, until)
+        else: # Held with no end, until the condition holds
+            until = np.where(on, np.iinfo(until.dtype).max, np.where(engine.selector.select(self.until) > 0, -1, until))
+        value = np.where(on, mask, value)
+        self.held[id(engine)] = (until, value)
+        out = np.where(until > ti, np.maximum(mask, value), mask)
+        return out.astype(mask.dtype)
+
+    def current(self, engine, frac=True, mask=None):
+        """ The amount on this step: a scalar, or one value per agent or group; with frac=, the multiplier on the hazard, 1 − frac·(1 − multiply); given a mask, a clock is read only for the agents in it """
+        convert = None if self.op == 'multiply' else engine.convert # A value that is set or added is in the target's own type
+        amount = engine.selector.per_person(self.amount, convert=convert, mask=mask)
+        if self.efficacy is not None:
+            amount = 1 - amount
+        if frac and self.frac is not None:
+            amount = 1 - self.frac_of(engine)*(1 - amount)
+        return amount
+
+    def frac_of(self, engine, net=None):
+        """ The fraction of acts (or contacts) it acts on this step: a scalar, or one value per agent or group; or, given a network, a function of it gives one per edge """
+        frac = self.frac
+        if self.per_edge:
+            if net is None:
+                raise ss.CapabilityError(f'frac= of the modifier "{self.name}" is a function of the network, one value per edge, which only a run as agents has; give a number, an ss.timeseries, or an ss.by over a dimension, or run with solver="abm"')
+            return np.asarray(frac(net), dtype=float)
+        return engine.selector.per_person(frac)
+
+    @property
+    def per_edge(self):
+        """ Whether its fraction is a function of the network, one value per edge """
+        return self.networks is not None and callable(self.frac) and not isinstance(self.frac, (ss.parameters.TimeValue, ss.Dist))
+
+    def apply(self, value, engine):
+        """ Apply the modifier to a value, for the people it applies to """
+        mask = None if self.where is None else engine.selector.select(self.where)
+        amount = self.current(engine, mask=mask if not self.holding else None)
+        if np.ndim(amount) and np.isnan(amount).any(): # A clock or an attribute read where it has no value: see ss.conditions.check_clocks()
+            check = amount if mask is None else np.where(mask > 0, amount, 0.0)
+            if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN
+                check = check[engine.sim.people.auids]
+            if np.isnan(check).any():
+                raise ValueError(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
+        if mask is not None and self.holding:
+            mask = self.held_mask(mask, engine)
+        if mask is None:
+            return amount + value*0 if self.op == 'set' else value*amount if self.op == 'multiply' else value + amount
+        mask = mask > 0
+        if   self.op == 'set':      return np.where(mask, amount, value)
+        elif self.op == 'multiply': return value*np.where(mask, amount, 1.0)
+        else:                       return value + np.where(mask, amount, 0.0)
+
+    def nan_sources(self):
+        """ What in the amount can have no value for some people, and how to give it one """
+        exprs = [self.amount] if isinstance(self.amount, ss.expressions.Expr) else []
+        clocks = ss.expressions.clocks_in(exprs)
+        attrs = [leaf for leaf in (exprs[0].leaves if exprs else []) if isinstance(leaf, ss.expressions.attr) and (leaf.kind == 'derived' or np.isnan(leaf.default))]
+        out = []
+        if clocks:
+            out.append(f'it reads {sc.strjoin(str(c) for c in clocks)}, which has a value only in the states it is kept for; give it a who= inside them')
+        for a in attrs:
+            if a.kind == 'derived':
+                out.append(f'it reads the attribute "{a.name}", which is NaN in the states it gives no value for; give it a who= inside them')
+            else:
+                out.append(f'it reads the attribute "{a.name}", which is NaN for people it has not been set for; give it an init=, e.g. ss.attr(..., init=0), or a who= for the people it has been set for')
+        if not out:
+            out.append('the value it is given is NaN for them; check what it reads, or give it a who= for the people it has a value for')
+        return '; '.join(out) + '.'
+
+    def describe(self):
+        """ One line saying what the modifier does """
+        amount = self.amount.__name__ if callable(self.amount) and hasattr(self.amount, '__name__') else self.amount
+        out = f'{self.name:<16s} ' + (f'efficacy={amount}' if self.efficacy is not None else f'{self.op}={amount}')
+        if self.frac is not None:
+            out += f'   frac={getattr(self.frac, "__name__", self.frac)}'
+        if self.networks is not None:
+            out += f'   network={sc.strjoin(self.networks)}'
+        if self.where is not None:
+            out += f'   who={getattr(self.where, "__name__", self.where)}'
+        window = ', '.join(f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None)
+        if self.schedule is not None and self.schedule.when is None: # Its own repr has the window
+            out += f'   when={self.schedule}'
+        elif self.schedule is not None: # A function of the date
+            out += f'   when={getattr(self.schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
+        elif window:
+            out += f'   when=ss.schedule({window})'
+        if self.hold is not None:
+            out += f'   until={self.hold}'
+        if self.until is not None:
+            out += f'   until={getattr(self.until, "__name__", self.until)}'
+        return out
+
+    def step(self):
+        """ Nothing: a modifier acts when the quantity it changes is read (see `combine()`) """
+        pass

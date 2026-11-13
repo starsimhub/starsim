@@ -4,365 +4,241 @@ Test calibration
 
 #%% Imports and settings
 import starsim as ss
+import starsim.internals.fitting
 import numpy as np
-import pandas as pd
 import sciris as sc
-from functools import partial
+import scipy.optimize as spo
+import scipy.special as spsp
+import scipy.stats as sps
 import pytest
-
-debug = False # If true, will run in serial
-total_trials = [20, 10][debug]
-n_agents = 1_000
-do_plot = True
-
-
-#%% Helper functions
-
-def make_sim():
-    sir = ss.SIR(
-        beta = ss.peryear(0.075),
-        init_prev = ss.bernoulli(0.02),
-    )
-    random = ss.RandomNet(n_contacts=ss.poisson(4))
-
-    sim = ss.Sim(
-        n_agents = n_agents,
-        start = ss.date('2020-01-01'),
-        stop = ss.date('2020-02-12'),
-        dt = ss.days(1),
-        diseases = sir,
-        networks = random,
-        verbose = 0,
-    )
-
-    return sim
-
-
-def build_sim(sim, calib_pars, **kwargs):
-    """ Modify the base simulation by applying calib_pars """
-
-    reps = kwargs.get('n_reps', 1)
-
-    sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
-    net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
-
-    for k, pars in calib_pars.items():
-        if k == 'rand_seed':
-            sim.pars.rand_seed = pars
-            continue
-
-        v = pars['value']
-        if k == 'beta':
-            sir.pars.beta = v
-        elif k == 'init_prev':
-            sir.pars.init_prev = ss.bernoulli(v)
-        elif k == 'n_contacts':
-            net.pars.n_contacts = ss.poisson(v)
-        else:
-            raise NotImplementedError(f'Parameter {k} not recognized')
-
-    if reps == 1:
-        return sim
-
-    # Ignoring the random seed if provided via the reseed=True option in Calibration
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False)
-    return ms
+from unittest import mock
 
 
 #%% Define the tests
 
+
 @sc.timer()
-@pytest.mark.skip(reason="Test requires performance enhancement")
-def test_onepar_normal(do_plot=True):
-    sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
+def test_best_trial():
+    sc.heading('Testing that a search of a deterministic sim that ends short of its best point gives that point, and that an unknown method is refused')
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+    pars = dict(total_pop=10_000, unit='day', stop=60, verbose=0)
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('I')
+    search = spo.minimize
+    def stalled(fun, x0, **kwargs): # As SciPy's CG did after a failed line search: back at the start, having tried better
+        res = search(fun, x0, **kwargs)
+        res.x, res.fun = x0, fun(x0)
+        return res
+    with mock.patch.object(spo, 'minimize', stalled):
+        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fitting.method('nelder-mead', scan=0), verbose=0)
+    assert np.isclose(fit.pars.beta, 0.5, rtol=0.01) and fit.objective <= fit.trials.objective.min()*1.001
+    with pytest.raises(ValueError, match='Unknown fitting method'):
+        ss.Sim(sir, data=data, **pars).fit(method='cg', verbose=0)
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-    )
-
-    # Make the sim and data
-    sim = make_sim()
-
-    prevalence = ss.Normal(
-        name = 'Disease prevalence',
-        conform = 'prevalent',
-
-        expected = pd.DataFrame({
-            'x': [0.13, 0.16, 0.06],    # Prevalence of infection
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.n_infected, # Instead of prevalence, let's compute it from infected and n_alive
-            'n': sim.results.n_alive,
-        }, index=pd.Index(sim.results.timevec, name='t')),
-
-        # User can specify sigma2, e.g.:
-        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        #sigma2 = np.array([0.05, 0.25, 0.01])
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=5), # Reps per point
-        reseed = False,
-        components = [prevalence],
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-        continue_db=False,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
-
-    # Call plotting to look for exceptions
-    if do_plot:
-        calib.plot_final()
-        calib.plot(bootstrap=False)
-        calib.plot(bootstrap=True)
-        calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
-
-    return sim, calib
-
+    # By default, a likelihood that JAX does not cover (a function) is fitted without gradients, rather than raising
+    dur = ss.par(ss.days(8), bounds=[3, 15])
+    k = ss.par(0.5, bounds=[0.1, 1])
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ dur, ss.outcome(k*infection, name='seen'), init=dict(I=0.01), name='sir')
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('seen')
+    normal = lambda observed, model: -0.5*((observed - model)/(0.1*model + 1))**2
+    fit = ss.Sim(sir, data=data, **pars).fit(likelihood=dict(seen=normal), verbose=0)
+    assert fit.method == 'nelder-mead' and np.isclose(fit.pars.beta, 0.5, rtol=0.05)
+    return fit
 
 
 @sc.timer()
-def test_onepar_custom(do_plot=True):
-    sc.heading('Testing a single parameter (beta) with a custom likelihood')
+def test_fit_keywords():
+    sc.heading('Testing a method with its settings, likelihoods for every series or none, and sim.optimize()')
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    S, I, R = ss.states(3)
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+    pars = dict(total_pop=10_000, unit='day', stop=40, verbose=0)
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data(['cases', 'I'], resample='week', rand_seed=1)
+    sim = ss.Sim(sir, data=data, **pars)
+    fit = sim.fit(likelihood=ss.poisson(), method=ss.fitting.method('nelder-mead', scan=2)) # One likelihood for every series
+    assert fit.measure == 'negative log-likelihood' and np.isclose(fit.pars.beta, 0.5, rtol=0.05) and fit.objective < fit.objective_before
+    with pytest.raises(ValueError, match='but I does not'): # Some series with a likelihood and some without (it silently minimized the loss)
+        sim.fit(likelihood=dict(cases=ss.poisson()))
+    with pytest.raises(ValueError, match='loss= is the measure of a fit without likelihoods'):
+        sim.fit(likelihood=ss.poisson(), loss='rmse')
+    declared = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases', likelihood=ss.poisson()), init=dict(I=0.01), name='sir')
+    dsim = ss.Sim(declared, data=data.drop(columns='I'), **pars)
+    quick = ss.fitting.method('nelder-mead', scan=2, maxiter=20)
+    assert dsim.fit(method=quick).measure == 'negative log-likelihood' # The declared likelihood
+    assert dsim.fit(loss='rmse', method=quick).measure == 'loss' == dsim.fit(likelihood=False, method=quick).measure # loss= in its place (with a note), or none
+    with pytest.raises(ValueError, match='likelihood=False'): # Some series with a likelihood and some without
+        ss.Sim(declared, data=data, **pars).fit(method=quick)
+    with pytest.raises(TypeError, match='ss.fitting.method'): # A setting of a method is not a keyword of sim.fit()
+        sim.fit(**dict(method='optuna', n_trials=5)) # As a dict, so the rewrite script leaves the old spelling
+    with pytest.raises(TypeError, match='takes draws=, warmup=, chains=, scan=, ess=, rhat=, max_draws=, batch=, require_jax=, not particles='):
+        ss.fitting.method('nuts', particles=100)
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-    )
+    # Spending allocated to reach a goal
+    S, I, R = ss.states(3)
+    a, b = ss.par(50.0, name='spend_a'), ss.par(50.0, name='spend_b') # Program a cuts transmission twice as much as b
+    cov = lambda spend: np.minimum(spend/0.01/(S + I + R).total, 1)
+    sir = ss.Disease(S >> I @ 0.3*(1 - 0.5*cov(a) - 0.25*cov(b))*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
+    sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
+    best = sim.optimize(ss.fitting.minimize('sir.R'), spend=['spend_a', 'spend_b'])
+    assert best.value < best.value_before and best.alloc['spend_a'] > best.alloc['spend_b'] # The program that does more gets more
+    with pytest.raises(TypeError, match='goal=ss.fitting.minimize'):
+        sim.optimize(minimize='sir.R', spend=['spend_a', 'spend_b'])
+    return fit
 
-    # Make the sim and data
-    sim = make_sim()
-
-    def eval(sim, expected):
-        # Compute the squared error at one point in time
-        date, p = expected
-        if not isinstance(sim, ss.MultiSim):
-            sim = ss.MultiSim(sims=[sim])
-
-        ret = 0
-        for s in sim.sims:
-            ind = np.searchsorted(s.results.timevec, date, side='left')
-            prev = s.results.sir.prevalence[ind]
-            ret += (prev - p)**2
-        return ret
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=2), # Two reps per point
-        reseed = True,
-        eval_fn = eval, # Will call my_function(msim, eval_kwargs)
-        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
 
 @sc.timer()
-@pytest.mark.skip(reason="Feature requires further debugging")
-def test_twopar_betabin_gammapois(do_plot=True):
-    sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
+def test_posterior_choices():
+    sc.heading('Testing prior draws truncated to the bounds, ABC-SMC (refused for a deterministic sim, and with no claim of convergence), and the default fit of an ODE without JAX')
+    # Prior draws: a normal prior truncated to the bounds, as the samplers use it, not clipped to them (which put 31% of the draws at the bound)
+    beta = ss.par(0.3, bounds=[0.1, 0.5], prior=ss.normal(0.45, 0.1), name='beta')
+    S, I, R = ss.states(3)
+    sim = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir'), unit='day', stop=30, verbose=0)
+    draws = np.array(ss.fitting.prior_draws(sim, 2000, rand_seed=1)['beta'])
+    truncated = sps.truncnorm((0.1 - 0.45)/0.1, (0.5 - 0.45)/0.1, loc=0.45, scale=0.1)
+    assert 0.1 < draws.min() and draws.max() < 0.5 and abs(draws.mean() - truncated.mean()) < 3*truncated.std()/np.sqrt(len(draws))
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Float par with log scale
-        init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
-    )
+    # ABC-SMC: refused for a deterministic sim, whose width it would set by the number of generations; for a stochastic one, it reports its tolerance rather than convergence
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+    pars = dict(total_pop=2000, unit='day', stop=40, verbose=0)
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('cases', resample='week', rand_seed=1)
+    abc = ss.fitting.method('abc-smc', samples=20, generations=2)
+    with pytest.raises(ss.CapabilityError, match='method="pmcmc"'):
+        ss.Sim(sir, data=data, **pars).fit(method=abc, likelihood=ss.poisson())
+    with pytest.raises(ss.CapabilityError, match='needs a likelihood'):
+        ss.Sim(sir, data=data, **pars).fit(method=abc)
+    fit = ss.Sim(sir, data=data, solver='binomial', **pars).fit(method=abc)
+    diag = fit.diagnostics
+    assert fit.converged is None and 'approximate posterior' in fit.why and np.isfinite(diag.tolerance) and 1 <= diag.generations <= 2 and 0 < diag.acceptance[0] <= 1
 
-    # Make the sim and data
-    sim = make_sim()
+    # An ODE that JAX can't run (here, for a module written as code): L-BFGS-B with SciPy's finite differences for three parameters, and particle MCMC for a posterior
+    dur, k = ss.par(ss.days(8), bounds=[3, 15]), ss.par(0.5, bounds=[0.1, 1])
+    sir = ss.Disease(infection, I >> R @ dur, ss.outcome(k*infection, name='cases', likelihood=ss.poisson()), init=dict(I=0.01), name='sir')
+    pars = dict(total_pop=10_000, unit='day', stop=60, verbose=0, interventions=lambda sim: None)
+    data = ss.Sim(sir, pars=dict(beta=0.5, k=0.3), **pars).run().to_synthetic_data('cases', resample='week', rand_seed=1)
+    sim = ss.Sim(sir, data=data, **pars)
+    method, why = ss.fitting.default_method(sim.init(), use_lik=True, n_pars=3)
+    assert method == 'l-bfgs-b' and 'finite differences' in why and 'method="pmcmc"' in why
+    assert ss.fitting.default_method(sim, use_lik=True, n_pars=2)[0] == 'nelder-mead'
+    assert ss.fitting.Problem(sim, verbose=0).choose() == 'l-bfgs-b' # Not refused for the gradients' "Python in the loop"
+    fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fitting.method('l-bfgs-b', scan=0, maxiter=5), verbose=0) # A few steps, by SciPy's finite differences
+    assert fit.objective < fit.objective_before
+    return fit
 
-    num_infectious = ss.BetaBinomial(
-        name = 'Number Infectious',
-        weight = 0.75,
-        conform = 'prevalent',
-
-        n_boot = 1000, # Testing bootstrap
-        combine_reps = 'mean',
-
-        expected = pd.DataFrame({
-            'n': [200, 197, 195], # Number of individuals sampled
-            'x': [30, 35, 10],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'n': sim.results.n_alive,
-            'x': sim.results.sir.n_infected,
-        }, index=pd.Index(sim.results.timevec, name='t')),
-    )
-
-    incident_cases = ss.GammaPoisson(
-        name = 'Incident Cases',
-        weight = 1.5,
-        conform = 'incident',
-
-        n_boot = 1000, # Testing bootstrap
-        combine_reps = 'sum',
-
-        expected = pd.DataFrame({
-            'n':  [100, 27, 54],   # Number of person-years
-            'x':  [740, 325, 200], # Number of new infections
-            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
-        }).set_index(['t', 't1']),
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.n_alive * sim.t.dt_year, # Person-years at risk
-        }, index=pd.Index(sim.results.timevec, name='t'))
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=3), # 3 reps per point
-        reseed = True,
-        components = [num_infectious, incident_cases],
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
 
 @sc.timer()
-@pytest.mark.skip(reason="Feature requires further debugging")
-def test_threepar_dirichletmultinomial_10reps(do_plot=True):
-    sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')
+def test_pmcmc():
+    sc.heading('Testing particle MCMC: on an ODE (the exact likelihood), chains from different starts, and projections that continue the runs kept with the draws')
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    S, I, R = ss.states(3)
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases', likelihood=ss.poisson()), init=dict(I=0.001), name='sir')
+    pars = dict(total_pop=2000, unit='day', stop=80, verbose=0)
+    data = ss.Sim(sir, pars=dict(beta=0.4), **pars).run().to_synthetic_data('cases', resample='week', rand_seed=1)
+    sim = ss.Sim(sir, data=data, **pars)
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-        init_prev = dict(low=0.01, high=0.25, guess=0.15),
-        n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int'), # Suggest int just for demo
-    )
+    # On an ODE, the same random walk on the exact likelihood, with chains from different points of the scan
+    grid = np.linspace(0.36, 0.44, 101)
+    runner = sim.new().init()
+    loglik = np.array([ss.fitting.loglik(runner.restart(pars=dict(beta=b)).run()) for b in grid])
+    cdf = np.cumsum(np.exp(loglik - loglik.max()))
+    lo, hi = np.interp([0.025, 0.975], cdf/cdf[-1], grid) # The exact 95% interval
+    with mock.patch.object(ss.fitting, 'pmmh', wraps=ss.fitting.pmmh) as called:
+        fit = sim.fit(method=ss.fitting.method('pmcmc', draws=300, warmup=300, chains=3, parallel=False))
+    z0 = called.call_args.args[1]
+    assert len(np.unique(z0.round(6), axis=0)) == 3 # Each chain from its own start
+    t = fit.table
+    assert abs(t.lower[0] - lo) < 0.003 and abs(t.upper[0] - hi) < 0.003, (t.lower[0], t.upper[0], lo, hi)
+    assert fit.trajectories is None # An ODE's run at each draw is its trajectory
 
-    # Make the sim and data
-    sim = make_sim()
+    # With draws='auto' (the default), the chains are taken further in batches until they agree, with enough effective draws, and no further
+    auto = sim.fit(method=ss.fitting.method('pmcmc', warmup=300, chains=3, parallel=False, batch=100), verbose=False)
+    n = len(auto.samples)//3
+    assert n % 100 == 0 and n < 20_000, n
+    assert auto.table.rhat.max() <= 1.01 and auto.table.ess.min() >= 400, auto.table
+    draws = np.stack([auto.samples[auto.samples.chain == c][['beta']].to_numpy() for c in range(3)])
+    rhat, ess = ss.fitting.diagnose(draws[:, :n - 100]) # One batch fewer was not yet enough
+    assert not (np.all(rhat <= 1.01) and np.all(ess >= 400)), (rhat, ess)
+    with pytest.raises(ValueError, match='its likelihood is exact'):
+        sim.fit(method=ss.fitting.method('pmcmc', particles=100))
 
-    def by_dow(sim):
-        # Extract the number of new infections by day of week
-        ret = pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-        }, index=pd.Index(sim.results.timevec, name='t'))
-        ret['var'] = [f'x_{d.weekday()}' for d in ret.index]
-        ret = ret.reset_index() \
-            .pivot(columns='var', index='t', values='x') \
-            .fillna(0)
-        return ret
+    # A stochastic sim: a run drawn from the filter with each draw, which a projection continues
+    sim = ss.Sim(sir, data=data.iloc[:6], solver='binomial', **pars) # Data to day 42
+    fit = sim.fit(method=ss.fitting.method('pmcmc', draws=40, warmup=40, chains=2, particles=50, parallel=False))
+    assert len(fit.trajectories) == len(fit.samples)
+    path = fit.trajectories[-1].sir
+    assert path.ti == 42 and path.stocks.sir.shape == (42, 3)
+    weekly = 0.5*path.flows.sir[:, 0].reshape(6, 7).sum(axis=1) # The cases expected in the run, which follows the data
+    assert np.all(np.abs(weekly - data.cases.values[:6]) < 5*np.sqrt(data.cases.values[:6]) + 5)
+    proj = fit.project(n_runs=5, rand_seed=1, stop=100)
+    rows = fit.samples.sample(n=5, random_state=1).index # The draws projected
+    for k,i in enumerate(rows):
+        assert np.array_equal(proj.results.sir.I.values[k, :42], fit.trajectories[i].sir.stocks.sir[:, 1]) # Up to the last data point, the run kept
+    assert len(set(proj.results.sir.I.values[:, 41])) > 1 and proj.results.sir.I.values.shape == (5, 101)
+    proj = fit.project(n_runs=5, rand_seed=1, stop=100, restart=True) # Each draw from the start instead
+    assert proj.results.sir.I.values.shape == (5, 101) and proj.sims[0].results_ready
+    vaccination = ss.vaccinate(efficacy=0.9, start=50, capacity=ss.perday(20)) # An intervention the kernels don't take, so the runs can't be continued
+    with pytest.warns(RuntimeWarning, match='from the start'):
+        proj = fit.project(dict(vx=vaccination), n_runs=3, rand_seed=1, stop=100)
+    assert proj.sims[0].results_ready
+    with pytest.raises(ValueError, match='restart=False'):
+        fit.project(dict(vx=vaccination), n_runs=3, rand_seed=1, stop=100, restart=False)
+    with pytest.warns(RuntimeWarning, match='stop before it'): # Ending before the runs kept do: from the start
+        fit.project(n_runs=3, rand_seed=1, stop=30)
+    abc = sim.fit(method=ss.fitting.method('abc-smc', samples=20, generations=2))
+    assert all(path.sir.ti == 42 and len(path.sir.stocks.sir) == 42 for path in abc.trajectories) # Kept to the last data point, as particle MCMC's, so scenarios differ after the data
+    vsim = ss.Sim(sir, data=data.iloc[:6], solver='binomial', interventions=ss.vaccinate(ss.Vaccine(efficacy=1.0), when=[10], coverage=0.5), **pars) # A fit with a product's effect, and a delivery before the last data point
+    vfit = vsim.fit(method=ss.fitting.method('pmcmc', draws=10, warmup=10, chains=2, particles=20, parallel=False))
+    with pytest.warns(RuntimeWarning, match='due before'): # A continued run would leave the delivery out
+        vfit.project(n_runs=2, stop=100)
+    return fit
 
-    cases_by_dow = ss.DirichletMultinomial(
-        name = 'Cases by day of week',
-        weight = 1,
-        conform = 'incident',
 
-        expected = pd.DataFrame({
-            'x_0': [40, 60], # Monday
-            'x_1': [40, 60], # Tuesday
-            'x_2': [40, 60], # Wednesday
-            'x_3': [40, 60], # Thursday
-            'x_4': [40, 60], # Friday
-            'x_5': [40, 60], # Saturday
-            'x_6': [40, 60], # Sunday
+@sc.timer()
+def test_stochastic_scoring():
+    sc.heading('Testing how a stochastic sim is scored: by the particle filter in Optuna\'s search, by the mean of runs (labeled so) otherwise, and by the mean likelihood of runs in compare_models()')
+    def make(solver='binomial', data=None):
+        beta = ss.par(0.3, bounds=[0.1, 1], name='beta')
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.days(6), init_n=dict(I=5), name='sir')
+        return ss.Sim(sir, data=data, total_pop=300, unit='day', stop=56, solver=solver, rand_seed=1, verbose=0)
+    data = make().new(pars=dict(beta=0.35), rand_seed=7).run().to_synthetic_data('infection', resample='week')
+    lik = dict(infection=ss.nbinom(n=5))
 
-            # incident conform will compute different in comulative counts between the
-            # end of step t1 and the end of step t
-            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']],
-            't1': [ss.date(d) for d in ['2020-01-21', '2020-02-11']],
-        }).set_index(['t', 't1']),
+    # Optuna scores each point by the filter's estimate of the log-likelihood, with 100 trials for one parameter
+    fit = make(data=data).fit(likelihood=lik)
+    assert fit.method == 'optuna' and fit.measure == 'negative log-likelihood (estimated by a particle filter of 200 particles)'
+    assert len(fit.scores) == 1 and fit.objective == fit.scores[0] and len(fit.study.trials) == 100
+    runs = make(data=data).fit(likelihood=lik, method=ss.fitting.method('optuna', n_trials=5, n_runs=2)) # With n_runs=, by the mean of the runs' log-likelihoods, which is not the likelihood
+    assert runs.measure == 'negative mean log-likelihood of 2 runs' and len(runs.scores) == 2
+    assert make(data=data).fit(method=ss.fitting.method('optuna', n_trials=5)).measure == 'mean loss of 4 runs' # No likelihood, so no filter
+    with pytest.raises(ValueError, match='not both'):
+        make(data=data).fit(likelihood=lik, method=ss.fitting.method('optuna', particles=50, n_runs=2))
+    with pytest.raises(ValueError, match='particle filter, which cannot run this sim'):
+        make(data=data).fit(method=ss.fitting.method('optuna', particles=50))
+    assert ss.fitting.method('optuna', particles=50).scoring == dict(particles=50) and ss.fitting.method('pmcmc', particles=50).options == dict(particles=50)
+    filt = lambda sim: ss.fitting.ParticleFilter(sim, likelihood=lik)(n_particles=50, rand_seed=1)
+    assert filt(make(data=data).init()) == filt(make(data=data).run()) # A sim already run is filtered from its start, not from where it ended
 
-        extract_fn = by_dow
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = partial(build_sim, n_reps=10),
-        reseed = False,
-        components = [cases_by_dow],
-        #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
-        #eval_kwargs = dict(expected=TRIAL_DATA),
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    # compare_models() scores a stochastic model by the log of its mean likelihood over runs at the best-fit values
+    sims = dict(ode=make('ode', data=data), binomial=make(data=data))
+    comp = ss.fitting.compare_models(sims, holdout=0.3, likelihood=lik, n_runs=10, method=ss.fitting.method('optuna', n_trials=10))
+    train, test = comp.splits[0]
+    best = comp.fits.binomial.sim
+    lls = [ss.fitting.loglik(best.new(rand_seed=1 + i).run() if i else best, data=test, likelihood=lik) for i in range(10)]
+    assert np.isclose(comp.table.prediction_error.binomial, -(spsp.logsumexp(lls) - np.log(10))) and 'over 10 runs' in comp.measure
+    assert np.isclose(comp.table.prediction_error.ode, -ss.fitting.loglik(comp.fits.ode.sim, data=test, likelihood=lik)) # A deterministic one is run once
+    return fit
 
 
 #%% Run as a script
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-
-    # Useful for generating fake "expected" data
-    if False:
-        sim = make_sim()
-        pars = {
-            'beta'      : dict(value=0.075),
-            'init_prev' : dict(value=0.02),
-            'n_contacts': dict(value=4),
-        }
-        ms = build_sim(sim, pars, n_reps=25)
-        ms.run().plot()
-
-        dfs = []
-        for sim in ms.sims:
-            df = sim.to_df()
-            df['prevalence'] = df['sir_n_infected']/df['n_alive']
-            df['rand_seed'] = sim.pars.rand_seed
-            dfs.append(df)
-        df = pd.concat(dfs)
-
-        import seaborn as sns
-        sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
-        plt.show()
-
-
-    do_plot = True
-    for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
-        T = sc.timer()
-        sim, calib = f(do_plot=do_plot)
-        T.toc()
-    plt.show()
+    test_best_trial()
+    test_fit_keywords()
+    test_posterior_choices()
+    test_pmcmc()
+    test_stochastic_scoring()

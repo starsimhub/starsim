@@ -1,0 +1,118 @@
+---
+title: "Solutions: T7 – Stratification and co-transmission"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI; split from the combined solutions page, with a setup for each part, on Nov 12 by AI after the docs review
+---
+
+These are solutions to the exercises of [T7 – Stratification and co-transmission](t7_strata.qmd). Many exercises are open-ended, so these are examples: there are often other good answers.
+
+## Part 1: several ways of grouping people (exercises 1–2)
+
+Exercises 1 and 2 start from the community model of the tutorial, with the coverage in the community and a catch-up rate in each community as arguments:
+
+```{python}
+import starsim as ss
+
+def make_measles():
+    """ The SEIR model of measles, by age, with nobody immune yet """
+    S, E, I, R = ss.states('S E I R')
+    infection   = S >> E @ 0.14*I
+    progression = E >> I @ ss.days(10)
+    recovery    = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10), name='measles')
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+    return measles
+
+def make_community_measles(coverage=0.6, rate=None):
+    """ The measles model by age, community, and vaccination, with the coverage in the community and a catch-up rate in each community """
+    split = ss.by([[0.02, 0.98], [1-coverage, coverage]], dims=['community', 'vaccinated'])
+    transfers = {}
+    if rate is not None:
+        transfers['catchup'] = ss.transfer(dict(vaccinated=True), rate=ss.peryear(ss.by(community=rate)), states=['S'])
+    measles = make_measles()
+    measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
+    measles.stratify(vaccinated=ss.levels([False, True], fractions=split, states=['S']), **transfers)
+    return measles
+
+age_contacts = [[10, 6, 1], [3, 8, 1], [3, 6, 3]]
+clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65])
+protection = ss.modify('measles.rel_sus', multiply=ss.by(vaccinated=[1, 0.03]))
+settings = dict(networks=clustered, connectors=protection, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+```
+
+**1. Higher coverage in the community.**
+
+```{python}
+for coverage in [0.6, 0.8]:
+    sim = ss.Sim(make_community_measles(coverage=coverage), **settings).run()
+    res = sim.results.measles
+    print('Coverage in the community', coverage, '- infections in the community:', round(res.infection.select(community='close-knit').sum()), '- in the rest of the town:', round(res.infection.select(community='general').sum()))
+```
+
+With 80% coverage in the community, there are about 700 fewer infections in the rest of the town (about 1,000 rather than 1,700), though nothing changed there. The rest of the town can't sustain an outbreak on its own (its reproduction number is about 0.8), so its infections are mostly seeded from the community, and each infection prevented there prevents the chains that would have followed. This is an indirect benefit of vaccination, which a model counting only infections prevented in the vaccinated would miss.
+
+**2. The same doses outside the community.**
+
+```{python}
+sims = {
+    'No catch-up':                ss.Sim(make_community_measles(), **settings),
+    'Catch-up in the community':  ss.Sim(make_community_measles(rate=[0, 2]), **settings),
+    'Catch-up outside it':        ss.Sim(make_community_measles(rate=[0.5, 0]), **settings),
+}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results.measles
+    doses = res.catchup.sum() if 'catchup' in res else 0
+    print(sim.label, '- doses:', round(doses), '- infections:', round(res.infection.sum()))
+```
+
+A rate of 0.5 a year outside the community gives about the same number of doses (about 600), but prevents only about 200 infections, against about 1,000 in the community: five times fewer per dose. Outside the community, most unvaccinated people are surrounded by vaccinated ones and unlikely to be infected anyway; in the community, each dose removes someone from where the outbreak is spreading. Stratifying by community lets the model show this.
+
+## Part 2: two diseases that interact (exercise 3)
+
+Exercise 3 starts from the measles and pneumococcus model of the tutorial's second part.
+
+**3. A measles campaign, and pneumococcus.**
+
+```{python}
+import starsim as ss
+
+ages = {0: 0.3, 15: 0.6, 65: 0.1}
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2028-01-01', unit='day', verbose=0)
+
+S, E, I, A, R = ss.states('S E I A R')
+infection   = S >> E @ 0.14*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> A @ ss.days(8)
+restored    = A >> R @ ss.years(2)
+measles = ss.Disease(infection, progression, recovery, restored,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=10),
+    name = 'measles',
+)
+measles.stratify(age=ages)
+
+S, C = ss.states('S C')
+acquisition = S >> C @ 0.003*C
+clearance   = C >> S @ ss.days(30)
+pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0.17, 0.17])), name='pneumococcus')
+pneumococcus.stratify(age=ages)
+
+amnesia = ss.modify(pneumococcus.rel_sus, multiply=2, who=measles.I | measles.A)
+campaign = ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-02-01', coverage=0.8)
+
+sims = {}
+for label, connectors in [('Independent', None), ('Interacting', amnesia)]:
+    sims[label] = ss.Sim([measles, pneumococcus], connectors=connectors, **settings)
+    sims[label + ', campaign'] = ss.Sim([measles, pneumococcus], connectors=connectors, interventions=campaign, **settings)
+msim = ss.parallel(sims)
+summary = msim.summarize()
+print(summary.loc['measles_infection'])
+summary.loc['pneumococcus_acquisition']
+```
+
+The campaign prevents about 7,900 of the 8,800 measles infections, with or without the interaction. Without it, the campaign prevents no pneumococcus, since the diseases are independent. With it, the campaign also prevents about 97,000 pneumococcus acquisitions over the three years (nearly all the extra ones measles caused), about 12 per measles infection prevented, among the children spared measles and the people they would have passed pneumococcus to. An evaluation counting only measles would miss this benefit, which is why estimates of immune amnesia matter for the case for measles vaccination.

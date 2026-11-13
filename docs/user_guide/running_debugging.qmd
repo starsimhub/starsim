@@ -1,0 +1,268 @@
+---
+title: Profiling and debugging
+jupyter: python3
+authorship:
+  human: 8
+  ai: 92
+  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging; comparing sims and appendices of tools and errors added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+---
+
+A model can go wrong in three ways: it stops with an error, it runs but gives an answer that looks wrong, or it runs too slowly. This page goes through Starsim's tools for each, and the mistakes that commonly catch people out.
+
+Where to look first, by symptom (the sections below cover each in turn):
+
+| Symptom | First checks |
+|---|---|
+| An error before the run starts | The message: it names the parameter, state, or module, and usually what to do |
+| No epidemic | R0 in the first lines printed; where the initial infections are (`init_prev` seeds the first infected state, not necessarily an infectious one); a rate written where a duration was meant |
+| An epidemic far too fast or too slow | Units of rates and durations; β per contact multiplied by a number of contacts; the time step (`sim.check_dt()`) |
+| The wrong population size | `total_pop` and `n_agents`; births, deaths, and migration; the number of people each agent stands for |
+| A fit that looks wrong | Which result each data column is compared with, and over what period |
+| Different results from run to run | The seed, the solver, changes to the model, versions of Starsim |
+| A slow run | The number of agents, steps, and runs; then profiling |
+
+The examples on this page use the measles model from the [tutorials](../tutorials/t1_intro.qmd) (β = 1.9 per day, infectious for 8 days, so R0 ≈ 15):
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+sim.run()
+```
+
+## Errors and what a run prints
+
+When Starsim can't build or run a model, it raises an error that names what is wrong in the terms of the model, and says what to do about it. Here the parameter β is misspelled:
+
+```{python}
+try:
+    ss.Sim(measles, pars=dict(betta=2.0), total_pop=100_000, stop=ss.days(50)).run()
+except KeyError as error:
+    print(error)
+```
+
+Most errors are Python's own (`KeyError`, `TypeError`, `ValueError`); the few that code may want to catch by kind, such as `ss.CapabilityError` (the solver asked for can't run part of the model), are classes of their own, listed in the [appendix](#appendix-errors-and-warnings). Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), so an error usually comes at once rather than after a long run.
+
+A run prints what it is running and how, the R0 of each disease, any notes, and a closing line with the size and timing of the peak. Read these first: most surprises are explained there. A note is something Starsim assumed or noticed that is worth knowing, and doesn't stop the run. For example, in an SEIR model, `init_prev` puts people in E, where a new infection starts, so nobody is infectious at first (to start people infectious, give `init=dict(I=0.001)` or `init_n=dict(I=100)`):
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection = S >> E @ 1.9*I
+latency   = E >> I @ ss.days(10)
+recovery  = I >> R @ ss.days(8)
+seir = ss.Disease(infection, latency, recovery, init_prev=0.001, name='measles')
+seir_sim = ss.Sim(seir, total_pop=100_000, stop=ss.days(100))
+seir_sim.run()
+```
+
+The notes are kept in `sim.notes`, even when nothing is printed (`verbose=0`):
+
+```{python}
+seir_sim.notes
+```
+
+Some messages are warnings rather than notes: the run continues, but something probably needs attention (for example, a fitted parameter that ended at one of its bounds). To stop at the first warning instead, so that a script can't carry on past one unnoticed, turn warnings into errors:
+
+```python
+ss.options(warnings='error')
+```
+
+## Checking the model
+
+Starsim fills in whatever a model leaves out: the population size, the distribution of each duration, how people mix, the unit of time, and which solver to use. `describe()` lists the whole model as it was built, with each value that Starsim chose itself marked as guessed. If a result looks wrong, check here that the model is the one you meant:
+
+```{python}
+sim.describe()
+```
+
+`equations()` gives the same model as the equations of an ODE, which is often the quickest way to check that each rate is what you meant (for example, that a transmission is frequency-dependent, β S I / N, and not density-dependent, β S I):
+
+```{python}
+measles.equations()
+```
+
+### Runs that should match but don't
+
+When two sims that should agree don't, compare what each says about itself: `describe()` gives the text of each (a string), and a diff of the two shows only the lines where their states, transitions, parameters, and settings differ. Here a second sim has a lower β and a shorter step:
+
+```{python}
+import difflib
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.5*I
+recovery  = I >> R @ ss.days(8)
+other = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+other_sim = ss.Sim(other, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.5), verbose=0)
+
+before = sim.describe().splitlines()
+after = other_sim.describe().splitlines()
+print('\n'.join(difflib.unified_diff(before, after, 'sim', 'other_sim', lineterm='', n=0)))
+```
+
+The lines marked `-` are the first sim's and those marked `+` the second's. To compare the results of two runs, `ss.debugtools.diff_sims()` lists each summary result that differs, with the ratio of the two, and `ss.debugtools.check_sims_match()` gives True if every result matches (see [debugtools](../api/internals.debugtools.qmd)):
+
+```{python}
+other_sim.run()
+ss.debugtools.diff_sims(sim, other_sim);
+```
+
+Where two runs of what should be the same model differ only from some step on (after a change to code written as a module, say), `sim.set_diagnostics()` before the run records every random draw and every agent's states at every step, in `sim.diagnostics`, so the step where the two runs diverge can be found. It slows the run a great deal, so use it on a small sim.
+
+### Checking the numbers
+
+A few numbers can be checked by hand. The run prints R0, which for an SIR is β × the infectious period; if it is far from what you expected, a rate or a duration is wrong, often in its units (see [Common pitfalls](#common-pitfalls)). Another check is to run the same model in another way, such as agents against the ODE: a large difference that doesn't shrink with more agents points to the time step, or to something only one of them does ([Solvers and backends](running_solvers.qmd#when-they-disagree) says when to expect them to differ). For the time step, `sim.check_dt()` runs the model with its step and with one half as long, and shows the largest difference in each result at any time, as a fraction of the result's largest value:
+
+```{python}
+agent_sim = ss.Sim(measles, n_agents=20_000, stop=ss.days(50), verbose=0)
+agent_sim.check_dt()
+```
+
+If the result you care about changes by more than a few percent, use a smaller step (`dt=ss.days(0.5)`) and check again. For a stochastic run, part of each change is chance.
+
+### Finding what changes a parameter
+
+Interventions and connectors change parameters while the model runs. When a parameter doesn't seem to have the value you expect, `sim.what_modifies()` lists everything that changes it:
+
+```{python}
+masks = ss.modify(measles.pars.beta, multiply=0.6, start=ss.days(10))
+masked = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), interventions=masks, verbose=0)
+masked.what_modifies(measles.pars.beta)
+```
+
+## Common pitfalls
+
+These are mistakes that have caught people out. Most don't raise an error: the model runs and gives a wrong answer, though Starsim prints a note for many of them. The commonest is a number after `@`, which is a rate, not a duration: `I >> R @ 8` means leaving I at a rate of 8 per day (after an eighth of a day on average), not after 8 days. Starsim notes a duration shorter than the step, which is almost always this:
+
+```{python}
+S, I, R = ss.states('S I R')
+wrong = ss.Disease(S >> I @ 1.9*I, I >> R @ 8, init_prev=0.001, name='measles') # Meant: ss.days(8)
+ss.Sim(wrong, total_pop=100_000, stop=ss.days(50)).run()
+```
+
+R0 comes out at 0.24 instead of 15. Give a duration with its unit (`ss.days(8)`), or as `dur=` in `ss.Transition(I, R, dur=ss.days(8))`. The others, each covered in full on its own page:
+
+- **A plain number is in the sim's unit of time.** If the model's unit is days, `stop=2`, meant as two years, is two days. Give times with their units or as dates ([Time](building_time.qmd#units)).
+- **A number as a time is a calendar year if the sim has a calendar.** With `start='2025-01-01'`, `when=2026` is the start of 2026, whatever the unit; with `start=0`, it is 2026 units from 0. A time outside the sim is an error that says how it was read ([Time](building_time.qmd#on-the-philosophy-of-time)).
+- **A rate times a duration is not a rate.** The product itself is fine: `ss.peryear(0.1)*ss.days(3)` is a plain number, the chance of an event over 3 days. Using it as the rate of a transition raises a `TypeError` that shows the product and asks for the rate itself ([Time](building_time.qmd#rates-probabilities-and-durations)).
+- **An ODE always takes off.** With R0 above 1 it takes off from any number infected, while a real outbreak started by a few cases often dies out by chance; for the chance of an outbreak, run a stochastic solver many times ([Solvers and backends](running_solvers.qmd#whether-an-outbreak-takes-off)).
+- **The median of many runs can hide that some died out.** When some runs die out and the rest take off, the median or mean describes neither; count the runs with an outbreak, and summarize those ([Scenarios](running_scenarios.qmd#reading-many-runs)).
+- **`n_agents=` runs the model as agents.** To set the size of a compartmental model, use `total_pop=` ([Running sims](running_sim.qmd#what-a-sim-takes)).
+- **With contacts, β is per contact.** Adding a network or contact matrix multiplies R0 by about the number of contacts, so scale β down to keep the same R0; the sim prints the new R0 ([Mixing](populations_mixing.qmd#pitfalls)).
+- **`stratify()` changes the disease itself.** Stratifying the same disease again in another way is an error; build the disease again each time ([Stratification](building_stratification.qmd#pitfalls-and-further-reading)).
+- **Vaccines are leaky unless told otherwise.** `efficacy=0.9` reduces everyone's chance of infection by 90%; `leaky=False` fully protects 90% instead, which for a fast disease such as measles gives far fewer infections ([Products](interventions_products.qmd#vaccines)).
+- **Data is matched to results by name.** A column called `reported` is not compared with the result `cases` (Starsim notes it, and `sim.fit()` stops); rename it, or use `ss.SimData(data, aliases=dict(cases='reported'))` ([Fitting a model](calibration_fitting.qmd#the-data)).
+- **Counts over a period are compared with totals over the same period.** Infections are summed between data points, while the number infectious is compared at each; check which kind each column is ([Fitting a model](calibration_fitting.qmd#the-data)).
+- **A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_post()`, `finish_step()`, and the like without calling the base class's version leaves part of it unset; Starsim warns at the end of the run ([Custom modules](building_modules.qmd#pitfalls)).
+- **`len(sim.people)` still counts those who died this step.** For a fraction worked out in an analyzer, use `sim.people.n`, the number alive.
+- **A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01')` with weekly steps does nothing; compare with `>=`, or give the module `start=`.
+
+More are in the pitfalls of [Custom modules](building_modules.qmd#pitfalls) and [Interventions](interventions_interventions.qmd#pitfalls).
+
+## Looking inside a run
+
+To look at a run partway through, `sim.run(until=...)` stops after the step that starts at that time, with the people and their states as they are at its end (`sim.people.to_df()`); a later `sim.run()` carries on (see [Running sims](running_sim.qmd#running-part-of-the-way)).
+
+A model run as agents, or one with modules written as code, is run one step at a time, and within each step the modules are run in a fixed order: the loop. When a sim does something it shouldn't, or doesn't do something it should, `sim.loop` is your friend. `sim.loop.to_df()` lists every call in it, in order, for the whole run; the first rows are the first step:
+
+```{python}
+agent_sim.run()
+agent_sim.loop.to_df().head(13)
+```
+
+To see what happens during a run, a function of the sim can be inserted into the loop, after (or, with `before=True`, before) any call in it. Here it prints the number infectious every ten days, just after the disease has taken its step:
+
+```{python}
+def show_infectious(sim):
+    if sim.ti % 10 == 0:
+        print('Day', sim.ti, 'infectious:', sim.diseases.measles.I.sum())
+
+probed = ss.Sim(measles, n_agents=20_000, stop=ss.days(50), verbose=0)
+probed.init()
+probed.loop.insert(show_infectious, label='measles.step')
+probed.run()
+```
+
+A function given as an analyzer (`analyzers=show_infectious`) does the same, but always runs last in the step; for more than a quick look, write an [analyzer](interventions_analyzers.qmd) that keeps results of its own. A compartmental model that Starsim runs whole has no loop to look into; inserting a function makes it run one step at a time, with the same results.
+
+`sim.loop.plot()` draws the loop as a diagram, which is most useful when modules have time steps of their own (demographics once a year and a disease once a week, say), to see which runs when. `sim.run_one_step()` takes a single step, for stepping through a run by hand in a debugger.
+
+## Profiling
+
+Compartmental models run in well under a second, so profiling is mostly for models run as agents, especially with networks or modules written as code. Start with how long each part of each step takes: `sim.profile(kind='loop')` runs the sim recording the time of each call of the loop, and plots the time spent in each (`sim.loop.plot_cpu()` plots it again):
+
+```{python}
+big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
+big.profile(kind='loop');
+```
+
+To see which lines of a function take the time, follow it with `sim.profile()` (`kind='line'`, the default), which runs a copy of the sim with a line-by-line profiler on the functions given:
+
+```{python}
+big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
+prof = big.profile(follow=ss.RandomNet.add_pairs, plot=False)
+prof.disp(maxentries=5)
+```
+
+`sim.profile(kind='function')` profiles every function the run calls, for when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as building the sim, use `sc.profile()` from Sciris directly. When the time is in your own code, [Speed and scale](running_performance.qmd#code-of-your-own) has the remedies. A fit runs the model thousands of times, so profile the model before fitting it.
+
+## Further reading
+
+If none of this finds the problem, cut it down to the smallest script that shows it (a small population, a short run, one disease, no data files) and ask on the [Starsim GitHub issues](https://github.com/starsimhub/starsim/issues), with the script, what it printed, and what you expected; see [How to contribute](../contributing/index.qmd).
+
+- [line_profiler](https://github.com/pyutils/line_profiler): the line-by-line profiler behind `sim.profile()`
+- [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.profile(kind='function')`
+- [Python: pdb](https://docs.python.org/3/library/pdb.html): the debugger, for stepping through a module written as code
+
+## Appendix: every diagnostic tool
+
+The tools on this page and elsewhere, by the question each answers. "Builds" means it calls `sim.init()` if the sim hasn't been built, without running it.
+
+| Tool | What it answers | Runs the sim? |
+|---|---|---|
+| The lines a run prints, and `sim.notes` | What Starsim assumed, approximated, or wants checked | Notes are made as the sim is built and run |
+| `sim.describe()` | The model as built: every state, transition, parameter, and setting, with each guess marked | Builds |
+| `disease.equations()` | The model as the equations of an ODE | No |
+| `disease.diagram()` | The states and transitions, drawn | No |
+| `sim.solver`, `sim.solver_reason` | Which solver was chosen, and why | Builds |
+| `sim.describe()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Speed and scale](running_performance.qmd)) | Builds |
+| `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
+| `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
+| `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |
+| `describe()` with `difflib` | Where two models differ | Builds |
+| `ss.debugtools.diff_sims()`, `check_sims_match()` | Which results of two runs differ, and by how much | No (give it sims that have run) |
+| `sim.set_diagnostics()` | Every random draw and agent state at every step, to find where two runs diverge | Records during the next run |
+| `ss.options(warnings='error')` | Stops at the first warning | No |
+| `sim.run(until=...)`, `sim.people.to_df()` | The people and their states partway through a run | Runs part of the way |
+| `sim.run_one_step()` | One step at a time, for a debugger | Runs one step |
+| `sim.loop.to_df()`, `sim.loop.plot()` | Every call in every step, in order | Builds |
+| `sim.loop.insert()` | Runs a function of your own at any point in the step | No (it runs with the sim) |
+| `sim.profile(kind='loop')`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
+| `sim.profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
+| `sim.profile(kind='function')` | How long every function the run calls takes | Runs |
+| `sim.elapsed` | The seconds the last run took | No |
+| `STARSIM_CHECK_COUNTS=1` (environment variable) | Checks, at every step, the counts the agent engine keeps against a new count (for testing the engine) | Applies to every run as agents |
+
+## Appendix: errors and warnings
+
+Most errors are Python's own (`KeyError`, `TypeError`, `ValueError`); these are the ones that are classes of their own, in `starsim/internals/errors.py`, so that code can catch or filter them by kind (see [Model execution](architecture_run.qmd#errors-warnings-and-notes) for the policy behind them):
+
+```{python}
+import inspect
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+rows = []
+for name, cls in inspect.getmembers(ss.errors, inspect.isclass):
+    if issubclass(cls, (Exception, Warning)) and cls.__module__ == ss.errors.__name__:
+        rows.append(dict(
+            name = ('ss.' if name in ss.errors.__all__ else 'ss.errors.') + name,
+            kind = 'warning' if issubclass(cls, Warning) else 'error',
+            subclass_of = ', '.join(base.__name__ for base in cls.__bases__),
+            what = ' '.join(inspect.getdoc(cls).split()),
+        ))
+pd.DataFrame(rows).set_index('name')
+```

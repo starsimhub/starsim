@@ -1,5 +1,0 @@
----
-pagetitle: "Contributing"
----
-
-{{< include ../CONTRIBUTING.md >}}

@@ -1,4 +1,4 @@
-# MNCH Examples
+# MNCH examples
 
 Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling in Starsim.
 
@@ -6,7 +6,7 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ### Maternal infections (`maternal_infections.py`)
 
-- **`CongenitalDisease`**: Simple SIR with congenital outcomes via the generic `set_congenital`/`step_congenital` framework in the base `Infection` class. Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled around delivery — stillbirths a timestep early so they occur in utero, the rest at delivery.
+- **`CongenitalDisease`**: Simple SIR with congenital outcomes, scheduled by its own `set_congenital()` (which its `set_prognoses()` calls for each person infected before birth) and `step_congenital()`. Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled around delivery — stillbirths a timestep early so they occur in utero, the rest at delivery.
 
 ### Neonatal sepsis (`neonatal_sepsis.py`)
 
@@ -14,8 +14,9 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ### Fetal health (`fetal_health.py`)
 
-- **`fetal_infection`**: Connector that links a disease (default: SIR) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected. Also reverses damage when treatment occurs.
-- **`treat_pregnant`**: Intervention that treats infected pregnant women each timestep, curing infection and enabling `fetal_infection` to reverse damage.
+- **`FetalHealth`**: Module that tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) during pregnancy; other modules change them through its methods.
+- **`fetal_infection`**: Connector that links a disease (default: an SIR written as code, `ssl.AgentSIR(name='sir')`) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected.
+- **`treat_pregnant`**: A delivery (as `ss.treat()` is, with `coverage=`, `who=`, `when=`) that treats infected pregnant women, curing infection and partially reversing the fetal damage.
 
 ## Usage
 
@@ -32,10 +33,10 @@ sim = ss.Sim(
 
 # Fetal health example
 sim = ss.Sim(
-    diseases=ss.SIR(beta=0.1),
+    diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
     connectors=ssl.mnch.fetal_infection(),
     interventions=ssl.mnch.treat_pregnant(disease='sir'),
-    custom=ssl.mnch.FetalHealth(),
+    modules=ssl.mnch.FetalHealth(),
     demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )

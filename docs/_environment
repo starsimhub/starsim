@@ -1,0 +1,7 @@
+# Set while rendering, unless already set in the shell
+
+# With parallel jobs, several notebooks at once won't fit in the memory of a typical GPU
+JAX_PLATFORMS=cpu
+
+# Each job should take one core
+SCIRIS_NUM_THREADS=1

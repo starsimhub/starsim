@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Run this script to regenerate all three performance benchmarks and save them to YAML:
+Run this script to regenerate all four performance benchmarks and save them to YAML:
 
     regular -> benchmark.yaml       (single default sim; via test_baselines.py)
+    guard   -> perf_guard.yaml      (a small matrix of sims; via test_baselines.py)
     tests   -> benchmark_tests.yaml (full pytest suite durations; via benchmark_tests.py)
     large   -> benchmark_large.yaml (large sim, one entry per version; via benchmark_large.py)
 

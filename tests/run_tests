@@ -1,11 +1,19 @@
 #!/bin/bash
-# Run the integration tests.
+# Run the core tests.
 # Be sure to install the test requirements first!
-#    pip install -r requirements.txt
+#    pip install -e ..[dev]
 
 # Non-interactive plots
 export SCIRIS_BACKEND='agg'
 export STARSIM_SHOW=0
 
-# Run the tests
+# Compile Numba's kernels first, once and visibly, if they aren't cached; otherwise the tests that compare them with Rust's each compile them, silently, near the end
+STARSIM_KERNELS=numba starsim init compile --check || starsim init compile --numba
+
+# Run the tests (the developer tests, in devtests/, are slower and run separately: pytest devtests -n auto)
 pytest test_*.py -n auto --durations=0
+status=$?
+
+# The performance guard skips itself in parallel (timing is unreliable there), so run it on its own afterwards
+pytest test_baselines.py::test_performance_guard -p no:xdist -s || status=1
+exit $status

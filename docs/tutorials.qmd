@@ -1,62 +1,76 @@
 ---
 pagetitle: "Tutorials"
+authorship:
+  human: 15
+  ai: 85
+  note: Adapted by AI from the Starsim 3 tutorials page; updated on Nov 11 by AI for the merged tutorials; setup, downloads, and choosing a tutorial revised on Nov 12 by AI after the docs review
 ---
 
 # Tutorials
 
-These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
+The tutorials teach Starsim through one example: a simplified measles outbreak in a town, which gains a latent period, age groups, vaccination, data to fit it to, and more. Each tutorial starts with the model so far, so you can start at any one, and ends with exercises. The [user guide](user_guide.qmd) covers each topic in full.
+
+If you are new to Starsim, start with T1–T3, which cover what every model needs. T4–T6 add what most real analyses need: who meets whom, interventions, and data. T7 and T8 are for when you need them. Sections marked "Advanced" can be skipped on a first read; many of them show the same model as agents, one simulated person at a time.
 
 ::: {.grid}
-::: {.g-col-4}
-[**T1 - Introduction to Starsim**](tutorials/t1_intro.qmd)
+::: {.g-col-6}
+[**T1 – Getting started**](tutorials/t1_intro.qmd)
 
-A quick introduction to the Starsim framework.
+A measles outbreak as an SIR model: run it, plot it, check what Starsim built, and run it as agents.
 :::
 
-::: {.g-col-4}
-[**T2 - Building a simulation**](tutorials/t2_model.qmd)
+::: {.g-col-6}
+[**T2 – Building a model**](tutorials/t2_model.qmd)
 
-How to build your first simulation.
+The first model in more depth: states, transitions, parameters, time, and results.
 :::
 
-::: {.g-col-4}
-[**T3 - Demographics**](tutorials/t3_demographics.qmd)
+::: {.g-col-6}
+[**T3 – Building a disease**](tutorials/t3_disease.qmd)
 
-Implementing demographics: births, deaths, and population structure.
+A latent period, how long people stay in each state, waning immunity, and deaths; and, as agents, chance and superspreading.
 :::
 
-::: {.g-col-4}
-[**T4 - Diseases**](tutorials/t4_diseases.qmd)
+::: {.g-col-6}
+[**T4 – Mixing**](tutorials/t4_mixing.qmd)
 
-How to implement disease dynamics.
+Who meets whom: age groups and contact matrices, movement between towns, and networks of contacts between people.
 :::
 
-::: {.g-col-4}
-[**T5 - Networks**](tutorials/t5_networks.qmd)
+::: {.g-col-6}
+[**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-How diseases spread between agents: networks and mixing pools.
+It's not all doom and gloom: vaccination, measures that cut transmission, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
 :::
 
-::: {.g-col-4}
-[**T6 - Interventions**](tutorials/t6_interventions.qmd)
+::: {.g-col-6}
+[**T6 – Data and calibration**](tutorials/t6_data.qmd)
 
-It's not all doom and gloom: implementing interventions to save lives.
-:::
-:::
-
-
-:::{.callout-note}
-You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+Fitting the model to reported cases, projecting a campaign with its uncertainty, and a real population with births and deaths.
 :::
 
-::: {.callout-tip}
-## Running tutorials locally
+::: {.g-col-6}
+[**T7 – Stratification and co-transmission**](tutorials/t7_strata.qmd)
 
-To run these tutorials locally:
-
-1. Clone the Starsim repository
-2. Install Starsim and its dependencies
-3. Navigate to the `docs/tutorials` directory
-4. Convert to Jupyter: `./convert_notebooks.sh` (or just open them directly if `jupytext` is installed)
-5. Launch Jupyter: `jupyter lab`
+Splitting a model by more than age, and two diseases that affect each other.
 :::
+
+::: {.g-col-6}
+[**T8 – Custom modules**](tutorials/t8_modules.qmd)
+
+Writing your own behavior as code: an intervention for compartments, and a disease, a quantity for each person, and a network for agents.
+:::
+
+:::
+
+The answers to the exercises are on the [solutions](tutorials/solutions.qmd) pages, one per tutorial.
+
+## Running the tutorials yourself
+
+**Install Starsim** with `pip install "starsim[jax]"` (see [installation](index.qmd#installation)). JAX is used for gradients and for fitting by NUTS in the user guide; the tutorials run without it (`pip install starsim`).
+
+**Download a tutorial** as a Jupyter notebook from the "Jupyter notebook" link beside the page's contents. The notebook has the Python code as cells; the R code is included as text.
+
+**Data files**: T6 reads the reported cases from [`data/measles_cases.csv`](tutorials/data/measles_cases.csv) and [`data/measles_cases_after.csv`](tutorials/data/measles_cases_after.csv). Save them in a folder called `data` beside the notebook. The other tutorials need no files.
+
+To run all the tutorials at once, clone the [Starsim repository](https://github.com/starsimhub/starsim), install it (`pip install -e .`), and open the files in `docs/tutorials` in Jupyter (`jupyter lab`): with `jupytext` installed, Jupyter opens the `.qmd` files directly, or run `./convert_notebooks` there first to convert them.

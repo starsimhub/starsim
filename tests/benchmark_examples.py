@@ -3,9 +3,9 @@
 Benchmark a few representative simulation scenarios.
 
 Examples:
-    ./benchmark_examples.py
-    ./benchmark_examples.py repeats=2
-    ./benchmark_examples.py case=complex_30
+    python benchmark_examples.py
+    python benchmark_examples.py repeats=2
+    python benchmark_examples.py case=complex
 """
 import sciris as sc
 import starsim as ss
@@ -13,12 +13,14 @@ import starsim.library as ssl
 
 sc.options(interactive=False)
 
+beta = dict(randomnet=ss.peryear(0.05), sexualnet=ss.peract(0.05)) # A rate on the random network, and a probability per act on the sexual one
+
 
 def make_simple_setup():
     """A tiny run where setup costs dominate the total runtime."""
     return ss.Sim(
         n_agents=50_000,
-        dur=1,
+        stop=ss.years(1),
         dt=1,
         rand_seed=1,
         verbose=0,
@@ -31,16 +33,16 @@ def make_simple_setup():
 def make_complex_30():
     """A shorter run with substantially more model structure."""
     hiv = ssl.diseases.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'prenatal': [0.2, 0], 'random': [0, 0]}
 
     return ss.Sim(
         n_agents=80_000,
-        dur=15,
+        stop=ss.years(15),
         dt=0.5,  # 30 timesteps
         rand_seed=1,
         verbose=0,
-        diseases=[ss.SIS(), hiv],
-        networks=[ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()],
+        diseases=[ss.SIS(beta=dict(beta, prenatalnet=0)), hiv],
+        networks=[ss.RandomNet(), ss.SexualNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         label='complex_30',
     )
@@ -50,33 +52,33 @@ def make_moderate():
     """A moderately complex run pushed by many timesteps."""
     return ss.Sim(
         n_agents=45_000,
-        dur=30,
+        stop=ss.years(30),
         dt=0.1,  # 300 timesteps
         rand_seed=1,
         verbose=0,
-        diseases=[ss.SIR(), ss.SIS()],
-        networks=[ss.RandomNet(), ss.MFNet()],
+        diseases=[ss.SIR(beta=beta), ss.SIS(beta=beta)],
+        networks=[ss.RandomNet(), ss.SexualNet()],
         demographics=True,
         label='moderate_300',
     )
 
 
-CASES = sc.objdict(
-    simple_setup=sc.objdict(
+CASES = sc.obj(
+    simple_setup=sc.obj(
         label='Simple setup-dominated simulation',
         timesteps=1,
         repeats=7,
         factory=make_simple_setup,
     ),
-    complex=sc.objdict(
+    complex=sc.obj(
         label='High-complexity simulation with 30 timesteps',
         timesteps=30,
         repeats=2,
         factory=make_complex_30,
     ),
-    moderate=sc.objdict(
+    moderate=sc.obj(
         label='Moderate-complexity simulation with 300 timesteps',
-        timesteps=100,
+        timesteps=300,
         repeats=3,
         factory=make_moderate,
     ),
@@ -101,7 +103,7 @@ def benchmark_case(name, case, repeats=None):
         sim.run()
         run_times.append(sc.toc(t0, output=True))
 
-    row = sc.objdict(
+    row = sc.obj(
         case=name,
         label=case.label,
         n_agents=int(sim.pars.n_agents),
@@ -122,7 +124,7 @@ def get_cases(selection):
     if selection not in CASES:
         errormsg = f'Invalid case "{selection}"; choices are: {sc.strjoin(CASES.keys())}, all'
         raise ValueError(errormsg)
-    return sc.objdict({selection: CASES[selection]})
+    return sc.obj({selection: CASES[selection]})
 
 
 def benchmark_examples(repeats=None, case='all'):
@@ -142,5 +144,5 @@ def benchmark_examples(repeats=None, case='all'):
 
 
 if __name__ == '__main__':
-    args = sc.argparse(repeats=None, case='all')
-    benchmark_examples(repeats=args.repeats, case=args.case)
+    args = sc.argparse(repeats=0, case='all')
+    benchmark_examples(repeats=args.repeats or None, case=args.case)

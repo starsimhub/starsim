@@ -1,7 +1,7 @@
 project:
   type: website
-  pre-render: python quarto_utils.py pre
-  post-render: python quarto_utils.py post
+  pre-render: qpyd prerender # API docs etc. (see the qpyd section below); skipped if Starsim and the config are unchanged
+  post-render: qpyd clean # Remove the files the notebooks write (see qpyd.clean below)
   output-dir: _site
   title: "Starsim"
   execute-dir: file
@@ -11,11 +11,16 @@ project:
     - llms.txt
     - llms-full.txt
     - api.json
+    - install.sh
+    - install.bat
 
 website:
   title: "Starsim"
-  site-url: https://docs.starsim.org
+  description: "A fast, flexible disease modeling framework, from compartments to agents"
+  site-url: https://starsim.org/v4 # V4-PREVIEW: restore to https://docs.starsim.org for normal publishing
   image: /assets/starsim-logo.png
+  open-graph: true
+  twitter-card: true
   favicon: /assets/favicon.ico
   google-analytics: "G-SVDSQH04EM"
 
@@ -49,208 +54,393 @@ website:
       - icon: envelope-at-fill
         href: mailto:info@starsim.org
       - icon: slack
-        href: https://starsim-idm.slack.com
+        href: https://starsimhub.slack.com
       - icon: globe
         href: https://starsim.org
 
     left:
       - href: index.qmd
         text: Home
-      - href: whatsnew.qmd
-        text: What's new
+      - href: tour.qmd
+        text: Tour
       - href: tutorials.qmd
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
-      - href: examples.qmd
-        text: Examples
-      - href: conduct.qmd
-        text: Code of conduct
-      - href: contributing.qmd
+      - href: gallery.qmd
+        text: Gallery
+      - href: whatsnew.qmd
+        text: What's new
+      - href: contributing/index.qmd
         text: Contributing
       - href: api/index.qmd
-        text: API reference
+        text: API
 
-  sidebar:
-    - id: main
-      collapse-level: 3
+  sidebar: # Each section of the site has its own sidebar, starting with a link home
+    - id: gallery
       contents:
-        - href: index.qmd
+        - href: index.qmd#top # Not index.qmd, which Quarto would take as the active navbar item
           text: "**Home**"
-        - href: whatsnew.qmd
-          text: "**What's new**"
-        - section: "**Tutorials**"
+        - href: gallery.qmd
+          text: "**Gallery**"
+        - gallery/sir.qmd
+        - gallery/theory_checks.qmd
+        - gallery/seir_erlang.qmd
+        - gallery/hospitalization.qmd
+        - gallery/cholera.qmd
+        - gallery/age_contacts.qmd
+        - gallery/vaccination_strata.qmd
+        - gallery/outcomes_fit.qmd
+        - gallery/sexual_network.qmd
+        - gallery/measles_london.qmd
+        - gallery/beyond_disease.qmd
+    - id: tutorials
+      collapse-level: 1
+      contents:
+        - href: index.qmd#top
+          text: "**Home**"
+        - href: tutorials.qmd
+          text: "**Tutorials**"
+        - tutorials/t1_intro.qmd
+        - tutorials/t2_model.qmd
+        - tutorials/t3_disease.qmd
+        - tutorials/t4_mixing.qmd
+        - tutorials/t5_interventions.qmd
+        - tutorials/t6_data.qmd
+        - tutorials/t7_strata.qmd
+        - tutorials/t8_modules.qmd
+        - section: Solutions # One entry, collapsed except on a solutions page; listing the pages gives them this sidebar
+          href: tutorials/solutions.qmd
           contents:
-            - tutorials/t1_intro.qmd
-            - tutorials/t2_model.qmd
-            - tutorials/t3_demographics.qmd
-            - tutorials/t4_diseases.qmd
-            - tutorials/t5_networks.qmd
-            - tutorials/t6_interventions.qmd
-            - tutorials/solutions.qmd
-        - section: "**User guide**"
+            - tutorials/solutions_t1_intro.qmd
+            - tutorials/solutions_t2_model.qmd
+            - tutorials/solutions_t3_disease.qmd
+            - tutorials/solutions_t4_mixing.qmd
+            - tutorials/solutions_t5_interventions.qmd
+            - tutorials/solutions_t6_data.qmd
+            - tutorials/solutions_t7_strata.qmd
+            - tutorials/solutions_t8_modules.qmd
+    - id: user_guide
+      collapse-level: 1
+      contents:
+        - href: index.qmd#top
+          text: "**Home**"
+        - href: user_guide.qmd
+          text: "**User guide**"
+        - section: "Introduction"
+          href: user_guide.qmd#introduction
           contents:
-          - section: "Introduction"
-            contents:
             - user_guide/intro_starsim.qmd
-            - user_guide/intro_models.qmd
-          - section: "Basic concepts"
-            contents:
-            - user_guide/basics_model.qmd
-            - user_guide/basics_sim.qmd
-            - user_guide/basics_people.qmd
-            - user_guide/basics_parameters.qmd
-            - user_guide/basics_results.qmd
-          - section: "Modules"
-            contents:
-            - user_guide/modules_diseases.qmd
-            - user_guide/modules_networks.qmd
-            - user_guide/modules_demographics.qmd
-            - user_guide/modules_interventions.qmd
-            - user_guide/modules_products.qmd
-            - user_guide/modules_analyzers.qmd
-            - user_guide/modules_connectors.qmd
-            - user_guide/modules_library.qmd
-            - user_guide/modules_adding.qmd
-          - section: "Workflows"
-            contents:
-            - user_guide/workflows_run.qmd
-            - user_guide/workflows_sir_calibration.qmd
-            - user_guide/workflows_calibration.qmd
-            - user_guide/workflows_deploy.qmd
-            - user_guide/workflows_samples.qmd
-          - section: "Advanced topics"
-            contents:
-            - user_guide/advanced_time.qmd
-            - user_guide/advanced_indexing.qmd
-            - user_guide/advanced_distributions.qmd
-            - user_guide/advanced_random.qmd
-            - user_guide/advanced_rescaling.qmd
-            - user_guide/advanced_profiling.qmd
-            - user_guide/advanced_nonstandard.qmd
-        - href: examples.qmd
-          text: "**Examples**"
-        - href: conduct.qmd
-          text: "**Code of conduct**"
-        - href: contributing.qmd
-          text: "**Contributing**"
+            - user_guide/intro_concepts.qmd
+            - user_guide/intro_faq.qmd
+        - section: "Building models"
+          href: user_guide.qmd#building-models
+          contents:
+            - user_guide/building_writing.qmd
+            - user_guide/building_declared.qmd
+            - user_guide/building_diseases.qmd
+            - user_guide/building_parameters.qmd
+            - user_guide/building_time.qmd
+            - user_guide/building_stratification.qmd
+            - user_guide/building_outcomes.qmd
+            - user_guide/building_results.qmd
+            - user_guide/building_modules.qmd
+            - user_guide/building_import.qmd
+        - section: "Populations and data"
+          href: user_guide.qmd#populations-and-data
+          contents:
+            - user_guide/populations_people.qmd
+            - user_guide/populations_mixing.qmd
+            - user_guide/populations_places.qmd
+        - section: "Interventions and analyzers"
+          href: user_guide.qmd#interventions-and-analyzers
+          contents:
+            - user_guide/interventions_products.qmd
+            - user_guide/interventions_interventions.qmd
+            - user_guide/interventions_analyzers.qmd
+            - user_guide/interventions_connectors.qmd
+        - section: "Running models"
+          href: user_guide.qmd#running-models
+          contents:
+            - user_guide/running_sim.qmd
+            - user_guide/running_scenarios.qmd
+            - user_guide/running_solvers.qmd
+            - user_guide/running_performance.qmd
+            - user_guide/running_branching.qmd
+            - user_guide/running_debugging.qmd
+        - section: "Calibration"
+          href: user_guide.qmd#calibration
+          contents:
+            - user_guide/calibration_fitting.qmd
+            - user_guide/calibration_methods.qmd
+            - user_guide/calibration_diagnostics.qmd
+            - user_guide/calibration_gradients.qmd
+            - user_guide/calibration_optimization.qmd
+        - section: "Library"
+          href: user_guide/library_index.qmd
+          contents:
+            - user_guide/library_diseases.qmd
+            - user_guide/library_networks.qmd
+            - user_guide/library_mnch.qmd
+            - user_guide/library_econ.qmd
+        - section: "Mechanics"
+          href: user_guide.qmd#mechanics
+          contents:
+            - user_guide/mechanics_indexing.qmd
+            - user_guide/mechanics_distributions.qmd
+            - user_guide/mechanics_random.qmd
+        - section: "Architecture"
+          href: user_guide/architecture_index.qmd
+          contents:
+            - user_guide/architecture_run.qmd
+            - user_guide/architecture_engines.qmd
+    - id: contributing
+      contents:
+        - href: index.qmd#top
+          text: "**Home**"
+        - contributing/index.qmd
+        - href: contributing/conduct.qmd
+          text: Code of conduct
+        - contributing/developer.qmd
     - id: api
       collapse-level: 2
       contents:
-        - href: index.qmd
+        - href: index.qmd#top
           text: "**Home**"
         - href: api/index.qmd
-          text: "**API reference**"
-        - section: "**Basics**"
+          text: "**API**"
+        - section: "**Starsim**"
           contents:
-            - api/sim.qmd
-            - api/loop.qmd
-            - api/people.qmd
-            - api/parameters.qmd
-            - api/results.qmd
-        - section: "**Modules**"
-          contents:
-            - api/modules.qmd
-            - api/diseases.qmd
-            - api/networks.qmd
-            - api/demographics.qmd
-            - api/interventions.qmd
-            - api/products.qmd
             - api/analyzers.qmd
             - api/connectors.qmd
-        - section: "**Workflows**"
-          contents:
+            - api/data.qmd
+            - api/demographics.qmd
+            - api/diseases.qmd
+            - api/distributions.qmd
+            - api/geo.qmd
+            - api/interventions.qmd
+            - api/networks.qmd
+            - api/people.qmd
+            - api/products.qmd
+            - api/results.qmd
             - api/run.qmd
-            - api/calibration.qmd
-            - api/samples.qmd
+            - api/settings.qmd
+            - api/sim.qmd
+            - api/strains.qmd
+            - api/utils.qmd
+        - section: "**Converters**"
+          contents:
+            - api/converters.qmd
+        - section: "**Internals**"
+          contents:
+            - href: api/internals.arrays.qmd
+              text: arrays
+            - href: api/internals.conditions.qmd
+              text: conditions
+            - href: api/internals.dates.qmd
+              text: dates
+            - href: api/internals.debugtools.qmd
+              text: debugtools
+            - href: api/internals.dimensions.qmd
+              text: dimensions
+            - href: api/internals.display.qmd
+              text: display
+            - href: api/internals.dists.qmd
+              text: dists
+            - href: api/internals.errors.qmd
+              text: errors
+            - href: api/internals.expressions.qmd
+              text: expressions
+            - href: api/internals.fitting.qmd
+              text: fitting
+            - href: api/internals.gradients.qmd
+              text: gradients
+            - href: api/internals.graph.qmd
+              text: graph
+            - href: api/internals.loop.qmd
+              text: loop
+            - href: api/internals.modules.qmd
+              text: modules
+            - href: api/internals.parameters.qmd
+              text: parameters
+            - href: api/internals.time.qmd
+              text: time
+            - href: api/internals.timeline.qmd
+              text: timeline
+            - href: api/internals.transitions.qmd
+              text: transitions
         - section: "**Library**"
           contents:
-            - api/library.diseases.qmd
-            - api/library.mnch.qmd
-            - api/library.networks.qmd
-        - section: "**Utilities**"
+            - href: api/library.diseases.qmd
+              text: diseases
+            - href: api/library.econ.qmd
+              text: econ
+            - href: api/library.mnch.qmd
+              text: mnch
+            - href: api/library.networks.qmd
+              text: networks
+        - section: "**Solvers**"
           contents:
-            - api/arrays.qmd
-            - api/time.qmd
-            - api/timeline.qmd
-            - api/distributions.qmd
-            - api/settings.qmd
-            - api/debugtools.qmd
-            - api/utils.qmd
+            - href: api/solvers.agents.qmd
+              text: agents
+            - href: api/solvers.choose.qmd
+              text: choose
+            - href: api/solvers.compartmental.qmd
+              text: compartmental
+            - href: api/solvers.deliveries.qmd
+              text: deliveries
+            - href: api/solvers.engine.qmd
+              text: engine
+            - href: api/solvers.joint_states.qmd
+              text: joint_states
+            - href: api/solvers.mixing.qmd
+              text: mixing
+            - href: api/solvers.particles.qmd
+              text: particles
+    - id: main # The pages that aren't in a section of their own (e.g. Home and Tour): the same links as the navbar. Last, so the pages above keep their own sidebars
+      contents:
+        - href: index.qmd
+          text: Home
+        - href: tour.qmd
+          text: Tour
+        - href: tutorials.qmd
+          text: Tutorials
+        - href: user_guide.qmd
+          text: User guide
+        - href: gallery.qmd
+          text: Gallery
+        - href: whatsnew.qmd
+          text: What's new
+        - href: contributing/index.qmd
+          text: Contributing
+        - href: api/index.qmd
+          text: API
 
 quartodoc:
   package: starsim
-  title: API reference
+  title: API
   style: pkgdown
   dir: api
   parser: google
+  parser_options: # Starsim documents parameters taken by **kwargs, and its Returns are prose with no type
+    warn_unknown_params: false
+    warn_missing_types: false
   render_interlinks: true
   sections:
-    - contents: # No title/desc here: the page already shows an "API reference" heading from the top-level title above (issue #1330)
+    - contents: # No title/desc here: the page already shows an "API" heading from the top-level title above (issue #1330)
         - analyzers
-        - arrays
-        - calibration
         - connectors
-        - debugtools
+        - data
         - demographics
         - diseases
         - distributions
+        - geo
         - interventions
-        - loop
-        - modules
         - networks
-        - parameters
         - people
         - products
         - results
         - run
-        - samples
         - settings
         - sim
-        - time
-        - timeline
+        - strains
         - utils
+    - title: Converters
+      desc: Importing models from other frameworks, and exporting sims to them.
+      contents:
+        - kind: page
+          path: converters
+          package: starsim
+          contents:
+            - kind: auto
+              name: converters
+              include_imports: true
+              children: embedded
+    - title: Internals
+      desc: How Starsim works under the hood, for developers rather than modelers.
+      contents:
+        - internals.arrays
+        - internals.conditions
+        - internals.dates
+        - internals.debugtools
+        - internals.dimensions
+        - internals.display
+        - internals.dists
+        - internals.errors
+        - internals.expressions
+        - internals.fitting
+        - internals.gradients
+        - internals.graph
+        - internals.loop
+        - internals.modules
+        - internals.parameters
+        - internals.time
+        - internals.timeline
+        - internals.transitions
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
         Import as `import starsim.library as ssl`. These modules are illustrative rather
-        than validated; see the [user guide](../user_guide/modules_library.qmd) for details.
+        than validated; see the [user guide](../user_guide/library_diseases.qmd) for details.
       contents:
         # One page per library subpackage; contents are picked up automatically from each
         # subpackage's __init__.py, so adding a class to the library does not need any
         # docs changes. include_imports is required since these are imported, not defined,
-        # in the __init__.py that is being documented.
+        # in the __init__.py that is being documented. Keep package as starsim (not
+        # starsim.library): otherwise quartodoc reparses all of starsim for every alias.
         - kind: page
           path: library.diseases
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: diseases
+              name: library.diseases
+              include_imports: true
+              children: embedded
+        - kind: page
+          path: library.econ
+          package: starsim
+          contents:
+            - kind: auto
+              name: library.econ
               include_imports: true
               children: embedded
         - kind: page
           path: library.mnch
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: mnch
+              name: library.mnch
               include_imports: true
               children: embedded
         - kind: page
           path: library.networks
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: networks
+              name: library.networks
               include_imports: true
               children: embedded
 
+    - title: Solvers
+      desc: The engines that run declared models, as compartments or as agents.
+      contents:
+        - solvers.agents
+        - solvers.choose
+        - solvers.compartmental
+        - solvers.deliveries
+        - solvers.engine
+        - solvers.joint_states
+        - solvers.mixing
+        - solvers.particles
 format:
   html:
     theme: 
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
+    grid:
+      body-width: 1000px # Wider than Quarto's 800px, for code and figures; narrower screens collapse the sidebars first
+    include-after-body: [./assets/collapse_sections.html, ./assets/tabset_fallback.html]
     toc: true
     toc-expand: true
     toc-depth: 5
@@ -258,34 +448,37 @@ format:
 
 filters:
   - interlinks
+  - assets/github_alerts.lua # GitHub alerts (> [!NOTE]) as callouts, for the README on the home page
+  - authorship # Each page's authorship front matter as a badge (quartopydoc's extension, in _extensions/sciris)
+
+language:
+  related-formats-title: "Download" # Above the tutorials' notebook download link (Quarto's default is "Other Formats")
 
 interlinks:
-  fast: false
-  sources:
-    python:
-      url: https://docs.python.org/3/
-    numpy:
-      url: https://numpy.org/doc/stable/
-    pandas:
-      url: https://pandas.pydata.org/pandas-docs/stable/
-    scipy:
-      url: https://docs.scipy.org/doc/scipy/
-    matplotlib:
-      url: https://matplotlib.org/stable/
-    sciris:
-      url: https://docs.sciris.org/
+  sources: {} # Only link to Starsim itself (objects.json); external inventories made every page slower to render
   autolink: true
   aliases:
-    numpy: [np]
-    pandas: [pd]
-    matplotlib: [plt]
-    sciris: [sc]
     starsim: [null, ss]
     starsim.library: [ssl]
 
+qpyd:
+  variables: # For {{< var version >}}, read from the Starsim source
+    version: {attr: __version__}
+    versiondate: {attr: __versiondate__}
+  prerender:
+    commands: [python make_api.py] # The machine-readable API index (api.json, llms.txt, llms-full.txt)
+    inputs: [make_api.py]
+    outputs: [api.json, llms.txt, llms-full.txt]
+  clean: # Temporary files the tutorials and user guide pages write
+    - 'tutorials/**/my-*.*'
+    - 'tutorials/**/example*.*'
+    - 'user_guide/**/my-*.*'
+    - 'user_guide/**/example*.*'
+    - 'user_guide/results'
+
 execute:
   freeze: auto # Only re-execute notebooks that have changed
-  cache: true # NB, not sure if this is needed for Quarto notebooks
+  preload: [starsim] # With --jobs, import this once rather than for each notebook
   error: false # Do not continue if an error is encountered
   echo: true
   warning: true

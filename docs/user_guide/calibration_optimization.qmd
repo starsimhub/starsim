@@ -1,0 +1,158 @@
+---
+title: Optimization
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page; bed nets replaced by masks, to suit a directly transmitted infection, by AI; revised on Nov 12 by AI after the docs review
+---
+
+Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a model whose parameters are set, usually by calibration: given a budget, how should it be divided between programs to do the most good? With diminishing returns on each program, the best division is rarely all to the program that looks best on its own. `sim.optimize()` finds it with the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries. Where costs come from is in [Health economics](library_econ.qmd).
+
+## Spending as parameters
+
+`sim.optimize()` needs the spending on each program as a named parameter of the model (`ss.par`), and the model has to say what the spending buys. In this SIR model of a respiratory infection with R0 = 2, the fraction of people a program reaches rises as 1 − exp(−spend / (cost per person × population)), with diminishing returns. Testing costs $10 a person and at full reach cuts transmission by 60%; masks cost $5 a person and cut it by 30%. The current budget is $100,000, split evenly:
+
+```{python}
+import numpy as np
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+tests = ss.par(50e3, name='tests') # Spending on testing, in dollars
+masks = ss.par(50e3, name='masks') # Spending on masks
+
+N = (S + I + R).total
+reach = lambda spend, cost: 1 - np.exp(-spend/cost/N) # The fraction of people reached, at a cost per person
+beta = ss.perday(0.2)*(1 - 0.6*reach(tests, 10))*(1 - 0.3*reach(masks, 5))
+sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
+
+sim = ss.Sim(sir, total_pop=10_000, start=2025, stop=2026, verbose=0) # One year, in daily steps
+```
+
+A change in spending is a change in the model like any other: `sim.new(pars=dict(tests=100e3, masks=0))` is the sim with everything spent on testing. Before optimizing, check that spending changes the result, with a few allocations by hand (`sir.R` at the end is the number ever infected):
+
+```{python}
+allocations = {
+    'No spending':  dict(tests=0,     masks=0),
+    'All testing':  dict(tests=100e3, masks=0),
+    'All masks':    dict(tests=0,     masks=100e3),
+    'Even split':   dict(tests=50e3,  masks=50e3),
+}
+for label, spend in allocations.items():
+    run = sim.new(pars=spend).run()
+    print(label, round(run.results.sir.R[-1]))
+```
+
+## Finding the best allocation
+
+`sim.optimize()` keeps the total fixed (by default, the total of the current values, $100,000 here) and searches over its division between the programs, to reach its goal: `ss.fitting.minimize()` the result to make as small as possible (or `ss.fitting.maximize()` one to make as large as possible), with `at=` the time of the result (by default, the end):
+
+```{python}
+best = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'])
+best.summarize()
+```
+
+The best allocation's run is `best.sim`, which can be compared with the others:
+
+```{python}
+compare = ss.MultiSim([
+    sim.new(pars=allocations['No spending'], label='No spending').run(),
+    sim.new(pars=allocations['Even split'], label='Even split').run(),
+    best.sim.new(label='Best allocation').run(),
+])
+compare.plot('sir.I')
+```
+
+The search (SciPy's SLSQP) is over the fractions of the total, and each point it tries is a run of the model. It is local, and assumes that the result changes smoothly with the spending, so:
+
+- **Use a deterministic model.** With a stochastic model, the search can't tell a better allocation from a lucky run. Optimize the ODE form of the model (`solver='ode'`), or give a goal function that averages many runs.
+- **Make returns diminish.** If every program's effect grows in proportion to its spending, the answer is often to put everything into one program, though not always: the epidemic itself responds to the programs nonlinearly, so even linear effects on transmission need not give a result that is linear in the spending. The answer is only as good as the curves that say what spending buys, so try the plausible range of costs and effects.
+- **Check that the answer is not one of several.** With more than a few programs, start from another allocation and compare. If the search stops before it has settled (`converged` is False), `maxiter=` (50 by default) lets it run longer.
+- **Parameterize the epidemic first**, usually by fitting it to data (see [Fitting a model](calibration_fitting.qmd)), or with values justified from elsewhere: an allocation optimized on the wrong epidemic is optimized for the wrong question.
+
+### What to optimize, and when
+
+The goal, `ss.fitting.minimize(...)` or `ss.fitting.maximize(...)`, takes the name of a result, as a disease's (`'sir.R'`, or `'R'` for the first disease), whose value at the end of the run is used, or at the time given by `at=` (a date, or a year): `ss.fitting.maximize('sir.S', at=2030)`. For anything else, it takes a function of the run sim, which returns the number to make small or large: here, the height of the peak, for a health system that must not be overwhelmed:
+
+```{python}
+def peak_infectious(sim):
+    """ The most people infectious at once """
+    return sim.results.sir.I.max()
+
+peak = sim.optimize(ss.fitting.minimize(peak_infectious), spend=['tests', 'masks'], verbose=False)
+peak.summarize()
+```
+
+`start=` says when the new allocation takes effect: before it, each program keeps its current spending, and from then on, the allocation being tried. This is the usual question for a program that is already running: given what has been spent until now, how should next year's budget be divided?
+
+```{python}
+from_april = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], start='2025-04-01', verbose=False)
+from_april.summarize()
+```
+
+### Limits on each program
+
+`bounds=` gives the least and most each program can have, in dollars, by name, with `None` for no limit (a program not named has none beyond 0 and the total):
+
+```{python}
+limited = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], bounds=dict(tests=(None, 60e3)), verbose=False)
+limited.summarize()
+```
+
+A single pair, `bounds=(10e3, None)`, applies to every program.
+
+### A different total
+
+`total=` sets the total to divide, for the question "what if the budget were larger (or smaller)?", starting from the current fractions scaled to the total. Run at a range of totals, it gives a curve of the best result against the budget:
+
+```{python}
+double = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], total=200e3, verbose=False)
+double.summarize()
+```
+
+### The least total that reaches a target
+
+The reverse question, how much money is needed to reach a target, is answered with `target=`: the least total whose best allocation brings the result to the target (at most the target with `ss.fitting.minimize()`, at least with `ss.fitting.maximize()`). The search doubles the total until it reaches the target, then halves the gap between a total that does and one that doesn't, to within 1%:
+
+```{python}
+needed = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], target=1000, verbose=False)
+needed.summarize()
+```
+
+This assumes that more money never does worse. A target that no budget can reach is an error.
+
+## Reading the result
+
+`sim.optimize()` returns an `ss.fitting.Optimization`, which holds:
+
+| Attribute | What it is |
+|---|---|
+| `alloc` | The best allocation, by program |
+| `value` | The result with it |
+| `total` | Its total (with `target=`, the least total that reaches the target) |
+| `alloc_before`, `value_before` | The current allocation, and the result with it |
+| `sim` | The sim run with the best allocation |
+| `n_runs` | The number of runs the search took |
+| `converged`, `why` | Whether the search reached its own stopping rule, and its message |
+
+```{python}
+best.alloc
+```
+
+If the search ends at an allocation worse than the one it started from, the starting allocation is returned. By default (`verbose=True`, unless `ss.options.verbose` says otherwise) it prints a line at the end, as in the first example, and with `target=`, each total it tried.
+
+## Program books from Atomica
+
+An optimization in Atomica starts from a program book: a spreadsheet of programs, their costs, and the coverage and effects they buy. A model imported from Atomica with its program book (see [Conversion: Atomica](https://starsim.org/lingua_franca/models/atomica/)) has a spending parameter for each program, so `spend=` is not needed, and the same calls work:
+
+```python
+sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
+best = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020)
+least = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches 10% more
+```
+
+## Further reading
+
+- [Optima HIV](https://optimamodel.com/hiv/): allocative efficiency studies of HIV programs, the approach `sim.optimize()` takes
+- [Atomica documentation](https://atomica.tools/docs/): program books and optimizations in the framework Starsim imports from
+- [SciPy: Constrained minimization (SLSQP)](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-slsqp.html): the search used here

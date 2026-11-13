@@ -1,0 +1,199 @@
+---
+title: Gradients
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Based on the Claude draft, with a note on sampling-importance resampling from the Starsim 3 user guide page on SIR calibration; the time-varying transmission rate fitted to a real change, and the note on how honest the posterior is, by AI; revised on Nov 12 by AI after the docs review
+---
+
+For a deterministic model, run as an ODE, Starsim can work out the *gradient*: how each result changes as each parameter changes. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step. Gradients make it possible to fit many parameters quickly, to draw from a posterior with the No-U-Turn sampler (NUTS), and to see which parts of the epidemic a parameter affects.
+
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`) and a model whose whole run JAX can follow: a rate that calls a Python function, a module written as code, or a movement register rules this out. The fit says why when it can't use gradients, and `ss.solvers.why_not(sim, 'jax')` says so for any sim (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). JAX runs on the CPU unless `ss.options.jax` says otherwise: for these runs, a GPU is several times slower.
+
+## The gradient of a result
+
+The model is a measles outbreak in a town of 100,000, 90% of whom are immune, with two unknowns, the transmission rate `beta` and the fraction of cases reported `report`, and a Poisson likelihood. The data are a year of weekly cases from a run with `beta = 1.9` and `report = 0.5`:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+
+S, E, I, R = ss.states('S E I R')
+beta   = ss.par(1.5, bounds=[0.5, 4])  # Transmission rate per day
+report = ss.par(0.3, bounds=[0.05, 1]) # Fraction of cases reported
+
+infection = S >> E @ beta*I
+onset     = E >> I @ ss.days(10)
+recovery  = I >> R @ ss.days(8)
+cases     = ss.outcome(report*onset, likelihood=ss.poisson())
+measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=0.0001, R=0.9))
+pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+
+truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5), rand_seed=2, **pars)
+truth.run()
+data = truth.to_synthetic_data('cases', resample='week')
+```
+
+`sim.gradient()` gives the derivative of each result, at each time, with respect to each parameter with bounds, at the parameters' current values. Here, at the true values, for the daily reported cases:
+
+```{python}
+grad = truth.gradient('cases')
+
+fig, ax = plt.subplots()
+t = truth.results.timevec
+ax.plot(t, grad.beta.measles.cases, label='Change in daily cases per unit of beta')
+ax.plot(t, grad.report.measles.cases, label='Change in daily cases per unit of report')
+ax.axhline(0, color='k', lw=0.5)
+ax.legend();
+```
+
+The result is indexed by parameter, then module, then result: `grad.beta.measles.cases` is an array with one value per time step. Two parameters whose gradients have the same shape can only be fitted as a combination (see [Fit diagnostics](calibration_diagnostics.qmd#can-the-data-tell-the-parameters-apart)).
+
+`sim.gradient()` also takes a function of the run sim that returns a number or an array, e.g. a total cost:
+
+```{python}
+total = lambda sim: sim.results.measles.cases.sum()
+truth.gradient(total)
+```
+
+### Many values
+
+A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[...]), bounds=...)`), an array, or a time series has a gradient for each value, named as a fit names them. A time series fitted value by value is a way to estimate a transmission rate that changes in time, with no shape assumed for it. Here the data come from an outbreak whose transmission rate fell by about a third over June (as it might when schools close for the summer), and the rate is fitted as a value every four weeks, with straight lines between them:
+
+```{python}
+start = ss.date(pars['start'])
+true_beta = ss.timeseries({'2025-01-01': 1.9, '2025-05-31': 1.9, '2025-06-30': 1.2}, 'linear') # 1.9 until the end of May, then falling to 1.2 by the end of June
+dates = [start + ss.days(d) for d in range(0, 365, 28)] # A value every four weeks, in between which it changes linearly
+beta = ss.par(ss.timeseries(dates, [1.5]*len(dates), 'linear'), bounds=[0.5, 4])
+
+S, E, I, R = ss.states('S E I R')
+onset = E >> I @ ss.days(10)
+cases = ss.outcome(0.5*onset, likelihood=ss.poisson()) # The fraction reported, taken as known here
+measles_t = ss.Disease(S >> E @ beta*I, onset, I >> R @ ss.days(8), cases, init=dict(I=0.0001, R=0.9))
+truth_t = ss.Sim(measles_t, pars=dict(beta=true_beta), rand_seed=2, verbose=0, **pars).run()
+data_t = truth_t.to_synthetic_data('cases', resample='week')
+
+smooth = lambda pars: 100*np.sum(np.diff(pars['beta'].values)**2) # Large changes from one value to the next are unlikely
+fit_t = ss.Sim(measles_t, data=data_t, **pars).fit(penalty=smooth, verbose=False)
+
+days = lambda times: [(ss.date(t) - start).days for t in times] # Days since the start
+t = np.arange(365)
+fig, ax = plt.subplots()
+ax.plot(t, np.interp(t, days(true_beta.times), true_beta.values), 'k--', label='True')
+ax.plot(days(fit_t.pars.beta.times), fit_t.pars.beta.values, 'o-', label='Fitted')
+ax.set_xlabel('Days since 1 January 2025')
+ax.set_ylabel('beta (per day)')
+ax.set_ylim(bottom=0)
+ax.legend();
+```
+
+The penalty (`penalty=`) keeps each value close to its neighbors: a larger one gives a smoother curve that is slower to follow a change, and a smaller one a curve that follows the noise. With many values, the gradient takes one pass in reverse mode, whatever their number.
+
+## The log-density
+
+`sim.log_density()` gives the log of the posterior density of the fitted parameters (the log-likelihood of the data, plus the log of the priors), as a function of their values, together with its gradient. It is what a sampler or optimizer of your own would use. Besides calling it (`density(x)`) and its gradient (`density.grad(x)`), `density.fn` is the function itself, to compose with JAX (`jax.vmap`, `jax.hessian`, ...), and `density.run(x)` gives the number in each state at each time at those values:
+
+```{python}
+sim = ss.Sim(measles, data=data, **pars)
+density = sim.log_density()
+print('Parameters:', density.names)
+print('At the starting values:', density.x0)
+print('Log-density:', density(density.x0))
+print('Its gradient:', density.grad(density.x0))
+```
+
+The same log-density is what L-BFGS-B and NUTS use in a fit with a likelihood. Initial numbers, branching fractions, and inflows that depend on fitted parameters need to be linear in them; if not, building the log-density is an error that names them, and `require_jax=False` takes the gradients with Python in the loop instead.
+
+## Fitting with gradients
+
+### A best fit with gradients
+
+`sim.fit()` uses the gradient by default (`'l-bfgs-b'`) when a deterministic model has three or more fitted parameters; with one or two, Nelder–Mead is faster. Either can be asked for:
+
+```{python}
+fit = sim.fit(method='l-bfgs-b')
+fit.table
+```
+
+With a likelihood for every series, this is the maximum likelihood estimate (with priors, the most probable values).
+
+### A posterior with NUTS
+
+A posterior is the whole distribution of values consistent with the data. `method='nuts'` draws from it, given a likelihood for every data series, with each parameter's `prior=`, or a uniform prior over its bounds:
+
+```{python}
+post = sim.fit(method=ss.fitting.method('nuts', warmup=100, draws=200)) # Fewer draws than the default, to run quickly
+post.summarize();
+```
+
+Each chain starts near one of the best points of a scan, spends `warmup=` draws tuning itself (these are discarded), and then draws until the chains agree, with enough effective draws of each parameter (see [Fitting methods](calibration_methods.qmd#posteriors)). The table gives each parameter's median and 95% interval, with R-hat and the effective sample size; [Fit diagnostics](calibration_diagnostics.qmd#a-posterior) says how to read them.
+
+The draws themselves are in `post.samples`, one row for each:
+
+```{python}
+fig, ax = plt.subplots()
+ax.scatter(post.samples.beta, post.samples.report, s=5, alpha=0.5)
+ax.scatter(1.9, 0.5, marker='x', s=100, color='red', label='True values')
+ax.set_xlabel('beta (per day)')
+ax.set_ylabel('report')
+ax.legend();
+```
+
+This posterior is narrow because the data were made by this very ODE with Poisson noise. Real counts vary more, and real outbreaks have chance in transmission that an ODE leaves out, so a Poisson likelihood would give a posterior just as narrow, and wrong (see [Fitting methods](calibration_methods.qmd#comparing-the-methods)). A negative binomial likelihood with its dispersion fitted widens it to match the data, as in [T6](../tutorials/t6_data.qmd#how-sure-is-the-fit); for chance in transmission, use a stochastic model and `method='pmcmc'`.
+
+### Profile likelihoods
+
+A profile likelihood gives a confidence interval for one parameter, without priors: at each value of it, the others are refitted, and the values whose negative log-likelihood is within 1.92 of the lowest form the 95% interval. A profile that stays flat up to a bound means the data don't determine the parameter.
+
+```{python}
+prof = ss.fitting.profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
+print('Best value of beta:', round(prof.best, 3))
+print('95% confidence interval:', np.round(prof.interval, 3))
+prof.table
+```
+
+Without `values=`, `ss.fitting.profile()` chooses the values itself, which takes longer. Plotting the profile:
+
+```{python}
+fig, ax = plt.subplots()
+ax.plot(prof.table.beta, prof.table.nll - prof.table.nll.min(), 'o-')
+ax.axhline(prof.threshold, color='k', ls='--', label='95% threshold')
+ax.set_xlabel('beta (per day)')
+ax.set_ylabel('Negative log-likelihood, above the lowest')
+ax.legend();
+```
+
+A profile needs a deterministic model whose data series all have a likelihood, and parameters without priors.
+
+### Projecting from a posterior
+
+`fit.project()` runs each scenario once for each of `n_runs` draws from the posterior, with the same draws in every scenario, so the spread of the runs carries the uncertainty in the fitted values. Here, a catch-up campaign on 1 April, compared with none:
+
+```{python}
+vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)
+proj = post.project({'No campaign': None, 'Campaign': vaccination}, n_runs=50)
+proj.plot('measles.cases')
+```
+
+```{python}
+proj.summarize().loc['measles_cases']
+```
+
+For a stochastic model, the runs also differ by chance (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)). `post.plot()` shows the fit against the data, with 95% of the posterior as a band:
+
+```{python}
+post.plot()
+```
+
+### Other samplers
+
+For stochastic models, and models JAX can't run, the other methods apply: `'pmcmc'`, `'abc-smc'`, and `'if2'` (see [Fitting methods](calibration_methods.qmd)). Starsim's samplers can also be used directly on a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`; see [ss.fitting](../api/internals.fitting.qmd). A posterior can also be put together by sampling-importance resampling (SIR, not to be confused with SIR): run draws from the priors (`ss.parallel(sim, priors=True, n_runs=1000)`), score each with `ss.fitting.loglik(run)`, and resample in proportion to the likelihoods; it works for any model, but needs many runs, and fails for many parameters.
+
+## Further reading
+
+- [JAX: Automatic differentiation](https://docs.jax.dev/en/latest/automatic-differentiation.html): how the gradients of a run are worked out
+- [Stan: User's guide](https://mc-stan.org/docs/stan-users-guide/index.html): Bayesian fitting with NUTS, including ODE models
+- [NumPyro: Getting started](https://num.pyro.ai/en/stable/getting_started.html): another implementation of NUTS in JAX, for models written as Python functions
+- [Grinsztajn et al. (2021): Bayesian workflow for disease transmission modeling in Stan](https://pmc.ncbi.nlm.nih.gov/articles/PMC8661657/): fitting an SIR model with NUTS, step by step

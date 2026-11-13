@@ -1,23 +1,29 @@
+---
+description-meta: "A fast, flexible disease modeling framework, from compartments to agents"
+---
+
 {{< include ../README.md >}}
 
-## Learn more
+## Where to go next
 
 ::: {.grid}
 ::: {.g-col-4}
-[**Tutorials**](tutorials.qmd)
+**Learn**
 
-An interactive tour of Starsim's key features.
+The [tour](tour.qmd) builds one epidemic model, from a first run to a fitted forecast, in ten minutes. The [tutorials](tutorials.qmd) then teach Starsim step by step, through one measles model.
 :::
 
 ::: {.g-col-4}
-[**API reference**](api/index.qmd)
+**Look up a topic**
 
-Full details on all classes and functions.
+The [user guide](user_guide.qmd) covers each topic in full, from writing models to fitting them; the [API](api/index.qmd) has every class and function.
 :::
 
 ::: {.g-col-4}
-[**What's new**](whatsnew.qmd)
+**Adapt an example**
 
-See what's in the latest Starsim releases.
+The [gallery](gallery.qmd) has complete models, each with its diagram, code, and result, to copy and change.
 :::
 :::
+
+Also: [import a model](user_guide/building_import.qmd) from another framework, [AI tools](https://ai.starsim.org) for coding agents, [what's new](whatsnew.qmd), and [contributing](contributing/index.qmd).

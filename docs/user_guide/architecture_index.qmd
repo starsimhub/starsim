@@ -1,0 +1,235 @@
+---
+title: Architecture
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI; further reading trimmed on Nov 12 by AI
+---
+
+This section explains how Starsim is put together and why, for contributors and for modelers who want to know what happens when they call `sim.run()`; no model needs it. This page gives the idea, the principles, and a map of the package, and then looks at *modules*, the pieces a sim is made of. [From declaration to run](architecture_run.qmd) follows a model from its declaration to a run, and [Engines and transmission](architecture_engines.qmd) looks at the engines that run it. Random numbers are in [Random numbers](mechanics_random.qmd#how-it-works), and how the design is tested in the [developer guide](../contributing/developer.qmd#testing).
+
+## The idea and the principles
+
+A model in Starsim is written once, as data: states (`S, I, R = ss.states('S I R')`), transitions between them (`S >> I @ beta * I`), and parameters, with the mixing, demography and interventions around them. Each disease checks its own structure when it is made (unknown names, rates of the wrong shape). When the sim is initialized, Starsim reads those objects, fills in what was left out (and records each guess), checks them against each other, and chooses how to run them: as a deterministic ODE or integro-differential model, as one of three stochastic compartmental solvers, or as agents. Because the model is data rather than code, everything else is derived from the same objects: the printed description, the equations, the diagram, and the exports to other frameworks. One declared model, several ways to run it, and one source of truth for all of them.
+
+A model can also be written as code, as classes with their own `step()` methods: these run through the same loop, as agents if they keep a value for each person and otherwise with no agents at all (an ODE of your own runs as just that), and can sit beside declared models in one sim. [Declared modules and modules written as code](#declared-modules-and-modules-written-as-code), below, covers how the two kinds fit together.
+
+Every design choice is checked against a short constitution. In order of weight:
+
+- **Simplicity.** Writing and changing a model should be easy for an epidemiologist, not just an engineer. A model ported to Starsim should get shorter.
+- **Performance.** As close to custom compiled code as is feasible. This is why compartmental runs go through *kernels* (small compiled functions that step the compartments) and why agents use compiled passes over their arrays.
+- **Flexibility.** Every major modeling feature should be expressible, even if not every one is built in. When a declaration can't say something, a module's `step()` can.
+- **Correctness.** The machinery is validated by tests, but over-correctness should not cost simplicity or speed: Euler steps, Erlang stages and other standard approximations are fine, as long as they are announced.
+
+After these come understandability (few concepts, no brittle subsystems), maintainability (solvers should not each reimplement the same thing), composability (use as much or as little of Starsim as you want), short startup (no long compilation before a small run), and being easy for AI tools to work with. The development principles add: no legacy shims, avoid bloat, and think about the whole system before adding a special path for one case.
+
+For example, `solver='auto'` picks the simplest representation that runs the model faithfully (simplicity, performance); every approximation prints one line saying what was done (correctness without refusing); and the compiled kernels are optional, with a plain-Python path for short runs (short startup).
+
+## The map
+
+Starsim has five layers. Broadly, each builds on the ones before it, and a contributor can usually work in one layer at a time.
+
+```{mermaid}
+%%| echo: false
+flowchart TD
+    D["<b>1. Declaration</b><br/>states, transitions, rates,<br/>parameters, dimensions"]
+    G["<b>The graph</b><br/>resolved, completed, checked"]
+    O["<b>2. Build and orchestration</b><br/>sim.init(), the loop, modules,<br/>people, networks, results"]
+    C{"choose a solver"}
+    K["<b>3. Compartmental engine</b><br/>ode, binomial, gillespie, tau"]
+    A["<b>3. Agent engine</b><br/>abm"]
+    J["<b>4. Speed and alternate backends</b><br/>Numba and Rust kernels, JAX, compiled draws"]
+    E["<b>5. Edges</b><br/>fitting, import and export,<br/>presentation, library, geography"]
+    D --> G --> O --> C
+    C --> K
+    C --> A
+    K -.-> J
+    A -.-> J
+    O --- E
+```
+
+| Layer | Files in `starsim/` | What they do |
+|---|---|---|
+| 1. Declaration | `internals/transitions.py`, `internals/expressions.py`, `internals/graph.py`, `internals/parameters.py`, `internals/time.py`, `internals/dimensions.py`, and others | The words a model is written in: states and transitions, rates as expressions (`beta * I`), parameters (`ss.par`, `ss.by`), durations and rates with units, conditions for `who=`, stratifications and strains. `internals/graph.py` collects one module's declarations into an `ss.graph.Graph`, names them, fills in defaults (recording each guess), and checks them. |
+| 2. Build and orchestration | `sim.py`, `internals/loop.py`, `internals/modules.py`, `people.py`, `internals/arrays.py`, and a file for each kind of module, `results.py`, `run.py` | The runtime objects. `sim.init()` builds the population, the modules and the results, and chooses the solver; the loop then calls each module in a fixed, printable order each step. `ss.Module` is the one base class for diseases, networks, demographics, interventions, connectors and analyzers. `run.py` runs many sims (`ss.MultiSim`, `ss.parallel`). |
+| 3. Engines | `solvers/` (`choose.py`, `compartmental.py`, `agents.py`, `joint_states.py`, and others) | How a graph is run. `choose.py` picks the solver and says why. Each declared module gets one engine: `Compartmental` (which flattens the model into a program of flows that the kernels step) or `Agents` (boolean arrays over agents). `joint_states.py` tracks several diseases jointly when one refers to another's states. |
+| 4. Speed and alternate backends | `solvers/backends/`, `internals/gradients.py`, and the Rust crate in `solvers/rust/` | The same runs, faster or differentiable: the Numba kernels that step a compartmental program, the compiled passes over agents and edges, the exact random draws everything shares, the Rust copy of all of these, `ss.jit` for users' own code, and the ODE in JAX for gradients. See [Engines and transmission](architecture_engines.qmd#the-engines). |
+| 5. Edges | `fit.py`, `internals/display.py`, `internals/errors.py`, `geo.py`, `data.py`, `converters/`, `library/` | What builds on a run model. Fitting (`sim.fit()`); `describe()`, `diagram()` and `equations()`; errors, warnings, and notes; places, mobility and data by place name; importers and exporters for other frameworks; and example diseases and networks (`import starsim.library as ssl`). |
+
+Helpers that every layer uses are in `settings.py` (`ss.options`), `utils.py`, `internals/debugtools.py` (profiling, debugging, and mock objects for tests) and `starsim_cli/` beside the package (the `starsim` command, apart so that it starts without importing Starsim). Everything in `internals/` is also at the top level: `ss.graph`, `ss.expressions`, `ss.gradients`, `ss.errors`, and so on.
+
+A few things to notice in the map:
+
+- **A declaration doesn't say how it will run.** The states, transitions and parameters of layer 1 are the same objects whether the model runs as an ODE or as agents; only when they are evaluated (a rate, a condition) do they see one value per group or one per agent. That is what makes the solver a choice rather than part of the model.
+- **Every compartmental solver steps the same program.** The ODE, the chain binomial, Gillespie and tau-leaping all run the flat list of flows that `Compartmental` builds. The ODE in JAX, the Rust kernels and the particle filter run that same program too, so a fix in one place is a fix for all of them.
+- **Code is never analyzed in advance.** A function in a rate, or a module's `step()`, is simply called with what the solver has (one value per agent, or one per group). If it asks for something that only agents have, the run stops and says so.
+
+## What a module is
+
+Everything a sim runs, apart from the people themselves, is a *module*: each disease, network, demographic process, intervention, connector and analyzer. The rest of this page is the view from inside a module; for how to write one of your own, see [Custom modules](building_modules.qmd) and the tutorial [T8](../tutorials/t8_modules.qmd).
+
+A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a subclass. Every module has the same parts:
+
+- a **name** (`sir`, `randomnet`), unique in the sim, and a **label** for plots;
+- its **parameters**, `mod.pars` (an `ss.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
+- its **timeline**, `mod.t` (an `ss.Timeline`), which is the sim's unless the module is given a `dt`, `start` or `stop` of its own;
+- its **distributions**, each with a random number stream of its own, found by searching the module when the sim is initialized ([Random numbers](mechanics_random.qmd#how-it-works));
+- its **states**, arrays with one value per agent (`define_states()`), which the people grow and shrink with the population;
+- its **results**, `mod.results`, one `ss.Result` per quantity per time point; every `ss.BoolState` gets a count of the same name without being declared;
+- a link to the sim, `mod.sim`, set when the sim is initialized.
+
+A few attributes are locked (`pars`, `t`, `sim`, `dists`, `results`, and each state), so that `self.I = ...` in a step raises an error instead of quietly replacing the array: the error suggests `self.I[:] = ...`.
+
+What kind of module it is decides only where in each step it is called, and where the sim keeps it. The kinds are the subclasses in `ss.modules.module_map()`, which is the one place that says what they are:
+
+| Kind | Base class | Kept in | Examples |
+|---|---|---|---|
+| Diseases | `ss.Disease` | `sim.diseases` | a declared `ss.Disease`, `ss.SIR`, `ss.AgentDisease` and its subclasses, `ssl.HIV` |
+| Networks | `ss.networks.Route` | `sim.networks` | `ss.RandomNet`, `ss.SexualNet`, `ss.MixingPool` |
+| Demographics | `ss.Demographics` | `sim.demographics` | `ss.Births`, `ss.Deaths`, `ss.Pregnancy` |
+| Interventions | `ss.Intervention` | `sim.interventions` | `ss.vaccinate`, `ss.screen`, `ss.treat` (deliveries, which hold products) |
+| Connectors | `ss.Connector` | `sim.connectors` | `ss.modify` |
+| Analyzers | `ss.Analyzer` | `sim.analyzers` | `ss.infection_log`, or a function of the sim |
+| Custom | `ss.Module`, or anything that is none of the above | `sim.custom` | a module of your own |
+
+A module can be more than one kind: `ss.Pregnancy` is both a demographic module and a declared disease, so it adds people and has states and transitions; a delivery such as `ss.screen` is an intervention that is also a source of events (the people it reached, `screening`, and its outcomes, `screening.positive`), which other deliveries can be triggered by. A product (`ss.Vaccine`) is a module too, but it has no step of its own: it is held by the delivery that gives it, and listed by `sim.products()`.
+
+Modules can be given to a sim by keyword (`diseases=`, `networks=`, ...), as positional arguments, which the sim sorts by kind (`simpars.py`), or by name as strings (`diseases='sis'`), which `ss.modules.find_modules()` looks up among Starsim's classes and any registered with `ss.register_modules()`. A module given no name is named after its class in lower case, and numbered if two would clash (`randomnet`, `randomnet_1`).
+
+```{python}
+import starsim as ss
+
+def make_sir():
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=S >> I @ ss.perday(0.3) * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+
+full = ss.Sim(
+    make_sir(),
+    networks      = ss.RandomNet(n_contacts=4),
+    demographics  = [ss.Births(), ss.Deaths()],
+    interventions = ss.vaccinate(efficacy=0.9, when=ss.days(20), coverage=0.5),
+    analyzers     = ss.infection_log(),
+    n_agents = 2000,
+    unit     = 'day',
+    stop     = ss.days(60),
+    verbose  = 0,
+)
+full.init()
+for mod in full.modules:
+    print(f'{mod.name:15} {type(mod).__name__}')
+```
+
+`sim.modules` lists every module of the sim in the order they are initialized: demographics, connectors, networks, interventions, products, diseases, custom modules, and analyzers. (The vaccine is there because the delivery made it.)
+
+### How modules find each other
+
+Modules don't hold references to each other: a module reaches the rest of the sim through `self.sim`, at run time, which is always the sim's own copy. The sim offers several ways in, all to the same objects:
+
+| To reach | Write | Notes |
+|---|---|---|
+| A module, by kind and name | `self.sim.diseases.sir`, `self.sim.networks.randomnet` | the usual way; each kind is an `ss.ndict`, so `sim.diseases[0]` works too |
+| A module, by name alone | `self.sim.sir` | if the name is unique and isn't an attribute of the sim |
+| A module through the people | `self.sim.people.sir` | the people hold every module with states |
+| A state by its full name | `self.sim.people.states['sir.I']` | every module's states, flat, as `<module>.<state>` |
+| A property of people | `self.sim.people.age`, or `ss.person.age` in a condition written before the sim exists | `ss.person` is a lazy reference, evaluated when it is needed |
+| A result | `self.sim.results.sir.I`, `self.sim.diseases.sir.results.I` | the same object: a module's results are nested in the sim's |
+| The time | `self.ti`, `self.now`, `self.t.dt` | the module's own; with a timeline of its own, `self.ti` counts its own steps |
+
+States are shared by reading them: any module can read `sir.I` or another module's array, and the arrays always have one value per agent alive, in the same order, since the people grow and shrink them all together. Writing is a different matter. A module can write into another's arrays (an intervention that cures people sets `sir.I[uids] = False`), and for a declared disease the write is tracked so its counts stay right, but Starsim can't see what was changed or why. The declared alternative is `ss.modify`, which never overwrites anything: it keeps the quantity's base value and applies itself on top, so modifiers can't clobber each other, and `sim.what_modifies()` can list them ([Engines and transmission](architecture_engines.qmd#effects-interventions-and-results)). To move people between a declared disease's states, `ss.move()` does it the same way under every solver.
+
+## The lifecycle
+
+A module goes through four stages: it is made, initialized with the sim, stepped, and finalized. Every stage is a method that a subclass can override, calling `super()` to keep what the base class does.
+
+**Made.** `__init__()` stores what the module was given: its parameters, states, and, for a declared disease, its states and transitions, which are built into its graph ([From declaration to run](architecture_run.qmd#the-graph-resolve-complete-check)). Nothing is linked to a sim yet. When a module is given to a sim, the sim copies it, so one module can go into several sims; the copy is the one that runs, which is why a change to the original after the sim is made (adding a callback, say) raises an error saying to make it on `sim.diseases.<name>` instead.
+
+**Initialized.** `sim.init()` ([From declaration to run](architecture_run.qmd#what-sim.init-does)) chooses the solver first, since that decides which objects exist, and then initializes the modules in two passes:
+
+1. `init_pre(sim)`, for each module in turn: link it to the sim, set up its timeline, link its time parameters to its `dt` (so that `self.pars.dur.to_dt()` works without arguments), check its bare numbers against the sim's unit, add its parameters to `sim.pars` and its results to `sim.results`, add it and its states to the people (`sim.people.add_module()`), and make its results (`init_results()`). A declared disease first makes its engine, the object that will run its transitions under the chosen solver.
+2. Then the sim initializes every distribution, gives the people their starting values, and calls `init_post()` on each module, which gives each state its initial values (and, for a declared disease, its initial conditions: who starts infected).
+
+After that, the loop is built, and the parameters are locked, so setting one that doesn't exist raises an error.
+
+**Stepped.** Each step, the loop calls the module's methods at its kind's place in the order: `start_step()`, `record_states()`, `step()` (and `step_state()` for a disease written as code), `on_death(uids)`, `record_events()`, and `finish_step()`. The order, and what each kind does in it, is in [From declaration to run](architecture_run.qmd#the-order-of-a-step); a method that is sure to do nothing in this sim is left out of the plan ([below](#reading-the-loop)).
+
+**Finalized.** After the last step, `finalize()` calls `finalize_results()` on each module, which scales the results that count people by the number of people each agent stands for. A module can override `finalize_results()` to work out results from others; it calls `super().finalize_results()` first. A module that has been finalized can't be stepped again: running it again raises `ss.AlreadyRunError`, which says to copy it first.
+
+Forgetting to call `super()` is the commonest mistake in writing a module, so the base class's methods that must be called are marked with `@ss.required()`. After a run, `sim.run()` warns about any that weren't, naming the method and the module.
+
+## Declared modules and modules written as code
+
+A disease can be declared (states and transitions), written as code (arrays and a `step_state()` and `step()` of its own), or both. The difference is in what the module hands to its engine:
+
+- A **declared** disease's graph is run by its engine, `ss.solvers.Agents` or `ss.solvers.Compartmental`, made by `ss.solvers.make_engine()`. `ss.Disease.step()` is three calls to the engine: the transitions that are not contact-mediated, then those that are, then any functions of the model. No method of `ss.Disease` asks which solver it has.
+- A disease **written as code** (an `ss.AgentDisease` subclass, or an `ss.Disease` that declares nothing) gets an engine that has nothing to run (`ss.solvers.Undeclared`), so `super().step()` is harmless, and its own code does the work. An `ss.AgentDisease` transmits through the same code a declared disease uses as agents (`ss.solvers.Transmission`), so modifiers and products act on it in the same way.
+- A class can be **both**: declared states and transitions, plus code in `step()` after `super().step()` has taken them, reading or writing arrays of its own.
+
+Every other kind of module is written as code (apart from the deliveries and modifiers, which are declared in their own way, by keywords). So a sim is often a mixture, and Starsim has to decide whether it can run as compartments. It never runs code to find out. Instead it looks at what each module written as code keeps (`init_capabilities()` in `starsim/solvers/choose.py`):
+
+- A module that keeps a value for each person (any array given with `define_states()`) needs agents, since only agents have one value per person.
+- So does one that adds and removes agents (`ss.Births`, `ss.Deaths`; a declared disease's `ss.birth()` and `ss.death()` are their compartmental form), and an individual-level network.
+- A module can say for itself: `compartmental = True` on the class says its code works on groups too, and `compartmental = False` that it needs agents.
+- Anything else (code that keeps nothing per person, whatever its kind) runs beside the compartments, called at its place in the loop like any other module. If its code then asks for something only agents have (`people.age` in a model not stratified by age, say), it raises an `ss.CapabilityError` that says so.
+
+A sim made only of such modules has no agents at all, so an ODE written by hand in NumPy, as a custom module, runs as just that. Here are two small custom modules beside the same declared SIR: one keeps a single number for the whole population, the other a number for each person:
+
+```{python}
+class Alarm(ss.Module):
+    """ Count the days on which more than 5% of people are infectious: nothing per person """
+    def __init__(self, threshold=0.05, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(threshold=threshold)
+        self.days_over = 0
+
+    def step(self):
+        sir = self.sim.diseases.sir
+        if sir.I.n > self.pars.threshold*self.sim.people.n:
+            self.days_over += 1
+
+class Exposure(ss.Module):
+    """ Count each person's days infectious: one value per person """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(ss.FloatArr('days_infectious', default=0))
+
+    def step(self):
+        infectious = self.sim.diseases.sir.I.uids
+        self.days_infectious[infectious] += 1
+
+for mod in [None, Alarm(), Exposure()]:
+    sim = ss.Sim(make_sir(), modules=mod, unit='day', stop=ss.days(100), verbose=0)
+    sim.init()
+    label = type(mod).__name__ if mod else 'No module'
+    print(f'{label}: {sim.solver}, since {sim.solver_reason}')
+```
+
+The SIR alone and the SIR with `Alarm` run as an ODE; `Exposure` makes the sim run as agents, and the reason names it and says how to change that. `Alarm` still costs something: a compartmental run is usually taken by the kernels in one call, but a module with a step of its own makes it go step by step (the `Solver` line under "Results and running" in `sim.describe()` says so). The same `Alarm` runs as agents unchanged, since `sir.I.n` is the number infectious either way.
+
+## Reading the loop
+
+The loop (`sim.loop`, an `ss.loop.Loop` in `starsim/internals/loop.py`) is built at the end of `sim.init()` by `Loop.collect_funcs()`, which walks the sim's modules in the order above and collects each method to call. Its plan is every (time, method) pair, sorted by time and then by that order; a module with a timeline of its own appears only at its own times. `sim.loop.to_df()` gives the plan as a table, so the order can always be checked rather than remembered. For the first sim on this page, one step is:
+
+```{python}
+df = full.loop.to_df()
+df[df.ti == 1][['label', 'module', 'func_name']] # The second step
+```
+
+Each row is one call. The rows that are missing are the ones left out because they would do nothing: the analyzer's (`ss.infection_log` records infections as they happen), and the `finish_step()` of the modules that don't override it. The first step (`ti == 0`) has the same rows but `sim.advance()`, since the time is already at the first time point.
+
+The same plan is what `sim.loop.insert()` adds to (a function, or a module's `step()` moved to another point), and what `sim.profile(kind='loop')` and `sim.loop.plot()` show; see [Profiling and debugging](running_debugging.qmd). A compartmental run that is taken by the kernels in one call doesn't use the plan at all, which is why it is made only when it is first needed.
+
+## Limits
+
+- **The order between kinds is fixed.** There are no priorities or phases; within a kind, modules run in the order given. A module that must run at another point is moved there with `sim.loop.insert()`.
+- **What code does to another module isn't recorded.** `describe()` and `what_modifies()` see declarations, not the writes of a `step()`.
+- **Whether code needs agents is decided by what it keeps, not what it does.** A module with no states that still reads per-agent values in a compartmental run is caught only when it first asks for them, part way into the run.
+
+## Further reading
+
+- [constitution.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/admin/constitution.md): the principles in full
+- [Overview](https://starsim.org/lingua_franca/design/00-overview.html): the whole language on one page, and the object model
+- [Objects and construction](https://starsim.org/lingua_franca/design/01-objects.html): `ss.Sim`, the lifecycle, and the module contract
+- [lingua_franca](https://starsim.org/lingua_franca/): the design record, of which these are part
+- [EMOD: Architecture overview](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-overview/): the components of IDM's agent-based model, for comparison
+

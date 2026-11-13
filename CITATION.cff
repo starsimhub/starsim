@@ -23,6 +23,13 @@ authors:
   given-names: "Daniel"
   orcid: https://orcid.org/0000-0003-0437-7916
 title: "Starsim"
-version: 3.0.0
-date-released: 2025-07-09
+abstract: "A fast, flexible disease modeling framework, from compartments to agents"
+keywords:
+- disease modeling
+- epidemiology
+- compartmental model
+- metapopulation model
+- agent-based model
+version: 4.0.0
+date-released: 2026-11-01
 url: "https://github.com/starsimhub/starsim"

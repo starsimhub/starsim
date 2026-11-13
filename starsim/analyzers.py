@@ -1,57 +1,97 @@
 """
-Define analyzers, which are used to track variables when the sim is run.
+Analyzers, which record more than a sim records by default, as it runs
 
-Analyzers typically include things like additional tracking states by age or another
-conditional.
+For example, the number infected by age or by sex, or who infected whom (`ss.infection_log`).
+
+Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by humans, lightly edited by AI
+
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 
 class Analyzer(ss.Module):
     """
-    Base class for Analyzers. Analyzers are used to provide more detailed information
-    about a simulation than is available by default -- for example, pulling states
-    out of sim.people on a particular timestep before they get updated on the next step.
+    Base class for analyzers, which record more about a sim than it records by default: for
+    example, a state of the people on each step, read before the next step changes it.
 
-    The key method of the analyzer is `step()`, which is called with the sim
-    on each timestep.
+    An analyzer records results as any module does: those about the state at the start
+    of each step (stocks) in `record_states()`, and those about what happened in it
+    (flows) in `record_events()` (both with `self.ti` the step's, as in every module).
+    Its `step()`, if it has one, is called at the end of each step, after the flows are
+    recorded, when the people are as they are at the next time point.
+
+    Examples:
+        ```python
+        class BySex(ss.Analyzer):
+            def init_results(self):
+                super().init_results()
+                self.define_results(ss.Result('infected', columns=['female', 'male'], kind='stock'))
+
+            def record_states(self):
+                infected, female = self.sim.diseases.sis.I, self.sim.people.female
+                self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
+        ```
+
+    An analyzer that reads who infected whom sets `needs_infection_log = True`: each disease then keeps its
+    infection log (`disease.infection_log`, see `ss.infection_log`), as with an `ss.infection_log` in the sim.
     """
-    pass
+    needs_infection_log = False # Whether the diseases keep their infection logs for it (see ss.diseases.InfectionLog)
+
+    def step(self):
+        """ Nothing by default: an analyzer usually only records results (see `record_states()` and `record_events()`) """
+        pass
 
 
 class infection_log(Analyzer):
-    """ Log infections -- see `ss.InfectionLog` for detail
+    """ Log who infected whom -- see `ss.diseases.InfectionLog` for detail
 
-    This analyzer activates an infection log running in each disease. This is
-    different than other analyzers, but is required since the information required
-    to create an infection log isn't kept outside of the disease's `infect()` step.
+    This analyzer turns on the infection log of each disease, rather than recording
+    anything itself, since who infected whom is known only inside the disease's
+    `transmit()` step.
+
+    Each entry has the time (`t`), the person infected (`target`), who infected them
+    (`source`), and the route (`network`). The source is known only for transmission
+    over a network, where each infection is drawn along an edge: seeds have a source
+    of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
+    mixing with everyone (no network) have a source and network of NaN, since they
+    come from the fraction infectious in a group rather than from a particular person
+    (by events, `solver=ss.solvers.abm(step='events')`, each contact is with a particular person, so
+    these have a source and route too). For a disease with strains (`ss.Strains`),
+    each entry also has the strain transmitted (`strain`; for seeds, the strains
+    they start with). As agents only.
+
+    The log stays on the disease (`sim.diseases.sir.infection_log`) as well, so
+    several analyzers can read it, during the run or after. To follow transmission
+    as the sim runs, an analyzer reads the entries of each step with
+    `disease.infection_log.to_df(ti=self.ti)` (see `ss.diseases.InfectionLog.to_df()`).
+
+    Note: CRN safe.
 
     Examples:
         ```python
         import starsim as ss
-        sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+        sim = ss.Sim(n_agents=1000, diseases='sir', networks='random', analyzers='infection_log')
         sim.run()
         sim.analyzers[0].plot()
         ```
     """
+    needs_infection_log = True
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.logs = sc.objdict()
+        self.logs = sc.obj()
         return
 
-    def step(self):
-        """ Handled by ss.InfectionLog() """
-        pass
-
     def finalize_results(self):
-        """ Collect the infection logs from each of the diseases """
+        """ Collect the infection logs from each of the diseases (the same logs, so several analyzers can share them) """
         super().finalize_results()
         for key,disease in self.sim.diseases.items():
             self.logs[key] = disease.infection_log
-            disease.infection_log = None # Reset them to save memory
         return
 
     @property
@@ -67,7 +107,11 @@ class infection_log(Analyzer):
         return self.log.to_df()
 
     def plot(self, **kwargs):
-        """ Plot all of the infection logs """
+        """ Plot all of the infection logs
+
+        Args:
+            kwargs (dict): passed to `ss.plot_args()`, for the figure and plot options
+        """
         kw = ss.plot_args(kwargs, alpha=0.7)
         with ss.style(**kw.style):
             fig,axs = sc.getrowscols(len(self.logs), make=True, **kw.fig)
@@ -76,7 +120,9 @@ class infection_log(Analyzer):
                 ax = axs[i]
                 plt.sca(ax)
                 df = log.to_df()
-                ax.scatter(df.t, df.target, **kw.plot) # NB, not all plot keywords are valid for scatter
+                t = ss.DateArray(df.t) if pd.api.types.is_datetime64_any_dtype(df.t) else df.t # Dates on Starsim's date axis
+                ax.scatter(t, df.target, **kw.plot) # NB, not all plot keywords are valid for scatter
+                sc.commaticks(ax)
                 ax.set_xlabel('Time')
                 ax.set_ylabel('Agent')
                 ax.set_title(f'Infection log for "{key}"')
@@ -90,19 +136,15 @@ class infection_log(Analyzer):
             framerate (float): how many frames per second to display
             clear (bool): whether to clear the frame on each step
             cmap (str): the colormap to use
+            kwargs (dict): passed to `ss.plot_args()`
         """
-        # Get data
-        log = self.logs[key]
-        df = log.to_df()
+        df = self.logs[key].to_df()
 
-        # Convert to 2d coordinates using compact indexing to avoid oversized grids with sparse UIDs
-        unique_uids = sorted(df.target.unique())
-        uid_to_idx = {uid: idx for idx, uid in enumerate(unique_uids)}
+        # Place each person infected on a square grid, numbering only them so that the grid stays small when UIDs are sparse
+        unique_uids, idx = np.unique(df.target, return_inverse=True)
         side = int(np.ceil(np.sqrt(len(unique_uids))))
-        x, y = np.meshgrid(np.arange(side), np.arange(side))
-        flat = x.ravel()
-        df['x'] = [flat[uid_to_idx[uid]] for uid in df.target]
-        df['y'] = [y.ravel()[uid_to_idx[uid]] for uid in df.target]
+        df['x'] = idx % side
+        df['y'] = idx // side
 
         # Assemble into frames
         frames = sc.autolist()
@@ -110,7 +152,7 @@ class infection_log(Analyzer):
         colors = sc.vectocolor(len(unique_t), cmap=cmap)
         for i,t in enumerate(unique_t):
             thisdf = df[df.t == t]
-            frames += sc.objdict(t=t, x=thisdf.x, y=thisdf.y, c=colors[i])
+            frames += sc.obj(t=t, x=thisdf.x, y=thisdf.y, c=colors[i])
 
         # Plot
         kw = ss.plot_args(kwargs, alpha=0.7)
@@ -127,65 +169,3 @@ class infection_log(Analyzer):
                 plt.ylim(0, side)
                 plt.pause(1/framerate)
         return ss.return_fig(fig, **kw.return_fig)
-
-
-class dynamics_by_age(Analyzer):
-    """
-    Example analyzer: track dynamics of a state by age.
-
-    Args:
-        state (str): the name of the state to analyze
-        age_bins (list): the list of age bins to analyze by
-
-    Examples:
-        ```python
-        by_age = ss.dynamics_by_age('sis.infected')
-
-        sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
-        sim.run()
-        sim.analyzers[0].plot() # Note: if Sim(copy_inputs=False), we can also use by_age.plot()
-        ```
-    """
-    def __init__(self, state, age_bins=(0, 20, 40, 100)):
-        super().__init__()
-        self.state = state
-        self.age_bins = age_bins
-        self.mins = age_bins[:-1]
-        self.maxes = age_bins[1:]
-        self.hist = {k: [] for k in self.mins}
-        return
-
-    def init_post(self):
-        """ Validate that the requested state exists """
-        super().init_post()
-        if self.state not in self.sim.people.states:
-            raise ValueError(f'State "{self.state}" not found; available states: {list(self.sim.people.states.keys())}')
-
-    def step(self):
-        """ Record counts of agents in each age bin who have the tracked state active """
-        people = self.sim.people
-        for min_age, max_age in zip(self.mins, self.maxes):
-            mask = (people.age >= min_age) & (people.age < max_age)
-            self.hist[min_age].append(people.states[self.state][mask].sum())
-        return
-
-    def finalize_results(self):
-        """ Convert per-step lists to arrays """
-        super().finalize_results()
-        for k,hist in self.hist.items():
-            self.hist[k] = np.array(hist)
-        return
-
-    def plot(self, **kwargs):
-        """ Plot counts by age bin over time """
-        kw = ss.plot_args(kwargs)
-        with ss.style(**kw.style):
-            fig = plt.figure(**kw.fig)
-            for minage, maxage in zip(self.mins, self.maxes):
-                plt.plot(self.sim.t.timevec, self.hist[minage], label=f'Age {minage}-{maxage}', **kw.plot)
-            plt.legend(**kw.legend)
-            plt.xlabel('Model time')
-            plt.ylabel('Count')
-            plt.ylim(bottom=0)
-        return ss.return_fig(fig, **kw.return_fig)
-

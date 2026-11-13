@@ -1,0 +1,191 @@
+---
+title: Fitting methods
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Claude draft, not yet reviewed; the comparison of the methods on two parameters, and the appendices, by AI; revised on Nov 12 by AI after the docs review
+---
+
+`sim.fit()` chooses a method that suits the model, so most fits don't need to name one. This page is for choosing one yourself: what each method gives, needs, and costs, and how their answers compare on the same data. The data, parameters, and measures of fit, which are the same for every method, are in [Fitting a model](calibration_fitting.qmd).
+
+## Choosing a method
+
+"Stochastic compartmental" is a model with `solver='binomial'`, `'gillespie'`, or `'tau'` that the kernels run from start to finish (as `sim.describe()` says; if not, `'if2'` and `'pmcmc'` raise an error that gives the reason). The costs are rough, in runs of the model, with the default settings and two or three parameters.
+
+| Method | Gives | Suits | Needs | Rough cost, in runs | Choose it when |
+|---|---|---|---|---|---|
+| `'nelder-mead'` | Best fit | Any deterministic model; default for an ODE with one or two parameters, or whose log-likelihood JAX can't take | Nothing | A scan of 10 per parameter, then a few hundred per search, 3 searches | Few parameters, or a model that can't be differentiated |
+| `'powell'` | Best fit | As Nelder-Mead | Nothing | As Nelder-Mead | Nelder-Mead is slow to settle |
+| `'l-bfgs-b'` | Best fit | ODE; default for three or more parameters | Gradients (from JAX, or by finite differences) | A scan, then tens of runs with gradients per search | Many parameters (e.g. a time series) of an ODE |
+| `'slsqp'` | Best fit | ODE | Gradients | As L-BFGS-B | As L-BFGS-B |
+| `'optuna'` | Best fit | Any; default for stochastic models and agents | Nothing | 50 trials per parameter (at least 100), each scored by a particle filter of 200 particles, or by 4 runs (1 for agents) | Runs are noisy, or as a first broad search |
+| `'if2'` | Maximum-likelihood best fit | Stochastic compartmental | A likelihood; each fitted parameter a single value of one of the model's rates | 4 chains × 50 passes × 1,000 particles | The maximum likelihood of a stochastic model |
+| `'nuts'` | Posterior | ODE with gradients (slowly without JAX, with `require_jax=False`) | A likelihood; gradients | 4 chains × (300 warm-up draws + sampling draws until the chains agree, with 400 effective draws of each parameter), each draw tens of runs with gradients | A posterior of an ODE whose data have little chance in them beyond the likelihood's |
+| `'pmcmc'` | Posterior | Stochastic compartmental, or an ODE | A likelihood | 4 chains × (1,000 warm-up draws + sampling draws until the chains agree, as for NUTS) × tens to hundreds of particles (one run a draw for an ODE) | A posterior of a stochastic model, with its process noise, or of an ODE that JAX can't run |
+| `'abc-smc'` | Approximate posterior | Any stochastic model, including agents; a deterministic model is an error | A goodness of fit (no likelihood) | 200 samples × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
+| A list | What its last stage gives | | What each stage needs | The sum of its stages | A broad search, then a local polish |
+
+A setting that the method doesn't take is an error, so a mistyped name can't be ignored by accident.
+
+## Best fits
+
+Every example on this page fits the same SIR model of an outbreak in a town of 10,000 people over four months, with half of infections reported (fixed, since `'if2'` can fit only the model's rates). Two parameters are unknown: the transmission rate `beta` and the infectious period `dur_inf`. The data are weekly reported cases from a chain binomial run with `beta = 0.3` and an infectious period of 8 days, so each method's estimate can be compared with the truth. The likelihood, where one is used, is Poisson.
+
+```{python}
+import time
+import pandas as pd
+import starsim as ss
+
+beta    = ss.par(0.4, bounds=[0.05, 1])      # Transmission rate per day
+dur_inf = ss.par(ss.days(5), bounds=[3, 15]) # Infectious period, in days
+S, I, R = ss.states(3)
+infection = S >> I @ beta*I
+cases = ss.outcome(0.5*infection) # Half of infections are reported
+sir = ss.Disease(infection, I >> R @ dur_inf, cases, init=dict(I=0.002), name='sir')
+
+pars = dict(total_pop=10_000, unit='day', stop=120)
+truth = dict(beta=0.3, dur_inf=8)
+data = ss.Sim(sir, pars=dict(beta=0.3, dur_inf=ss.days(8)), solver='binomial', rand_seed=2, verbose=0, **pars).run().to_synthetic_data('cases', resample='week')
+
+deterministic = ss.Sim(sir, data=data, verbose=0, **pars)
+stochastic = ss.Sim(sir, data=data, solver='binomial', verbose=0, **pars)
+likelihood = dict(cases=ss.poisson())
+
+fits = {} # Each method's fit and how long it took, for the comparison at the end
+def fit_by(method, sim, likelihood=None, **settings):
+    """ Fit by one method, with its settings, and keep the fit and its time """
+    start = time.time()
+    fit = sim.fit(method=ss.fitting.method(method, **settings), likelihood=likelihood, verbose=False)
+    fits[method] = dict(fit=fit, seconds=time.time() - start)
+    return fit
+```
+
+`fit_by()` is `sim.fit(method=ss.fitting.method(name, **settings))`, timed for the comparison at the end. A method with its default settings is given by name alone, e.g. `sim.fit(method='optuna')`.
+
+### SciPy: `'nelder-mead'`, `'l-bfgs-b'`, and others
+
+These search from the best few points of a scan over the bounds (`scan=`, 10 per parameter), with `restarts=` searches (3 by default) from points that are apart, and take SciPy's own options too, e.g. `maxiter=500`. The gradient-based methods take their gradients from JAX (see [Gradients](calibration_gradients.qmd)), or by finite differences. On a stochastic model, they minimize the mean score of `n_runs=` runs with the same seeds at every point, which with a likelihood is not the log-likelihood.
+
+```{python}
+fit = fit_by('nelder-mead', deterministic, scan=10, restarts=2, maxiter=200)
+fit.pars
+```
+
+```{python}
+fit = fit_by('l-bfgs-b', deterministic)
+fit.pars
+```
+
+### Optuna: `'optuna'`
+
+[Optuna](https://optuna.org) learns where to look from the scores so far, which suits noisy scores: each trial takes fresh random seeds, so the search averages over chance. With a likelihood for every series on a stochastic compartmental model, each trial is scored by a particle filter's estimate of the log-likelihood, so the best fit is near the maximum likelihood; otherwise (or with `n_runs=` given) by the mean of several runs' scores. `fit.measure` says which. Its key setting is `n_trials=`; `workers=` runs trials in parallel, `storage=` keeps them so a fit can be resumed, and other keywords go to Optuna's `study.optimize()`, e.g. `timeout=600`.
+
+```{python}
+fit = fit_by('optuna', stochastic, n_trials=100)
+fit.table
+```
+
+### Iterated filtering: `'if2'`
+
+Iterated filtering (IF2; [Ionides et al. 2015](https://doi.org/10.1073/pnas.1410597112)), the method of the [pomp](https://kingaa.github.io/pomp/) package for R, finds maximum-likelihood values of a stochastic model by running a particle filter many times, with each particle's values taking small random steps that shrink from one pass to the next. Several chains (`chains=`, 4) each run `iterations=` passes (50) with `particles=` particles (1,000); `sd=` and `cooling=` set the size of the steps and how fast they shrink. `fit.converged` is True if the chains, from different starts, end within 2 of the best log-likelihood: a sign that they agree, not proof that they found the maximum.
+
+```{python}
+fit = fit_by('if2', stochastic, likelihood=likelihood, particles=200, iterations=25)
+fit.summarize();
+```
+
+With these reduced settings, the fit has not converged: one chain has wandered to a low β and a long infectious period, where the outbreak barely grows, and the message says to run longer. The best chain is still reported, and `fit.trials` has each chain's estimate and log-likelihood at each pass:
+
+```{python}
+fit.trials.groupby('chain').tail(1)
+```
+
+### Several methods in turn
+
+With a list, each method starts from the best values of the one before, and the list stops, with a warning, at a method that doesn't converge. A setting goes to the stages that take it:
+
+```{python}
+fit = deterministic.fit(method=[ss.fitting.method('optuna', n_trials=200), ss.fitting.method('nelder-mead', maxiter=100)], verbose=False)
+fit.pars
+```
+
+## Posteriors
+
+A posterior uses each parameter's `prior=`, or a uniform prior over its bounds. Its draws are in `fit.samples`, and `fit.table` adds the median, the 95% interval, and for chains R-hat and the effective sample size ([Fit diagnostics](calibration_diagnostics.qmd) covers reading them). The defaults are in the table above. Each of `chains=` chains first takes `warmup=` draws, which tune it and are discarded; with `draws='auto'` (the default), it then draws in batches until the chains agree (an R-hat of at most `rhat=1.01` for every parameter) and every parameter has `ess=400` effective draws, or until `max_draws=` (with a warning). A number, e.g. `draws=1000`, takes exactly that many. The examples take fewer to run quickly, so they may report that they have not converged.
+
+### NUTS: `'nuts'`
+
+The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX. Its warm-up learns the scale of each parameter and the correlations between them (a dense mass matrix), so that strongly correlated parameters, such as an infection rate and a fraction reported, don't slow it down. On a GPU, the last digits of the draws can differ from run to run (far inside the posterior's intervals).
+
+```{python}
+fit = fit_by('nuts', deterministic, likelihood=likelihood, draws=150, warmup=150, chains=2)
+fit.table
+```
+
+### Particle MCMC: `'pmcmc'`
+
+Particle MCMC takes a random walk over the parameters, with the likelihood at each point estimated by a particle filter, so it includes the model's process noise. Its draws are more correlated than those of NUTS, so it needs more. It tunes its steps so that about 15% of proposals are accepted (`fit.diagnostics.acceptance`), and chooses the number of particles in its warm-up unless `particles=` is given. Each draw keeps the run the filter drew with it (`fit.trajectories`), which `fit.project()` continues (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)). For an ODE, it is a random walk on the exact likelihood, with no particles.
+
+```{python}
+fit = fit_by('pmcmc', stochastic, likelihood=likelihood, draws=150, warmup=150, chains=2, particles=50)
+fit.table
+```
+
+### ABC-SMC: `'abc-smc'`
+
+Approximate Bayesian computation keeps the values whose runs come closest to the data, over `generations=` (8) with a shrinking tolerance, with `samples=` particles (200). It needs no likelihood and works for agents. Its result is an approximation whose width depends on the final tolerance as well as on the data, so its convergence is not assessed (`fit.converged` is None); `fit.diagnostics` gives the final tolerance and acceptance.
+
+```{python}
+fit = fit_by('abc-smc', stochastic, samples=100, generations=6)
+fit.table
+```
+
+## Comparing the methods
+
+Each fit above is kept, with how long it took, so their estimates can be put side by side, with the true values:
+
+```{python}
+rows = []
+for method, entry in fits.items():
+    fit, table = entry['fit'], entry['fit'].table.set_index('par')
+    row = dict(method=method, gives='posterior' if fit.samples is not None else 'best fit')
+    for par in ['beta', 'dur_inf']:
+        row[par] = table.loc[par, 'median'] if fit.samples is not None else table.loc[par, 'best'] # The median of a posterior
+        row[f'{par} 95% interval'] = f"{table.loc[par, 'lower']:.3f} to {table.loc[par, 'upper']:.3f}" if fit.samples is not None else ''
+    row['seconds'] = entry['seconds']
+    rows.append(row)
+rows.append(dict(method='(true values)', **truth))
+comparison = pd.DataFrame(rows).set_index('method')
+comparison.round(3).fillna('')
+```
+
+Every result is relative to the model and the likelihood. The methods that fit the ODE (SciPy and NUTS) agree with each other, but the ODE is not the model that made the data, so its best fit is a little off, and the NUTS posterior is narrow around it: a Poisson likelihood on an ODE counts only the noise in reporting, not the chance in transmission, so its interval for β can exclude the true value. Particle MCMC runs the stochastic model itself, so its posterior includes the process noise. ABC-SMC is only as close to the posterior as its last tolerance. IF2 gives the maximum likelihood of the stochastic model, and Optuna without a likelihood the lowest mean mismatch; neither gives an interval (their spreads show only how flat the score is near the best, and `ss.fitting.profile()` gives a confidence interval for a deterministic model).
+
+So, for data with much more chance in them than reporting noise, a posterior from an ODE understates the uncertainty. A likelihood that allows more variation (`ss.nbinom(n=...)`, with `n` fitted) widens it, and `'pmcmc'` on a stochastic model counts the chance directly, at a higher cost.
+
+## Further reading
+
+- [Ionides et al. 2015, "Inference for dynamic and latent variable models via iterated filtering"](https://doi.org/10.1073/pnas.1410597112): the IF2 algorithm
+- [pomp: Statistical inference for partially observed Markov processes](https://kingaa.github.io/pomp/): the R package for iterated filtering and particle MCMC
+- [Andrieu et al. 2010, "Particle Markov chain Monte Carlo methods"](https://doi.org/10.1111/j.1467-9868.2009.00736.x): particle MCMC
+- [Hoffman and Gelman 2014, "The No-U-Turn sampler"](https://jmlr.org/papers/v15/hoffman14a.html): NUTS
+- [King et al. 2015, "Avoidable errors in the modelling of outbreaks of emerging pathogens"](https://doi.org/10.1098/rspb.2015.0347): why deterministic models fitted to stochastic data give overconfident estimates
+
+## Appendix: settings of each method
+
+The settings each method takes (in `ss.fitting.method()`), from `ss.fitting.method_options()`, with the defaults from each method's signature (a SciPy method also takes SciPy's own options, and Optuna those of `study.optimize()`, which are listed too):
+```{python}
+import inspect
+import optuna
+
+rows = []
+for method, func in ss.fitting.methods.items():
+    defaults = {key:p.default for key, p in inspect.signature(optuna.Study.optimize).parameters.items()}
+    defaults |= {key:p.default for key, p in inspect.signature(func).parameters.items()} | dict(require_jax=True) # n_runs and reseed are chosen by the fit
+    settings = [f'{key}={defaults.get(key)}' for key in ss.fitting.method_options(method)]
+    rows.append(dict(method=method, settings=', '.join(settings)))
+pd.DataFrame(rows).set_index('method')
+```
+
+A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fitting.method()` (see [ss.fitting](../api/internals.fitting.qmd)). The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`.

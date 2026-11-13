@@ -8,6 +8,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: linting-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Pylint
@@ -20,7 +24,9 @@ jobs:
         with:
           python-version: '3.13'
           architecture: x64
-      - name: Install Starsim
-        run: pip install -e .[dev]
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
+          rust: false
       - name: Run pylint
         run: pylint starsim --rcfile=.pylintrc --fail-under=9

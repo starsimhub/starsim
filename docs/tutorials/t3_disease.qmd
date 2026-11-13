@@ -1,0 +1,329 @@
+---
+title: "T3 – Building a disease"
+jupyter: python3
+authorship:
+  human: 9
+  ai: 91
+  note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+---
+
+The SIR model of [Tutorial 1](t1_intro.qmd) and [Tutorial 2](t2_model.qmd) is over within weeks, far faster than real measles. [Tutorial 2](t2_model.qmd) found that R0 and prior immunity decide how *many* people are infected. This tutorial asks: **what decides how *fast* an outbreak spreads?** It adds, one at a time, structure that most disease models need: a latent period, the distribution of a duration, waning immunity, and a branch (here, a small fraction die). It then names the parameters, checks the finished disease, and runs it as agents. By the end of this tutorial, you will be able to:
+
+- turn an SIR model into an SEIR model, and say why it changes the course of the epidemic but not R0;
+- choose the distribution of a duration, and add waning immunity and deaths;
+- name parameters, and check a disease from its description, equations, and diagram;
+- run a disease as agents, and see how chance and superspreading decide whether one case starts an outbreak.
+
+## A latent period
+
+People infected with measles become infectious about 10 days later. In an SEIR model, people in this latent period are in their own compartment, E (exposed): infected, but not yet infectious. Infection moves people from S to E, and progression from E to I.
+
+Here are the SIR and SEIR models, both named `measles`, so their results can be plotted together:
+
+```{python}
+import starsim as ss
+
+# The SIR model of Tutorials 1 and 2
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='measles')
+
+# The SEIR model: infection leads to E, not I
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # Infected by contact with infectious people, I
+progression = E >> I @ ss.days(10)  # Infectious after a latent period of 10 days on average
+recovery    = I >> R @ ss.days(8)   # Recovered after 8 days on average
+seir = ss.Disease(infection, progression, recovery, init=dict(I=0.001), name='measles')
+
+sir_sim  = ss.Sim(sir,  total_pop=100_000, stop=ss.days(150))
+seir_sim = ss.Sim(seir, total_pop=100_000, stop=ss.days(150))
+msim = ss.parallel({'SIR': sir_sim, 'SEIR': seir_sim})
+msim.plot('measles.I')
+```
+
+Only `I` is infectious, since only it appears in the rate of infection. Both outbreaks start with 0.1% infectious (`init=dict(I=0.001)`; `init_prev=0.001` would put them in `E`, [Tutorial 2](t2_model.qmd)).
+
+R0 is the same in both, 15.2: it depends on how many people each infectious person infects (β = 1.9 a day, for 8 days), not on how soon they become infectious. But with a latent period, the time from one infection to the next (the generation time) is about 18 days instead of 8, so the epidemic peaks later and lower. So the first answer is the generation time: for the same R0, a longer one means a slower, flatter epidemic.
+
+## How long people stay in a state
+
+A duration such as `ss.days(10)` is an average; by default, the time in the state is exponentially distributed, as in the standard ODE. That describes most latent periods poorly: with a mean of 10 days, 10% of people become infectious within a day. An Erlang distribution (a gamma with a whole-number shape, `k`) is the usual alternative in compartmental models. With `k=10`, the latent period still averages 10 days, with a standard deviation of about 3:
+
+```{python}
+progression = E >> I @ ss.erlang(k=10, mean=ss.days(10))  # 10 days on average; 95% between 5 and 17
+seir_erlang = ss.Disease(infection, progression, recovery, init=dict(I=0.001), name='measles')
+
+erlang_sim = ss.Sim(seir_erlang, total_pop=100_000, stop=ss.days(150))
+msim = ss.parallel({'Exponential latent period': seir_sim, 'Erlang latent period': erlang_sim})
+msim.plot('measles.I')
+```
+
+R0 is the same, but the epidemic peaks two weeks later, and higher. With an exponential latent period, the few who become infectious within a day or two start chains of infection early; with an Erlang one, almost nobody does. So the distribution of a duration, not just its average, sets how fast an epidemic grows.
+
+As an ODE, Starsim runs an Erlang distribution as `k` exponential stages in a row, each 1/`k` of the mean, only a way to narrow the time in `E`. Written out, it is a transition with 10 stages:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+progression = E >> I @ ss.erlang(k=10, mean=ss.days(10))
+```
+
+## R
+
+```r
+progression <- Transition(E, I, dur = ss$erlang(k = 10, mean = days(10)))
+```
+
+## Explicit
+
+```{python}
+progression = ss.Transition(source=E, dest=I, dur=ss.days(10), stages=10) # 10 exponential stages of 1 day each, on average
+```
+:::
+
+`equations()` shows the stages, as `E_1` to `E_10`:
+
+```{python}
+seir_erlang.equations()
+```
+
+As agents, each person draws their own time from the distribution instead. Other distributions, such as `ss.lognormal()`, are covered in [Distributions](../user_guide/mechanics_distributions.qmd).
+
+## Waning immunity
+
+For many infections, such as pertussis or RSV, immunity wanes: a transition from `R` back to `S`, an SEIRS model. Suppose (unlike real measles) that immunity lasted 2 years on average:
+
+```{python}
+progression = E >> I @ ss.days(10)  # Back to an exponential latent period
+waning      = R >> S @ ss.years(2)  # Susceptible again after 2 years on average
+seirs = ss.Disease(infection, progression, recovery, waning, init=dict(I=0.001), name='measles')
+
+lifelong = ss.Sim(seir,  total_pop=100_000, stop=ss.years(5), unit='day')
+waning_sim = ss.Sim(seirs, total_pop=100_000, stop=ss.years(5), unit='day')
+msim = ss.parallel({'Lifelong immunity': lifelong, 'Immunity lasting 2 years': waning_sim})
+msim.plot('measles.I')
+```
+
+`unit='day'` says which unit the bare β = 1.9 is in ([Tutorial 2](t2_model.qmd)). With waning immunity, smaller waves follow the first outbreak, and the disease becomes endemic. A supply of new susceptible people, from waning immunity or births ([Tutorial 6](t6_data.qmd#births-and-deaths)), is what lets an infection persist, rather than burn through the population once and disappear.
+
+## Deaths: a branch
+
+A small fraction of people with measles die: from 1 in 1,000 cases or fewer in high-income countries to several in 100 in some low-income settings. Suppose it is 2 in 1,000. People leaving `I` then branch: 0.2% die and the rest recover. A branch is a transition with `p=`, the fraction that take it, and `p=None` marks the one that takes the rest. After `@`, a dict gives the transition's keywords:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R       @ dict(dur=ss.days(8), p=None)   # The rest recover...
+death       = I >> ss.dead @ dict(dur=ss.days(8), p=0.002)  # ...and 0.2% die
+measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.run()
+print('Deaths:', round(sim.results.measles.death.sum()))
+```
+
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+measles <- Disease(
+  infection   = Transition(S, E, rate = 1.9 * I),
+  progression = Transition(E, I, dur = days(10)),
+  recovery    = Transition(I, R, dur = days(8), p = 0.998),       # 99.8% recover...
+  death       = Transition(I, ss$dead, dur = days(8), p = 0.002), # ...and 0.2% die
+  init = list(I = 0.001)
+)
+
+sim <- Sim(measles, total_pop = 100000, stop = days(150))
+sim$run()
+cat("Deaths:", round(sum(sim$results$measles$death$values)), "\n")
+```
+
+## Explicit
+
+```{python}
+S, E, I, R = ss.State(name='S'), ss.State(name='E'), ss.State(name='I'), ss.State(name='R')
+measles_explicit = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=E, rate=ss.perday(1.9)*I, name='infection'),
+        ss.Transition(source=E, dest=I, dur=ss.expon(mean=ss.days(10)), name='progression'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), p=0.998, name='recovery'),    # 99.8% recover...
+        ss.Transition(source=I, dest=ss.dead, dur=ss.expon(mean=ss.days(8)), p=0.002, name='death'), # ...and 0.2% die
+    ],
+    init = dict(S=0.999, I=0.001), # The fraction of people in each state at the start
+    name = 'measles',
+)
+
+sim_explicit = ss.Sim(diseases=measles_explicit, networks=ss.contacts(1), total_pop=100_000, start=ss.days(0), stop=ss.days(150), dt=ss.days(1), unit='day', solver='ode')
+sim_explicit.run()
+print('Deaths:', round(sim_explicit.results.measles.death.sum()))
+```
+:::
+
+`ss.dead` is outside the model: people who die leave the population. Each branch has its own result (`recovery` and `death`), and could have its own duration. In the equations, who goes which way is decided on entering `I`, so `I` is in two parts, `I_1` (who will die) and `I_2` (who will recover):
+
+```{python}
+measles.equations()
+```
+
+The same outcome can be written as one transition with several destinations, `outcome = I >> {ss.dead: 0.002, R: None} @ ss.days(8)`, decided as people leave `I`; its results are then `outcome.dead` and `outcome.R` (see [Building diseases](../user_guide/building_diseases.qmd#branching)). Two transitions out of a state with rates and no `p=` are instead competing risks: whichever happens first moves each person. A branch gives the fraction directly, which is how the case fatality ratio is usually known.
+
+## Naming the parameters
+
+Starsim names parameters itself (`beta`, `dur_E`, ...), as [Tutorial 2](t2_model.qmd) showed. To name them yourself, use `ss.par()`. Each takes its name from its variable, and can have a description (`doc=`), a source (`source=`), and bounds, the range of plausible values:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta           = ss.par(1.9, bounds=[1, 3], doc='Transmission rate per day')
+dur_latent     = ss.par(ss.days(10), bounds=[ss.days(7), ss.days(14)], doc='Average latent period', source='Assumed for this tutorial')
+dur_infectious = ss.par(ss.days(8), doc='Average infectious period')
+
+infection   = S >> E @ beta*I
+progression = E >> I @ dur_latent
+recovery    = I >> R       @ dict(dur=dur_infectious, p=None)
+death       = I >> ss.dead @ dict(dur=dur_infectious, p=0.002)
+measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+```
+
+One parameter can be used in several places, as `dur_infectious` is, by both `recovery` and `death`: `ss.Sim(measles, pars=dict(dur_infectious=ss.days(7)), ...)` changes it in both. [Calibration](t6_data.qmd#fitting-and-checking-the-fit) uses the bounds. See [Parameters](../user_guide/building_parameters.qmd) for more, including priors.
+
+## Checking the disease
+
+Check that the disease is what you meant before using it. `describe()` lists every state, transition, and parameter as built, including every value Starsim chose itself:
+
+```{python}
+sim.describe()
+```
+
+`equations()` gives the ODEs, the quickest way to check that every flow leaves one state and enters another:
+
+```{python}
+measles.equations()
+```
+
+`diagram()` draws a flowchart (`diagram('text')` gives it as Mermaid):
+
+```{python}
+measles.diagram()
+```
+
+A disease can also be written as a class, with its states, parameters, and transitions in the class body, so that it can be made with other parameter values, like the diseases in Starsim's library (e.g. `Measles(beta=1.5)`); see [Diseases](../user_guide/building_diseases.qmd).
+
+## Advanced: diseases as agents {#as-agents}
+
+Everything above also runs as agents (with `n_agents=`, as in [Tutorial 1](t1_intro.qmd)). Each person then has their own state, their own durations (`measles.E.stays` gives each person's time in `E`), and, if you want, their own infectiousness and susceptibility. This shows two things the deterministic ODE can't: chance when cases are few (which a stochastic compartmental solver can also show), and differences between people.
+
+### Chance, and the first case
+
+In a deterministic ODE, an infection with a reproduction number above 1 always takes off. In reality, the first cases may recover before infecting anyone. Suppose 90% of the town is immune and one infectious person arrives. R0 is still 15, but the effective reproduction number at the start is R ≈ 1.9 × 8 × 0.1 ≈ 1.5: each case infects about 1.5 others. Here are 20 runs as agents, each with its own random seed, and the ODE for comparison:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=1)) # 90% immune, and 1 case
+
+pars = dict(n_agents=5000, stop=ss.days(365), verbose=0)
+msim = ss.parallel(ss.Sim(measles, **pars), n_runs=20)
+msim.plot('measles.I', lines=True)
+
+ode = ss.Sim(measles, total_pop=5000, stop=ss.days(365), solver='ode', verbose=0)
+ode.run()
+ode.plot('measles.I')
+```
+
+The ODE always gives the same outbreak. As agents, some runs give one about as large, and the rest die out after a handful of cases. Counting runs with fewer than 20 infections:
+
+```{python}
+total = msim.results.measles.infection.values.sum(axis=1) # Total infections in each run
+print('Fraction of introductions that die out:', np.mean(total < 20))
+```
+
+Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to the runs. This holds early in an outbreak in a large, well-mixed population, where each case's infections are independent and the infectious period is exponentially distributed, as here. This matters for questions about introductions: how likely an imported case is to start an outbreak.
+
+### People who differ: superspreading
+
+For many diseases, most cases infect few others or none, and a few infect many (superspreading). This is usually described by giving each person an infectiousness drawn from a gamma distribution with mean 1 and dispersion k: the smaller k, the more concentrated transmission is. A value that each person has is an attribute, `ss.attr()`, here drawn once for each person; `ss.modify()` then multiplies each person's infectiousness (`rel_trans`) by it:
+
+```{python}
+def make_sim(k=None):
+    """ The measles model, with the infectiousness of each person drawn from a gamma distribution with shape k """
+    S, E, I, R = ss.states('S E I R')
+    infection   = S >> E @ 1.9*I
+    progression = E >> I @ ss.days(10)
+    recovery    = I >> R @ ss.days(8)
+    if k is None: # Everyone equally infectious
+        measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=1))
+        return ss.Sim(measles, **pars)
+    infectiousness = ss.attr(ss.gamma(shape=k, scale=1/k)) # A mean of 1, and a shape (dispersion) of k
+    measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, init=dict(R=0.9), init_n=dict(I=1))
+    superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
+    return ss.Sim(measles, connectors=superspreading, **pars)
+
+for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2}.items():
+    msim = ss.parallel(make_sim(k), n_runs=40)
+    total = msim.results.measles.infection.values.sum(axis=1)
+    print(label, '- fraction that die out:', np.mean(total < 20), '- median size of the outbreaks that take off:', np.median(total[total >= 20]))
+```
+
+Each case infects about 1.5 others on average in all three, but the more concentrated transmission is, the more often an introduction dies out: with k = 0.2, about 3 in 4 do, since the first case is most likely one who infects nobody. `ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `when=infection`); see [Diseases](../user_guide/building_diseases.qmd). Susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
+
+### Counting each person's infections
+
+With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `keep_times=True` keeps each person's history, which only agents have:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.4*I        # β = 0.4 per day
+recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
+waning    = R >> S @ ss.days(180) # Immune for 6 months on average
+cold = ss.Disease(infection, recovery, waning, init_prev=0.01, name='cold')
+
+sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), keep_times=True, verbose=0)
+sirs.run()
+sirs.plot('cold.I')
+```
+
+After a first wave, the infection settles into smaller, repeated waves. `cold.infection.n_times` is the number of times each person has been infected:
+
+```{python}
+counts = sirs.diseases.cold.infection.n_times.values
+plt.figure()
+plt.hist(counts, bins=np.arange(counts.max() + 2) - 0.5)
+plt.xlabel('Number of infections in 3 years')
+plt.ylabel('Number of people');
+```
+
+Most people are infected 3 to 5 times. A model can use a person's history: e.g. `ss.modify(cold.rel_sus, multiply=0.5, who=cold.infection.n_times >= 2)` would halve the susceptibility of people infected at least twice. A disease can also be written as Python code, as in Starsim 3: [T8 – Custom modules](t8_modules.qmd#a-disease-written-as-code) shows how.
+
+## Exercises
+
+1. Measles has a latent period of 10 to 12 days. Using the model with named parameters, run it with a latent period of 12 days, using `pars=`. Does R0 change? How do the timing and height of the peak change?
+2. Give the infectious period an Erlang distribution too, with `k=4`. Using `R0()` and a plot of `I`, check whether R0 or the course of the epidemic changes.
+3. About 1 in 10 people with measles in this town are admitted to hospital, after 4 days of being infectious on average, and stay for 7 days. Add a state for people in hospital (assume they don't transmit), and find the largest number of people in hospital at once.
+4. Try different durations of immunity in the SIRS model of the respiratory infection (e.g. 1, 6, and 24 months). How do they affect the epidemic curve, and the number of times people are infected?
+5. In the town with 90% immune, increase the fraction susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What fraction of introductions die out now, with and without superspreading (k = 0.2)?
+
+[Solutions](solutions_t3_disease.qmd) · Next: [T4 – Mixing](t4_mixing.qmd)
+
+## Further reading
+
+- [Wearing, Rohani & Keeling (2005): Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): why exponential latent and infectious periods mislead, and how Erlang stages fix it
+- [CDC Pink Book: Measles](https://www.cdc.gov/pinkbook/hcp/table-of-contents/chapter-13-measles.html): the natural history of measles, including its incubation and infectious periods and complications
+- [WHO: Measles fact sheet](https://www.who.int/news-room/fact-sheets/detail/measles): deaths from measles, and how they vary between settings
+- [Wikipedia: Compartmental models in epidemiology](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): the SEIR and SEIRS models, among others
+- [Lloyd-Smith et al. (2005): Superspreading and the effect of individual variation on disease emergence](https://www.nature.com/articles/nature04153): the paper that introduced the dispersion k
