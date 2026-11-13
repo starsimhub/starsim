@@ -109,75 +109,56 @@ import starsim as ss
 ss.demo()
 ```
 
-Here's how you'd write a minimal compartmental SIR model with an infection rate of 0.3 per step and a mean recovery duration of 10 steps:
+Here's a minimal SIR model, with an infection rate of β = 0.3 per day and an infectious period of 10 days, written much as you'd write it on paper:
 
 ```py
 import starsim as ss
 
-S, I, R = ss.states(3)
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.3*I         # From S to I, at a rate of β times the fraction infectious
+recovery  = I >> R @ ss.days(10)   # From I to R, after 10 days on average
+sir = ss.Disease(infection, recovery)
+
+sim = ss.Sim(sir)
+sim.run()
+sim.plot()
+```
+
+The same model, written out in full:
+
+```py
+import starsim as ss
+
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
 sir = ss.Disease(
-    infection = ss.Transition(S, I, rate=0.3*I),
-    recovery = ss.Transition(I, R, dur=10)
+    transitions = [
+        ss.Transition(source=S, dest=I, rate=ss.perday(0.3)*I, name='infection'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(10)), name='recovery'),
+    ],
+    name = 'sir',
 )
 
-sim = ss.Sim(sir).run()
-sim.sir.plot()
+sim = ss.Sim(diseases=sir, solver='ode')
+sim.run()
+sim.plot()
 ```
 
-If you prefer something that looks more like equations rather than code, there's an even more compact notation available:
-
-```py
-import starsim as ss
-
-S, I, R = ss.states(3) # Create model states
-inf = S >> I @ 0.3*I   # Define infection at rate beta, mediated by I (*S/N implied)
-rec = I >> R @ 0.1     # Define spontaneous recovery
-ss.Sim(inf, rec).run().plot() # Create, run, and plot the simulation
-```
-
-The code above runs as a compartmental model by default, but you can also run it as an agent-based model (ABM) if you prefer. ABMs come with additional flexibility, such as defining explicit contact networks:
-
-```py
-import starsim as ss
-
-# Define the parameters
-pars = dict(
-    n_agents = 5_000,     # Number of agents to simulate
-    networks = dict(      # Networks define how agents interact with each other
-        type = 'random',  # Use the built-in 'random' network
-        n_contacts = 10   # Each person has 10 contacts with other people  
-    ),
-    diseases = dict(      # Define the disease dynamics
-        type = 'sir',     # Use the built-in SIR disease (including built-in parameters)
-        init_prev = 0.01, # Proportion of the population initially infected
-        beta = 0.05,      # Probability of transmission between contacts
-    )
-)
-
-# Make the sim, run and plot
-sim = ss.Sim(pars)
-sim.run() # Runs as an agent-based model since uses an explicit network
-sim.plot() # Plot all the sim results
-sim.sir.plot() # Plot the standard SIR curves
-```
+These run as a compartmental model (an ODE). To run the same model as agents, give the number of agents, `ss.Sim(sir, n_agents=5_000)`; agents also allow networks of contacts between particular people ([mixing](https://starsim.org/v4/user_guide/populations_mixing.html)).
 
 Or from R:
 
 ```R
 library(starsim)
-load_starsim()
 
-# Define the parameters
-pars <- list(
-    n_agents = 5000,
-    networks = list(type = 'random'),
-    diseases = list(type = 'sir', beta = 0.1)
+states("S I R")
+sir <- Disease(
+  infection = Transition(S, I, rate = 0.3 * I), # From S to I, at a rate of β times the fraction infectious
+  recovery  = Transition(I, R, dur = days(10))  # From I to R, after 10 days on average
 )
 
-# Create, run, and plot the simulation
-sim <- ss$Sim(pars)
+sim <- Sim(sir)
 sim$run()
-sim$diseases$sir$plot()
+sim$plot()
 ```
 
 More usage examples are available in the tutorials and user guide.
@@ -197,4 +178,4 @@ We welcome contributions of all kinds! Questions or comments can be directed to 
 
 We believe in being transparent about AI use. Each page comes with a little note estimating the human vs. AI contribution; hover to get more info. For this page:
 
-[*Authorship*: 🧠90%, 🤖10%](# "Humans wrote everything, except some of the code examples were AI-generated")
+[*Authorship*: 🧠85%, 🤖15%](# "Humans wrote everything, except some of the code examples were AI-generated; the usage examples were revised by AI on Nov 12")

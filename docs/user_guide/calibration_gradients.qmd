@@ -4,12 +4,12 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the Claude draft, with a note on sampling-importance resampling from the Starsim 3 user guide page on SIR calibration; the time-varying transmission rate fitted to a real change, and the note on how honest the posterior is, by AI
+  note: Based on the Claude draft, with a note on sampling-importance resampling from the Starsim 3 user guide page on SIR calibration; the time-varying transmission rate fitted to a real change, and the note on how honest the posterior is, by AI; revised on Nov 12 by AI after the docs review
 ---
 
 For a deterministic model, run as an ODE, Starsim can work out the *gradient*: how each result changes as each parameter changes. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step. Gradients make it possible to fit many parameters quickly, to draw from a posterior with the No-U-Turn sampler (NUTS), and to see which parts of the epidemic a parameter affects.
 
-This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`) and a model whose whole run JAX can follow: a rate that calls a Python function, a module written as code, or a movement register rules this out. The fit says why when it can't use gradients, and `ss.solvers.why_not(sim, 'jax')` says so for any sim (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). If JAX can't use a GPU it finds, `ss.options.jax = 'cpu'` runs it on the CPU.
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`) and a model whose whole run JAX can follow: a rate that calls a Python function, a module written as code, or a movement register rules this out. The fit says why when it can't use gradients, and `ss.solvers.why_not(sim, 'jax')` says so for any sim (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). JAX runs on the CPU unless `ss.options.jax` says otherwise: for these runs, a GPU is several times slower.
 
 ## The gradient of a result
 
@@ -124,11 +124,11 @@ With a likelihood for every series, this is the maximum likelihood estimate (wit
 A posterior is the whole distribution of values consistent with the data. `method='nuts'` draws from it, given a likelihood for every data series, with each parameter's `prior=`, or a uniform prior over its bounds:
 
 ```{python}
-post = sim.fit(method=ss.fitting.method('nuts', draws=250, warmup=250))
+post = sim.fit(method='nuts')
 post.summarize();
 ```
 
-Each chain starts near one of the best points of a scan, spends `warmup=` draws tuning itself, and then makes `draws=` draws (500 of each by default; fewer here). The table gives each parameter's median and 95% interval, with R-hat and the effective sample size; [Fit diagnostics](calibration_diagnostics.qmd#a-posterior) says how to read them.
+Each chain starts near one of the best points of a scan, spends `warmup=` draws tuning itself (these are discarded), and then draws until the chains agree, with enough effective draws of each parameter (see [Fitting methods](calibration_methods.qmd#posteriors)). The table gives each parameter's median and 95% interval, with R-hat and the effective sample size; [Fit diagnostics](calibration_diagnostics.qmd#a-posterior) says how to read them.
 
 The draws themselves are in `post.samples`, one row for each:
 
@@ -189,7 +189,7 @@ post.plot()
 
 ### Other samplers
 
-For stochastic models, and models JAX can't run, the other methods apply: `'pmcmc'`, `'abc-smc'`, and `'if2'` (see [Fitting methods](calibration_methods.qmd)). Starsim's samplers can also be used directly on a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`; see [ss.fitting](../api/fit.qmd). A posterior can also be put together by sampling-importance resampling (SIR, not to be confused with SIR): run draws from the priors (`ss.parallel(sim, priors=True, n_runs=1000)`), score each with `ss.fitting.loglik(run)`, and resample in proportion to the likelihoods; it works for any model, but needs many runs, and fails for many parameters.
+For stochastic models, and models JAX can't run, the other methods apply: `'pmcmc'`, `'abc-smc'`, and `'if2'` (see [Fitting methods](calibration_methods.qmd)). Starsim's samplers can also be used directly on a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`; see [ss.fitting](../api/internals.fitting.qmd). A posterior can also be put together by sampling-importance resampling (SIR, not to be confused with SIR): run draws from the priors (`ss.parallel(sim, priors=True, n_runs=1000)`), score each with `ss.fitting.loglik(run)`, and resample in proportion to the likelihoods; it works for any model, but needs many runs, and fails for many parameters.
 
 ## Further reading
 

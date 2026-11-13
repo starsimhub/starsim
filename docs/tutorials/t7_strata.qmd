@@ -4,24 +4,30 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, from the earlier AI-written tutorials on stratification and on several diseases, with new examples of an under-vaccinated community and of measles immune amnesia. Shortened on Nov 11 by AI
+  note: Written by AI, from the earlier AI-written tutorials on stratification and on several diseases, with new examples of an under-vaccinated community and of measles immune amnesia. Shortened on Nov 11 by AI; simplified on Nov 12 by AI after the docs review, as two parts with their own starting points
 ---
 
 **Who is the outbreak in, and does it make other infections worse?**
 
-[T4](t4_mixing.qmd) split the model by age, but other differences matter too. Where vaccine coverage is high, measles outbreaks happen mostly in communities where it is low, and spread from there. And measles leaves people more vulnerable to other infections for years afterwards.
+[T4](t4_mixing.qmd) split the model by age, but other differences matter too. This tutorial has two parts, each starting from a model of its own:
 
-The first half of this tutorial stratifies the model by vaccination status and by membership of a close-knit community with low coverage. The second runs measles with a second disease that it interacts with. By the end, you will be able to:
+1. [Several ways of grouping people](#part-1-several-ways-of-grouping-people): where vaccine coverage is high, measles outbreaks happen mostly where it is low. This part splits the town by vaccination, and by membership of a close-knit community with low coverage.
+2. [Two diseases that interact](#part-2-two-diseases-that-interact): measles leaves people more vulnerable to other infections for years afterwards. This part runs measles with a second disease that it makes worse.
 
-- stratify a model by several dimensions, and give fractions that differ by another dimension;
-- stratify only part of a model, and say why that is worth doing;
-- give the contacts between groups of two dimensions at once;
+By the end, you will be able to:
+
+- stratify a model by several dimensions, with fractions that differ by another dimension, and contacts between groups of two dimensions;
 - move people between groups at a rate, with `ss.transfer()`;
-- run two diseases in one model, link them with `ss.modify()`, and say what tracking them jointly means.
+- run two diseases in one model, and link them with `ss.modify()`.
 
-## The model so far
+## Part 1: several ways of grouping people
 
-This is the SEIR model from [T5 – Interventions and scenarios](t5_interventions.qmd): 100,000 people in three age groups, mixing by a contact matrix, with 10 infectious on 1 January. Immunity, which started in `R` in T5, comes from vaccination below. A function makes a new copy for each section:
+### The starting point
+
+This is the SEIR model of measles from [T5 – Interventions and scenarios](t5_interventions.qmd): 100,000 people in three age groups, mixing by a contact matrix, with 10 infectious on 1 January. In T5, immunity started in `R`; here it comes from vaccination, so nobody starts immune. A function makes a new copy of the model for each section:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import starsim as ss
@@ -40,9 +46,32 @@ age_contacts = [[10, 6, 1], [3, 8, 1], [3, 6, 3]] # Contacts a day, between age 
 settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 ```
 
-## Vaccination status as a dimension
+## R
 
-Two doses of measles vaccine protect about 97% of people. To model this, stratify by vaccination status, with the vaccinated 97% less susceptible. Unlike an intervention on a date ([T5](t5_interventions.qmd)), a dimension gives the immunity a population already has, and splits results by vaccination status.
+```r
+library(starsim)
+
+states("S E I R")
+infection   <- Transition(S, E, rate = 0.14 * I) # β = 0.14 per contact per day
+progression <- Transition(E, I, dur = days(10))  # Latent for 10 days on average
+recovery    <- Transition(I, R, dur = days(8))   # Infectious for 8 days on average
+
+make_measles <- function() { # The SEIR model of measles, by age, with nobody immune yet
+  measles <- Disease(infection, progression, recovery, init_n = list(I = 10), name = "measles")
+  measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+
+  measles
+}
+
+age_contacts <- rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3)) # Contacts a day, between age groups
+make_sim <- function(measles, ...) { # A sim of 100,000 people for a year, with any other settings given
+  Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", ...)
+}
+```
+:::
+
+### Vaccination status
+
+To give the population its immunity, stratify by vaccination status. Two doses of measles vaccine protect about 97% of people. Here this is modeled as the vaccinated being 97% less susceptible: everyone vaccinated has 3% of the usual susceptibility (a "leaky" effect), rather than 97% of them being fully protected and 3% not at all ("all or nothing"; see [Products](../user_guide/interventions_products.qmd)). Unlike a vaccination campaign on a date ([T5](t5_interventions.qmd)), a dimension gives the immunity a population already has, and splits results by vaccination status.
 
 Coverage often differs by age: here 85% of children, 92% of adults aged 15 to 64, and 95% of people 65 and over. A fraction that differs by another dimension is an `ss.by()` over both: a row for each age group and a column for each level of vaccination, each row adding up to 1, so each age group keeps its size. Written out, it is a table with a row for each combination:
 
@@ -79,8 +108,12 @@ coverage_by_age = ss.by(coverage_table)
 ```
 :::
 
-```{python}
+`ss.levels()` gives the levels of the new dimension with their options: the fractions, and the states the dimension applies to (here only `S`; see below). `ss.modify()` then changes a quantity of the disease by level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated:
 
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
 measles = make_measles()
 measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_age, states=['S']))
 protection = ss.modify('measles.rel_sus', multiply=ss.by(vaccinated=[1, 0.03])) # The vaccinated are 3% as susceptible
@@ -90,7 +123,23 @@ sim.run()
 sim.results.measles.infection.by('vaccinated').plot()
 ```
 
-`ss.levels()` gives the levels with their options: the fractions, which depend on age, and the states the dimension applies to (see below). `ss.modify()` changes a quantity of a disease, here by level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints an R0 of about 2.3, not 16: the vaccinated are part of the population this R0 is worked out for, and most are protected. The outbreak is much smaller than with nobody immune:
+## R
+
+```r
+measles <- make_measles()
+measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_age, states = list("S")))
+protection <- modify("measles.rel_sus", multiply = ss$by(vaccinated = c(1, 0.03))) # The vaccinated are 3% as susceptible
+
+sim <- make_sim(measles, networks = contacts(ages = c(0, 15, 65), matrix = age_contacts), connectors = protection)
+sim$run()
+sim$results$measles$infection$by("vaccinated")$plot()
+```
+:::
+
+The run prints an R0 of about 2.3, not 16: R0 here is worked out for the whole population, vaccinated included, and most of it is protected. Who is infected?
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 res = sim.results.measles
@@ -99,13 +148,28 @@ print('Among the vaccinated:', round(res.infection.select(vaccinated=True).sum()
 print('Among unvaccinated children:', round(res.infection.select(vaccinated=False, age='0-14').sum()))
 ```
 
-Even with a vaccine that protects 97%, about two in five of those infected are vaccinated, since there are so many more of them. This is common in real outbreaks, and doesn't mean the vaccine is failing: each vaccinated person is still far less likely to be infected.
+## R
 
-`states=['S']` stratifies only the susceptible state by vaccination. This is *partial stratification*: once infected, a vaccinated person is the same as anyone else in this model, so people enter `E` with no level of vaccination, and splitting `E`, `I`, and `R` would only add compartments that behave the same. So `S` has 3 × 2 = 6 compartments, and `E`, `I`, and `R` 3 each. Results by a dimension count only the states that have it, so `res.I.by('vaccinated')` raises an error here; the flow out of `S`, `res.infection.by('vaccinated')`, says who was infected. A dimension that people mix by (with a contact matrix) can't be partial, since everyone needs a level of it to mix as. See [Stratification](../user_guide/building_stratification.qmd) for this and for `who=`, which narrows a dimension to some groups rather than some states (e.g. pregnancy, for women only).
+```r
+res <- sim$results$measles
+cat("Infections:", round(res$infection$sum()), "\n")
+cat("Among the vaccinated:", round(res$infection$select(vaccinated = TRUE)$sum()), "\n")
+cat("Among unvaccinated children:", round(res$infection$select(vaccinated = FALSE, age = "0-14")$sum()), "\n")
+```
+:::
 
-## An under-vaccinated community
+About two in five of those infected are vaccinated, since there are so many more of them. This is common in real outbreaks, and doesn't mean the vaccine is failing: each vaccinated person is still far less likely to be infected.
 
-Overall coverage says little if the unvaccinated are clustered. Suppose 5% of the town belong to a close-knit community in which 60% are vaccinated (at every age), against 98% of everyone else. Overall, 96% are vaccinated and about 93% protected, close to the herd immunity threshold of 94% (1 − 1/16). Community members make 70% of their contacts with each other and 30% with the rest of the town. This is a third dimension, `community`, with coverage an `ss.by()` over community and vaccination:
+`states=['S']` splits only `S` by vaccination: this is *partial stratification*. Once infected, a vaccinated person is like anyone else in this model, so splitting `E`, `I`, and `R` would only add compartments that behave the same. So results by vaccination count only `S` and the flows out of it: `res.infection.by('vaccinated')` says who was infected, but `res.I.by('vaccinated')` raises an error. A dimension that people mix by can't be partial, since everyone needs a level of it to mix as. See [Stratification](../user_guide/building_stratification.qmd) for more.
+
+### An under-vaccinated community
+
+Overall coverage says little if the unvaccinated are clustered. Suppose 5% of the town belong to a close-knit community in which 60% are vaccinated (at every age), against 98% of everyone else. Overall, 96% are vaccinated; with their susceptibility 97% lower, it is as if about 93% were immune, close to the 94% needed to stop measles spreading (1 − 1/16). Community members make 70% of their contacts with each other and 30% with the rest of the town.
+
+This is a new dimension, `community`, with coverage now given by community rather than by age:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 coverage_by_community = ss.by([[0.02, 0.98],  # General: 2% unvaccinated, 98% vaccinated
@@ -120,10 +184,29 @@ def make_community_measles():
     return measles
 ```
 
-Contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of their entries: a child in the community has 10 contacts a day with children, 70% of them within the community, so 7. (The rest of the town makes 1.6% of its contacts with the community, so that the total contacts each way are the same.) To see what the clustering does, compare it with the community mixing like everyone else, with the same coverage:
+## R
+
+```r
+coverage_by_community <- ss$by(rbind(c(0.02, 0.98),  # General: 2% unvaccinated, 98% vaccinated
+                                     c(0.40, 0.60)), # Close-knit community
+                               dims = c("community", "vaccinated"))
+
+make_community_measles <- function() { # The measles model, by age, community, and vaccination
+  measles <- make_measles()
+  measles$stratify(community = list("general" = 0.95, "close-knit" = 0.05))
+  measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S")))
+  measles
+}
+```
+:::
+
+Contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of their entries: a child in the community has 10 contacts a day with children, 70% of them within the community, so 7. To see what the clustering does, compare it with the community mixing like everyone else, with the same coverage:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
-clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65])
+clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65]) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
 mixed     = ss.contacts(age=age_contacts, community=[[0.95, 0.05], [0.95, 0.05]], ages=[0, 15, 65])
 
 sims = {
@@ -134,44 +217,89 @@ msim = ss.parallel(sims)
 msim.plot('measles.infection')
 ```
 
+## R
+
+```r
+clustered <- contacts(age = age_contacts, community = rbind(c(0.984, 0.016), c(0.3, 0.7)), ages = c(0, 15, 65)) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
+mixed     <- contacts(age = age_contacts, community = rbind(c(0.95, 0.05), c(0.95, 0.05)), ages = c(0, 15, 65))
+
+msim <- parallel(list(
+  "Mixing with everyone" = make_sim(make_community_measles(), networks = mixed, connectors = protection),
+  "Close-knit"           = make_sim(make_community_measles(), networks = clustered, connectors = protection)
+))
+msim$plot("measles.infection")
+```
+:::
+
 Mixed with everyone, unvaccinated community members are surrounded mostly by vaccinated people, and the outbreak smolders. Clustered, the community has a reproduction number of about 7 within itself, against about 0.8 in the rest of the town, so it has an explosive outbreak within weeks, which spills over into the town. `select()` picks out any combination of groups, summing over the dimensions not named:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 for sim in msim.sims:
     res = sim.results.measles
     print(sim.label, '- in the community:', round(res.infection.select(community='close-knit').sum()), '- elsewhere:', round(res.infection.select(community='general').sum()))
-sim = msim.sims['Close-knit']
-sim.results.measles.I.by('community').plot()
+msim.sims['Close-knit'].results.measles.I.by('community').plot()
 ```
+
+## R
+
+```r
+for (sim in msim$sims) {
+  res <- sim$results$measles
+  cat(sim$label, "- in the community:", round(res$infection$select(community = "close-knit")$sum()), "- elsewhere:", round(res$infection$select(community = "general")$sum()), "\n")
+}
+msim$sims[["Close-knit"]]$results$measles$I$by("community")$plot()
+```
+:::
 
 With clustering, there are about ten times as many infections, and the community, 5% of the town, has more than half. A model that averaged coverage over the town would miss this, and with it where vaccination would do the most good.
 
-## Moving between groups
+### Moving between groups
 
-So far, nobody changes group (and with no births or deaths, nobody changes age group). `ss.transfer()` moves people from one level of a dimension to another at a rate, without changing their disease state. Suppose an outreach program offers catch-up vaccination to unvaccinated community members at a rate of 2 a year (reaching about 85% within a year, if measles doesn't first). `ss.transfer(dict(vaccinated=True), rate=...)` moves people to the level `True`, here at a rate given by community, 0 outside it. A transfer is given to the `stratify()` call of the dimension it moves people along, by name:
+So far, nobody changes group. `ss.transfer()` moves people from one level of a dimension to another at a rate, without changing their disease state. Suppose an outreach program offers catch-up vaccination to unvaccinated community members at a rate of 2 a year (reaching about 85% within a year, if measles doesn't first), and nobody outside it. A transfer is given to the `stratify()` call of the dimension it moves people along, by name:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
-catchup = ss.transfer(dict(vaccinated=True), rate=ss.peryear(ss.by(community=[0, 2])), states=['S'])
+catchup = ss.transfer(dict(vaccinated=True), rate=ss.peryear(ss.by(community=[0, 2])), states=['S']) # To vaccinated, at a rate of 0 a year outside the community and 2 in it
 
 measles = make_measles()
 measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
 measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_community, states=['S']), catchup=catchup)
 
 sims = {
-    'No catch-up': msim.sims['Close-knit'],
+    'No catch-up': ss.Sim(make_community_measles(), networks=clustered, connectors=protection, **settings),
     'Catch-up':    ss.Sim(measles, networks=clustered, connectors=protection, **settings),
 }
 msim = ss.parallel(sims)
 msim.plot('measles.infection')
-```
-
-```{python}
-res = msim.sims['Catch-up'].results.measles
-print('Doses given:', round(res.catchup.sum()))
+print('Doses given:', round(msim.sims['Catch-up'].results.measles.catchup.sum()))
 msim.summarize().loc['measles_infection']
 ```
 
-A transfer is a transition, so it has a result by its name (`catchup`), and interventions can change it. About 600 doses prevent about 1,000 infections, nearly two per dose, since each is given where the outbreak is. (Exercise 2 gives the same doses to the rest of the town.) Three kinds of movement between groups are easy to confuse:
+## R
+
+```r
+catchup <- ss$transfer(list(vaccinated = TRUE), rate = peryear(ss$by(community = c(0, 2))), states = list("S")) # To vaccinated, at a rate of 0 a year outside the community and 2 in it
+
+measles <- make_measles()
+measles$stratify(community = list("general" = 0.95, "close-knit" = 0.05))
+measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S")), catchup = catchup)
+
+msim <- parallel(list(
+  "No catch-up" = make_sim(make_community_measles(), networks = clustered, connectors = protection),
+  "Catch-up"    = make_sim(measles, networks = clustered, connectors = protection)
+))
+msim$plot("measles.infection")
+cat("Doses given:", round(msim$sims[["Catch-up"]]$results$measles$catchup$sum()), "\n")
+msim$summarize()$loc["measles_infection"]
+```
+:::
+
+A transfer is a transition, so it has a result by its name (`catchup`). About 600 doses prevent about 1,000 infections, nearly two per dose, since each is given where the outbreak is. Three kinds of movement between groups are easy to confuse:
 
 | Movement | What it is | How it is given |
 |---|---|---|
@@ -179,24 +307,33 @@ A transfer is a transition, so it has a result by its name (`catchup`), and inte
 | A delivery | People move at given times, with a coverage (a vaccination campaign) | `ss.vaccinate()` or `ss.Event(...)`, as an intervention ([T5](t5_interventions.qmd)) |
 | Aging | People move up the age groups as they get older | Automatic, when people are born or die |
 
-Each state has a compartment for each combination of levels, so dimensions multiply: here `S` has 3 × 2 × 2 = 12 compartments, and `E`, `I`, and `R` 6 each. Sixteen age groups, five communities, and two levels of vaccination in every state would be 640. Large models still run quickly, but are hard to check; `sim.describe()` lists each dimension, its levels, and the states it applies to. Stratification works the same as agents (see [T1](t1_intro.qmd#the-same-model-as-agents)): each agent has a value of each dimension, transfers change it, and results are counted by group in the same way.
+Dimensions multiply: here `S` has 3 × 2 × 2 = 12 compartments, and `E`, `I`, and `R` 6 each. `sim.describe()` lists each dimension, its levels, and the states it applies to. Stratification works the same as agents (see [T1](t1_intro.qmd#the-same-model-as-agents)): each agent has a level of each dimension, and transfers change it.
 
-## A second disease
+## Part 2: two diseases that interact
+
+### The starting point
 
 Measles damages the immune system's memory of other infections. For two to three years after recovering, children are more likely to fall ill from other infections ("immune amnesia"), so a measles outbreak leaves a wake of other infections. Modeling this needs a second disease that interacts with measles.
 
+This part starts again from the measles model of [T5](t5_interventions.qmd), with immunity in `R` by age, and no vaccination dimension. Measles needs one new state, to remember who has had it recently: in a compartmental model, what a person has been through has to be a state. Recovery now leads to `A` (recovered, with amnesia), and people leave `A` for `R` after two years on average.
+
 The second disease is pneumococcus, a bacterium many children carry in the nose and throat for a few weeks at a time, and a leading cause of pneumonia. It is an SIS model: people acquire it (`S` to `C`, for carrying) from carriers, and clear it after a month on average. About a quarter of children and a sixth of adults carry it at any time, so it starts there.
 
-Measles needs one new state, to remember who has had it recently: in a compartmental model, what a person has been through has to be a state. Recovery now leads to `A` (recovered, with amnesia), and people leave `A` for `R` after two years on average. `unit='day'` says that bare numbers (the values of β) are per day. The run is three years long, to show the wake, with immunity in `R` by age as in [T5](t5_interventions.qmd):
+The run is three years long, to show the wake. The durations are in days and years, so `unit='day'` says that the bare values of β are per day (see [Time](../user_guide/building_time.qmd#units)):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
-ages = {0: 0.3, 15: 0.6, 65: 0.1}
-contacts = ss.contacts(ages=[0, 15, 65], matrix=age_contacts)
+import starsim as ss
+
+ages = {0: 0.3, 15: 0.6, 65: 0.1} # Ages 0-14, 15-64, and 65+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2028-01-01', unit='day')
 
 S, E, I, A, R = ss.states('S E I A R')
-infection   = S >> E @ 0.14*I
-progression = E >> I @ ss.days(10)
+infection   = S >> E @ 0.14*I       # β = 0.14 per contact per day
+progression = E >> I @ ss.days(10)  # Latent for 10 days on average
 recovery    = I >> A @ ss.days(8)   # Recovered, with immune amnesia
 restored    = A >> R @ ss.years(2)  # Immune memory of other infections restored after 2 years on average
 measles = ss.Disease(infection, progression, recovery, restored,
@@ -207,7 +344,7 @@ measles = ss.Disease(infection, progression, recovery, restored,
 measles.stratify(age=ages)
 
 S, C = ss.states('S C')
-acquisition = S >> C @ 0.003*C     # Acquired through contact with carriers
+acquisition = S >> C @ 0.003*C     # Acquired through contact with carriers, at a rate of 0.003 per contact per day
 clearance   = C >> S @ ss.days(30) # Carried for a month on average
 pneumococcus = ss.Disease(acquisition, clearance,
     init = dict(C=ss.by(age=[0.25, 0.17, 0.17])), # The fraction carrying it in each age group
@@ -217,15 +354,63 @@ pneumococcus.stratify(age=ages)
 measles.diagram()
 ```
 
-## An interaction
+## R
+
+```r
+library(starsim)
+
+ages <- list("0" = 0.3, "15" = 0.6, "65" = 0.1) # Ages 0-14, 15-64, and 65+
+age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3))) # Contacts a day, between age groups
+make_sim <- function(...) { # 100,000 people for three years, with any other settings given
+  Sim(networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2028-01-01", unit = "day", ...)
+}
+
+states("S E I A R")
+measles <- Disease(
+  infection   = Transition(S, E, rate = 0.14 * I), # β = 0.14 per contact per day
+  progression = Transition(E, I, dur = days(10)),  # Latent for 10 days on average
+  recovery    = Transition(I, A, dur = days(8)),   # Recovered, with immune amnesia
+  restored    = Transition(A, R, dur = years(2)),  # Immune memory of other infections restored after 2 years on average
+  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+  init_n = list(I = 10),
+  name   = "measles"
+)
+measles$stratify(age = ages)
+
+states("S C")
+pneumococcus <- Disease(
+  acquisition = Transition(S, C, rate = 0.003 * C), # Acquired through contact with carriers, at a rate of 0.003 per contact per day
+  clearance   = Transition(C, S, dur = days(30)),   # Carried for a month on average
+  init = list(C = ss$by(age = c(0.25, 0.17, 0.17))), # The fraction carrying it in each age group
+  name = "pneumococcus"
+)
+pneumococcus$stratify(age = ages)
+measles$diagram()
+```
+:::
+
+### An interaction
 
 `ss.modify()` changes a quantity for the people a condition selects. Each disease has a relative susceptibility (`rel_sus`) and transmissibility (`rel_trans`), both 1 to begin with, so an interaction is a change to one of these for people in some state of the other disease. Here, people with measles or amnesia are twice as likely to acquire pneumococcus (an illustrative value):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 amnesia = ss.modify(pneumococcus.rel_sus, multiply=2, who=measles.I | measles.A)
 ```
 
-It reads as a sentence: for people infectious with measles or with amnesia (`who=measles.I | measles.A`), multiply their susceptibility to pneumococcus by 2. The condition is evaluated as the sim runs, so it stops applying when people reach `R`; a modifier never overwrites the quantity it changes, so nothing needs restoring. Interactions that are part of the biology go in `connectors=` (an intervention would go in `interventions=`; they differ only in when they act in each step). Run the two diseases with and without it:
+## R
+
+```r
+amnesia <- modify(pneumococcus$rel_sus, multiply = 2, who = measles$I | measles$A)
+```
+:::
+
+It reads as a sentence: for people infectious with measles or with amnesia, multiply their susceptibility to pneumococcus by 2. The condition is evaluated as the sim runs, so it stops applying when people reach `R`, and the modifier never overwrites `rel_sus`, so nothing needs restoring. Interactions that are part of the biology go in `connectors=`. Run the two diseases with and without it:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sims = {
@@ -234,24 +419,42 @@ sims = {
 }
 msim = ss.parallel(sims)
 msim.plot(['measles.I', 'pneumococcus.C'])
-```
-
-```{python}
 msim.summarize().loc['pneumococcus_acquisition']
 ```
 
+## R
+
+```r
+msim <- parallel(list(
+  "Independent" = make_sim(diseases = list(measles, pneumococcus)),
+  "Interacting" = make_sim(diseases = list(measles, pneumococcus), connectors = amnesia)
+))
+msim$plot(c("measles.I", "pneumococcus.C"))
+msim$summarize()$loc["pneumococcus_acquisition"]
+```
+:::
+
 The measles outbreak is the same in both, since pneumococcus doesn't affect it. With the interaction, pneumococcus carriers rise by about a fifth over the outbreak's year, and stay high for years after, as people with amnesia slowly recover. The effect is larger than the 9% who had measles would suggest: they carry pneumococcus more often, and pass it to more people, including people who never had measles. Since some carriers develop pneumonia, a measles outbreak would cause more pneumonia for years.
 
-## Diseases tracked jointly
+### Diseases tracked jointly
 
-A compartmental model of pneumococcus alone needs only the number of carriers. With the interaction, it also needs how many susceptible people have measles amnesia, which separate compartments for each disease can't say. So Starsim tracks linked diseases jointly, with a compartment for each combination of their states (`S` and `S`, `A` and `C`, and so on), between which each disease's transitions move people. `describe()` shows how:
+With the interaction, a compartmental model of pneumococcus needs to know how many of the people susceptible to it have measles amnesia, which separate compartments for each disease can't say. So Starsim tracks linked diseases jointly, with a compartment for each combination of their states (`S` and `S`, `A` and `C`, and so on). `describe()` shows this:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
-sim = msim.sims['Interacting']
-sim.describe()
+msim.sims['Interacting'].describe()
 ```
 
-Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10 joint states in each age group, and why: the modifier acts on pneumococcus by a state of measles. It also says what is assumed at the start: that the two infections are independent, so the fraction carrying pneumococcus is the same in every measles state. Joint states multiply, so Starsim tracks diseases jointly only up to a limit (`ss.options.max_joint`, 10,000 compartments by default); above it, the default solver runs the model as agents, each with a state in each disease. Diseases that don't refer to each other's states are not tracked jointly, so link only those that interact. [Connectors](../user_guide/interventions_connectors.qmd) covers modifiers in full, including interactions that change transmission or the course of a disease, and connectors written as code.
+## R
+
+```r
+msim$sims[["Interacting"]]$describe()
+```
+:::
+
+Its "jointly" line says that the two diseases are tracked as 5 × 2 = 10 joint states in each age group, because the modifier acts on pneumococcus by a state of measles, and that at the start the two infections are assumed independent. Joint states multiply, so above a limit (`ss.options.max_joint`, 10,000 compartments by default) the default solver runs the model as agents instead. Diseases that don't refer to each other's states are not tracked jointly, so link only those that interact. [Connectors](../user_guide/interventions_connectors.qmd) covers modifiers in full, and connectors written as code.
 
 ## Exercises
 
@@ -259,7 +462,7 @@ Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10
 2. Give the same number of catch-up doses (about 600) to unvaccinated people outside the community instead, using a transfer whose rate is 0 in the community. How many infections do they prevent, compared with the doses given in the community?
 3. In the model with two diseases, add a measles vaccination campaign for children on 1 February (`ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-02-01', coverage=0.8)`; the vaccine is for the disease whose age groups `who=` names, or give `disease=` if it names none, e.g. `who=ss.person.age < 15`). How many pneumococcus acquisitions does it prevent over the three years, with and without the interaction? What does this mean for working out the benefit of measles vaccination?
 
-[Solutions](solutions.qmd#t7-stratification-and-co-transmission) · Next: [T8 – Custom modules](t8_modules.qmd)
+[Solutions](solutions_t7_strata.qmd) · Next: [T8 – Custom modules](t8_modules.qmd)
 
 ## Further reading
 

@@ -1,9 +1,9 @@
 ---
 title: FAQ
 authorship:
-  human: 60
-  ai: 40
-  note: Some parts written by humans, the rest written by AI; all reviewed by humans; shortened on Nov 11 by AI
+  human: 50
+  ai: 50
+  note: Some parts written by humans, the rest written by AI; all reviewed by humans; shortened on Nov 11 by AI; shortened again on Nov 12 by AI after the docs review
 ---
 
 Short answers to common questions, each with a link to the page that covers it in full.
@@ -14,20 +14,7 @@ Short answers to common questions, each with a link to the page that covers it i
 
 No! Starsim covers a lot (compartmental and agent-based models, networks, demographics, geography, calibration, and more), but you only need the parts your model uses, and the rest stays out of the way. (By analogy: you probably use `pandas`, but you've probably never used [`extractall`](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extractall.html).) A simple SIR model is a few lines, and needs nothing from the pages on networks or custom modules.
 
-To get started, read:
-
-1. [T1 – Getting started](../tutorials/t1_intro.qmd), [T2 – Building a model](../tutorials/t2_model.qmd), and [T3 – Building a disease](../tutorials/t3_disease.qmd): states, transitions, parameters, and results
-2. [T4 – Mixing](../tutorials/t4_mixing.qmd) and [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd), if your model has age groups or interventions
-3. [T6 – Data and calibration](../tutorials/t6_data.qmd), to fit the model to data
-4. [Writing models](building_writing.qmd) and [Solvers and backends](running_solvers.qmd) in this user guide, to look things up as you go
-
-For **agent-based modeling**, which is written the same way, also read the "As agents" parts of [T3](../tutorials/t3_disease.qmd#as-agents) and [T5](../tutorials/t5_interventions.qmd#as-agents), the networks of [T4](../tutorials/t4_mixing.qmd#contacts-per-person), [T8 – Custom modules](../tutorials/t8_modules.qmd), and [People and demographics](populations_people.qmd), [Mixing](populations_mixing.qmd), and [Array indexing](mechanics_indexing.qmd) in this user guide.
-
-The [Architecture](architecture_index.qmd) pages, on how Starsim works inside, are for those who want to know; no model needs them.
-
-### Is Starsim available in R?
-
-Yes: see [R-Starsim](https://r.starsim.org).
+To get started, follow [T1](../tutorials/t1_intro.qmd)–[T3](../tutorials/t3_disease.qmd), then the tutorials your model needs (the [tutorials page](../tutorials.qmd) helps you choose), and look things up in this user guide as you go. Agent-based models are written the same way; the "Advanced" sections of the tutorials show what changes as agents. No model needs the [Architecture](architecture_index.qmd) pages.
 
 ### Can I use Starsim with an AI coding agent?
 
@@ -39,7 +26,7 @@ We were fed up with the limitations of existing disease models (especially our o
 
 ### Where can I get help?
 
-[Email us](mailto:info@starsim.org)! Or if you prefer, you can look at [Profiling and debugging](running_debugging.qmd), which covers common pitfalls and how to find what is wrong. If that doesn't find it, cut the problem down to the smallest script that shows it and open an issue on [GitHub](https://github.com/starsimhub/starsim/issues), with the script, what it printed, and what you expected.
+[Email us](mailto:info@starsim.org)! [Profiling and debugging](running_debugging.qmd) covers common pitfalls. To report a bug, open an issue on [GitHub](https://github.com/starsimhub/starsim/issues) with the smallest script that shows it (see [Contributing](../contributing/index.qmd)).
 
 ## Building models
 
@@ -57,7 +44,7 @@ They are starting points, not models of a particular setting. The [library](libr
 
 ### I have a model in Starsim 3 or another framework. Can I bring it over?
 
-In almost all cases, yes. Starsim can import models from several frameworks, including EpiModel, odin, and epydemix; others, such as LASER, have a guide to translating by hand (or by agent); Starsim 3 libraries like [STIsim](https://stisim.org) were automatically rewritten for this version by a migration script (`python -m starsim.converters.migrate`). See [Import/export](building_import.qmd), which has a page for each. If a model doesn't translate and you'd like it to, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues) and we'll see if we can get it to work.
+In almost all cases, yes. Starsim imports models from more than a dozen frameworks, including EpiModel, odin, and epydemix, and Starsim 3 code can be rewritten with `python -m starsim.converters.migrate`. See [Import/export](building_import.qmd) and the [migration guide](../migration/v3_v4.md). If a model doesn't translate, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues).
 
 ## Running and fitting
 
@@ -75,4 +62,4 @@ Give the parameters you want fitted bounds, give the sim data whose columns are 
 
 ### Why do two runs give different results, and how do I make them match?
 
-A stochastic run (agents, or a stochastic compartmental solver) depends on its random seed, `rand_seed`: the same seed gives the same results, and different seeds give different ones. One stochastic run is not a result, so run several seeds and look at the spread. When comparing scenarios, Starsim uses *common random numbers*, so that the difference between two runs with the same seed comes from what was changed rather than from chance. See [Scenarios](running_scenarios.qmd#seeds) and [Random numbers](mechanics_random.qmd).
+A stochastic run (agents, or a stochastic compartmental solver) depends on its random seed, `rand_seed`: the same seed gives the same results, and different seeds give different ones. One stochastic run is not a result, so run several seeds and look at the spread. When comparing scenarios, Starsim uses *common random numbers*, so that two runs with the same seed differ much less by chance, and more of their difference comes from what was changed. See [Scenarios](running_scenarios.qmd#seeds) and [Random numbers](mechanics_random.qmd).

@@ -1,32 +1,19 @@
 ---
 title: Solutions
-jupyter: python3
+format-links: false
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; made an index of the solution pages on Nov 12 by AI after the docs review
 ---
 
-These are solutions to the exercises at the end of each tutorial. Many of the exercises are open-ended, so these are examples: there are often other good answers. Each section starts from its tutorial's model, so it can be run on its own.
+The solutions to each tutorial's exercises. Many exercises are open-ended, so these are examples: there are often other good answers. Each page starts from its tutorial's model, so it runs on its own.
 
-```{python}
-#| tags: [hide-cell]
-%pip install -q starsim # Install Starsim if required
-```
-
-{{< include _solutions_t1_intro.qmd >}}
-
-{{< include _solutions_t2_model.qmd >}}
-
-{{< include _solutions_t3_disease.qmd >}}
-
-{{< include _solutions_t4_mixing.qmd >}}
-
-{{< include _solutions_t5_interventions.qmd >}}
-
-{{< include _solutions_t6_data.qmd >}}
-
-{{< include _solutions_t7_strata.qmd >}}
-
-{{< include _solutions_t8_modules.qmd >}}
-
+- [T1 – Getting started](solutions_t1_intro.qmd)
+- [T2 – Building a model](solutions_t2_model.qmd)
+- [T3 – Building a disease](solutions_t3_disease.qmd)
+- [T4 – Mixing](solutions_t4_mixing.qmd)
+- [T5 – Interventions and scenarios](solutions_t5_interventions.qmd)
+- [T6 – Data and calibration](solutions_t6_data.qmd)
+- [T7 – Stratification and co-transmission](solutions_t7_strata.qmd)
+- [T8 – Custom modules](solutions_t8_modules.qmd)

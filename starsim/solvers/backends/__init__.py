@@ -12,6 +12,7 @@ come in several sets (Numba's here, and Rust's, built from `../rust/`), which gi
     ss.solvers.backends.rust                             # Swaps in the Rust kernels, once built (see ss.options.kernels)
     ss.solvers.backends.keep_memory(), release_memory()  # Keep large freed arrays for reuse (the default), or give them back
     ss.solvers.backends.compiling()                      # Say what is being compiled, and about how long it takes
+    ss.solvers.backends.timed_compile()                  # The same around a block, then how long it took (timed_first_call() for a function's first call)
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -21,4 +22,4 @@ from . import passes
 from .memory import keep as keep_memory, release as release_memory
 keep_memory() # Large arrays freed are kept for reuse, so new ones take no page faults: see memory.py
 from .jit import jit # ss.solvers.backends.jit is the function; its module is starsim.solvers.backends.jit
-from .cache import compiling
+from .cache import compiling, timed as timed_compile, timed_first as timed_first_call

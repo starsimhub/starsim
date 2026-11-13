@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page; bed nets replaced by masks, to suit a directly transmitted infection, by AI
+  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page; bed nets replaced by masks, to suit a directly transmitted infection, by AI; revised on Nov 12 by AI after the docs review
 ---
 
-Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a calibrated model: given a budget, how should it be divided between programs to do the most good? With diminishing returns on each program, the best division is rarely all to the program that looks best on its own. `sim.optimize()` finds it with the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries. Where costs come from is in [Health economics](library_econ.qmd).
+Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a model whose parameters are set, usually by calibration: given a budget, how should it be divided between programs to do the most good? With diminishing returns on each program, the best division is rarely all to the program that looks best on its own. `sim.optimize()` finds it with the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries. Where costs come from is in [Health economics](library_econ.qmd).
 
 ## Spending as parameters
 
@@ -66,9 +66,9 @@ compare.plot('sir.I')
 The search (SciPy's SLSQP) is over the fractions of the total, and each point it tries is a run of the model. It is local, and assumes that the result changes smoothly with the spending, so:
 
 - **Use a deterministic model.** With a stochastic model, the search can't tell a better allocation from a lucky run. Optimize the ODE form of the model (`solver='ode'`), or give a goal function that averages many runs.
-- **Make returns diminish.** If every program's effect grows in proportion to its spending, the answer is to put everything into the best one. The answer is only as good as the curves that say what spending buys, so try the plausible range of costs and effects.
+- **Make returns diminish.** If every program's effect grows in proportion to its spending, the answer is often to put everything into one program, though not always: the epidemic itself responds to the programs nonlinearly, so even linear effects on transmission need not give a result that is linear in the spending. The answer is only as good as the curves that say what spending buys, so try the plausible range of costs and effects.
 - **Check that the answer is not one of several.** With more than a few programs, start from another allocation and compare. If the search stops before it has settled (`converged` is False), `maxiter=` (50 by default) lets it run longer.
-- **Calibrate first** (see [Fitting a model](calibration_fitting.qmd)): an allocation optimized on an uncalibrated model optimizes the wrong epidemic.
+- **Parameterize the epidemic first**, usually by fitting it to data (see [Fitting a model](calibration_fitting.qmd)), or with values justified from elsewhere: an allocation optimized on the wrong epidemic is optimized for the wrong question.
 
 ### What to optimize, and when
 

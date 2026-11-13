@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Based on the Claude draft, with the introduction to calibration and to optimization-based fitting adapted from the Starsim 3 user guide page on calibration; the worked fit made realistic (data from an agent-based run, the initial infections fitted, a fitted dispersion) and appendices added by AI; shortened on Nov 11 by AI
+  note: Based on the Claude draft, with the introduction to calibration and to optimization-based fitting adapted from the Starsim 3 user guide page on calibration; the worked fit made realistic (data from an agent-based run, the initial infections fitted, a fitted dispersion) and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Calibration is fitting a model's parameters to data: finding the values for which the model's results match what was observed. A model of a measles outbreak may know from the literature how long people are infectious, but not how fast measles spreads in this particular town, or what fraction of cases were reported: those are the parameters to estimate. A best fit (the single set of values that fits best) is usually enough for a first exploration; when the uncertainty in the values matters too, a posterior (the distribution of values consistent with the data) can be fitted instead.
@@ -196,7 +196,7 @@ fit = sim.fit(likelihood=dict(cases=ss.nbinom(n=10)))     # Or for one fit, by s
 fit = sim.fit(likelihood=ss.nbinom(n=10))                  # Or the same for every series
 ```
 
-The likelihoods are listed in the [appendix](#likelihoods-and-priors). A likelihood can also be a function `fn(observed, model)` that returns the log-likelihood of each value; it can't be differentiated in JAX, so the default fit then uses Nelder-Mead.
+The [appendix](#likelihoods-and-priors) lists the likelihoods, with the data each suits. A likelihood can also be a function `fn(observed, model)` that returns the log-likelihood of each value; it can't be differentiated in JAX, so the default fit then uses Nelder-Mead.
 
 With a likelihood for every series, the fit maximizes their summed log-likelihood (for a stochastic model, an estimate of it; see [below](#a-stochastic-model)), and the methods that give a posterior can be used. A fit uses likelihoods for every series or for none: a mix, or likelihoods with `loss=`, is an error. A negative binomial suits reported cases, and its dispersion `n` (smaller is more variable) can be fitted too:
 
@@ -325,17 +325,17 @@ Every kind of value that a fit can take as a parameter, and how it is named in `
 
 ### Likelihoods and priors
 
-The likelihoods that `likelihood=` (or `ss.outcome(..., likelihood=)`) takes. In each, the model's value is the mean (or, for a fraction, the probability). "In JAX" means the log-likelihood can be taken in JAX, as gradient-based fits and NUTS need:
+The likelihoods that `likelihood=` (or `ss.outcome(..., likelihood=)`) takes, and the data each suits. "In JAX" means the log-likelihood can be taken in JAX, as gradient-based fits and NUTS need:
 
-| Likelihood | For data that are | In JAX |
-|---|---|---|
-| `ss.poisson()` | Counts, such as reported cases | Yes |
-| `ss.nbinom(n=...)` | Counts that vary more than a Poisson, with `n` the dispersion (smaller is more variable); `n` can be an `ss.par` with bounds, and is then fitted | Yes |
-| `ss.normal(std=...)` | Continuous values, with the standard deviation `std` | Yes |
-| `ss.lognormal(std=...)` | Positive continuous values, with the standard deviation `std` | Yes |
-| `ss.binom(n=...)` | The number who test positive out of `n` surveyed, with the model's fraction (e.g. a prevalence) as the probability | Yes |
-| `ss.bernoulli()` | Yes or no outcomes | Yes |
-| A function `fn(observed, model)` | Anything else (e.g. a beta-binomial from SciPy): it returns the log-likelihood of each value | No: the default fit uses Nelder-Mead; a method with gradients needs `require_jax=False` |
+| Likelihood | The model's value is | Suits | In JAX |
+|---|---|---|---|
+| `ss.poisson()` | The mean count | Counts with no more spread than chance gives: cases or deaths, reported in full or at a steady rate | Yes |
+| `ss.nbinom(n=...)` | The mean count; `n` is the dispersion (smaller means more spread), and can be an `ss.par` with bounds, which is then fitted | Overdispersed counts, as most surveillance data are: reporting that varies from week to week | Yes |
+| `ss.binom(n=...)` | The probability; `n` is the number of trials | The positives among `n` people tested, e.g. a prevalence survey or a serosurvey | Yes |
+| `ss.bernoulli()` | The probability | Whether something happened, as 0 or 1, e.g. whether an outbreak was reported | Yes |
+| `ss.normal(std=...)` | The mean; `std` is the standard deviation | A continuous measure with noise of a known size, e.g. a fraction estimated with a standard error | Yes |
+| `ss.lognormal(std=...)` | The mean; `std` is the standard deviation | A positive measure whose noise grows with its size, e.g. a concentration in wastewater | Yes |
+| A function `fn(observed, model)` | Whatever the function says: it returns the log-likelihood of each value | Anything else, e.g. a beta-binomial from SciPy, or a normal whose variance grows with the mean | No: the default fit uses Nelder-Mead; a method with gradients (or NUTS) needs `require_jax=False`, and runs with Python in the loop |
 
 The priors that `ss.par(..., prior=)` takes. Without one, the prior is uniform over the bounds, on the value itself, even for a parameter searched on a log scale; give a parameter whose order of magnitude is uncertain a prior such as `ss.lognormal()`:
 
@@ -346,7 +346,7 @@ The priors that `ss.par(..., prior=)` takes. Without one, the prior is uniform o
 
 ### What a fit holds
 
-The attributes of the `ss.fitting.Fit` that `sim.fit()` returns (see [ss.fitting.Fit](../api/fit.qmd)):
+The attributes of the `ss.fitting.Fit` that `sim.fit()` returns (see [ss.fitting.Fit](../api/internals.fitting.qmd)):
 
 | Attribute | What it is |
 |---|---|

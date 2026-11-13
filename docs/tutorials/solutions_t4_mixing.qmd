@@ -1,6 +1,15 @@
-## T4 – Mixing
+---
+title: "Solutions: T4 – Mixing"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI; made a page of its own, with a new exercise on movement between towns, on Nov 12 by AI after the docs review
+---
 
-Exercises 1 and 2 start from the model of the tutorial: measles in a town of 100,000 people in three age groups, with immunity by age and a contact matrix.
+These are solutions to the exercises at the end of [T4 – Mixing](t4_mixing.qmd). Many of the exercises are open-ended, so these are examples: there are often other good answers. This page runs on its own, from the setup below.
+
+Exercises 1 to 3 start from the model of the tutorial: measles in three age groups, with immunity by age and a contact matrix, with β fixed per contact throughout.
 
 ```{python}
 import starsim as ss
@@ -20,7 +29,7 @@ matrix = [[10, 6, 1], [3, 8, 1], [3, 6, 3]]
 settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
 ```
 
-### Exercise 1
+## Exercise 1
 
 **Closing schools roughly halves the contacts between children. Change the matrix so that children have 5 contacts a day with other children instead of 10. How do the reproduction number at the start and the number infected in each age group change, and why?**
 
@@ -36,9 +45,9 @@ for label, contacts in {'Schools open': open_schools, 'Schools closed': closed_s
 
 The reproduction number at the start (`R`, printed as each run starts) falls from about 2.5 to 1.6; the outbreak is about a quarter smaller (6,700 infections rather than 8,800), and peaks three months later, at the end of July. Most infections prevented are in children, but adults and older adults have fewer too, though their own contacts are unchanged: with fewer children infected, there are fewer infectious children for them to meet. (The matrix is still reciprocal, since only children's contacts with each other changed.)
 
-### Exercise 2
+## Exercise 2
 
-**Give every age group the same immunity, 90%, keeping the contact matrix. How large is the outbreak now? What does this say about where gaps in immunity matter most?**
+**Give every age group the same immunity, 90% (about the same overall fraction as above), keeping the contact matrix. How large is the outbreak now? What does this say about where gaps in immunity matter most?**
 
 ```{python}
 contacts = ss.contacts(ages=[0, 15, 65], matrix=matrix)
@@ -53,9 +62,49 @@ for sim in msim.sims:
 
 In the tutorial's town, 0.3 × 80% + 0.6 × 92% + 0.1 × 98% ≈ 89% of people are immune, about the same as 90% at every age. Yet with the same immunity at every age, the reproduction number at the start is about 1.6 rather than 2.5, and the outbreak a third smaller (5,900 infections rather than 8,800). Where the susceptible people are matters, not only how many: a gap in immunity among children, who have the most contacts, gives measles far more chances to spread than the same gap spread evenly. This is why measles programs track coverage by age and birth cohort, not only overall.
 
-### Exercise 3
+## Exercise 3
 
-**Repeat the comparison of contacts per person for a less infectious disease, with a rate of infection of 0.083 per contact per day. How much does it matter now that people meet the same contacts every day, and why?**
+**In the four towns, people spend 1% of their time in other towns. Try 0.1% and 5% instead (`pars=dict(away=...)`). How does the amount of movement change when the outbreak peaks in each town, and how many people are infected in each?**
+
+```{python}
+import numpy as np
+
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True)
+beta = ss.par(0.14, bounds=[0.05, 0.5])
+away = ss.par(0.01, bounds=[0.001, 0.1]) # The fraction of time spent in other towns
+measles = ss.Disease(S >> E @ beta*I, E >> I @ ss.days(10), I >> R @ ss.days(8),
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=ss.by(patch=[10, 0, 0, 0])), # The outbreak starts in Riverton
+    name   = 'measles',
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+towns = ss.geo.geography(
+    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    populations = [100_000, 40_000, 20_000, 10_000],
+    x           = [0, 20, 35, 60],
+    y           = [0, 10, -15, 5],
+)
+measles.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=away)))
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=matrix)
+sims = {f'{a:.1%} away': ss.Sim(measles, pars=dict(away=a), networks=contacts, start='2025-01-01', stop='2026-01-01', verbose=0) for a in [0.001, 0.01, 0.05]}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results.measles
+    print(sim.label)
+    for town in towns.names:
+        peak = sim.timevec[np.argmax(res.I.select(patch=town).values)]
+        print(f'  {town}: peak on {peak}, {res.infection.select(patch=town).sum():,.0f} infections')
+```
+
+Movement changes when the outbreak reaches each town, not how large it is. With 0.1% of time away, Fairfield's outbreak peaks almost three months after Riverton's; with 5%, all four towns peak within about two weeks of each other. Riverton's own peak comes a few days later with more movement, since more of its infectious time is spent elsewhere. Each town has the same number of infections in every run, since in this deterministic model each town's outbreak, once started, is decided by its own immunity and contacts. (As the tutorial showed, with chance and little movement, an outbreak may never reach a small town at all.)
+
+Exercises 4 to 6 use networks, so they run as agents. Each holds β per contact fixed, so a network with more contacts adds transmission.
+
+## Exercise 4
+
+**Repeat the comparison of contacts per person with a rate of infection of 0.083 per contact per day (so R0 is about 2 with random mixing). How much does it matter now that people meet the same contacts every day, and why?**
 
 With a rate of infection of 0.083 per contact per day and 3 contacts a day, R0 is about 0.083 × 3 × 8 ≈ 2 with random mixing:
 
@@ -80,9 +129,9 @@ msim.summarize().loc['disease_infection']
 
 Now it matters a great deal: with random mixing, most people are infected, but with the same 3 contacts every day, far fewer (how many varies a lot from one run to the next, since the outbreak can stall early or find its way through). Over a contact that lasts for the whole infectious period, the chance of passing the infection on is only about 1 − e^(−0.083 × 8) ≈ 50%, and one of each person's 3 contacts is usually the person who infected them, so each case infects on average not much more than one new person. Measles passes along nearly every link, so for measles the network changed the timing but not the size of the outbreak.
 
-### Exercise 4
+## Exercise 5
 
-**Give the network with partnerships of a year `n_contacts=1` and `concurrency=0.2`. Does the infection persist?**
+**In the sexual network with partnerships that last a year, the infection dies out. Give the network `n_contacts=1` and `concurrency=0.2`, so that 20% of people have more than one partner at a time. Does the infection persist?**
 
 ```{python}
 S, I = ss.states('S I')
@@ -101,9 +150,9 @@ msim.plot('sti.I')
 
 Yes: with 20% of people having more than one partner at a time, the infection persists. Someone with two partners can pass the infection from one partnership to the other without waiting for either to end, which is why concurrency matters so much for sexually transmitted infections.
 
-### Exercise 5
+## Exercise 6
 
-**Add households to the measles model, with a community mixing pool with 2 contacts a day. How much do households add?**
+**Add households of about 4 people (`ssl.ClusterNet(cluster_size=ss.poisson(4))`, after `import starsim.library as ssl`) to measles with a community mixing pool of 2 contacts a day. How much of the epidemic do households add?**
 
 ```{python}
 S, I, R = ss.states('S I R')

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI for the v4 docs; DALYs example and appendix added by AI; shortened on Nov 11 by AI
+  note: Written by AI for the v4 docs; DALYs example and appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, `cost`, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted. The tools for adding costs up, discounting them, counting DALYs, and comparing scenarios are in the Starsim library, in `ssl.econ`: `ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, and `ssl.ICER`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd).
@@ -37,17 +37,17 @@ msim = ss.parallel({'No vaccination': base, 'Routine vaccination': base.new(inte
 The delivery's result `cost` is the amount spent on each step; over a year, it is the cost of that year's round:
 
 ```{python}
-sim = msim.sims['Routine vaccination']
-sim.results.routine.cost.resample('year').plot()
+vx = msim.sims['Routine vaccination']
+vx.results.routine.cost.resample('year').plot()
 ```
 
 The cost of the program, and the infections it averts, are the totals of these results, and their ratio is the cost per infection averted:
 
 ```{python}
 no_vx = msim.sims['No vaccination']
-cost = sim.results.routine.cost.sum()
-doses = sim.results.routine.delivered.sum()
-averted = no_vx.results.measles.infection.sum() - sim.results.measles.infection.sum()
+cost = vx.results.routine.cost.sum()
+doses = vx.results.routine.delivered.sum()
+averted = no_vx.results.measles.infection.sum() - vx.results.measles.infection.sum()
 
 print('Doses given:', round(doses))
 print('Total cost ($):', round(cost))
@@ -77,7 +77,9 @@ icer = ssl.ICER(msim, outcome='measles.infection')
 icer.df.round()
 ```
 
-`ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.ICER` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated (`dominated`), and one that a mix of two others would beat, averting more for the same cost, is extendedly dominated (`extended`); neither has a ratio. It works for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means; its columns and methods (such as `icer.best(wtp=1000)`, the best scenario at a willingness to pay) are in the [appendix](#appendix-the-economic-tools).
+`ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.ICER` orders the scenarios by cost, and compares each with the next cheaper one that is not dominated: the incremental cost over the incremental outcome averted (here infections; by default, DALYs). Outcomes averted are counted from the first scenario, unless `baseline=` names another.
+
+Here routine vaccination costs about $6 per infection averted, and adding the campaigns about $22 for each further infection averted. Neither program is dominated: a program is dominated (`dominated`) if a cheaper one averts as much, and extendedly dominated (`extended`) if a mix of two others would avert more for the same cost; neither kind gets a ratio. `ssl.ICER` takes any number of scenarios, and with several runs of each compares their means; its columns and methods (such as `icer.best(wtp=1000)`, the best scenario at a willingness to pay) are in the [appendix](#appendix-the-economic-tools).
 
 `ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`: the sim is then compared at each step with the finished sims it is given, so that an intervention can act on the result (e.g. follow `sim.analyzers.icer.best(wtp=1000)`); `window=ss.years(1)` compares the latest year alone. How best to divide a budget between programs is an optimization: see [Optimization](calibration_optimization.qmd).
 
@@ -114,27 +116,24 @@ A model run as agents gives different costs and effects in each run, so a cost p
 msim = ss.parallel({'No program': base, 'Test and treat': base.new(interventions=[screening, treatment])}, n_runs=8)
 
 res = msim.results
-cost = res.screening.cost.values.sum(axis=1) + res.treatment.cost.values.sum(axis=1) # The cost of each run of the program
-averted = -res.sis.infection.diff('No program')['Test and treat'].values.sum(axis=1)  # The infections it averted, run by run
+program = 'Test and treat'
+cost = sum(res[name].cost.select(scenario=program).values.sum(axis=1) for name in ['screening', 'treatment']) # The cost of each run of the program
+averted = -res.sis.infection.diff('No program')[program].values.sum(axis=1) # The infections it averted, run by run (paired by seed)
+print('Infections averted, fewest:', round(averted.min()))
 ratio = cost / averted
 
 print('Cost per infection averted ($), median and range:', np.round(np.median(ratio), 1), np.round([ratio.min(), ratio.max()], 1))
 ```
 
-The uncertainty here is only from chance: uncertainty in the parameters needs runs with values drawn from their priors as well (`ss.parallel(sim, priors=True, n_runs=...)`; see [Scenarios](running_scenarios.qmd)).
+A ratio is only meaningful when the program averted something: here every run averts many thousands of infections, but a small program can avert none, or fewer than none, in a run by chance, giving an infinite or negative ratio. Check the outcomes averted before dividing, or compare mean costs and outcomes (as `ssl.ICER` does). The uncertainty here is only from chance: uncertainty in the parameters needs runs with values drawn from their priors as well (`ss.parallel(sim, priors=True, n_runs=...)`; see [Scenarios](running_scenarios.qmd)).
 
 ## Discounting and other costs
 
-Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example. `ssl.discount()` weights each time point of a result by `(1 + rate)**-(t - start)`, for a time `t` in years, and gives back a result. Here the routine measles program from the first example, discounted at 3% a year from 2010:
+Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example. `ssl.discount()` weights each time point of a result by `(1 + rate)**-(t - start)`, for a time `t` in years, and gives back a result. Here the two runs of the first example (`vx` and `no_vx`), discounted at 3% a year from 2010:
 
 ```{python}
-sim = ss.Sim(measles, interventions=routine, **pars)
-sim.run()
-no_vx = ss.Sim(measles, **pars)
-no_vx.run()
-
-cost = ssl.discount(sim.results.routine.cost, 0.03, start=2010).sum()
-averted = ssl.discount(no_vx.results.measles.infection - sim.results.measles.infection, 0.03, start=2010).sum()
+cost = ssl.discount(vx.results.routine.cost, 0.03, start=2010).sum()
+averted = ssl.discount(no_vx.results.measles.infection - vx.results.measles.infection, 0.03, start=2010).sum()
 print('Discounted cost ($):', round(cost))
 print('Discounted infections averted:', round(averted))
 print('Discounted cost per infection averted ($):', round(cost/averted, 2))
@@ -163,7 +162,7 @@ A net cost below zero means a program saves more than it costs; `ssl.ICER` then 
 - **Compare like with like.** Take costs and outcomes from the same runs, over the same period (see [Scenarios](running_scenarios.qmd)).
 - **The horizon matters.** Infections averted after the end of the run are not counted, and a program that starts late in a run has had little time to avert any.
 
-The API reference for this page: [Products](../api/products.qmd), [ss.fitting](../api/fit.qmd).
+The API reference for this page: [Products](../api/products.qmd), [Economics](../api/library.econ.qmd).
 
 ## Further reading
 

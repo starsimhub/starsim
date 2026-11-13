@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged from the gallery pages "Final size" and "The chance of a major outbreak" on Nov 11 by AI; both written by AI
+  note: Merged from the gallery pages "Final size" and "The chance of a major outbreak" on Nov 11 by AI; both written by AI; solver comparison measured on Nov 12 by AI after the docs review
 ---
 
 Two classic results of epidemic theory hold for the simplest SIR model, and are good checks of any way of running it. The first is deterministic: the fraction of people ever infected, the final size, depends only on R0. The second is stochastic: an epidemic with R0 above 1 doesn't always take off, and the chance that it does also depends only on R0. This page sweeps R0 and checks Starsim against each: the final size with the ODE, and the chance of a major outbreak with many stochastic runs.
@@ -76,7 +76,7 @@ The model agrees with the equation to within a few parts in a million, for every
 
 Early in an epidemic, when there are only a few cases, each one infects a random number of others, and by chance all of them can recover before passing the infection on. For an SIR model with an exponential infectious period, started by one infectious person, the chance that this happens (that the outbreak is minor) is 1 / R0, so the chance of a major outbreak is 1 − 1 / R0 (Whittle, 1955). A deterministic model can't show this, since in an ODE an epidemic with R0 above 1 always takes off.
 
-Here the model starts with a single infectious person in a population of 1,000, and is run 300 times for each R0 with the Gillespie algorithm, which follows each infection and recovery as an event at its own random time, as the theory does. A run counts as a major outbreak if more than 10% of people are infected; the rest infect at most a few people each, so the exact threshold hardly matters. `infection.summarize()` gives the infections over the whole of each run:
+Here the model starts with a single infectious person in a population of 1,000, and is run 300 times for each R0 (1,500 runs in all, which take seconds as compartments) with the Gillespie algorithm, which follows each infection and recovery as an event at its own random time, as the theory does. A run counts as a major outbreak if more than 10% of people are infected. The theory is for an infinite population, and in a finite one the line between minor and major outbreaks is not sharp; but with R0 well above 1 and 1,000 people, minor outbreaks infect at most a few people each, so the exact threshold hardly matters. Close to R0 = 1 it matters more, and the agreement is looser. `infection.summarize()` gives the infections over the whole of each run:
 
 ```{python}
 R0s = [1.25, 1.5, 2, 3, 4]
@@ -98,7 +98,16 @@ plt.show()
 
 Each point is the fraction of 300 runs with a major outbreak, so it is uncertain by about ±0.05 (two standard errors), and within that the runs agree with the theory.
 
-The theory is for continuous time. A chain binomial model (`solver='binomial'`) moves people between states in steps of time, here a day, and gives higher fractions for this model (about 0.6 for R0 = 2, against 0.5): in steps of a day, the chance that a person recovers before infecting anyone is lower than in continuous time. With a smaller step (`dt=ss.days(0.1)`), it agrees with the theory. Agents also take steps of a day, but draw each person's infectious period from the exponential distribution itself, and agree with the theory at steps of a day.
+The theory is for continuous time. A chain binomial model moves people between states in steps of time, and in a step the chance that a person recovers before infecting anyone is lower than in continuous time, so it gives more major outbreaks. How many more depends on the step. With 10,000 runs at R0 = 2 (theory: 0.5), in steps of a day:
+
+| Solver | Major outbreaks |
+|---|---|
+| `'gillespie'` | 0.49 |
+| `'binomial'` (by default, with substeps as needed) | 0.52 |
+| `ss.solvers.binomial(substeps=1)` (each day taken whole) | 0.55 |
+| `'binomial'` with `dt=ss.days(0.1)` | 0.50 |
+
+Each is uncertain by about ±0.01. So the default chain binomial is close to the theory here, and taking each day whole, as discrete-time models do, overstates the chance by about a tenth. Agents also take steps of a day, but draw each person's infectious period from the exponential distribution itself, and come close to the theory too (0.53 ± 0.03 in 1,000 runs).
 
 ## Going further
 

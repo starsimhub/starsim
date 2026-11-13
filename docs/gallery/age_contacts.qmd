@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged from the gallery pages "Age groups and a contact matrix" and "Closing schools" on Nov 11 by AI; both written by AI, the second adapting the school closure example of the Epidemics R package
+  note: Merged from the gallery pages "Age groups and a contact matrix" and "Closing schools" on Nov 11 by AI; both written by AI, the second adapting the school closure example of the Epidemics R package; school closure labeled as advanced on Nov 12 by AI after the docs review
 ---
 
 People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the rate of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the fraction of *j* who are infectious. This page builds an age-structured SIR with a contact matrix written by hand, as in the age-structured models of Keeling and Rohani (2008, chapter 3). Then it uses a real country's population and contact matrices, one for each setting (home, school, work, and the rest of the community), and closes schools by removing one of them.
@@ -62,9 +62,9 @@ sim.results.sir.infection.by('age').summarize()
 
 Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, these are all but a few hundred in each group.
 
-## A real population, with contacts by setting
+## Advanced: a real population, with contacts by setting {#a-real-population-with-contacts-by-setting}
 
-Closing schools is one of the first measures considered against a new respiratory infection. It removes the contacts children make at school, but not those at home or elsewhere, so whether it helps depends on how much of the spread happens at school, and on when the schools close and reopen. A model of it needs contacts by setting. This part adapts the school closure example of the [Epidemics](https://epiverse-trace.github.io/epidemics/) R package: an SEIR model of an influenza-like infection in the population of the United Kingdom, in three age groups, with the contact matrices of Prem et al. (2021) for each setting.
+This part is an extension of the example above, with a larger model. Closing schools is one of the first measures considered against a new respiratory infection. It removes the contacts children make at school, but not those at home or elsewhere, so whether it helps depends on how much of the spread happens at school, and on when the schools close and reopen. A model of it needs contacts by setting. This part adapts the school closure example of the [Epidemics](https://epiverse-trace.github.io/epidemics/) R package: an SEIR model of an influenza-like infection in the population of the United Kingdom, in three age groups, with the contact matrices of Prem et al. (2021) for each setting.
 
 | Parameter | Value | Meaning |
 |---|---|---|
@@ -121,7 +121,7 @@ msim.summarize().loc['flu_infection']
 By age, the number infectious falls in every group while schools are closed, and most among children, who make most of the contacts at school:
 
 ```{python}
-sims['Schools closed for 60 days'].results.flu.I.by('age').plot()
+msim.sims['Schools closed for 60 days'].results.flu.I.by('age').plot() # The run sim, from the MultiSim
 ```
 
 The Epidemics package says a closure another way: as a fraction by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, who=flu.age < 20, start=..., stop=...)`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.

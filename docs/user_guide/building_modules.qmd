@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI
+  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI; links updated on Nov 12 by AI after the docs review
 ---
 
 Most of a Starsim model is declared, but some parts are easier to say as code: a quantity that each person carries and that changes continuously (an antibody level, a CD4 count), a rule of behavior of your own, or a result worked out in a way of your own. A module written as code is a Python class with a `step()` method, which Starsim calls once each step. It can read and change the rest of the sim, and sits in the same sim as declared diseases. [T8 – Custom modules](../tutorials/t8_modules.qmd) builds modules up a step at a time.
@@ -22,13 +22,13 @@ Many things that once needed a module of their own are declared, and a declared 
 | A change to a parameter for some people or some time (masks, school closures) | `ss.modify()` | [Interventions](interventions_interventions.qmd) |
 | One disease changing the risk of another | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` | [Connectors](interventions_connectors.qmd) |
 | A number to report, such as cases from infections | `ss.outcome()` | [Outcomes](building_outcomes.qmd) |
-| A value for each person, drawn or recorded at an event, or a trait (a CD4 count at infection, each person's infectiousness) | `ss.attr()`, e.g. `ss.attr(ss.normal(500, 50), when=infection)` | [`ss.attr`](../api/expressions.qmd) |
+| A value for each person, drawn or recorded at an event, or a trait (a CD4 count at infection, each person's infectiousness) | `ss.attr()`, e.g. `ss.attr(ss.normal(500, 50), when=infection)` | [`ss.attr`](../api/internals.expressions.qmd) |
 | A move as soon as a condition holds, or when an event happens to the person (debut at 15, a change at diagnosis) | A trigger, `ss.on()` | [Diseases](building_diseases.qmd#other-transitions) |
 | Moving people between groups, such as vaccination or a change of risk | `ss.transfer()` | [Stratification](building_stratification.qmd#moving-between-groups) |
 | Protection that depends on the time since an event, such as immunity that halves every 60 days after recovery | `ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60)))` | [The example below](#an-example-immunity-that-builds-up) |
 | Counting events in each person, such as past infections or doses | `increment=` on a transition | [Stratification](building_stratification.qmd#moving-between-groups) |
 
-Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, makes the sim run as agents (`n_agents=` says how many). A class can also say so itself: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too ([Modules](architecture_index.qmd#what-a-module-is)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents; [Measles in London, two ways](../gallery/measles_london.qmd) works through an example.
+Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, makes the sim run as agents (`n_agents=` says how many). A class can also say so itself: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too ([Modules](architecture_index.qmd#what-a-module-is)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents; [Measles in London](../gallery/measles_london.qmd) works through an example.
 
 ## An example: immunity that builds up
 
@@ -173,9 +173,9 @@ To report a result of your own, override `init_results()` and give it with `defi
 - A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.n_times`, and `.since` say whether, how often, and how long ago each person did; a disease keeps this only for the transitions the model reads, so to read one after the run, give `keep_times=True` to the sim.
 - To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five people infectious, `ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5)` takes a condition, and `sir.move(uids, sir.R)` moves particular agents. It runs under every solver; the number in a state of people is read, not set, but a count that is not people can be set (`W.n = 0`) or moved from outside (`ss.move(ss.dead, mosq.Sv, n=1000)`).
 
-A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [Model execution](architecture_run.qmd#the-order-of-a-step) lists the full order.
+A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [From declaration to run](architecture_run.qmd#the-order-of-a-step) lists the full order.
 
-Two habits keep a module's results from depending on the length of the step ([Solvers](running_solvers.qmd#the-length-of-a-step)): draw competing exits from a state together (one exit at the total rate, then which one it was), rather than one after the other; and give those who arrive in a state during a step only half a step's chance of leaving it. `sim.check_dt()` shows both biases.
+Two habits keep a module's results from depending on the length of the step ([Solvers](running_solvers.qmd#the-length-of-a-step)): draw competing exits from a state together (one exit at the total rate, then which one it was), rather than one after the other; and give those who arrive in a state during a step only half a step's chance of leaving it, as a declared disease does as agents ([how](architecture_run.qmd#how-the-state-is-updated-within-a-step)). `sim.check_dt()` shows both biases.
 
 For anything random, give the module a distribution in `__init__()` (e.g. `self.p_isolate = ss.bernoulli(p=0.5)`) and draw from it in `step()` (`self.p_isolate.filter(uids)`), rather than calling NumPy's random numbers. Each distribution then has its own stream of random numbers, so the module's draws don't change when the rest of the model does, and comparisons between scenarios stay free of noise from the random numbers: see [Random numbers](mechanics_random.qmd).
 

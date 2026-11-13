@@ -2,9 +2,9 @@
 title: Networks
 jupyter: python3
 authorship:
-  human: 25
-  ai: 75
-  note: The household and spatial network sections are adapted from the Starsim 3 user guide page on library modules; the rest, and every comparison, written by AI; school closure example and appendix added by AI; shortened on Nov 11 by AI
+  human: 20
+  ai: 80
+  note: The household and spatial network sections are adapted from the Starsim 3 user guide page on library modules; the rest, and every comparison, written by AI; school closure example and appendix added by AI; shortened on Nov 11 by AI; the random-number experiment labeled as advanced on Nov 12 by AI after the docs review
 ---
 
 Core Starsim's networks (random contacts, partnerships, mother and child, mixing pools, and contact matrices), and how to write a network of your own, are on [Mixing](populations_mixing.qmd). The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd)) has more, for households and other clusters, for space, and for theoretical work:
@@ -144,6 +144,8 @@ msim.plot('sir.I')
 ```
 
 With no graph, `ssl.StaticNet` is the classic random (Erdős–Rényi) graph: each possible pair of people is connected with probability `p` (or `n_contacts` over the population, by default 10 contacts each), so each person's number of contacts is binomial; it is useful for comparison with analytic results. For random contacts drawn again on every step, `ss.RandomNet` is the one to use. `ssl.NullNet` connects each agent only to themselves, with a weight of 0, so it never transmits: a placeholder while developing a model, or for testing a disease's natural history alone.
+
+### Advanced: contacts when people are added {#crn-contacts}
 
 `ss.RandomNet(method='safe')` is a random network in which each agent's contacts depend only on that agent's own random numbers (see [Random numbers](mechanics_random.qmd)). Here the same network is made for 1,000 and 1,001 agents, counting how many of the contacts among the first 1,000 survive the extra person:
 

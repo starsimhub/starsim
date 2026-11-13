@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting; appendix of importers and exporters added by AI. Moved from the conversion section on Nov 11 by AI, with the pages for each framework moved to the lingua_franca site; shortened on Nov 11 by AI
+  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting; appendix of importers and exporters added by AI. Moved from the conversion section on Nov 11 by AI, with the pages for each framework moved to the lingua_franca site; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (agreement as a check)
 ---
 
 A model written for another framework can be read into Starsim, and a Starsim model can be written out in formats other tools read. Importing is useful for checking a model against its original, for running it in ways the original can't (as agents, or fitted with gradients), or for building on it in Starsim. Each framework in [the formats](#the-formats) has a page on the lingua_franca site (for example [odin](https://starsim.org/lingua_franca/models/odin/) and [EpiModel](https://starsim.org/lingua_franca/models/epimodel/)) that shows a model from it written both ways, and how closely the results agree; [Comparison with other frameworks](https://starsim.org/lingua_franca/models/comparison.html) compares them all. For Starsim 3 code, see the [migration guide](../migration/v3_v4.md).
@@ -71,7 +71,7 @@ sim.plot()
 sim.describe()
 ```
 
-Here the importer guessed the names of the transitions (such as `S_to_E`, since odin doesn't name flows) and the total population `N`. The solver is an ODE, as odin uses, so that the results can be checked against odin's. Two models are the same if they give the same results; here is the import against the same model written in Starsim (see [T3 – Building a disease](../tutorials/t3_disease.qmd)):
+Here the importer guessed the names of the transitions (such as `S_to_E`, since odin doesn't name flows) and the total population `N`. The solver is an ODE, as odin uses, so that the results can be checked against odin's. Matching results is a validation check, not a proof that two models are the same: two models can agree on one trajectory and differ at other parameter values, starting conditions, or solvers. So compare their structure as well (each one's `describe()`), and their results in more than one setting where it matters. Here is the import against the same model written in Starsim (see [T3 – Building a disease](../tutorials/t3_disease.qmd)):
 
 ```{python}
 S, E, I, R = ss.states('S E I R')

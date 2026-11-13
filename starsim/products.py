@@ -538,6 +538,9 @@ class Held(Product):
         out = super().agent_reasons(sim)
         if self.fades and self.boxcar_form is None:
             out.append(f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep' + (' (an ss.boxcar() has a compartmental form)' if not isinstance(self.waning, dict) else ' (a boxcar for each effect has a compartmental form if they are the same)'))
+        elif self.fades and sim.pars.approximations == 'error': # A boxcar: in a compartmental run its plateau is approximated by levels, with a note (see ss.Event.init_pre())
+            b = self.boxcar_form
+            out.append(f'the protection of "{self.name}" wanes as {b!r}, whose plateau compartments approximate by {b.stages} levels, each left at a rate, and approximations="error"')
         return out
 
     def init_pre(self, sim):

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Based on the AI-written v4 drafts on deliveries and on changing parameters, with ideas on eligibility and naming from the Starsim 3 user guide page on interventions; the overview, custom intervention, and advice on comparisons written by AI; examples made realistic, delivery without a product, and appendices added by AI; shortened on Nov 11 by AI
+  note: Based on the AI-written v4 drafts on deliveries and on changing parameters, with ideas on eligibility and naming from the Starsim 3 user guide page on interventions; the overview, custom intervention, and advice on comparisons written by AI; examples made realistic, delivery without a product, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 An intervention is anything done to change the course of an epidemic. Most are one of two kinds. Some **deliver a product** (a vaccine, a test, or a drug) to the people who are eligible, at given times or when something happens to them. Others **change a quantity** in the model, giving nothing to anyone: masks, distancing, and school closures change transmission. Anything else is an intervention written as code.
@@ -426,7 +426,7 @@ print('Peak infectious:', sim.results.flu.I.max())
 
 ## Pitfalls
 
-- **Infections only delayed.** A change that ends, such as distancing, delays infections rather than averting them: run long enough to count them (see [Scenarios](running_scenarios.qmd)).
+- **Infections delayed, not averted.** A change that ends can mostly delay infections rather than avert them: in the first example, distancing for two months pushes the peak months later but averts fewer than a tenth of the infections over the 18 months, while vaccination averts most. How much a temporary change averts depends on the epidemic and on the horizon, so run long enough to count what happens after it ends (see [Scenarios](running_scenarios.qmd)).
 - **Routine is once per person.** For a fraction of people reached every year, use yearly rounds, or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
 - **A function made in a loop sees the loop's last value.** Every `who=lambda sim: sim.people.age >= lower` made in `for lower in [0, 15]:` uses 15. Use a condition (`who=ss.person.age >= lower`), which keeps the value it was written with.
 

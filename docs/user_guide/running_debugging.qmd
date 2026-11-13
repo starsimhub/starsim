@@ -2,12 +2,26 @@
 title: Profiling and debugging
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging; comparing sims and appendices of tools and errors added by AI; shortened on Nov 11 by AI
+  human: 8
+  ai: 92
+  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging; comparing sims and appendices of tools and errors added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
-A model can go wrong in three ways: it stops with an error, it runs but gives an answer that looks wrong, or it runs too slowly. This page goes through Starsim's tools for each, and the mistakes that commonly catch people out. The examples use the measles model from the [tutorials](../tutorials/t1_intro.qmd) (β = 1.9 per day, infectious for 8 days, so R0 ≈ 15).
+A model can go wrong in three ways: it stops with an error, it runs but gives an answer that looks wrong, or it runs too slowly. This page goes through Starsim's tools for each, and the mistakes that commonly catch people out.
+
+Where to look first, by symptom (the sections below cover each in turn):
+
+| Symptom | First checks |
+|---|---|
+| An error before the run starts | The message: it names the parameter, state, or module, and usually what to do |
+| No epidemic | R0 in the first lines printed; where the initial infections are (`init_prev` seeds the first infected state, not necessarily an infectious one); a rate written where a duration was meant |
+| An epidemic far too fast or too slow | Units of rates and durations; β per contact multiplied by a number of contacts; the time step (`sim.check_dt()`) |
+| The wrong population size | `total_pop` and `n_agents`; births, deaths, and migration; the number of people each agent stands for |
+| A fit that looks wrong | Which result each data column is compared with, and over what period |
+| Different results from run to run | The seed, the solver, changes to the model, versions of Starsim |
+| A slow run | The number of agents, steps, and runs; then profiling |
+
+The examples on this page use the measles model from the [tutorials](../tutorials/t1_intro.qmd) (β = 1.9 per day, infectious for 8 days, so R0 ≈ 15):
 
 ```{python}
 import starsim as ss
@@ -19,18 +33,6 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
 sim.run()
 ```
-
-Where to look first, by symptom:
-
-| Symptom | First checks |
-|---|---|
-| An error before the run starts | The message: it names the parameter, state, or module, and usually what to do |
-| No epidemic | R0 in the first lines printed; where the initial infections are (`init_prev` seeds the first infected state, not necessarily an infectious one); a rate written where a duration was meant |
-| An epidemic far too fast or too slow | Units of rates and durations; β per contact multiplied by a number of contacts; the time step (`sim.check_dt()`) |
-| The wrong population size | `total_pop` and `n_agents`; births, deaths, and migration; the number of people each agent stands for |
-| A fit that looks wrong | Which result each data column is compared with, and over what period |
-| Different results from run to run | The seed, the solver, changes to the model, versions of Starsim |
-| A slow run | The number of agents, steps, and runs; then profiling |
 
 ## Errors and what a run prints
 
@@ -101,7 +103,7 @@ after = other_sim.describe().splitlines()
 print('\n'.join(difflib.unified_diff(before, after, 'sim', 'other_sim', lineterm='', n=0)))
 ```
 
-The lines marked `-` are the first sim's and those marked `+` the second's. To compare the results of two runs, `ss.debugtools.diff_sims()` lists each summary result that differs, with the ratio of the two, and `ss.debugtools.check_sims_match()` gives True if every result matches (see [debugtools](../api/debugtools.qmd)):
+The lines marked `-` are the first sim's and those marked `+` the second's. To compare the results of two runs, `ss.debugtools.diff_sims()` lists each summary result that differs, with the ratio of the two, and `ss.debugtools.check_sims_match()` gives True if every result matches (see [debugtools](../api/internals.debugtools.qmd)):
 
 ```{python}
 other_sim.run()
@@ -145,7 +147,7 @@ R0 comes out at 0.24 instead of 15. Give a duration with its unit (`ss.days(8)`)
 
 - **A plain number is in the sim's unit of time.** If the model's unit is days, `stop=2`, meant as two years, is two days. Give times with their units or as dates ([Time](building_time.qmd#units)).
 - **A number as a time is a calendar year if the sim has a calendar.** With `start='2025-01-01'`, `when=2026` is the start of 2026, whatever the unit; with `start=0`, it is 2026 units from 0. A time outside the sim is an error that says how it was read ([Time](building_time.qmd#on-the-philosophy-of-time)).
-- **A rate times a duration is not a rate.** `ss.peryear(0.1)*ss.days(3)` is the chance of an event over 3 days, and Starsim raises a `TypeError` rather than guess what was meant ([Time](building_time.qmd#rates-probabilities-and-durations)).
+- **A rate times a duration is not a rate.** The product itself is fine: `ss.peryear(0.1)*ss.days(3)` is a plain number, the chance of an event over 3 days. Using it as the rate of a transition raises a `TypeError` that shows the product and asks for the rate itself ([Time](building_time.qmd#rates-probabilities-and-durations)).
 - **An ODE always takes off.** With R0 above 1 it takes off from any number infected, while a real outbreak started by a few cases often dies out by chance; for the chance of an outbreak, run a stochastic solver many times ([Solvers and backends](running_solvers.qmd#whether-an-outbreak-takes-off)).
 - **The median of many runs can hide that some died out.** When some runs die out and the rest take off, the median or mean describes neither; count the runs with an outbreak, and summarize those ([Scenarios](running_scenarios.qmd#reading-many-runs)).
 - **`n_agents=` runs the model as agents.** To set the size of a compartmental model, use `total_pop=` ([Running sims](running_sim.qmd#what-a-sim-takes)).

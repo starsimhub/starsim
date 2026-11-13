@@ -1,6 +1,17 @@
-## T5 – Interventions and scenarios
+---
+title: "Solutions: T5 – Interventions and scenarios"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI; split from the combined solutions page, with separate setups for the measles and STI answers, on Nov 12 by AI after the docs review
+---
 
-Each solution starts from the model of the tutorial:
+These are solutions to the exercises of [T5 – Interventions and scenarios](t5_interventions.qmd). Many exercises are open-ended, so these are examples: there are often other good answers.
+
+## Measles (exercises 1–3)
+
+Exercises 1 to 3 start from the measles model of the tutorial:
 
 ```{python}
 import starsim as ss
@@ -68,7 +79,9 @@ print('Outbreak died out in', sum(totals < 100), 'of 50 runs; (1/R)^2 =', round(
 
 With 2 people infectious at the start, the outbreak dies out in about one run in seven, close to (1/R)² ≈ 17%: the chains of infection started by each first case must all die out, each with a chance of roughly 1/R. The match is rough, since R = 2.46 is an average over age groups: a child, with many contacts, is more likely to start an outbreak than an adult. In the runs that take off, the size hardly varies; chance matters at the start, when cases are few.
 
-**4. Notifying the partners of people who seek care.** Exercises 4 and 5 use the model and interventions of the section on agents:
+## Interventions as agents (exercises 4–5)
+
+Exercises 4 and 5 use the sexually transmitted infection and the interventions of the tutorial's [advanced section on agents](t5_interventions.qmd#as-agents):
 
 ```{python}
 S, I = ss.states('S I')
@@ -94,7 +107,7 @@ treatment = ss.treat(drug, when=screening.positive)
 notification = ss.treat(drug, when=screening.positive, coverage=0.5, trace='sexualnet')
 ```
 
-A delivery is an event too, so `when=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
+**4. Notifying the partners of people who seek care.** A delivery is an event too, so `when=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
 
 ```{python}
 care_notification = ss.treat(drug, when=care, coverage=0.5, trace='sexualnet')
@@ -134,4 +147,4 @@ for label in ['Screening 15-29', 'Screening 15-49']:
     print(label, '- tests:', tests, '- infections prevented:', prevented, '- per 100 tests:', round(100*prevented/tests, 1))
 ```
 
-Screening everyone aged 15 to 49 takes a little over twice as many tests and prevents about twice as many infections, so about as many per test. Here partnerships don't depend on age beyond debut, so people over 30 are as much at risk; where infection is concentrated in the young, the answer could be the reverse. Each is a single stochastic run; with several (`n_runs=`), the comparison would be clearer.
+Screening everyone aged 15 to 49 takes a little over twice as many tests, but prevents about three times as many infections, so more per test (about 6 per 100 tests, against 4). Here partnerships don't depend on age beyond debut, so people over 30 are as much at risk, and screening more of the network at once cuts transmission more; where infection is concentrated in the young, the answer could be the reverse. Each is a single stochastic run; with several (`n_runs=`), the comparison would be clearer.

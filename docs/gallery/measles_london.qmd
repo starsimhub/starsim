@@ -1,10 +1,10 @@
 ---
-title: Measles in London, two ways
+title: Measles in London, three ways
 jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, reproducing the model of He, Ionides and King (2010). Shortened on Nov 11 by AI
+  note: Written by AI, reproducing the model of He, Ionides and King (2010). Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes a model with several such parts, the measles model of He, Ionides and King (2010), and writes it in Starsim in three ways:
@@ -13,7 +13,9 @@ Starsim declares most models in a few lines: states, transitions, rates, and the
 2. **Written as code**: the whole model as one module, with nothing declared, which can do anything.
 3. **Declared, with noise**: the whole model declared, with the noise on infection given by `noise=`, so that it runs in the compiled kernels and Starsim's own particle filter can run it.
 
-Along the way, it gives a likelihood of its own, compiles the coded model's loop with `@ss.jit`, and runs Starsim's particle filter on the declared model.
+Along the way, it gives a likelihood of its own, compiles the coded model's loop with `@ss.jit`, and runs Starsim's particle filter on the declared model, at the published parameters.
+
+This is an advanced case study, and the longest page in the gallery (it takes about a minute to run). To start from the version to use, read [The model](#the-model), then [A likelihood of your own](#a-likelihood-of-your-own) and [section 3](#declared-with-noise); sections 1 and 2, and compiling, show the alternatives, and [Which to use](#which-to-use) compares all three.
 
 ## The model
 
@@ -62,7 +64,7 @@ def lookup(column, date):
 
 ## 1. Declared, with a little code
 
-The states, transitions and deaths are declared as usual. The rest is written as functions of the sim, which Starsim calls once a step: the force of infection, which reads the calendar for the school terms, and the births, which on day 251 of the year include the cohort entering school. The noise is a value that changes each step, so it is a few lines of a connector, whose `step()` draws it before the diseases run; the force of infection reads it. (Section 3 declares all of these instead.)
+The states, transitions and deaths are declared as usual. The rest is written as functions of the sim, which Starsim calls once a step: the force of infection, which reads the calendar for the school terms, and the births, which on day 251 of the year include the cohort entering school. The noise is a value that changes each step, so it is a few lines of a connector, whose `step()` draws it before the diseases run; the force of infection reads it. It is one number for the whole population, not a draw for each person, so it uses a NumPy generator seeded from the sim rather than a Starsim distribution: common random numbers pair the draws of individuals between scenarios, and there are none here to pair (see [Random numbers](../user_guide/mechanics_random.qmd)). (Section 3 declares all of these instead.)
 
 ```{python}
 class Noise(ss.Connector):
@@ -276,7 +278,7 @@ filt = ss.fitting.ParticleFilter(declared, likelihood=dict(recovery=reported))
 print(f'Log-likelihood: {filt(n_particles=200, rand_seed=0):,.1f}')
 ```
 
-The filter runs many copies of the model (the particles) and, at each week of data, weights each by how likely the reported cases are under it, then draws the copies again in proportion to their weights, so that those that have drifted from the data are dropped. That is with 200 particles, to keep this page quick, which gives a lower estimate. With 2,000 particles, ten filters give −5,816.7 ± 11.5, against −5,827.4 from pomp, the R package He et al. used; without the noise, they give about −13,000, so the noise is what lets the published values fit. It is the filter that `sim.fit()` uses for IF2 (`method='if2'`) and particle MCMC (`method='pmcmc'`), so the declared model can be fitted with them: give a rate to fit bounds, e.g. `I >> R @ ss.par(ss.perday(pars.gamma), bounds=[0.05, 0.12])` (here R0 and the school terms are folded into the time series, so they stay fixed). The noise is drawn only by the chain binomial: the ODE leaves it out (and says so), and the other solvers refuse it.
+The filter runs many copies of the model (the particles) and, at each week of data, weights each by how likely the reported cases are under it, then draws the copies again in proportion to their weights, so that those that have drifted from the data are dropped. That is with 200 particles, to keep this page quick. With so few, the estimate is noisy, and tends to be too low: the filter's estimate of the likelihood is unbiased, but the log of it is biased downward, more so with fewer particles. With 2,000 particles, ten filters give −5,816.7 ± 11.5, against −5,827.4 from pomp, the R package He et al. used; without the noise, they give about −13,000, so the noise is what lets the published values fit. It is the filter that `sim.fit()` uses for IF2 (`method='if2'`) and particle MCMC (`method='pmcmc'`), so the declared model can be fitted with them: give a rate to fit bounds, e.g. `I >> R @ ss.par(ss.perday(pars.gamma), bounds=[0.05, 0.12])` (here R0 and the school terms are folded into the time series, so they stay fixed). The noise is drawn only by the chain binomial: the ODE leaves it out (and says so), and the other solvers refuse it.
 
 ## Which to use
 

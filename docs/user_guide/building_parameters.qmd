@@ -2,9 +2,9 @@
 title: Parameters
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Written by AI, with the section on parameters of modules written as code adapted from the Starsim 3 user guide page on parameters; examples made realistic and an appendix added by AI; shortened on Nov 11 by AI
+  human: 9
+  ai: 91
+  note: Written by AI, with the section on parameters of modules written as code adapted from the Starsim 3 user guide page on parameters; examples made realistic and an appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (units, copying, priors)
 ---
 
 The parameters of a model are the numbers in it: transmission rates, durations, fractions, and the like. This page covers where they live, their units, how to name and change them, and the forms a value can take.
@@ -62,7 +62,7 @@ The number that multiplies a source of infection is `beta`, a duration is named 
 
 ### Units of time
 
-A typed value says its unit: `ss.days(8)` is a duration, and `ss.perday(1.9)`, `ss.peryear(0.02)` are rates. A bare number takes the unit of the model, which is the unit of its typed values: here days, from `ss.days(8)`, so β = 1.9 is per day. The rates of births and deaths don't count, so adding births per year to this model leaves β per day. A model whose other typed values are in different units (a duration in days and another in years) has no single unit for its bare numbers, which is an error that asks for `unit=`; giving every rate a type avoids it.
+A typed value says its unit: `ss.days(8)` is a duration, and `ss.perday(1.9)`, `ss.peryear(0.02)` are rates. A bare number is in the sim's unit, here days, from `ss.days(8)`, so β = 1.9 is per day. [Time](building_time.qmd#units) says how the unit is chosen; to depend on none of it, type every rate or give the sim `unit=`.
 
 Values are converted to the time step of the sim, whatever it is, so the same model can be run with a step of a day or a week. A rate (`ss.perday`) is a rate, converted exactly. A probability over a period, such as a 10% chance of recovering each day, is written `ss.prob(0.1, 'day')`, and is converted as a probability: over a week it is 1 − 0.9^7, not 0.7. See [Time](building_time.qmd) for durations, rates, and dates.
 
@@ -107,7 +107,7 @@ measles$pars
 - The name is taken from the variable (`beta`), or given with `name=`.
 - `bounds` is the range of plausible values. A parameter with bounds can be fitted: `sim.fit()` fits every parameter that has bounds to every result that has data ([Fitting a model](calibration_fitting.qmd)). A value outside its bounds is an error.
 - `doc` (what it means) and `source` (where the value came from) are free text. `describe()` shows them under the transition that uses the parameter, and they are kept when the model is saved.
-- `prior=` gives a distribution of belief about the value, used only in calibration ([Gradients](calibration_gradients.qmd)).
+- `prior=` gives a distribution of belief about the value: its uncertainty, not variation between people. It is used in calibration ([Fitting a model](calibration_fitting.qmd)), and to carry that uncertainty into projections, with runs that draw the value from its prior (`ss.parallel(sim, priors=True, n_runs=...)`; [Scenarios](running_scenarios.qmd)).
 - `label=` is a human-readable name, for plots and tables.
 
 `ss.pars(defaults, **kwargs)` makes several named parameters at once, for a disease declared in `__init__()` ([Diseases](building_diseases.qmd#declaring-in-__init__)). A module written as code gives its parameters with `define_pars()` ([Custom modules](building_modules.qmd#parameters)).
@@ -292,8 +292,8 @@ A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma
 ## Pitfalls
 
 - **A bare number in the wrong unit.** A bare number is in the model's unit of time: in a model whose unit is years, `I >> R @ 0.125` is 0.125 per year. Typed values (`ss.perday(0.125)`, `ss.days(8)`) don't depend on it.
-- **Changing the model instead of the sim.** To try another value, give it to the sim (`pars=dict(beta=1.5)`) rather than changing the disease, which every sim made from it shares.
-- **A distribution as a value or as a prior.** A distribution as a value is variation between people. Uncertainty about a single value is a prior, `ss.par(1.9, prior=...)`, used only in calibration.
+- **Changing the disease after the sim is made.** A sim runs its own copy of each module, made when the sim is made, so changing `measles` afterwards doesn't change that sim, and changing `sim.diseases.measles` doesn't change `measles`. To try another value, give it by name to a new sim (`ss.Sim(measles, pars=dict(beta=1.5))`, or `sim.new(pars=dict(beta=1.5))`), and read a run's values from the sim's copy ([Writing models](building_writing.qmd#where-the-parts-of-a-sim-go)).
+- **A distribution as a value or as a prior.** A distribution as a value is variation between people. Uncertainty about a single value is a prior, `ss.par(1.9, prior=...)`, used in calibration and in runs with `priors=True`.
 - **A function where a time series would do.** A function can't be printed by `describe()`, exported to another framework, or written out as equations.
 
 ## Further reading

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from a short prompt, with each example run and each timing measured; shortened on Nov 11 by AI
+  note: Written by AI from a short prompt, with each example run and each timing measured; shortened on Nov 11 by AI; timings moved to Speed and scale on Nov 12 by AI after the docs review
 ---
 
 A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, how to mix the two, and what each costs in speed.
@@ -132,66 +132,7 @@ The `plan` line of `sim.describe()` says why a run is taken a step at a time, an
 
 ## Performance
 
-### Compartments
-
-A declared compartmental model runs in compiled code, the whole run in one call. Anything that needs Python at each step (a function, a module written as code, or a condition that needs a memory of past steps) takes it a step at a time, with the same results but not the same speed. Here are the measures above, timed on their second run (so that compiling is left out):
-
-```{python}
-def seconds(sim):
-    """ The time of a second run, after the sim has been built and its code compiled """
-    sim.run()
-    sim.run() # Again, from the start
-    return sim.elapsed
-
-def masks(sim):
-    """ The measure written as an intervention of code: a step of its own, setting beta each step """
-    flu = sim.diseases.flu
-    flu.pars.beta = 0.3*(0.7 if flu.I.n >= 20_000 else 1.0)
-    return
-
-versions = {
-    'Declared, on a count':      ss.modify(flu.pars.beta, multiply=0.7, who=flu.I.n >= 20_000),
-    'Declared, on incidence':    ss.modify(flu.pars.beta, multiply=0.7, who=weekly > 0.01),
-    'A function as the condition': ss.modify(flu.pars.beta, multiply=0.7, who=many_infectious),
-    'An intervention of code':   masks,
-}
-for label, measure in versions.items():
-    sim = ss.Sim(flu, interventions=measure, **pars)
-    print(f'{label}: {1000*seconds(sim):.1f} ms')
-```
-
-For one run the difference doesn't matter, but for a fit of thousands of runs it does: where a declared form can say the same thing, it is worth using ([Speed and scale](running_performance.qmd)).
-
-### Agents
-
-As agents, the whole model is taken a step at a time anyway, and Starsim's own parts are compiled. Code of your own adds the cost of its own work, and what matters is how it is written: for whole arrays with NumPy (usually the simplest and fastest), as a loop over people in Python (slow), or as the same loop compiled with `@ss.jit` (compiled with Numba the first time it is called, and kept on disk), which suits logic that is easier written person by person. Here is an update of each person's antibody level (boosted on recovery, decaying otherwise), for 100,000 people, written each way:
-
-```{python}
-import time
-
-def update_numpy(level, recovered, decay, boost):
-    """ Each person's antibody level: boosted on recovery, up to 1, and decaying otherwise """
-    return np.where(recovered, np.minimum(1.0, level + boost), level*decay)
-
-def update_loop(level, recovered, decay, boost):
-    """ The same, as a loop over people """
-    for i in range(len(level)):
-        if recovered[i]:
-            level[i] = min(1.0, level[i] + boost)
-        else:
-            level[i] = level[i]*decay
-    return level
-
-update_jit = ss.jit(update_loop) # The same loop, compiled; or @ss.jit above the def
-
-level = np.random.rand(100_000)
-recovered = np.random.rand(100_000) < 0.01
-for label, update in {'A Python loop': update_loop, 'NumPy': update_numpy, 'ss.jit': update_jit}.items():
-    update(level.copy(), recovered, 0.99, 0.5) # The first call compiles the ss.jit version
-    start = time.perf_counter()
-    update(level.copy(), recovered, 0.99, 0.5)
-    print(label, '- milliseconds per step:', round(1000*(time.perf_counter() - start), 2))
-```
+A compartmental model that is all declared runs in compiled code, the whole run in one call; a function, a module written as code, or a condition that needs a memory of past steps takes it a step at a time, with the same results but slower, for a small model many times so (how much depends on the model). For one run this doesn't matter, but for a fit of thousands of runs it does, so where a declared form can say the same thing, it is worth using. As agents, the model is taken a step at a time anyway, and code of your own costs what its own work costs: written with NumPy on whole arrays, or as a loop compiled with `@ss.jit`, it adds little; as a loop in Python, a lot. [Speed and scale](running_performance.qmd) gives figures for both.
 
 ## Further reading
 

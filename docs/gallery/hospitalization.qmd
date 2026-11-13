@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged from the gallery pages "Hospitalization and death" and "Severity by age, as a function" on Nov 11 by AI; both written by AI
+  note: Merged from the gallery pages "Hospitalization and death" and "Severity by age, as a function" on Nov 11 by AI; both written by AI; age example labeled as advanced on Nov 12 by AI after the docs review
 ---
 
 Two different mechanisms decide what happens to people after a state, and a model needs the right one. In a **split on entry**, the outcome is decided when people enter the state: here, 10% of infectious people will go to hospital and the rest will recover, each after their infectious period. With **competing hazards**, two transitions out of a state run at the same time and whichever happens first wins: here, people in hospital are discharged after 10 days on average, but die at a rate of 0.02 per day while they are there, so the fraction who die depends on both rates. This page puts both in one model, a respiratory infection with hospitalization, and checks the fraction who die. Then it makes the chance of hospitalization depend on age, written as a Python function, and runs the model both as compartments and as agents.
@@ -69,7 +69,7 @@ deaths = sim.results.covid.death.sum()
 print('Admitted:', round(admitted), 'Died:', round(deaths), 'Fraction:', round(deaths/admitted, 3))
 ```
 
-## Severity by age, as a function
+## Advanced: severity by age, as a function {#severity-by-age-as-a-function}
 
 Some parts of a model are easiest to write as a function. Here the chance that an infection is severe enough for hospital depends on age: 10% under 50, and 40% from 50 up. Rather than stratify the disease by age and give a value for each group, the chance is a Python function of the sim, which reads people's ages. Starsim tries the function on the model's age groups, and since it works on them, the model still runs as compartments; run as agents, the same function is evaluated for each person.
 

@@ -2,12 +2,12 @@
 title: Products
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Based on the AI-written v4 draft, with the framing of products and deliveries and the custom product adapted from the Starsim 3 user guide page on products; examples made realistic, treatment outcomes and resistance, and appendices added by AI; shortened on Nov 11 by AI
+  human: 9
+  ai: 91
+  note: Based on the AI-written v4 draft, with the framing of products and deliveries and the custom product adapted from the Starsim 3 user guide page on products; examples made realistic, treatment outcomes and resistance, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
-Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, so the same vaccine can be given routinely in one scenario and in a campaign in another. This page covers products; deliveries, and changes to parameters that need no product, are on [Interventions](interventions_interventions.qmd), and costs on [Health economics](library_econ.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and then tests and treatment ([As agents](../tutorials/t5_interventions.qmd#as-agents)).
+Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, so the same vaccine can be given routinely in one scenario and in a campaign in another. This page covers products; deliveries, and changes to parameters that need no product, are on [Interventions](interventions_interventions.qmd), and costs on [Health economics](library_econ.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and then tests and treatment ([Advanced: interventions as agents](../tutorials/t5_interventions.qmd#as-agents)).
 
 | Product | Delivered by | Main keywords |
 |---|---|---|
@@ -17,7 +17,7 @@ Vaccination, screening, and treatment programs have two parts: **what** is given
 
 Each delivery (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`) takes the product's own keywords and makes the product, or takes a product made explicitly, as where one product is given by several deliveries (see [below](#one-product-several-deliveries)). Name a delivery after the activity (`vaccination`, `screening`), since the product takes the name of the thing (`vaccine`, `test`). Every keyword of each product is in the [appendix](#appendix-every-product-and-its-keywords).
 
-Products work under every solver, but what follows each person's own history needs agents (see [What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)); for any waning shape under every solver, write the protection as states of the disease, and move people into them with an event (see [Interventions](interventions_interventions.qmd#events-moves-without-a-product)).
+Products run under every solver, but what follows each person's own history needs agents, and a compartmental run approximates some waning shapes (see [What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)); for any waning shape under every solver, write the protection as states of the disease, and move people into them with an event (see [Interventions](interventions_interventions.qmd#events-moves-without-a-product)).
 
 The examples on this page use a curable infection with no lasting immunity, as an SIS model run as agents:
 
@@ -53,7 +53,7 @@ msim.plot('sis.I')
 
 `doses=[0.85, 1.0]` gives a vaccine in doses, with the fraction of the full protection after each; each delivery to someone who already holds the vaccine gives the next dose.
 
-Protection can also fade by its own shape. `ss.boxcar(plateau=..., decay=...)` is full protection for `plateau`, then (with `decay=`) an exponential decline with that mean; it runs under every solver. Any other shape is a function of the time since delivery, `t` (a duration, so `t.years` works in any sim), returning the fraction of protection left; a function of `(t, sim, uids)` also gets the sim and the people who hold it. A function runs as agents only.
+Protection can also fade by its own shape. `ss.boxcar(plateau=..., decay=...)` is full protection for `plateau`, then (with `decay=`) an exponential decline with that mean. Agents follow it exactly; a compartmental run approximates the plateau by a series of levels, each left at a rate, so its end is spread out (`stages=` sets how many), and says so in a note. Any other shape is a function of the time since delivery, `t` (a duration, so `t.years` works in any sim), returning the fraction of protection left; a function of `(t, sim, uids)` also gets the sim and the people who hold it. A function runs as agents only.
 
 ```{python}
 scenarios = {
@@ -311,7 +311,7 @@ The transitions of a disease (`measles.infection`, or a branch, `tr.to(state)`) 
 | `leaky=False` | A number | All or nothing: that fraction fully protected, the rest not at all | All |
 | `doses=` | A list, e.g. `[0.85, 1.0]` | The fraction of the full protection after each dose | All |
 | `waning=` | A duration, e.g. `ss.years(3)` | Protection lost after an exponentially distributed time with that mean | All |
-| | `ss.boxcar(plateau=..., decay=...)` | Full for `plateau`, then (with `decay=`) an exponential decline; `stages=` is the number of levels in a compartmental run | All |
+| | `ss.boxcar(plateau=..., decay=...)` | Full for `plateau`, then (with `decay=`) an exponential decline; `stages=` is the number of levels in a compartmental run | Agents; approximated by compartments (the end of the plateau is spread out) |
 | | A function, `fn(t)` or `fn(t, sim, uids)` | The fraction of protection left at a time `t` since delivery | Agents |
 | | A dict by effect, e.g. `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)` | Each effect its own waning | As its parts |
 | `during=` | A condition, e.g. `sis.I` | Held only while people are in these states | All |

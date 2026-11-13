@@ -2,9 +2,9 @@
 title: Running sims
 jupyter: python3
 authorship:
-  human: 20
-  ai: 80
-  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI
+  human: 19
+  ai: 81
+  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 A sim (`ss.Sim`) is one model put together with everything needed to run it: the diseases, the population, the time span, how people mix, and any births and deaths, interventions, and analyzers. It runs them in the right order, and holds the results afterwards. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd) build and run the measles model used here; running many sims and comparing them is in [Scenarios](running_scenarios.qmd).
@@ -202,7 +202,7 @@ loaded = ss.load('my-measles.sim')
 loaded.plot('measles')
 ```
 
-By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). `sim.shrink()` does the same in memory (`ss.parallel()` already does it). A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table and `sim.to_json()` as JSON (see [Results](building_results.qmd)); to write the model itself in another format (SBML, odin), see [Import and export](building_import.qmd).
+By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). `sim.shrink()` does the same in memory, and `ss.parallel(..., shrink=True)` does it to each run (by default, runs keep their people). A sim that keeps its people can be looked at person by person (`sim.people.to_df()`; see [People and demographics](populations_people.qmd)), but a declared disease run as agents keeps only the times and histories the model reads (such as `ti_I`, when a duration needs it): make the sim with `keep_times=True` to read any other. A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table and `sim.to_json()` as JSON (see [Results](building_results.qmd)); to write the model itself in another format (SBML, odin), see [Import and export](building_import.qmd).
 
 ## Larger projects: `make_sim()`
 
@@ -294,6 +294,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `even_draws` | False | For agents (an error for a compartmental run): space each call's random numbers evenly, which reduces the variance between runs, but makes outbreaks die out less often than they should |
 | **Output** | | |
 | `group_results` | all | The results to keep by group (e.g. `['I', 'cases']`); the others keep only their totals, which saves memory in a model with many groups (by default all are kept, but only every few steps if every step would take more than about 100 MB) |
+| `keep_times` | False | For a declared disease run as agents, keep the time each agent entered every state (`ti_S`) and the history of every transition, to read after the run; by default only those the model reads are kept |
 | `record_people` | True | Whether to record the people's results (`alive`, `female`, `died`, `emigrated`) each step; False saves a little time in a light sim that doesn't need them, though demographics read `alive` |
 | `label` | none | A name for the sim, used in plots and comparisons |
 | `verbose` | 1 | How much to print: 0 nothing, 1 the solver, notes, and progress, 2 everything; a fraction gives progress at each such fraction of the run |

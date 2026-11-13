@@ -4,18 +4,21 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Merged from the Codex and Claude drafts of this tutorial and of the tutorials on repeated runs and seasonality, all written by AI; vaccination over the year relabeled by AI. Merged on Nov 11 by AI with the agent-based interventions tutorial (A4), adapted from the Starsim 3 interventions tutorial, as its section on agents. Shortened on Nov 11 by AI
+  note: Merged from the Codex and Claude drafts of this tutorial and of the tutorials on repeated runs and seasonality, all written by AI; vaccination over the year relabeled by AI. Merged on Nov 11 by AI with the agent-based interventions tutorial (A4), adapted from the Starsim 3 interventions tutorial, as its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
-**How much difference could a vaccination campaign make?** Most models are built to answer questions like this. This tutorial compares a one-off campaign, vaccination over the year, and a response that cuts transmission, as scenarios. It then runs the scenarios many times to see how sure the answer is, and, as agents, turns to interventions that reach particular people because of what has happened to them. By the end of this tutorial, you will be able to:
+**How much difference could a vaccination campaign make?** Most models are built to answer questions like this. This tutorial compares a one-off campaign, vaccination over the year, and a response that cuts transmission, as scenarios. It then runs the scenarios many times to see how sure the answer is, and, in an advanced section on agents, turns to interventions that reach particular people because of what has happened to them. By the end of this tutorial, you will be able to:
 
 - give a vaccine to a chosen group of people, once or over time, and change a parameter from a given date;
 - compare scenarios, and run each many times to tell the uncertainty in an outcome from that in a difference;
-- as agents, treat people who seek care, screen and treat, notify partners, and vaccinate people as they reach an age.
+- (advanced) as agents, treat people who seek care, screen and treat, notify partners, and vaccinate people as they reach an age.
 
 ## The model so far
 
 This is the model from [T4 – Mixing](t4_mixing.qmd): an SEIR model of 100,000 people in three age groups, mixing by a contact matrix. Most people are immune, but only 80% of children:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import starsim as ss
@@ -40,11 +43,34 @@ sim.run()
 sim.results.measles.infection.by('age').plot()
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+beta <- par(0.14, bounds = c(0.05, 0.5)) # The rate of infection per contact with an infectious person, per day
+measles <- Disease(
+  infection   = Transition(S, E, rate = beta * I), # At a rate of β times the contacts with infectious people
+  progression = Transition(E, I, dur = days(10)),  # Latent for 10 days on average
+  recovery    = Transition(I, R, dur = days(8)),   # Infectious for 8 days on average
+  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+  init_n = list(I = 10)                               # 10 people infectious at the start
+)
+measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
+
+age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3))) # Contacts a day, between age groups
+sim <- Sim(measles, networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01")
+sim$run()
+sim$results$measles$infection$by("age")$plot()
+```
+:::
+
 About 89% of people are immune, short of the 1 − 1/R0 ≈ 94% needed with R0 = 16, so about 8,800 people are infected, mostly children.
 
 ## A vaccination campaign
 
-A vaccine has two parts in a model: the **product**, what it does to those who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the efficacy, the group (`who=`), the fraction reached (`coverage=`), and when (`when=`).
+A vaccine has two parts in a model: the **product**, what it does to those who get it (here, it cuts the rate at which each vaccinated person is infected by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the efficacy, the group (`who=`), the fraction reached (`coverage=`), and when (`when=`).
 
 Suppose a campaign on 1 March reaches 80% of children under 15. A scenario is a sim with its own interventions; make one for each, labeled, and run them together with `ss.parallel()`:
 
@@ -64,7 +90,7 @@ msim.plot('measles.infection')
 ## R
 
 ```r
-# With measles and age_contacts as in T4; a function makes each scenario's sim, with these settings
+# A function makes each scenario's sim, with these settings
 make_sim <- function(...) {
   Sim(measles, networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", ...)
 }
@@ -98,7 +124,7 @@ After the campaign, the outbreak peaks within weeks, since those already infecte
 print('Doses delivered:', round(msim.sims['Campaign'].results.campaign.delivered.sum()))
 ```
 
-This vaccine protects everyone vaccinated by 93% (it is "leaky"); `leaky=False` makes it all or nothing. Vaccines can also wane, need several doses, or protect against transmission rather than infection; see [Products](../user_guide/interventions_products.qmd).
+This vaccine is "leaky": it gives everyone vaccinated the same partial protection, a 93% lower rate of infection. With `leaky=False` it is "all or nothing" instead: 93% of those vaccinated are fully protected, and the rest not at all. Vaccines can also wane, need several doses, or protect against transmission rather than infection; see [Products](../user_guide/interventions_products.qmd).
 
 ## Vaccination over time, and changing a parameter
 
@@ -207,7 +233,7 @@ msim.summarize(baseline='No intervention').loc['measles_infection']
 
 The campaign averts about 6,900 infections in the median, and 5,800 to 7,700 in 95% of pairs. This is only the uncertainty from chance: every run has the same β, immunity, and contacts. Uncertainty in those, often larger, comes from varying them too, as in [T6 – Data and calibration](t6_data.qmd). See [Scenarios](../user_guide/running_scenarios.qmd) and [Random numbers](../user_guide/mechanics_random.qmd).
 
-## As agents
+## Advanced: interventions as agents {#as-agents}
 
 The interventions above reach groups of people, which compartments can hold. Others reach particular people because of what has happened to them, such as their infections, test results, and partners, so they run as agents. Each is a _product_ (`ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`) and a _delivery_ that gives it to people (`ss.vaccinate()`, `ss.screen()`, or `ss.treat()`), which says who (`who=`), when (`when=`: times, an event that has happened to them, or `ss.schedule()`), and how many (`coverage=`, `capacity=`).
 
@@ -324,7 +350,7 @@ print('... of whom cured:', sim.results.treatment.cured.sum(), '- not cured:', s
 print('Partners treated:', sim.results.notification.delivered.sum())
 ```
 
-About half of those treated after a positive test weren't infected: with only a few percent infected, even a 98% specific test gives about as many false positives as true ones. A treatment's outcomes, `cured`, `failed`, and `unneeded`, are results and events: `ss.treat(..., when=treatment.failed)` would give a second-line drug (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)).
+About a third of those treated after a positive test weren't infected: with only a few percent infected, even a 98% specific test gives about half as many false positives as true ones. A treatment's outcomes, `cured`, `failed`, and `unneeded`, are results and events: `ss.treat(..., when=treatment.failed)` would give a second-line drug (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)).
 
 ### Vaccination as people reach an age
 
@@ -343,7 +369,7 @@ msim.plot('sti.I')
 print('Doses:', msim.sims['And vaccination at age 15'].results.vaccination.delivered.sum())
 ```
 
-The vaccine makes little difference for ten years, since vaccinated cohorts replace unvaccinated ones only as the population turns over, and by 2040 lowers prevalence by about a quarter.
+The vaccine makes little difference for ten years, since vaccinated cohorts replace unvaccinated ones only as the population turns over, and by 2040 lowers prevalence only a little (about a tenth over the last year, which at this size is close to the noise between runs).
 
 These deliveries cover most programs. For a rule of your own, `who=` takes a function of the sim, as in the screening above; an intervention that does something no product does is a module written as code ([T8 – Custom modules](t8_modules.qmd)). [Interventions](../user_guide/interventions_interventions.qmd) covers capacity, priority, queues, and delays.
 
@@ -351,11 +377,11 @@ These deliveries cover most programs. For a rule of your own, `who=` takes a fun
 
 1. The campaign above is run on 1 March. How many infections does it prevent if it is run on 1 February instead, or on 1 May? What does this say about how quickly a campaign should follow the first cases?
 2. Add a scenario that combines the campaign and the response (`interventions=[campaign, response]`). Is its effect the sum of the two on their own? Why not?
-3. Start the outbreak with 2 infectious people rather than 10 (`init_n=dict(I=2)`), and run the model with no intervention 50 times as a stochastic model. In what fraction of runs does the outbreak die out? Compare this with (1/R)², where R ≈ 2.5 is the reproduction number at the start: roughly the chance that the chains of infection started by both people die out.
+3. Start the outbreak with 2 infectious people rather than 10 (`init_n=dict(I=2)`), and run the model with no intervention 50 times as a stochastic model. In what fraction of runs does the outbreak die out? Compare this with (1/R)², where R ≈ 2.5 is the reproduction number at the start: roughly the chance that the chains of infection started by both people die out. (This estimate assumes that each chain dies out on its own with a chance of 1/R, as early in an outbreak in a large population where everyone is alike; here people differ by age.)
 4. In the scenario with partner notification, what happens if the partners of people who seek care are notified too (a second notification, with `when=care`)? Is the effect larger than notifying the partners of those found by screening?
 5. Screening reaches people aged 15 to 29. How much does the effect change if it reaches everyone aged 15 to 49 instead, and how many more tests does it take? Which gives more infections prevented per test?
 
-[Solutions](solutions.qmd#t5-interventions-and-scenarios) · Next: [T6 – Data and calibration](t6_data.qmd)
+[Solutions](solutions_t5_interventions.qmd) · Next: [T6 – Data and calibration](t6_data.qmd)
 
 ## Further reading
 

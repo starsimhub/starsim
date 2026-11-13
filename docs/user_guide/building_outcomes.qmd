@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; appendix added by AI; shortened on Nov 11 by AI
+  note: Written by AI; appendix added by AI; shortened on Nov 11 by AI; the table of likelihoods moved to Fitting a model on Nov 12 by AI after the docs review
 ---
 
 What a model tracks is not what is observed: a model of measles tracks who is susceptible, latent, infectious, and immune, while surveillance sees some of the cases, some days after infection. This page covers declaring more results (such as prevalence), declaring **outcomes** (reported quantities worked out from the model's flows: cases, hospital admissions, deaths), and attaching data to results by name, so that it can be plotted and fitted. For a step-by-step introduction, see [T6 – Data and calibration](../tutorials/t6_data.qmd).
@@ -157,7 +157,7 @@ Nothing needs a likelihood to be compared with data or fitted to it: by default,
 cases = ss.outcome(0.5*onset, delay=ss.days(4), likelihood=ss.nbinom(n=ss.par(10, bounds=[1, 100])))
 ```
 
-The model's value is the mean of the distribution, and the rest (here the dispersion of a negative binomial) is given, or fitted as a parameter. The [appendix](#appendix-every-likelihood) lists the likelihoods there are, and the data each suits. See [Fitting a model](calibration_fitting.qmd) and [Gradients](calibration_gradients.qmd).
+The model's value is the mean of the distribution, and the rest (here the dispersion of a negative binomial) is given, or fitted as a parameter. Use `ss.poisson()` for counts with no more spread than chance gives, `ss.nbinom()` for overdispersed counts (most surveillance data), and `ss.binom()` for the positives among those tested; [Fitting a model](calibration_fitting.qmd#likelihoods-and-priors) lists every likelihood and the data each suits.
 
 ## Pitfalls and further reading
 
@@ -171,17 +171,3 @@ Further reading:
 - [Practical considerations for measuring the effective reproductive number, Rt](https://doi.org/10.1371/journal.pcbi.1008409): why the delays between infection and observation matter, and how to account for them
 - [pomp](https://kingaa.github.io/pomp/): stochastic models with an explicit measurement model linking the process to the data, in R
 - [Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): course notes on measurement models and likelihoods for epidemic data
-
-## Appendix: every likelihood
-
-A likelihood is given with an outcome (`ss.outcome(..., likelihood=...)`), or to the fit by the name of the data series (`sim.fit(likelihood=dict(cases=...))`). In each, the model's value at the data is the mean (or the probability), and the other parameters can be numbers or fitted `ss.par()`s. See [`ss.fitting`](../api/fit.qmd).
-
-| Likelihood | The model's value is | Suits |
-|---|---|---|
-| `ss.poisson()` | The mean count | Counts with no more spread than chance gives: cases or deaths, reported in full or at a steady rate |
-| `ss.nbinom(n=...)` | The mean count; `n` is the dispersion (smaller means more spread) | Overdispersed counts, as most surveillance data are: reporting that varies from week to week |
-| `ss.binom(n=...)` | The probability; `n` is the number of trials | The positives among `n` people tested, e.g. a prevalence survey or a serosurvey |
-| `ss.bernoulli()` | The probability | Whether something happened, as 0 or 1, e.g. whether an outbreak was reported |
-| `ss.normal(std=...)` | The mean; `std` is the standard deviation | A continuous measure with noise of a known size, e.g. a fraction estimated with a standard error |
-| `ss.lognormal(std=...)` | The mean; `std` is the standard deviation | A positive measure whose noise grows with its size, e.g. a concentration in wastewater |
-| A function `fn(observed, model)` | Whatever the function says: it returns the log-likelihood of each value | Anything else, e.g. a normal whose variance grows with the mean (not available for NUTS in JAX, which then runs with Python in the loop) |

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; revised on Nov 12 by AI after the docs review
 ---
 
 In an SEIR model, people infected first pass through a latent period (E, exposed) before they become infectious. In the simplest SEIR, the time spent in each state is exponentially distributed: many people leave a state almost at once and a few stay a long time, which is rarely realistic. A gamma-distributed (Erlang) period with a few stages is closer to most real infections: each person passes through *k* stages, each exponential, and the total has the same mean but much less spread. This page compares the two, for the same mean infectious period.
@@ -43,8 +43,6 @@ erlang.diagram()
 As an ODE, the Erlang period is exact: I is split into three stages, each with a mean of a third of the period, as the equations show:
 
 ```{python}
-sim = ss.Sim(erlang, total_pop=100_000, stop=ss.days(200), verbose=0)
-sim.run()
 erlang.equations()
 ```
 
@@ -59,9 +57,9 @@ msim = ss.parallel(sims)
 msim.plot('seir')
 ```
 
-Both have the same R0, so the same fraction of people is infected in the end. But with the Erlang period, people infect others over a narrower window of time after they were infected, so the epidemic grows faster, and peaks earlier and higher. A model fitted to the growth of an epidemic with the wrong distribution of the infectious period gets R0 wrong, which is one reason for the stages.
+Both have the same R0 and start the same way, in a closed population, so the same fraction of people is infected in the end (the final size depends only on R0 in an SEIR like this one, whatever the distributions of the periods). But with the Erlang period, people infect others over a narrower window of time after they were infected, so the epidemic grows faster, and peaks earlier and higher. A model fitted to the growth of an epidemic with the wrong distribution of the infectious period gets R0 wrong, which is one reason for the stages.
 
 ## Going further
 
 - [T3 – Building a disease](../tutorials/t3_disease.qmd) adds a latent period to the measles model, with durations and their distributions.
-- [Distributions](../user_guide/mechanics_distributions.qmd) lists the distributions a duration can have; any of them can be used as agents, and as compartments they are represented by stages.
+- [Diseases](../user_guide/building_diseases.qmd#durations) says how each kind of duration runs, as agents and as compartments, and [Distributions](../user_guide/mechanics_distributions.qmd) lists the distributions a duration can have.

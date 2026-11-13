@@ -142,8 +142,8 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         optdesc.kernels = 'Which compiled code runs the solvers (all give the same results):\n\n- "auto" (default): Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md); otherwise Numba, running compartmental sims in plain Python until Numba has compiled (Numba compiles first if a run, or the runs of a session, would take longer in plain Python than compiling takes, about two minutes, once per install; a note says which)\n- "rust": Rust, compiled ahead of time, so a first run takes no compiling\n- "numba": always compile with Numba first (see ss.compile())\n- "python": the compartmental kernels in plain Python (the passes over agents are still Numba), e.g. for debugging\n\nJAX is chosen by the run (see sim.jax), and ss.jit always uses Numba.'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
-        optdesc.jax = 'Where JAX runs when Starsim uses it (sim.gradient(), fits, and ODE runs with sim.jax = True): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has already started on other platforms, it is restarted on these the next time Starsim uses it (and "auto" goes back to the platforms it had before).'
-        options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
+        optdesc.jax = 'Where JAX runs when Starsim uses it (sim.gradient(), fits, and ODE runs with sim.jax = True): "cpu" (default), "auto" for JAX\'s own choice (a GPU if it finds one), or another platform, e.g. "cuda". The CPU is the default since Starsim\'s runs in JAX are long loops of small steps, which a GPU runs several times slower. It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has already started on other platforms, it is restarted on these the next time Starsim uses it (and "auto" goes back to the platforms it had before).'
+        options.jax = sc.parse_env('STARSIM_JAX', 'cpu', str)
 
         optdesc.uncompiled_warning = 'Whether to say on import that Starsim has not been compiled yet (see ss.compile()); True by default. Since it is read on import, it only has an effect as the environment variable STARSIM_UNCOMPILED_WARNING.'
         options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
@@ -296,7 +296,7 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
                 import starsim.solvers.backends.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
                 rust.auto() if value == 'auto' else rust.use(value == 'rust')
             elif key == 'jax' and not (isinstance(value, str) and value):
-                errormsg = f'ss.options.jax must be "auto" or the name of a JAX platform, e.g. "cpu", not {value!r}'
+                errormsg = f'ss.options.jax must be the name of a JAX platform, e.g. "cpu", or "auto", not {value!r}'
                 raise ValueError(errormsg)
             super().__setitem__(key, value) # Not self[key], which calls this
 

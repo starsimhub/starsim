@@ -507,19 +507,22 @@ def test_jax_platform(monkeypatch):
     sc.heading('Testing the platform of JAX')
     with pytest.raises(ValueError, match='JAX platform'):
         ss.options.jax = 3
-    with ss.options(jax='cpu'):
-        assert ss.options.jax == 'cpu'
-    assert ss.options.jax == 'auto'
+    assert ss.options.jax == 'cpu' # The default
+    with ss.options(jax='auto'):
+        assert ss.options.jax == 'auto'
+    assert ss.options.jax == 'cpu'
 
     import importlib.metadata as md
     pytest.importorskip('jax')
     env = os.environ.get('JAX_PLATFORMS')
-    jax = ss.gradients.jax() # Started on its own platforms (the CPU in the tests: see conftest.py)
+    with ss.options(jax='auto'):
+        jax = ss.gradients.jax() # Started on its own platforms (the CPU in the tests: see conftest.py)
     with ss.options(jax='cpu'): # Started again, on these
         assert ss.gradients.jax().default_backend() == 'cpu'
         assert os.environ['JAX_PLATFORMS'] == 'cpu'
         assert float(jax.numpy.ones(2).sum()) == 2
-    ss.gradients.jax() # And back to what it had
+    with ss.options(jax='auto'):
+        ss.gradients.jax() # And back to what it had
     assert os.environ.get('JAX_PLATFORMS') == env
     assert (jax.config.jax_platforms or None) == ss.gradients.original['platforms']
     real = md.distributions

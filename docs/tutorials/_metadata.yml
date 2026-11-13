@@ -1,0 +1,12 @@
+# Each tutorial (and solutions page) can also be downloaded as a Jupyter notebook: Quarto renders it
+# to ipynb too, and links to it from the page. The notebook is not executed (the page already is),
+# and Quarto (the Sciris fork) lays out its tabs as plain cells.
+format:
+  html: default
+  ipynb:
+    execute:
+      enabled: false
+format-links:
+  - text: Jupyter notebook
+    format: ipynb
+    icon: journal-code

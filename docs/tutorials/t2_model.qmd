@@ -2,9 +2,9 @@
 title: "T2 – Building a model"
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI
+  human: 9
+  ai: 91
+  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 This tutorial goes through the SIR model of [Tutorial 1](t1_intro.qmd) in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?**
@@ -38,7 +38,7 @@ sim.plot()
 
 **Transitions.** `S >> I @ rate` moves people from `S` to `I` at a *per capita* rate: the rate for each person in `S`. For an infection, this is the force of infection, λ = β I / N, which is what `1.9*I` says, since a state in a rate is the fraction of people in it. Times S, it gives β S I / N infections a day. Because `I` is in the rate, Starsim knows the transition is a transmission, and that `I` is infectious.
 
-This is *frequency-dependent* transmission: what matters is the fraction infectious, so a larger town has more infections but not a faster epidemic. A bare state in a rate means contact with the people in it, which, with nobody in particular meeting anybody in particular, is their fraction; with a contact matrix ([Tutorial 4](t4_mixing.qmd)) or a network, the same `1.9*I` is worked out from whom each person meets. To say exactly the fraction, write `1.9*I.frac` (which a sim with a network refuses, since it would ignore whom people meet); for *density-dependent* transmission (as for some diseases of animals), write the number, `beta*I.n`, so that β is per infectious person and R0 (β N × the infectious period) grows with the population. A rate is read as it is written: with the total, from `S, I, R, N = ss.states('S I R', include_sum=True)`, `1.9*I/N` is the fraction, as in the equations, the same as `1.9*I.frac`; and the whole flow, as many textbooks write it, `S >> I @ 1.9*S*I/N`, is too ([Building diseases](../user_guide/building_diseases.qmd#transmission) has all the forms).
+This is *frequency-dependent* transmission: what matters is the fraction infectious, so a larger town has more infections but not a faster epidemic. For *density-dependent* transmission (as for some diseases of animals), write the number infectious, `beta*I.n`, so that β is per infectious person and R0 grows with the population. [Diseases](../user_guide/building_diseases.qmd#transmission) has these and the other ways to write a rate, such as the whole flow, `S >> I @ 1.9*S*I/N`, as many textbooks write it.
 
 **Durations.** `I >> R @ ss.days(8)` gives a duration instead of a rate: 8 days in `I` on average, or a recovery rate of 1/8 per day, exponentially distributed as in the standard SIR model ([Tutorial 3](t3_disease.qmd) shows other distributions).
 
@@ -208,9 +208,9 @@ See [Results](../user_guide/building_results.qmd) in the user guide for more.
 
 ## Time
 
-**Units.** Every run has a unit of time, here a day, taken from the durations in the model (`ss.days(8)`). A bare number, such as β = 1.9, is in the same unit: 1.9 per day, the same as `ss.perday(1.9)` (and nearly `ss.perweek(13.3)`). Durations can be in any unit (`ss.days()`, `ss.weeks()`, `ss.months()`, `ss.years()`), converted to the model's.
+**Units.** Every run has a unit of time, here a day, taken from the typed values in the model (`ss.days(8)`). A bare number, such as β = 1.9, is in the same unit: 1.9 per day, the same as `ss.perday(1.9)` (and nearly `ss.perweek(13.3)`). Durations can be in any unit (`ss.days()`, `ss.weeks()`, `ss.months()`, `ss.years()`), converted to the model's.
 
-If a model has values in more than one unit, such as days and years ([Tutorial 3](t3_disease.qmd)), Starsim can't tell which unit bare numbers are in, and says so. Then give them units, or the model's unit, e.g. `ss.Sim(..., unit='day')`.
+If a model mixes units, such as days and years ([Tutorial 3](t3_disease.qmd#waning-immunity)), give its bare numbers units (`ss.perday(1.9)`), or give the sim its unit (`ss.Sim(..., unit='day')`); [Time](../user_guide/building_time.qmd#units) has the rules.
 
 **Start and stop.** `stop=ss.days(50)` runs from day 0 to day 50 (as does `dur=ss.days(50)`). A run can also start and stop on dates:
 
@@ -220,19 +220,7 @@ sim.run()
 sim.plot()
 ```
 
-**Steps, people, and agents.** A run moves in steps, `dt`, by default one of the unit (a day). For the ODE, the step is only how often results are recorded. For agents, moves are drawn once per step; [Tutorial 1](t1_intro.qmd) showed that a day is too long a step for this outbreak. Here are agents with steps of a day and a quarter day, with the ODE:
-
-```{python}
-ode = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
-day = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50), verbose=0)
-quarter = day.new(dt=ss.days(0.25))
-msim = ss.parallel({'ODE': ode, 'Agents, step of 1 day': day, 'Agents, step of 1/4 day': quarter})
-msim.plot('measles.I')
-```
-
-`sim.new()` copies a sim with whatever is given changed; `verbose=0` silences the run. With a quarter-day step, the peak comes close to the ODE's. A good check of any agent model is to halve the step and see whether results change; `sim.check_dt()` does this for you.
-
-`total_pop` is the number of people; as agents, each of the `n_agents` stands for `total_pop / n_agents` people (here 10). Results are always in people. More agents vary less by chance but take longer; small numbers, such as the last few cases, need more. See [Time](../user_guide/building_time.qmd) in the user guide for more.
+**Steps.** A run moves in steps, `dt`, by default one of the unit (a day). Agents move once per step, so for agents, a step that is too long changes the results, as [Tutorial 1](t1_intro.qmd#the-same-model-as-agents) showed; [Solvers](../user_guide/running_solvers.qmd#the-length-of-a-step) shows how to check. See [Time](../user_guide/building_time.qmd) in the user guide for more.
 
 ## Saving and loading
 
@@ -256,7 +244,7 @@ df.to_csv('my-measles.csv')
 2. Using the final size relation, a model with R0 = 1.5 should infect about 58% of people. Choose β to give R0 = 1.5 with an infectious period of 8 days, run the model for long enough for the outbreak to end, and check.
 3. Change the model to density-dependent transmission (`I.n`), choosing β so that R0 is still 15 in a town of 100,000. Then run it in a town of 10,000 and of 1,000,000. How does the outbreak change with the size of the town, and how does this differ from the frequency-dependent model?
 
-[Solutions](solutions.qmd) · Next: [T3 – Building a disease](t3_disease.qmd)
+[Solutions](solutions_t2_model.qmd) · Next: [T3 – Building a disease](t3_disease.qmd)
 
 ## Further reading
 

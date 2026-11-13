@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI
+  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI; linked to the one description of a step on Nov 12 by AI after the docs review
 ---
 
 
@@ -80,7 +80,7 @@ Three details of the compartmental engine explain most of its behavior:
 - **Rust, Numba, or plain.** The kernels run in Rust, compiled by Numba, or as plain Python, with the same results (see [the kernels](#the-kernels), below).
 - **JAX for gradients and fitting.** `internals/gradients.py` (`ss.gradients`) runs the same program with the same steps in JAX, so results can be differentiated (`sim.gradient()`) and many parameter sets run at once. `ss.solvers.choose_engine()` uses JAX for a run, or for a sweep of many parameter sets in one call (`ss.parallel(sim, pars=...)`), only with `sim.jax = True`; gradients and `sim.fit()` use it on their own. `sim.engine_reason` says which ran, once the sim has been run.
 
-The agent engine takes a step as one sweep over the disease's transitions, in an order worked out once from the graph (`Agents.sweep()`): each transition after those that bring people into its source, a trigger (`when=`) after the event it waits for, and the triggers out of a state ahead of its scheduled exits; a loop of states is broken at the transition declared first. At each transition in turn, those it moves now leave (by its trigger, or because their exit by it is due, including people who arrived in its source earlier in the sweep with a wait that rounds to no steps), and everyone who left by it is sent to their destinations (a transition with several destinations takes one draw for each, and `ss.stay` puts people back); each arrival is dated, and has its branch, dwell time and exit drawn if its state schedules them. Someone who reaches a transition the sweep has already passed is taken by another sweep, until nobody moves, so the moves with no wait happen in the step that caused them, as in the ODE, and in the order a modeler writing the code by hand would take them (`Agents.finish_moves()`). The step's infections are dated at its end, and start a cascade of their own. Every way in from code (an intervention's move, `ss.move()`, `disease.infect()`) is a round of its own.
+What a step does, under each solver (competing exits, when rates are read, cascades, and the order between modules), is in [From declaration to run](architecture_run.qmd#how-the-state-is-updated-within-a-step); this is how the agent engine does it. It takes the transitions that are not transmission first, then transmission, each as one sweep over the disease's transitions, in an order worked out once from the graph (`Agents.sweep()`): each transition after those that bring people into its source, a trigger (`when=`) after the event it waits for, and the triggers out of a state ahead of its scheduled exits; a loop of states is broken at the transition declared first. At each transition in turn, those it moves now leave (by its trigger, or because their exit by it is due, including people who arrived in its source earlier in the sweep with a wait that rounds to no steps), and everyone who left by it is sent to their destinations (a transition with several destinations takes one draw for each, and `ss.stay` puts people back); each arrival is dated, and has its branch, dwell time and exit drawn if its state schedules them. Someone who reaches a transition the sweep has already passed is taken by another sweep, until nobody moves, so the moves with no wait happen in the step that caused them, as in the ODE, and in the order a modeler writing the code by hand would take them (`Agents.finish_moves()`). The step's infections are dated at its end, and start a cascade of their own. Every way in from code (an intervention's move, `ss.move()`, `disease.infect()`) is a round of its own. The compiled passes take the same rounds.
 
 Each of the engine's draws is keyed by its stream, the step, and the *round* (`Agents.draw()`, `Agents.new_round()`): each transition of the sweep is a round, as is each way in from code. A draw is not keyed by how many times the stream has been called, so it does not depend on how the work of a round is batched; an agent moves at most once in a round, so each agent's draws from a stream are its own (`STARSIM_CHECK_DRAWS=1` checks it).
 
@@ -92,23 +92,7 @@ The same kernels exist as several sets, which give the same numbers: Rust's (`so
 
 ## Execution paths and the tests that pin them
 
-Each path below is checked against a reference where one exists: the ODE against SciPy and known answers, and the other paths against the ODE or against a path already checked. Files in `tests/` are the core tests, run on every change; those marked `devtests/` are the slower developer tests in `tests/devtests/`.
-
-| Path | When it is used | Pinned by |
-|---|---|---|
-| ODE in the kernels | `ode`, or `'auto'` choosing it | `test_transitions.py::test_solvers` (within 1e-4 of SciPy, and the analytic final size); `test_kernels.py::test_ode` (whole run equals stepped run to 1e-9) |
-| Kernels as plain Python, and in Rust | before Numba's are compiled; Rust's when built | `test_kernel_sets.py` (equal to Numba's, bit for bit, every solver); `devtests/test_kernels.py::test_numpy_ode` (the ODE in NumPy) |
-| ODE in JAX | `sim.jax = True`, gradients, fitting, many parameter sets | `devtests/test_gradients.py::test_jax_run` (equals the kernels to 1e-9), `test_jax_engine`; `test_gradient` (against finite differences) |
-| `binomial`, `gillespie` in the kernels | asked for by name | `devtests/test_contracts.py::test_solvers_agree` (means within 5% of the ODE), `test_exit_order`, `test_conservation`; `devtests/test_kernels.py::test_stochastic` (whole and stepped runs identical) |
-| `tau` in the kernels | asked for by name | `devtests/test_contracts.py::test_exit_order`; `test_kernels.py::test_stages`; `devtests/test_contracts_inference.py::test_particle_filter` (against the ODE at a large population) |
-| Diseases tracked jointly | one refers to another's states | `devtests/test_contracts.py::test_crossing_conservation`, `test_joint_population`; `devtests/test_gradients.py::test_crossing` |
-| A declared model as agents | `abm`, or `'auto'` choosing it | `devtests/test_contracts.py::test_solvers_agree`, `test_agents_match_ode` (within 3% of the ODE), `test_dwell_forms` |
-| Built-in modules as agents | `ss.SIR`, `ss.RandomNet`, births and deaths | `test_baselines.py::test_baseline` (results identical to the recorded baseline) |
-| Modules written as code | their own `step()`, alone or beside a declared model | `test_composition.py`; `devtests/test_contracts.py::test_coded_beside` (code beside a declared model leaves its results unchanged) |
-| Particle filter | `ss.fitting.ParticleFilter` | `devtests/test_contracts_inference.py::test_particle_filter` (against direct runs) |
-| `@ss.jit` | users' compiled code | `test_jit.py` (same results compiled as run as Python) |
-
-The [developer guide](../contributing/developer.qmd#testing) explains the suites these come from, and which to run after a change.
+Each path is checked against a reference where one exists: the ODE against SciPy and known answers, and the other paths against the ODE or against a path already checked. The [developer guide](../contributing/developer.qmd#execution-paths) lists each path, when it is used, and the tests that pin it.
 
 ## How the engines compute transmission
 
@@ -145,20 +129,9 @@ The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connecto
 
 ## Further reading
 
-The design record:
-
-- [Solvers: choosing, approximating, and building](https://starsim.org/lingua_franca/design/12-backends.html)
-- [Execution](https://starsim.org/lingua_franca/design/10-execution.html)
-- [Conformance](https://starsim.org/lingua_franca/design/18-conformance.html)
-- [Routes](https://starsim.org/lingua_franca/design/06-routes.html)
-- [Effects](https://starsim.org/lingua_franca/design/07-effects.html)
-- [Interventions](https://starsim.org/lingua_franca/design/08-interventions.html)
-- [Results](https://starsim.org/lingua_franca/design/09-results.html)
-
-Elsewhere:
-
+- [Solvers: choosing, approximating, and building](https://starsim.org/lingua_franca/design/12-backends.html): the design record's account of the engines
+- [Routes](https://starsim.org/lingua_franca/design/06-routes.html) and [Effects](https://starsim.org/lingua_franca/design/07-effects.html): the design record's account of transmission and modifiers
 - [dust2: Introduction](https://mrc-ide.github.io/dust2/): the engine behind odin2, which runs one compiled model deterministically or as many stochastic particles, as Starsim's compartmental engine does
 - [GillesPy2](https://stochss.github.io/GillesPy2/): exact (Gillespie) and tau-leaping solvers for stochastic compartmental models, with several compiled backends
-- [Numba: A 5-minute guide](https://numba.readthedocs.io/en/stable/user/5minguide.html) and [JAX: Quickstart](https://docs.jax.dev/en/latest/quickstart.html): the compiler behind Starsim's reference kernels and `ss.jit`, and the library Starsim uses to differentiate a run and to run many at once
-- [EpiModel: Network modeling for epidemics](https://epimodel.org/): transmission over dynamic partnership networks, estimated with exponential-family random graph models
-- [EMOD: Campaign management](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-campaigns/): how interventions are distributed to individuals in IDM's agent-based model
+- [EpiModel: Network modeling for epidemics](https://epimodel.org/): transmission over dynamic partnership networks
+

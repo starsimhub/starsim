@@ -2,12 +2,12 @@
 title: Branching and rescaling
 jupyter: python3
 authorship:
-  human: 20
-  ai: 80
-  note: Based on the Claude draft on rescaling, with text adapted from the Starsim 3 user guide page on population rescaling and a new section on branching processes written by AI; examples corrected and made realistic, and an appendix added, by AI; shortened on Nov 11 by AI
+  human: 19
+  ai: 81
+  note: Based on the Claude draft on rescaling, with text adapted from the Starsim 3 user guide page on population rescaling and a new section on branching processes written by AI; examples corrected and made realistic, and an appendix added, by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
-Many questions are about a small part of a large population: the first cases of an outbreak in a city, or an epidemic in a country of tens of millions. Simulating every person is then often unnecessary and slow. While an outbreak is small compared with the population, it can be treated as a **branching process**: each case infects a random number of others, independently of every other case, and the rest of the population hardly matters. Once an epidemic is large, a run as agents can instead let each agent stand for several people: **population rescaling**. (A compartmental model holds numbers of people, so it can be any size at no cost.)
+Many questions are about a small part of a large population: the first cases of an outbreak in a city, or an epidemic in a country of tens of millions. Simulating every person is then often unnecessary and slow. While an outbreak is small compared with the population, it can be treated as a **branching process**: each case infects a random number of others, independently of every other case, and the rest of the population hardly matters. Once an epidemic is large, a run as agents can instead let each agent stand for several people: **population rescaling**. (A compartmental model holds numbers of people, so it can be any size at no cost.) The two differ in kind: branching changes the model itself, by turning off the depletion of susceptible people, so it is right only while an outbreak is small; rescaling changes only how the same model is represented, and should change the answer by no more than the extra noise of coarser agents.
 
 ## Branching processes
 
@@ -17,7 +17,7 @@ Early in an outbreak, each case infects a random number of others, its *offsprin
 - **Chains and generations.** Who infected whom, how many generations a chain lasts, and how large it gets before it dies out or takes off.
 - **Overdispersion.** If some cases infect many more people than others (superspreading), the offspring distribution has a long tail, and more introductions die out, even at the same R0.
 
-In Starsim, a branching process is not a different model, but the same model run with depletion turned off: `ss.Sim(branching=True)`. Infection then takes no one from the uninfected, and gives no one back, so the susceptible side stays as it would be with no infection, however large the outbreak gets. It works with every solver:
+In Starsim, a branching process is not a different model, but the same model run with depletion turned off: `ss.Sim(branching=True)`. Infection then takes no one from the uninfected, and gives no one back, so the susceptible side stays as it would be with no infection, however large the outbreak gets. It works with every solver but agents stepped by events (`ss.solvers.abm(step='events')`):
 
 | Solver | What it gives |
 |---|---|

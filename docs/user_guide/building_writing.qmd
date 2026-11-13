@@ -2,9 +2,9 @@
 title: Writing models
 jupyter: python3
 authorship:
-  human: 5
-  ai: 95
-  note: Written by AI, with a little from the Starsim 3 user guide page on model structure; appendix added by AI; shortened on Nov 11 by AI
+  human: 4
+  ai: 96
+  note: Written by AI, with a little from the Starsim 3 user guide page on model structure; appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (a table of the shorthand and its written-out form)
 ---
 
 A Starsim model is a sim (`ss.Sim`) that holds a population and a set of modules: one or more diseases, and whatever else the model needs (contacts, births and deaths, interventions). This page covers how those parts fit together, and how to check that the model Starsim built is the one you meant. For a first walk through a model, see [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd).
@@ -85,6 +85,23 @@ A sim can hold these kinds of modules, each given to it by keyword (a disease ca
 The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed, and how the model is run (`solver=`). See [Running sims](running_sim.qmd) for these, and its [appendix of every sim setting](running_sim.qmd#appendix-every-sim-setting); see [Time](building_time.qmd) for the span and the step.
 
 A disease can be **declared**, as states and transitions, as above, or **written as code**, for what states and transitions can't say; both kinds can be in the same sim. See [Diseases](building_diseases.qmd#diseases-as-classes), [Custom modules](building_modules.qmd), and [What can be declared](building_declared.qmd).
+
+## Shorthand and its written-out form
+
+This page is the reference for how a declared model is written; [Diseases](building_diseases.qmd) says what each kind of transition means. The operators are a short way to write `ss.Transition()`, and each form below builds the same objects as its written-out form, with the same results:
+
+| Shorthand | Written out | Means |
+|---|---|---|
+| `S, I, R = ss.states('S I R')` | `S = ss.State(name='S')`, and so on | The states |
+| `S >> I @ 1.9*I` | `ss.Transition(S, I, rate=1.9*I)` | A rate (a bare number after `@` is a rate) |
+| `I >> R @ ss.days(8)` | `ss.Transition(I, R, dur=ss.days(8))` | A duration, or a distribution of durations |
+| `I >> R @ dict(dur=ss.days(8), p=0.99)` | `ss.Transition(I, R, dur=ss.days(8), p=0.99)` | Any keywords of the transition |
+| `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` | `ss.Transition(I, {ss.dead: 0.002, R: None}, dur=ss.days(8))` | One transition with several destinations |
+| `S + V >> I @ 1.9*I` | `ss.Transition([S, V], I, rate=1.9*I)` | From any of several states |
+| `U >> A @ ss.on(ss.person.age >= 15)` | `ss.Transition(U, A, when=ss.on(ss.person.age >= 15))` | A trigger |
+| `ss.Disease(infection, recovery)` | `ss.Disease(transitions=[infection, recovery])`, or `ss.Disease(infection=..., recovery=...)` | The disease, named after its variable |
+
+A disease can also be a class, with the same lines in its body, or declare them in `__init__()` with `define_states()` and `define_transitions()` ([Diseases](building_diseases.qmd#diseases-as-classes)). Names and values that aren't given are filled in by the rules in the [appendix](#appendix-what-starsim-names-and-fills-in), and units by those in [Time](building_time.qmd#units).
 
 ## Checking a model
 
@@ -187,7 +204,7 @@ A model that runs is not necessarily the model you meant, and a plausible plot i
 - **Check that everyone has a place to start.** `init_prev` starts people in `E`, not `I`, in an SEIR model ([Starting values](building_diseases.qmd#starting-values-births-and-deaths)).
 - **Check that the states add up.** In a closed model (no births or deaths), the people in all the states of a disease add up to the population at every time point.
 - **Match the quantity to the question.** New infections are a flow (`res.infection`), and the number infectious a stock (`res.I`): summing `I` over time counts each person once for every day they are infectious.
-- **Check the units of β.** Adding a contact matrix or a network changes β from a rate per person to a rate per contact; see [Stratification](building_stratification.qmd).
+- **Check the units of β.** Adding a contact matrix or a network changes β from a rate per person to a rate per contact; see [Mixing](populations_mixing.qmd).
 - **Don't change the original after the sim is made.** Since the sim has a copy, changing `measles` after `ss.Sim(measles, ...)` has no effect on that sim. Change the sim's copy, give the new value to the sim by name (`ss.Sim(measles, pars=dict(beta=1.5))`), or make a new sim.
 
 ## Further reading
@@ -208,7 +225,7 @@ From some names and forms, Starsim works out what the model didn't say. Each val
 |---|---|---|
 | The population | 10,000 people | `total_pop=`, or `n_agents=` as agents |
 | The length of the run | 50 units of time | `stop=` or `dur=` |
-| The unit of time | From the model's typed values, then dates, a typed `dt`, or years, in that order ([Time](building_time.qmd#units)) | `unit=`, or type every value |
+| The unit of time | From the diseases' typed values, then dates, a typed `dt`, years, or the other modules' typed values; else time is in steps ([Time](building_time.qmd#units)) | `unit=`, or type every value |
 | The solver | An ODE, or agents if anything in the model needs them ([Solvers](running_solvers.qmd)) | `solver=`, or `n_agents=` |
 | Mixing | Homogeneous, one contact per unit of time | `networks=` |
 | A single duration (`ss.days(8)`) | Exponential, with that mean | A distribution, e.g. `ss.erlang(k=4, mean=ss.days(8))` |

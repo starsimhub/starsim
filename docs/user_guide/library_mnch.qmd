@@ -2,9 +2,9 @@
 title: Maternal-child health
 jupyter: python3
 authorship:
-  human: 45
-  ai: 55
-  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with the comparisons with and without each module written by AI; shortened on Nov 11 by AI
+  human: 40
+  ai: 60
+  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with the comparisons with and without each module written by AI; shortened on Nov 11 by AI; customization condensed on Nov 12 by AI after the docs review
 ---
 
 Transmission from mother to child, and the outcomes of a pregnancy (stillbirth, preterm birth, low birth weight, neonatal death), are harder to model than a standard disease: they depend on the timing of pregnancy, on which module acts first in a step, and on how deaths around birth are counted. The `ssl.mnch` submodule of the Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd) for what the library is) has worked examples of these patterns. All of them build on pregnancy (`ss.Pregnancy`, which gives each pregnancy as states and transitions, with conception, delivery, and the unborn child as an agent) and on `ss.PrenatalNet`, the network between a pregnant woman and her unborn child; both are described on [Demographics](populations_people.qmd#births-and-deaths).
@@ -46,7 +46,13 @@ for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items(
     print('  Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 ```
 
-To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()` into any `ss.AgentDisease`, which calls `set_congenital()` instead of `set_prognoses()` for each person infected before birth, whose mother is `people.parent`): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) instead infects a fetus over `ss.PrenatalNet` as it infects anyone else.
+To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease`, or copy its methods into any `ss.AgentDisease`:
+
+- `set_congenital()`, called instead of `set_prognoses()` for each child infected before birth (the mother is `people.parent`), draws and schedules the outcome;
+- `step_congenital()`, called from `step_state()`, applies the outcomes that are due;
+- the parameters `birth_outcome_keys` and `birth_outcomes`, and a `ti_<key>` state for each outcome (plus a true/false state for each that doesn't kill), say what the outcomes are. Outcomes named `'stillborn'` or `'miscarriage'` are deaths before delivery, and `'neonatal_death'` after it.
+
+`ssl.HIV` (see [Library: diseases](library_diseases.qmd)) instead infects a fetus over `ss.PrenatalNet` as it infects anyone else.
 
 ## Neonatal deaths
 

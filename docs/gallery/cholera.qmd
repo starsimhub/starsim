@@ -4,19 +4,19 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; amount and concentration made consistent on Nov 12 by AI after the docs review
 ---
 
 Cholera spreads mostly through water rather than from person to person: infected people shed bacteria into the water, the bacteria decay over weeks, and susceptible people are infected by drinking it. A model of it needs a state that is not people at all: the amount of bacteria in the water, W. This page models W as a state of the disease that holds a count rather than people, following the model of Codeço (2001).
 
 ## The model
 
-Infection depends on the concentration of bacteria, with a dose-response curve that saturates: the rate is β W / (W + K), where K is the concentration at which the rate is half its maximum.
+Infection depends on the bacteria in the water, with a dose-response curve that saturates: the rate is β W / (W + K), where K is the amount of bacteria at which the rate is half its maximum. W and K are amounts; Codeço writes them as concentrations, which is the same model for a fixed volume of water (taken here as one unit).
 
 | Parameter | Value | Meaning |
 |---|---|---|
 | β | 0.5 per day | Maximum rate of infection, when the water is saturated with bacteria |
-| K | 100,000 | Concentration of bacteria at which the rate is half its maximum |
+| K | 100,000 | Amount of bacteria at which the rate is half its maximum |
 | Infectious period | 5 days | Mean time in I (exponential) |
 | Shedding | 10 per day | Bacteria shed into the water by each infectious person |
 | Survival of bacteria | 30 days | Mean time bacteria survive in the water |
@@ -28,7 +28,7 @@ import starsim as ss
 
 S, I, R = ss.states('S I R')
 W = ss.State(people=False) # Bacteria in the water: a count, not people
-K = 1e5                    # Concentration at which infection is half its maximum
+K = 1e5                    # Amount of bacteria at which infection is half its maximum
 
 infection = S >> I @ ss.perday(0.5) * W.n / (W.n + K)
 recovery  = I >> R @ ss.days(5)
@@ -37,7 +37,7 @@ decay     = W >> ss.dead @ ss.days(30)          # Bacteria survive 30 days on av
 cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001), name='cholera')
 ```
 
-`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the fraction of people infectious (`I.frac`). `ss.dead` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
+`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the fraction of people infectious (`I.frac`). `ss.outside` and `ss.dead` are outside the model: shedding adds bacteria from outside it, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
 
 ```{python}
 cholera.diagram()

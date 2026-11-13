@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Merged on Nov 11 by AI from "Contact networks", the contact matrices of "Population data", and the movement between places of "Geography". "Contact networks" was based on the AI-written v4 draft, with the sections on how mixing pools transmit, hybrid networks, and editing edges adapted from the Starsim 3 user guide page on networks; the contact matrices and movement were from the AI-written v4 drafts (Claude's and Codex's). The realistic examples, movement between neighbors, and the tables completed, by AI. Shortened on Nov 11 by AI, with movement between places moved to Places and data
+  note: Merged on Nov 11 by AI from "Contact networks", the contact matrices of "Population data", and the movement between places of "Geography". "Contact networks" was based on the AI-written v4 draft, with the sections on how mixing pools transmit, hybrid networks, and editing edges adapted from the Starsim 3 user guide page on networks; the contact matrices and movement were from the AI-written v4 drafts (Claude's and Codex's). The realistic examples, movement between neighbors, and the tables completed, by AI. Shortened on Nov 11 by AI, with movement between places moved to Places and data; revised on Nov 12 by AI after the docs review
 ---
 
-A disease model says how infectious people are; the mixing says who meets whom, and how often. This page goes from the simplest mixing to the most detailed: homogeneous mixing, mixing pools, contact matrices between groups (such as age groups), and networks of individual contacts. Everything but networks runs as compartments or as agents; networks are about particular people, so need agents. Movement between places is in [Places and data](populations_places.qmd#movement-between-places), and the tutorial [T4 – Mixing](../tutorials/t4_mixing.qmd) builds up the same material as a single worked path.
+A disease model says how infectious people are; the mixing says who meets whom, and how often. This page goes from the simplest mixing to the most detailed: homogeneous mixing, mixing pools, contact matrices between groups (such as age groups), and networks of individual contacts. Everything but networks runs as written as compartments or as agents; networks are about particular people, so only agents run them as written, and a compartmental solver approximates them ([below](#which-solver-runs-it)). Movement between places is in [Places and data](populations_places.qmd#movement-between-places), and the tutorial [T4 – Mixing](../tutorials/t4_mixing.qmd) builds up the same material as a single worked path.
 
 ## Choosing how people mix
 
@@ -17,6 +17,15 @@ The disease and the mixing are separate: changing from homogeneous mixing to a n
 - **A mixing pool**, `ss.MixingPool(n_contacts=10)`: homogeneous mixing with 10 contacts per unit time. β is then per contact, so β × the number of contacts is the transmission rate.
 - **A contact matrix**, `ss.contacts(...)`: mixing between groups, such as age groups, with a number of contacts for each pair of groups (see [below](#a-contact-matrix-by-age)).
 - **A network**, such as `ss.RandomNet(n_contacts=10)` or `ss.SexualNet()`: contacts between particular people, with β per contact (or per sex act, on a network with acts).
+
+Which to choose depends on how people meet:
+
+| How people meet | Use | Runs as |
+|---|---|---|
+| Many brief contacts, at random | No route (homogeneous mixing), or `ss.MixingPool()` | Compartments or agents |
+| At random, but more within some groups (e.g. by age) | `ss.contacts()` with a stratified disease | Compartments or agents |
+| The same few people, again and again (households, partners) | A network: `ss.RandomNet(dynamic=False)`, `ss.SexualNet()`, or the library's household networks | Agents (a compartmental solver approximates it: see [below](#which-solver-runs-it)) |
+| From mother to child | `ss.PrenatalNet()`, with `ss.Pregnancy()` | Agents |
 
 Here is the same disease under three kinds of mixing. With no route, β = 0.05 per day and an infectious period of 10 days give R0 = 0.5; with 10 contacts a day, R0 = 5, and the mixing pool and the random network give nearly the same epidemic:
 
