@@ -913,7 +913,7 @@ class People:
         Plot the distribution of each of the people's states: a histogram for numbers, and a bar chart for true/false
 
         Args:
-            key (str/list): the state(s) to plot (default: all, up to `max_plots`)
+            key (str/list): the state(s) to plot (default: every true/false or numeric state with a value, up to `max_plots`, but not the solvers' own bookkeeping)
             alive (bool): if False, include every agent ever made, not only those active
             bins (int): the number of bins to use in `plt.hist()`
             hist_kw (dict): passed to `plt.hist()`
@@ -922,7 +922,11 @@ class People:
             **kwargs (dict): passed to `sc.getrowscols()`, including `fig_kw`
         """
         kwargs.setdefault('figsize', figsize)
-        key = sc.tolist(self.states.keys() if key is None else key)
+        if key is None: # What can be shown: not the solvers' own bookkeeping, or a state with no values (e.g. the time of death when nobody has died)
+            data = lambda state: state.values if alive else state.raw
+            shown = lambda state: not state.internal and (isinstance(state, ss.BoolArr) or (isinstance(state, ss.FloatArr) and not np.all(np.isnan(data(state)))))
+            key = [k for k,state in self.states.items() if shown(state)]
+        key = sc.tolist(key)
         if max_plots:
             key = key[:max_plots]
 
@@ -941,7 +945,7 @@ class People:
             else:
                 warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
                 ss.warn(warnmsg)
-            ax.set_title(f'{state.name} (mean={data.mean():n})')
+            ax.set_title(f'{state.name} (mean={ss.results.format_value(data.mean())})')
             ax.set_ylabel('Count')
             sc.commaticks(ax)
             sc.boxoff(ax)
@@ -992,10 +996,11 @@ class People:
         ax.set_yticklabels(y_labels)
         ax.set_xlabel(xlabel)
         ax.set_ylabel('Age group')
-        ax.legend(loc='lower right')
+        ax.legend(loc='upper right', frameon=False) # Beside the oldest groups, which are the narrowest
         max_val = max(f_vals.max(), m_vals.max()) * 1.1
         ax.set_xlim([-max_val, max_val])
         ax.axvline(0, color='black', linewidth=0.8)
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, pos: f'{abs(x):,g}')) # Females are drawn to the left, but are not negative
 
         # Tidy up
         sc.boxoff()

@@ -1810,9 +1810,9 @@ class Sim(ss.modules.Base):
             fig (Figure): an existing figure to plot into
             style (str): the plotting style to use
             show_data (bool): plot the data, if the sim has any
-            show_skipped (bool): also show the results that are left out by default (e.g. those that never change)
+            show_skipped (bool): also show the results that are left out by default (those that are zero throughout, and the sim's own that never change)
             annualize (bool): if True, resample results to annual values before plotting (each by its `summarize_by`; see `ss.Result.resample()`)
-            show_interventions (bool): mark when interventions and modifiers act: a dashed line at each round of a delivery, and a shaded span from the start to the stop of routine delivery or of an `ss.modify()` (those on an event or condition are not marked)
+            show_interventions (bool/str): mark when interventions and modifiers act: a dashed line at each round of a delivery, and at the start of routine delivery or of an `ss.modify()`; if `'fill'`, shade the span from their start to their stop instead (those on an event or condition are not marked)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             data_kw (dict): passed to `plt.scatter()`, for plotting the data
@@ -1839,7 +1839,7 @@ class Sim(ss.modules.Base):
             own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
             flat = ss.results.match_result_keys(self.results, None)
             key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
-        marks = {None:ss.results.intervention_marks(self)} if show_interventions else None
+        marks = {None:ss.results.intervention_marks(self, fill=(show_interventions == 'fill'))} if show_interventions else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, marks=marks, **kwargs)
 
 

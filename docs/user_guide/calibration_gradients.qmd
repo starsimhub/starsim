@@ -124,7 +124,7 @@ With a likelihood for every series, this is the maximum likelihood estimate (wit
 A posterior is the whole distribution of values consistent with the data. `method='nuts'` draws from it, given a likelihood for every data series, with each parameter's `prior=`, or a uniform prior over its bounds:
 
 ```{python}
-post = sim.fit(method='nuts')
+post = sim.fit(method=ss.fitting.method('nuts', warmup=100, draws=200)) # Fewer draws than the default, to run quickly
 post.summarize();
 ```
 

@@ -1706,6 +1706,7 @@ class Engine(Telling, Effects):
         fracs = sc.obj({s.name:0.0 for s in graph.people_states})
         counts = sc.obj({s.name:0.0 for s in graph.count_states})
         by_count = {} # Starting values read from the numbers in other states, e.g. init=m*N: worked out from the others, once they are known
+        exact = True # Whether fracs are the fractions people start in, rather than leaving out those chosen agent by agent (see describe_graph())
         for state in graph.states.values():
             is_n = state.init_n is not None # init_n= is a number of people, and init= a fraction of them (or, for a state that is not people, its amount)
             init = state.init_n if is_n else state.init
@@ -1720,6 +1721,7 @@ class Engine(Telling, Effects):
                 continue
             if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A)
                 if state.people and not is_n and isinstance(self.solver, ss.solvers.abm): # Read for each person, as agents: see Agents.init_post()
+                    exact = False
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
             elif isinstance(init, ss.expressions.Expr): # An expression of parameters, e.g. I0/2
@@ -1731,6 +1733,7 @@ class Engine(Telling, Effects):
                 errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the fraction of each strain, or set of strains carried together, in ss.Strains(fractions=...), e.g. fractions={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
                 raise ValueError(errormsg)
             if isinstance(init, ss.by) and state.people and not is_n and isinstance(self.solver, ss.solvers.abm) and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
+                exact = False
                 continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
@@ -1774,6 +1777,7 @@ class Engine(Telling, Effects):
             raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a fraction, or a function of the sim; or init_n= for a number of people')
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
+            exact = False
         if isinstance(init_prev, ss.by): # A fraction for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
             init_prev = init_prev.per_group(self.sim, self.convert)
         elif callable(init_prev): # A function of the sim, giving a fraction (or one for each group)
@@ -1835,6 +1839,8 @@ class Engine(Telling, Effects):
                 ss.note(f'the initial value of {graph.default_state.name} in "{self.mod.name}" is kept, and the other {n_rest:,.0f} people start in {graph.rest.name}, the only state not given one', sim=self.sim)
         for name,init in by_count.items():
             counts[name] = self.start_count(name, init, fracs, counts, by_count)
+        split = self.sim.groups.group_split
+        self.start_fracs = {name:float(np.sum(np.broadcast_to(frac, split.shape)*split)) for name,frac in fracs.items()} if exact else None # Of everyone, for describe_graph()
         return fracs, counts
 
     def start_count(self, name, init, fracs, counts, later):
@@ -1964,6 +1970,7 @@ class Engine(Telling, Effects):
         ng = self.sim.groups.n_groups
         self.stock_groups = sc.obj()
         self.flow_groups = sc.obj()
+        self.keep_at = self.kept_y = None # A time point to keep the compartments at in a run the kernels take whole, and those compartments: see ss.fitting.run_kept()
         self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.solvers.group_rows()
         self.row_flows = sc.obj() # Then, the flows by group so far in the current row
         if ng > 1:

@@ -150,7 +150,13 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 #%% Performance regression guard
 
 CI_REGRESSION_FACTOR = 2.0 # On a CI runner, which is shared and noisier, the limit is looser
-TIGHTEN = 0.7 # A case that comes in at less than this times its baseline has its baseline lowered to the new time, so that an improvement is kept: with REGRESSION_FACTOR, a slowdown of more than 1.5/0.7 (about 2x) from any case's current speed fails, while noise (a few percent, as min-of-repeats) rarely moves a baseline
+ABS_SLACK = 0.02 # Seconds (normalized) allowed on top of the factor, so that a few milliseconds of noise on a short case don't fail it, while a long case is held to the factor...
+MAX_FACTOR = 3.0 # ... but never more than this times the baseline: e.g. 24 ms for an 8 ms case, 50 ms for a 20 ms one, and 2.42 s for a 1.6 s one
+
+def perf_limit(base, factor):
+    """ The most time a case of the performance guard may take: the factor times its baseline, plus up to ABS_SLACK, but at most MAX_FACTOR times its baseline """
+    return max(base*factor, min(base*factor + ABS_SLACK, base*MAX_FACTOR))
+TIGHTEN = 0.7 # A case that comes in at less than this times its baseline has its baseline lowered to the new time, so that an improvement is kept: with REGRESSION_FACTOR, a slowdown of more than 1.5/0.7 (about 2x) from any case's current speed fails (more for short cases; see perf_limit()), while noise (a few percent, as min-of-repeats) rarely moves a baseline
 
 
 def fit_sim(prior=False):
@@ -275,7 +281,7 @@ def test_performance_guard(do_save=False, verbose=True):
     Guard against major performance regressions.
 
     Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
-    term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x).
+    term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x) plus up to ABS_SLACK (20 ms), but at most MAX_FACTOR (3x) its baseline.
     Baselines are the current times, so this catches only major regressions, not normal drift.
     A case that comes in at less than 70% of its baseline (TIGHTEN) has its baseline lowered to the
     new time, saved to perf_guard.yaml, so that improvements are kept rather than lost to drift. A case
@@ -314,7 +320,7 @@ def test_performance_guard(do_save=False, verbose=True):
     # A case over its limit is measured once more, keeping the faster: a real slowdown is slow both times, while a burst of load on the machine rarely lasts
     if not do_save:
         for name,(fn,which,crn) in cases.items():
-            if name in recorded and normalized[name] > recorded[name]*factor:
+            if name in recorded and normalized[name] > perf_limit(recorded[name], factor):
                 again = round(sc.benchmark(which='numpy')/REF_MOPS*measure_case(fn, which, repeats[name], crn=crn), 4)
                 if verbose:
                     print(f'  {name}: over its limit ({normalized[name]*1e3:.1f} ms), so measured again: {again*1e3:.1f} ms')
@@ -330,7 +336,7 @@ def test_performance_guard(do_save=False, verbose=True):
 
     # Compare against this kind of machine's baselines and fail on a major regression
     if verbose:
-        print(f'Performance guard on {key}, against its baselines in {perf_guard_filename} (limit: {factor}x)')
+        print(f'Performance guard on {key}, against its baselines in {perf_guard_filename} (limit: {factor}x + up to {ABS_SLACK*1e3:n} ms, at most {MAX_FACTOR:n}x)')
     failures = []
     updated = {}
     for name, new in normalized.items():
@@ -340,14 +346,14 @@ def test_performance_guard(do_save=False, verbose=True):
             if verbose:
                 print(f'  {name:22s}: {new*1e3:8.1f} ms (new case: recorded as its baseline)')
             continue
-        limit = base * factor
+        limit = perf_limit(base, factor)
         if new < base*TIGHTEN and not ci:
             updated[name] = new
         if verbose:
             status = 'REGRESSION' if new > limit else f'FASTER: baseline lowered to {new*1e3:.1f} ms' if name in updated else 'OK'
             print(f'  {name:22s}: {new*1e3:8.1f} ms (baseline {base*1e3:7.1f} ms, limit {limit*1e3:7.1f} ms) [{status}]')
         if new > limit:
-            failures.append(f'{name}: {new*1e3:.1f} ms > limit {limit*1e3:.1f} ms (baseline {base*1e3:.1f} ms x {factor})')
+            failures.append(f'{name}: {new*1e3:.1f} ms > limit {limit*1e3:.1f} ms (baseline {base*1e3:.1f} ms; see perf_limit())')
     if updated:
         times = dict(sorted((recorded | updated).items()))
         if ci: # Nothing written in CI is kept, so print what to record instead

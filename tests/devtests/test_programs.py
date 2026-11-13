@@ -49,7 +49,7 @@ def test_people():
         sir = make_sir()
         def look(sim): # Results read during the run are people, with 5 people to an agent
             if sim.ti == 30:
-                seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti], delivered=sim.results.stock.delivered[sim.ti - 1]) # The state at the start of the step, and the deliveries of the last
+                seen[sim.solver.name] = sc.obj(I=sim.results.sir.I[sim.ti], delivered=sim.results.stock.delivered[sim.ti - 1]) # The state at the start of the step, and the deliveries of the last
             return True
         stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=look, when=ss.schedule(start=10), capacity=ss.perday(500))
         return ss.Sim(sir, interventions=stock, **kwargs)
@@ -59,7 +59,7 @@ def test_people():
         assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02), f'{solver}: {res.stock.delivered[10:20]}' # From the step that starts at 10
         assert seen[solver].I == res.sir.I[30] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
     assert sims.abm.pop_scale == 5
-    check_close(sims, lambda sim: seen[sim.solver].I, rtol=0.15)
+    check_close(sims, lambda sim: seen[sim.solver.name].I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
     return sims
 
@@ -98,7 +98,7 @@ def test_priority():
 
 def make_sis(name='sis', beta=0.25):
     S, I = ss.states(2)
-    return ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ ss.days(20), cure=I >> S, init_prev=0.01, name=name)
+    return ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ ss.days(20), cure=I >> S @ 0, init_prev=0.01, name=name)
 
 
 def test_queue():

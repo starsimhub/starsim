@@ -313,7 +313,7 @@ def test_given_splits():
     assert sim.people.tob.sum() == tob.sum()
     expected = tob.sum()*(1 - np.exp(-0.6)) # Six steps, from 2000 to 2005
     assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
-    assert 'guessed' not in [line for line in sim.describe().splitlines() if 'tob' in line and 'dimension' in line][0]
+    assert 'Guessed' not in [line for line in sim.describe().splitlines() if 'tob' in line and 'Dimension' in line][0]
 
     # A split over two dimensions that contradicts one's own split raises (before, urban came out at 0.497 where 0.17 was given)
     table = np.array([[0.11, 0.21, 0.22, 0.23, 0.23], [0.75, 0.16, 0.05, 0.02, 0.02]]) # P(wealth | urban)

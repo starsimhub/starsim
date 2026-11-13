@@ -2994,7 +2994,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             out, self.given = self.given, None
         elif use_jax:
             out = ss.gradients.run(self)
-        elif self.rows is not None: # The results by group are kept every few steps, so the run is taken a part at a time, and only those are kept
+        elif self.rows is not None or self.keep_at is not None: # The results by group are kept every few steps, so the run is taken a part at a time, and only those are kept; or the compartments are kept at a time point, where a part ends
             self.store_parts(self.run_parts())
             return
         else:
@@ -3042,12 +3042,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         Take a whole run a part at a time, in calls to the kernels that each take as many steps as fit in `part_bytes`
 
         Yields the time point each part starts at, and its compartments and flows at each of its time points (as `ss.kernels.run()`
-        returns them). The deliveries' results are stored as it goes.
+        returns them). The deliveries' results are stored as it goes. With `self.keep_at`, a part also ends at that time point, and
+        the compartments there are kept, as `self.kept_y` (see `ss.fitting.run_kept()`).
         """
         args, _ = self.run_args(tables=False)
         y, program, dt, npts, solver, n_sub = args
         rng = self.make_rng(stream=1)
-        every = int(self.group_ti[1]) # The steps in each row of the results by group
+        every = int(self.group_ti[1]) if self.rows is not None else 1 # The steps in each row of the results by group
         per_point = (self.n_comps + program.n_trans + program.n_movers + len(program.consts))*self.n_groups*8 # The compartments and flows, and the tables of values that vary in time
         length = max(int(part_bytes//per_point)//every, 1)*every # Steps per part: whole rows, so each part ends at the end of one
         short = 0.0
@@ -3055,10 +3056,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         kn = self.kernels()
         while start < npts:
             end = min(start + length, npts) # The steps from start to end-1
+            if self.keep_at is not None and start < self.keep_at < end:
+                end = self.keep_at
             tally = np.zeros((end - start, len(self.shifts.to), 2, self.n_groups))
             tables = self.tables(start, end) # Only for these steps, since by group at every step they can be large
             y, stocks, flows, more = kn.run(rng, y, program, dt, end, solver, n_sub, *tables, self.register, self.shifts, tally, start)
             short += more
+            if end == self.keep_at:
+                self.kept_y = y.copy()
             for k,mod in enumerate(self.deliveries):
                 mod.in_compartments.store_shifts(tally[:, self.shift_of[k]], start=start, done=end == npts)
             yield (start, stocks, flows)

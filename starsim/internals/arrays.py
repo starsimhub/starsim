@@ -319,6 +319,7 @@ class Arr(BaseArr):
     """
     mod = None # The module whose state this is, if any; set by Module.define_states(), so a condition on it (e.g. hiv.cd4 < 200) can find it
     shared = None # Whether it has no memory of its own yet: see own()
+    internal = False # Bookkeeping of a solver rather than a property of people, left out of people.plot() by default
 
     def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, raw=None, skip_init=False, people=None, mock=None, columns=None, shared=False):
         # Set attributes

@@ -52,6 +52,7 @@ dependencies = [
 jax = [
     "jax>=0.8",
     "blackjax>=1.7",
+    "filelock", # Without it, JAX can't limit the size of its cache of compiled code, so it doesn't keep any
 ]
 
 # For running the tests
@@ -93,6 +94,7 @@ lock = [
     "cycler==0.12.1",
     "dill==0.4.1",
     "et-xmlfile==2.0.0",
+    "filelock==4.2.10",
     "fonttools==4.68.0",
     "gitdb==4.0.12",
     "gitpython==3.2.1",

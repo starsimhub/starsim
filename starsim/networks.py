@@ -719,9 +719,10 @@ class Network(Route):
         with ss.style(**kw.style):
             fig,ax = plt.subplots(**kw.fig)
             G = self.to_graph(max_edges=max_edges, random=random)
+            kwargs = sc.mergedicts(dict(with_labels=False, node_size=20) if G.number_of_nodes() > 50 else None, kwargs) # Labels and large nodes only where they can be read
             nx.draw_networkx(G, alpha=alpha, ax=ax, **kwargs)
             if max_edges:
-                edgestr = f'{max_edges:n} of {len(self):n} connections shown' if len(self) > max_edges else f'{len(self):n} connections'
+                edgestr = f'{max_edges:,} of {len(self):,} connections shown' if len(self) > max_edges else f'{len(self):,} connections'
                 plt.title(f'{self.label}: {edgestr}')
         return ss.return_fig(fig)
 

@@ -1198,8 +1198,25 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         exact (bool): write numbers at full precision (e.g. for `sim.to_json()`), rather than to six significant figures
         unit (str): with `values='number'`, the unit the numbers are read in (e.g. 'day'): a rate written in another unit keeps its own (`0.02 per year`)
     """
+    def number(e, x): # Whether a term is the number x, once values are written in (e.g. a death rate of 0)
+        return bool(values) and not exact and isinstance(e, par) and sc.isnumber(e.raw) and e.raw == x
+    def simple(e): # Without adding or taking away 0, or multiplying by 1, once values are written in: 1 - 0 is written as 1
+        while isinstance(e, BinOp):
+            if e.op in ['+', '-'] and number(e.b, 0) or e.op == '*' and number(e.b, 1):
+                e = e.a
+            elif e.op == '+' and number(e.a, 0) or e.op == '*' and number(e.a, 1):
+                e = e.b
+            else:
+                break
+        return e
     def fmt(e):
         if isinstance(e, BinOp):
+            e = simple(e)
+            if not isinstance(e, BinOp):
+                return fmt(e)
+            a, b = simple(e.a), simple(e.b)
+            if a is not e.a or b is not e.b:
+                e = BinOp(e.op, a, b)
             return join_binop(e, fmt, op=mul if e.op == '*' else e.op)
         elif isinstance(e, Func):
             if e.name in comparisons:

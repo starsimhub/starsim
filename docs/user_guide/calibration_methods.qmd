@@ -119,7 +119,7 @@ A posterior uses each parameter's `prior=`, or a uniform prior over its bounds. 
 The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX. Its warm-up learns the scale of each parameter and the correlations between them (a dense mass matrix), so that strongly correlated parameters, such as an infection rate and a fraction reported, don't slow it down. On a GPU, the last digits of the draws can differ from run to run (far inside the posterior's intervals).
 
 ```{python}
-fit = fit_by('nuts', deterministic, likelihood=likelihood, draws=250, warmup=250, chains=2)
+fit = fit_by('nuts', deterministic, likelihood=likelihood, draws=150, warmup=150, chains=2)
 fit.table
 ```
 
@@ -128,7 +128,7 @@ fit.table
 Particle MCMC takes a random walk over the parameters, with the likelihood at each point estimated by a particle filter, so it includes the model's process noise. Its draws are more correlated than those of NUTS, so it needs more. It tunes its steps so that about 15% of proposals are accepted (`fit.diagnostics.acceptance`), and chooses the number of particles in its warm-up unless `particles=` is given. Each draw keeps the run the filter drew with it (`fit.trajectories`), which `fit.project()` continues (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)). For an ODE, it is a random walk on the exact likelihood, with no particles.
 
 ```{python}
-fit = fit_by('pmcmc', stochastic, likelihood=likelihood, draws=250, warmup=250, chains=2, particles=50)
+fit = fit_by('pmcmc', stochastic, likelihood=likelihood, draws=150, warmup=150, chains=2, particles=50)
 fit.table
 ```
 

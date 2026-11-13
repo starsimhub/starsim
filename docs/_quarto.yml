@@ -11,6 +11,8 @@ project:
     - llms.txt
     - llms-full.txt
     - api.json
+    - install.sh
+    - install.bat
 
 website:
   title: "Starsim"

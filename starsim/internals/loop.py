@@ -747,7 +747,7 @@ class Loop:
         ticks = df[['func_order', 'label']].dropna().drop_duplicates() # Inserted functions have no func_order, so skip them
         yticks = ticks.func_order
         ylabels = ticks.label
-        x = df.time
+        x = ss.DateArray(df.time) if pd.api.types.is_datetime64_any_dtype(df.time) else df.time # Dates on Starsim's date axis, rather than Matplotlib's, whose labels crowd
         y = df.func_order
 
         # Convert module names to integers for plotting colors
@@ -779,10 +779,11 @@ class Loop:
             bar_kw (dict): passed to `plt.bar()`
         """
         # Assemble data
+        if not len(self.cpu_time): # No per-entry timing was recorded, so there is nothing to plot
+            errormsg = 'No CPU timing was recorded: profile the sim with sim.profile(kind="loop") (or loop.run(profile=True)) first'
+            raise ValueError(errormsg)
         if self.cpu_df is None:
             self.to_df()
-        if not len(self.cpu_time): # No per-entry timing was recorded
-            ss.warn('No CPU timing was recorded: profile the sim with sim.profile(kind="loop") (or loop.run(profile=True)) to populate cpu_time.')
         df = self.cpu_df
         ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:

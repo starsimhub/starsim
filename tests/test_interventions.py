@@ -187,9 +187,12 @@ def test_campaign_delivery():
     halve = ss.modify(sis.pars.beta, multiply=0.5, when=ss.schedule(start=2012, stop=2016))
     when = ss.screen(make_dx(), coverage=0.5, when=lambda now: ss.date(now).year % 2 == 0, name='when')
     marked = ss.Sim(pars, interventions=[ss.screen(make_dx(), when=years, coverage=coverage, name='screening'), halve, when]).run()
-    marks = ss.results.intervention_marks(marked)
+    marks = ss.results.intervention_marks(marked, fill=True)
     assert len(marks) == 4 and isinstance(marks[-1], tuple), 'Expected a mark at each of the 3 rounds, and a span for the modifier'
+    assert ss.results.intervention_marks(marked) == marks[:3] + [marks[-1][0]], 'Expected the modifier marked by its start by default'
     fig = marked.plot('sis.prevalence', do_show=False)
+    assert len(fig.axes[0].lines) == 1 + 4 and len(fig.axes[0].patches) == 0
+    fig = marked.plot('sis.prevalence', show_interventions='fill', do_show=False)
     assert len(fig.axes[0].lines) == 1 + 3 and len(fig.axes[0].patches) == 1
     assert len(marked.plot('sis.prevalence', show_interventions=False, do_show=False).axes[0].lines) == 1
     plt.close('all')

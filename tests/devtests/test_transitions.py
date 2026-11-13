@@ -1485,7 +1485,7 @@ def test_describe_init_func():
         def __init__(self, **kwargs):
             super().__init__(init=dict(I=self.start), **kwargs)
     sim = ss.Sim(diseases=M(), n_agents=100, verbose=0).init()
-    assert 'I = start(sim)' in str(sim.diseases.m.describe())
+    assert 'I = 0.1 (start(sim))' in str(sim.diseases.m.describe())
     return
 
 
