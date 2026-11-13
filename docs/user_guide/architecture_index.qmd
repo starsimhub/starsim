@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI
+  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI; further reading trimmed on Nov 12 by AI
 ---
 
 This section explains how Starsim is put together and why, for contributors and for modelers who want to know what happens when they call `sim.run()`; no model needs it. This page gives the idea, the principles, and a map of the package, and then looks at *modules*, the pieces a sim is made of. [From declaration to run](architecture_run.qmd) follows a model from its declaration to a run, and [Engines and transmission](architecture_engines.qmd) looks at the engines that run it. Random numbers are in [Random numbers](mechanics_random.qmd#how-it-works), and how the design is tested in the [developer guide](../contributing/developer.qmd#testing).
@@ -227,18 +227,9 @@ The same plan is what `sim.loop.insert()` adds to (a function, or a module's `st
 
 ## Further reading
 
-The design record:
-
 - [constitution.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/admin/constitution.md): the principles in full
 - [Overview](https://starsim.org/lingua_franca/design/00-overview.html): the whole language on one page, and the object model
 - [Objects and construction](https://starsim.org/lingua_franca/design/01-objects.html): `ss.Sim`, the lifecycle, and the module contract
-- [Execution](https://starsim.org/lingua_franca/design/10-execution.html): the loop, deferred removals, and per-module timesteps
-- [Backends](https://starsim.org/lingua_franca/design/12-backends.html): how a model is laid out for each solver, and what needs agents
-- [The spec](https://starsim.org/lingua_franca/design/): the index of the spec
-- [lingua_franca](https://starsim.org/lingua_franca/): where the design record starts
+- [lingua_franca](https://starsim.org/lingua_franca/): the design record, of which these are part
+- [EMOD: Architecture overview](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-overview/): the components of IDM's agent-based model, for comparison
 
-Other frameworks:
-
-- [EMOD: Architecture overview](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-overview/) and [Reporter component](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-reporter/): the components of IDM's agent-based model, how a simulation is controlled, and how it collects output (the role analyzers play in Starsim)
-- [LASER: Design principles](https://laser.idmod.org/): IDM's framework for very large agent-based models, built around arrays of agent properties
-- [Vivarium: Concepts](https://vivarium.readthedocs.io/en/latest/concepts/index.html) and [The builder](https://vivarium.readthedocs.io/en/latest/concepts/builder.html): a component-based microsimulation framework with a similar split between model specification and engine, and how it gives each component access to the rest of the simulation during setup

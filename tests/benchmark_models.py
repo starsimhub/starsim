@@ -190,7 +190,7 @@ def make_by_age(n_agents=20_000):
     )
     sus = ss.modify(covid.rel_sus, multiply=by_age('sus'), name='sus_by_age')
     return ss.Sim(diseases=covid, connectors=sus, demographics=[ss.death(rate=mortality)], networks=ss.RandomNet(n_contacts=20), n_agents=n_agents,
-                  start='2020-03-01', stop=ss.days(120), dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
+                  start='2020-03-01', dur=ss.days(120), dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
 
 
 #%% tb: tbsim's LSHTM spectrum of disease, as agents on a network
@@ -231,7 +231,7 @@ def make_contra(n_agents=10_000):
     """
     FPsim's contraceptive choice as declared (with made-up coefficients): one state
     per method, durations of use by age, and at each exit a choice whose chances are a logistic regression on traits and
-    age times a switching table by age and destination (one p= entry per destination), 2000-2010 monthly
+    age times a switching table by age and destination (a dict of each destination and its probability), 2000-2010 monthly
     """
     methods = ['pill', 'iud', 'inj', 'cond', 'implant', 'other']
     st = {n: ss.State(n) for n in ['young', 'male', 'never', 'none'] + methods}
@@ -258,12 +258,12 @@ def make_contra(n_agents=10_000):
     fecund = ppl.female & (ppl.age >= 15) & (ppl.age <= 50)
     tr = dict(
         sexed      = ss.Transition(st['young'], st['male'], dur=0, who=~ppl.female),
-        debut      = ss.Transition(st['young'], never_kind, dur=0, p=branch('none', 0), who=fecund & (ppl.age >= 18)),
-        from_never = ss.Transition(st['never'], never_kind, dur=dur(0), p=branch('none', 0), who=fecund),
-        from_none  = ss.Transition(st['none'], dests, dur=dur(0), p=branch('none', 1), who=fecund),
+        debut      = ss.Transition(st['young'], dict(zip(never_kind, branch('none', 0))), dur=0, who=fecund & (ppl.age >= 18)),
+        from_never = ss.Transition(st['never'], dict(zip(never_kind, branch('none', 0))), dur=dur(0), who=fecund),
+        from_none  = ss.Transition(st['none'], dict(zip(dests, branch('none', 1))), dur=dur(0), who=fecund),
     )
     for i, m in enumerate(methods):
-        tr[f'from_{m}'] = ss.Transition(st[m], dests, dur=dur(i + 1), p=branch(m, 1), who=fecund)
+        tr[f'from_{m}'] = ss.Transition(st[m], dict(zip(dests, branch(m, 1))), dur=dur(i + 1), who=fecund)
     women = sum([s for k, s in st.items() if k not in ['male', 'young']], st['young'])
     users = sum([st[m] for m in methods[1:]], st[methods[0]])
     contra = ss.Disease(*st.values(), **tr, cpr=users/women, default_state='young', name='contra')

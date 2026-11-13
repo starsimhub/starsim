@@ -4,12 +4,12 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; headings split writing from running on Nov 12 by AI after the docs review
 ---
 
 The SIR model is the starting point of most epidemic modeling: people are susceptible (S), infectious (I), or recovered and immune (R), infection is frequency-dependent (each susceptible person is infected at a rate of β times the fraction of people who are infectious), and people stay infectious for an exponentially distributed time. This page writes it in each of the ways Starsim accepts, checks that they are the same model, and runs it as a deterministic ODE, as two kinds of stochastic compartmental model, and as agents.
 
-## The model
+## The model: four ways to write it {#the-model}
 
 | Parameter | Value | Meaning |
 |---|---|---|
@@ -70,7 +70,7 @@ The state-transition diagram, from `diagram()` (the dashed arrow is a transmissi
 spellings['Operators'].diagram()
 ```
 
-## Result
+## Result: four ways to run it {#result}
 
 The same model can be run in four ways: as an ODE (the default for this model, since nothing in it is about individual people), as a chain binomial (a random number of people move between states each day), with the Gillespie algorithm (each event at its own random time), and as agents.
 

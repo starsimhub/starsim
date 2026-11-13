@@ -1244,7 +1244,11 @@ def findings(sim, rows, mods=None):
             for rule in group:
                 yield from run(rule)
             continue
-        for mod in ((mods or sim.declared) if kind == 'declared' else sim.gathered):
+        if kind == 'declared':
+            subjects = mods or sim.declared
+        else: # The modules given, and the modifiers that are members of a declared disease, which are read as the modules given are (e.g. for a clock, I.time_in)
+            subjects = sim.gathered + [m for mod in sim.declared for m in mod.graph.modifiers.values() if not any(m is g for g in sim.gathered)]
+        for mod in subjects:
             graph = getattr(mod, 'graph', None)
             for scope,part in itertools.groupby(group, key=lambda rule: rule.scope):
                 part = list(part)

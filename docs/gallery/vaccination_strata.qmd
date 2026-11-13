@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; reproduction-number wording made precise on Nov 12 by AI after the docs review
 ---
 
 In many compartmental models, vaccination is not part of the disease at all: the population is split into the vaccinated and the unvaccinated, vaccination moves people from one group to the other, and the vaccinated are infected at a lower rate. This is how summer2, Atomica, and many published models write it, and it keeps the disease model the same whatever the vaccination program. This page writes an SIR this way, with a campaign that vaccinates half of the population on day 10, and compares it with no vaccination.
@@ -52,7 +52,7 @@ msim = ss.parallel(sims)
 msim.plot('sir')
 ```
 
-Vaccinating half of the population brings the effective reproduction number below 2 (3 × (0.5 + 0.5 × 0.1) = 1.65), and the epidemic infects under half as many people:
+Vaccinating half of the population lowers the reproduction number from 3 to 3 × (0.5 + 0.5 × 0.1) = 1.65: that is R0 weighted by the susceptibility of each group, for a population that is still almost all susceptible. By day 10 some people have already been infected, so the effective reproduction number on the day of the campaign is a little lower. The epidemic infects under half as many people:
 
 ```{python}
 msim.summarize().loc['sir_infection']

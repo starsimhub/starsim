@@ -3,6 +3,7 @@ Test that the current version of Starsim exactly matches
 the baseline results.
 """
 import os
+import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
@@ -145,6 +146,50 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
 #%% Performance regression guard
 
+TIGHTEN = 2 # A case that comes in at less than its baseline divided by this has its baseline lowered to the new time, so that an improvement is kept
+
+
+def fit_sim(prior=False):
+    """ A declared SIR run as an ODE, with synthetic weekly cases to fit beta and the fraction reported to (with a prior on the fraction if `prior`) """
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    rep = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(a=3, b=6) if prior else None)
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(rep*infection, name='cases'), init=dict(I=0.001), name='sir')
+    pars = dict(total_pop=100_000, unit='day', stop=120, verbose=0)
+    data = ss.Sim(sir, pars=dict(beta=0.4, rep=0.3), **pars).run().to_synthetic_data('cases', resample='week', rand_seed=1)
+    return ss.Sim(sir, data=data, **pars)
+
+
+def call_cases():
+    """
+    Factories for the performance-guard cases that are not one sim's init or run: each makes what it needs (untimed) and
+    returns the call to time. Each guards a cost that a sim's run doesn't show:
+
+    - copy_sim: copying an initialized sim (a deep copy, as each scenario and fit run once made)
+    - parallel_ode: many runs of one sim, restarted rather than copied (`ss.parallel(sim, n_runs=)`)
+    - fit_best: a default best fit (Nelder-Mead on an ODE)
+    - fit_pmcmc: a posterior by particle MCMC on an ODE with a prior, serially (each evaluation is one run, plus the prior)
+    - diagnose: the R-hat and effective sample size of a posterior's draws
+    - jax_gradient: a gradient of a run in JAX, once compiled (skipped without JAX)
+    """
+    ode = lambda: fit_sim()
+    pmcmc = ss.fitting.method('pmcmc', draws=100, warmup=100, chains=2, parallel=False)
+    cases = dict(
+        copy_sim     = lambda: (lambda s: lambda: s.copy())(ss.Sim(diseases='sir', networks='random', n_agents=10_000, verbose=0).init()),
+        parallel_ode = lambda: (lambda s: lambda: ss.parallel(s, n_runs=100, workers=1, verbose=0))(ode()),
+        fit_best     = lambda: (lambda s: lambda: s.fit(verbose=False))(ode()),
+        fit_pmcmc    = lambda: (lambda s: lambda: s.fit(method=pmcmc, likelihood=ss.poisson(), verbose=False))(fit_sim(prior=True)),
+        diagnose     = lambda: (lambda d: lambda: ss.fitting.diagnose(d))(np.random.default_rng(1).normal(size=(4, 1000, 3)).cumsum(axis=1)),
+    )
+    try:
+        import jax # Only to see whether it is installed
+        cases['jax_gradient'] = lambda: (lambda s: lambda: s.gradient(pars=['beta']))(ode().init())
+    except ImportError:
+        pass
+    return cases
+
+
 def perf_cases():
     """
     Factories for the performance-guard sims; each guards a distinct cost term
@@ -163,15 +208,15 @@ def perf_cases():
 
     Each case is (factory, which, crn).
     """
-    bare = lambda **kw: ss.Sim(start=0, stop=365*10, dt=ss.days(1), verbose=0, **kw)
+    bare = lambda **kw: ss.Sim(n_agents=10_000, start=0, stop=365*10, dt=ss.days(1), verbose=0, **kw) # Agents, with nothing else: the cost of each step itself
     het  = lambda: ss.Sim(diseases=ss.SIS(dt=ss.days(1)), networks=ss.RandomNet(dt=ss.weeks(1)),
                           demographics=ss.Births(dt=ss.days(10)), dt=ss.days(2),
                           start='2000-01-01', stop='2002-01-01', n_agents=200, verbose=0)
-    births = lambda: ss.Sim(n_agents=5000, dur=ss.years(20), dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(0.03)),
+    births = lambda: ss.Sim(n_agents=5000, dur=ss.years(20), dt=ss.years(0.25), demographics=ss.Births(birth_rate=ss.peryear(0.03)),
                             rand_seed=1, verbose=0)
     crnf = lambda: ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
                           demographics=ss.Births(birth_rate=ss.peryear(0.02)),
-                          n_agents=2000, dur=ss.years(20), dt=0.2, rand_seed=1, verbose=0)
+                          n_agents=2000, dur=ss.years(20), dt=ss.years(0.2), rand_seed=1, verbose=0)
     return {
         'bare_init':          (bare, 'init', True),
         'bare_run':           (bare, 'run', True),
@@ -197,7 +242,15 @@ def perf_cases():
 
 
 def measure_case(fn, which, repeats, warmup=1, crn=True):
-    """ Return the minimum wall-clock time (seconds) to init or run a fresh sim, after warmup """
+    """ Return the minimum wall-clock time (seconds) to init or run a fresh sim, or (`which='call'`) of the call that `fn()` returns, after warmup """
+    if which == 'call':
+        call = fn()
+        for _ in range(warmup): # Compiling, and caches
+            call()
+        times = []
+        for _ in range(repeats):
+            t0 = sc.tic(); call(); times.append(sc.toc(t0, output=True))
+        return min(times)
     with ss.options.context(crn=crn):
         for _ in range(warmup): # Warm up caches/JIT so the first (cold) sample doesn't dominate
             s = fn(); s.init()
@@ -220,6 +273,8 @@ def test_performance_guard(do_save=False, verbose=True):
     Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
     term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x).
     Baselines are the current times, so this catches only major regressions, not normal drift.
+    A case that comes in at less than half its baseline (TIGHTEN) has its baseline lowered to the
+    new time, saved to perf_guard.yaml, so that improvements are kept rather than lost to drift.
     Times use min-of-repeats with CPU normalization (see test_benchmark) to cancel machine speed.
     Refresh with ./update_benchmarks.py after an intended speedup.
 
@@ -234,10 +289,12 @@ def test_performance_guard(do_save=False, verbose=True):
     repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
     repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age', 'tb'] for which in ['init', 'run']})
     repeats.update(contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
+    repeats.update(copy_sim=8, parallel_ode=5, fit_best=3, fit_pmcmc=3, diagnose=8, jax_gradient=8)
+    cases = {name:(fn, which, crn) for name,(fn,which,crn) in perf_cases().items()} | {name:(fn, 'call', True) for name,fn in call_cases().items()}
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')
-    measured = {name: measure_case(fn, which, repeats[name], crn=crn) for name,(fn,which,crn) in perf_cases().items()}
+    measured = {name: measure_case(fn, which, repeats[name], crn=crn) for name,(fn,which,crn) in cases.items()}
     r2 = sc.benchmark(which='numpy')
     ratio = (r1 + r2) / 2 / REF_MOPS
     normalized = {k: round(ratio*v, 4) for k,v in measured.items()}
@@ -250,18 +307,30 @@ def test_performance_guard(do_save=False, verbose=True):
         return normalized
 
     # Compare against recorded baselines and fail on a major regression
-    recorded = sc.loadyaml(perf_guard_filename)['times']
+    saved = sc.loadyaml(perf_guard_filename)
+    recorded = saved['times']
     failures = []
-    for name, base in recorded.items():
-        new = normalized.get(name)
-        if new is None:
+    updated = {}
+    for name, new in normalized.items():
+        base = recorded.get(name)
+        if base is None: # A new case: its first time is its baseline
+            updated[name] = new
+            if verbose:
+                print(f'  {name:22s}: {new*1e3:8.1f} ms (new case: recorded as its baseline)')
             continue
         limit = base * REGRESSION_FACTOR
+        if new < base/TIGHTEN:
+            updated[name] = new
         if verbose:
-            status = 'OK' if new <= limit else 'REGRESSION'
+            status = 'REGRESSION' if new > limit else f'FASTER: baseline lowered to {new*1e3:.1f} ms' if name in updated else 'OK'
             print(f'  {name:22s}: {new*1e3:8.1f} ms (baseline {base*1e3:7.1f} ms, limit {limit*1e3:7.1f} ms) [{status}]')
         if new > limit:
             failures.append(f'{name}: {new*1e3:.1f} ms > limit {limit*1e3:.1f} ms (baseline {base*1e3:.1f} ms x {REGRESSION_FACTOR})')
+    if updated: # Keep improvements, and record new cases
+        saved['times'] = dict(sorted((recorded | updated).items()))
+        sc.saveyaml(perf_guard_filename, saved)
+        if verbose:
+            print(f'Updated the baselines of {sc.strjoin(updated)} in {perf_guard_filename}')
     assert not failures, 'Performance regression detected:\n' + '\n'.join(failures)
     return normalized
 

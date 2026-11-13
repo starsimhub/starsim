@@ -2,9 +2,9 @@
 title: Random numbers
 jupyter: python3
 authorship:
-  human: 35
-  ai: 65
-  note: Adapted from the Starsim 3 user guide page on common random numbers; ported to v4, with the limits and the rules for modules expanded by AI. "How it works" written by AI from the Claude draft of "Randomness and fitting", checked against the current code. Merged with the architecture page "Randomness" on Nov 11 by AI, and shortened on Nov 11 by AI
+  human: 33
+  ai: 67
+  note: Adapted from the Starsim 3 user guide page on common random numbers; ported to v4, with the limits and the rules for modules expanded by AI. "How it works" written by AI from the Claude draft of "Randomness and fitting", checked against the current code. Merged with the architecture page "Randomness" on Nov 11 by AI, and shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (reproducibility, fitting)
 ---
 
 A stochastic model uses random numbers to decide what happens to each person: whether they are infected on a step, how long they stay infectious, whether a vaccine takes. When two scenarios are compared, such as with and without an intervention, the difference between them should come from the intervention, not from the scenarios happening to draw different random numbers. Starsim arranges its random numbers so that, as far as possible, the same person making the same decision gets the same random number in both scenarios. This is known as **common random numbers**.
@@ -134,7 +134,7 @@ for uid in uids:                            # A draw for each person in turn, ra
     value = self.dist.rvs(uid)
 ```
 
-### A varying number of draws in compiled code
+### Advanced: a varying number of draws in compiled code {#a-varying-number-of-draws-in-compiled-code}
 
 Some decisions need a number of random draws for each person that isn't known in advance: one for each act, or the tries of a matching or queuing algorithm, often written as a loop compiled with `@ss.jit`. `dist.streams(uids)` gives each person a stream of uniforms for this call of the distribution, as a `uint64` state, and `ss.draws.next_u(state)`, inside the compiled loop (or in Python), gives the next uniform in (0, 1) and the new state. A person's stream depends only on the distribution, the step and call, and the person, so the same person in the same step gets the same sequence, however many others draw and however many uniforms they take:
 
@@ -198,7 +198,7 @@ Uniforms are counter-based (a hash of a key and an index), so a draw doesn't dep
 
 ### Common random numbers and their limits
 
-Common random numbers (CRN) are on by default. Since the same agent making the same decision gets the same random number in the baseline and in the intervention scenario, much of the Monte Carlo noise cancels in the difference, so small effects can be seen with fewer runs.
+Common random numbers (CRN) are on by default. Since the same agent making the same decision gets the same random number in the baseline and in the intervention scenario, much of the Monte Carlo noise cancels in the difference, so a paired comparison has less variance, and small effects can be seen with fewer runs. They reduce the noise; they don't remove it, and a difference between two paired runs is still partly chance.
 
 The key is the agent's *slot*, a persistent index: an agent's uniform for a given decision depends only on its slot and the distribution's stream. A newborn's slot is drawn from its parent's stream, so the same birth gets the same slot in both scenarios; agents born after the scenarios diverge may have no counterpart.
 
@@ -210,27 +210,18 @@ With agents, `ss.Sim(even_draws=True)` also makes each call's random numbers eve
 
 ### Run identity
 
-A seed makes a run repeatable, but doesn't say what was run. The record of that is the code (the commit of the script), with the seed (`rand_seed`): the same code and seed give the same results on every machine. Two versions of a model are compared by their code (in a text editor), their `describe()`, or their results.
+A seed makes a run repeatable, but doesn't say what was run. The record of that is the code (the commit of the script), with the seed (`rand_seed`) and the versions of Starsim and its dependencies. With all of these the same, a run gives the same results again, and the kernel sets (Rust, Numba, and plain Python) are tested to give the same numbers bit for bit. Across machines, platforms, or JAX on a GPU, floating-point arithmetic can differ in the last digits, which in a stochastic run can change a draw and grow from there; compare such runs by how well they agree, not by whether they are identical. Two versions of a model are compared by their code (in a text editor), their `describe()`, or their results.
 
 A related check is `sim.check_dt()`, which reruns the sim at half the timestep and reports how much each result moves. That covers every effect of order `dt` at once: converting rates to probabilities, the one-step delay between modules, and module order.
 
 ### Randomness in fitting
 
-`sim.fit()` scores a stochastic model, whose every run is different, with the same machinery ([Fitting a model](calibration_fitting.qmd) shows it at work):
-
-- **Common seeds.** A stochastic sim is scored at each point by the mean of several runs (4 for a stochastic compartmental sim, 1 for agents), with the same seeds at every point, so a local method such as Nelder-Mead follows the values rather than the noise. Optuna, the default for stochastic models, takes fresh seeds at each point instead (`reseed=False` turns this off), and where every series has a likelihood, scores each point by a particle filter.
-- **Many runs at once.** A stochastic compartmental run taken by the kernels in one call can be run as many runs that differ only in their seed, and as many *particles* stepped forward together, each with its own random numbers, weighted by the likelihood and resampled at each data point. This is what particle MCMC (`'pmcmc'`) and iterated filtering (`'if2'`) need, and why they are offered only when the kernels take the run whole.
-- **No randomness at all.** For an ODE, `sim.gradient()` and `sim.log_density()` run the same steps in JAX, which differentiates them, with the cheap steps on either side by central differences (accurate to about 1e-9). A run the kernels can't take whole (a `when=` function, a movement register, or code of your own) rules gradients out, and the printed reason says which (see [Gradients](calibration_gradients.qmd)).
-
-The method a fit uses by default follows from what the sim is, and every fit says whether it converged; see [Fitting methods](calibration_methods.qmd) and [Fit diagnostics](calibration_diagnostics.qmd).
+Fitting uses the same streams. A stochastic sim is scored with the same seeds at every point (or fresh seeds, for Optuna), so a search follows the values rather than the noise; particle methods step many runs together, each with its own random numbers; and an ODE needs no randomness at all, so it can be differentiated. [Fitting a model](calibration_fitting.qmd), [Fitting methods](calibration_methods.qmd), and [Gradients](calibration_gradients.qmd) cover these.
 
 ## Further reading
 
 - [Design record: Randomness and reproducibility](https://starsim.org/lingua_franca/design/11-random.html): streams, common random numbers, run identity, and `check_dt()`
-- [Design record: Inference](https://starsim.org/lingua_franca/design/13-inference.html): calibration, the choice of method, gradients, staged fitting, sensitivity, and model comparison
-
 - [Klein et al.: Noise-free comparison of stochastic agent-based simulations using common random numbers](https://arxiv.org/abs/2409.02086): the method, with examples in Starsim
 - [Wikipedia: Variance reduction](https://en.wikipedia.org/wiki/Variance_reduction): common random numbers among the other ways of reducing the noise in simulation estimates
 - [NumPy: parallel random number generation](https://numpy.org/doc/stable/reference/random/parallel.html): independent streams from one seed, as each Starsim distribution has
-- [Vivarium: Common random numbers](https://vivarium.readthedocs.io/en/latest/concepts/crn.html): how another microsimulation framework keys random draws to individuals, so that scenarios can be compared with less noise
-- [JAX: Quickstart](https://docs.jax.dev/en/latest/quickstart.html): the library behind Starsim's gradients and many runs at once
+- [Vivarium: Common random numbers](https://vivarium.readthedocs.io/en/latest/concepts/crn.html): how another microsimulation framework keys random draws to individuals

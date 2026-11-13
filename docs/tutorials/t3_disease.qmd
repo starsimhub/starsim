@@ -2,9 +2,9 @@
 title: "T3 – Building a disease"
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI
+  human: 9
+  ai: 91
+  note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 The SIR model of [Tutorial 1](t1_intro.qmd) and [Tutorial 2](t2_model.qmd) is over within weeks, far faster than real measles. [Tutorial 2](t2_model.qmd) found that R0 and prior immunity decide how *many* people are infected. This tutorial asks: **what decides how *fast* an outbreak spreads?** It adds, one at a time, structure that most disease models need: a latent period, the distribution of a duration, waning immunity, and a branch (here, a small fraction die). It then names the parameters, checks the finished disease, and runs it as agents. By the end of this tutorial, you will be able to:
@@ -168,7 +168,7 @@ print('Deaths:', round(sim_explicit.results.measles.death.sum()))
 ```
 :::
 
-`ss.dead` is outside the model: people who die leave the population. Each branch has its own result (`recovery` and `death`), and could have its own duration. In the equations, who goes which way is decided on entering `I`, so `I` is in two parts, `I_1` (who will recover) and `I_2` (who will die):
+`ss.dead` is outside the model: people who die leave the population. Each branch has its own result (`recovery` and `death`), and could have its own duration. In the equations, who goes which way is decided on entering `I`, so `I` is in two parts, `I_1` (who will die) and `I_2` (who will recover):
 
 ```{python}
 measles.equations()
@@ -195,7 +195,7 @@ measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001)
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
 ```
 
-One parameter can be used in several places, as `dur_infectious` is: `ss.Sim(measles, pars=dict(dur_latent=ss.days(12)), ...)` changes it everywhere. [Calibration](t6_data.qmd#fitting-and-checking-the-fit) uses the bounds. See [Parameters](../user_guide/building_parameters.qmd) for more, including priors.
+One parameter can be used in several places, as `dur_infectious` is, by both `recovery` and `death`: `ss.Sim(measles, pars=dict(dur_infectious=ss.days(7)), ...)` changes it in both. [Calibration](t6_data.qmd#fitting-and-checking-the-fit) uses the bounds. See [Parameters](../user_guide/building_parameters.qmd) for more, including priors.
 
 ## Checking the disease
 
@@ -219,13 +219,13 @@ measles.diagram()
 
 A disease can also be written as a class, with its states, parameters, and transitions in the class body, so that it can be made with other parameter values, like the diseases in Starsim's library (e.g. `Measles(beta=1.5)`); see [Diseases](../user_guide/building_diseases.qmd).
 
-## As agents
+## Advanced: diseases as agents {#as-agents}
 
-Everything above also runs as agents (with `n_agents=`, as in [Tutorial 1](t1_intro.qmd)). Each person then has their own state, their own durations (`measles.E.stays` gives each person's time in `E`), and, if you want, their own infectiousness and susceptibility. This shows what a compartmental model can't: chance when cases are few, and differences between people.
+Everything above also runs as agents (with `n_agents=`, as in [Tutorial 1](t1_intro.qmd)). Each person then has their own state, their own durations (`measles.E.stays` gives each person's time in `E`), and, if you want, their own infectiousness and susceptibility. This shows two things the deterministic ODE can't: chance when cases are few (which a stochastic compartmental solver can also show), and differences between people.
 
 ### Chance, and the first case
 
-In a compartmental model, an infection with R above 1 always takes off. In reality, the first cases may recover before infecting anyone. Suppose 90% of the town is immune and one infectious person arrives, so each case infects about 1.9 × 8 × 0.1 ≈ 1.5 others. Here are 20 runs as agents, each with its own random seed, and the ODE for comparison:
+In a deterministic ODE, an infection with a reproduction number above 1 always takes off. In reality, the first cases may recover before infecting anyone. Suppose 90% of the town is immune and one infectious person arrives. R0 is still 15, but the effective reproduction number at the start is R ≈ 1.9 × 8 × 0.1 ≈ 1.5: each case infects about 1.5 others. Here are 20 runs as agents, each with its own random seed, and the ODE for comparison:
 
 ```{python}
 import numpy as np
@@ -253,7 +253,7 @@ total = msim.results.measles.infection.values.sum(axis=1) # Total infections in 
 print('Fraction of introductions that die out:', np.mean(total < 20))
 ```
 
-Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to the runs. This matters for questions about introductions: how likely an imported case is to start an outbreak.
+Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to the runs. This holds early in an outbreak in a large, well-mixed population, where each case's infections are independent and the infectious period is exponentially distributed, as here. This matters for questions about introductions: how likely an imported case is to start an outbreak.
 
 ### People who differ: superspreading
 
@@ -284,61 +284,29 @@ Each case infects about 1.5 others on average in all three, but the more concent
 
 ### Counting each person's infections
 
-With waning immunity, people can be infected again and again. Here is an SIRS model of a respiratory infection (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. The attribute `infections` counts each person's infections (`combine='sum'` adds 1 at each): a history, which only agents have:
+With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `keep_times=True` keeps each person's history, which only agents have:
 
 ```{python}
-def make_cold():
-    """ A respiratory infection whose immunity wanes, counting each person's infections """
-    S, I, R = ss.states('S I R')
-    infection = S >> I @ 0.4*I        # β = 0.4 per day
-    recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
-    waning    = R >> S @ ss.days(180) # Immune for 6 months on average
-    infections = ss.attr(1, when=infection, combine='sum', init=0) # The number of times each person has been infected
-    return ss.Disease(infection, recovery, waning, infections=infections, init_prev=0.01, name='cold')
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.4*I        # β = 0.4 per day
+recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
+waning    = R >> S @ ss.days(180) # Immune for 6 months on average
+cold = ss.Disease(infection, recovery, waning, init_prev=0.01, name='cold')
 
-pars_cold = dict(n_agents=5000, stop=ss.days(3*365), verbose=0)
-sirs = ss.Sim(make_cold(), **pars_cold)
+sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), keep_times=True, verbose=0)
 sirs.run()
 sirs.plot('cold.I')
 ```
 
-After three years (written out, an analyzer that adds 1 for each person infected in each step gives the same counts):
-
-::: {.panel-tabset group="language"}
-## Python
+After a first wave, the infection settles into smaller, repeated waves. `cold.infection.n_times` is the number of times each person has been infected:
 
 ```{python}
-counts = sirs.people.cold.infections.values
+counts = sirs.diseases.cold.infection.n_times.values
 plt.figure()
 plt.hist(counts, bins=np.arange(counts.max() + 2) - 0.5)
 plt.xlabel('Number of infections in 3 years')
 plt.ylabel('Number of people');
 ```
-
-## Explicit
-
-```{python}
-class CountInfections(ss.Analyzer):
-    """ The number of times each person has been infected, counted by hand """
-    def init_post(self):
-        super().init_post()
-        self.counts = np.zeros(len(self.sim.people), dtype=int)
-        self.counts[self.sim.diseases.cold.I.uids] = 1 # The people infectious at the start
-    def step(self):
-        self.counts[self.sim.diseases.cold.infection.uids] += 1 # The people infected in this step
-
-S, I, R = ss.states('S I R')
-cold = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> R @ ss.days(7), waning=R >> S @ ss.days(180), init_prev=0.01) # No attribute
-counted = ss.Sim(cold, analyzers=CountInfections(), **pars_cold)
-counted.run()
-
-counts = counted.analyzers.countinfections.counts
-plt.figure()
-plt.hist(counts, bins=np.arange(counts.max() + 2) - 0.5)
-plt.xlabel('Number of infections in 3 years')
-plt.ylabel('Number of people');
-```
-:::
 
 Most people are infected 3 to 5 times. A model can use a person's history: e.g. `ss.modify(cold.rel_sus, multiply=0.5, who=cold.infection.n_times >= 2)` would halve the susceptibility of people infected at least twice. A disease can also be written as Python code, as in Starsim 3: [T8 – Custom modules](t8_modules.qmd#a-disease-written-as-code) shows how.
 
@@ -350,7 +318,7 @@ Most people are infected 3 to 5 times. A model can use a person's history: e.g. 
 4. Try different durations of immunity in the SIRS model of the respiratory infection (e.g. 1, 6, and 24 months). How do they affect the epidemic curve, and the number of times people are infected?
 5. In the town with 90% immune, increase the fraction susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What fraction of introductions die out now, with and without superspreading (k = 0.2)?
 
-[Solutions](solutions.qmd#t3-building-a-disease) · Next: [T4 – Mixing](t4_mixing.qmd)
+[Solutions](solutions_t3_disease.qmd) · Next: [T4 – Mixing](t4_mixing.qmd)
 
 ## Further reading
 

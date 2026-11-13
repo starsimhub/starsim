@@ -2,9 +2,9 @@
 title: Conceptual overview
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI
+  human: 5
+  ai: 95
+  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review
 ---
 
 This page is the mental model of Starsim on one page: what a model is made of, how it runs, and how Starsim decides whether to run it as compartments or as agents. For a hands-on start, see [T1 – Getting started](../tutorials/t1_intro.qmd).
@@ -51,7 +51,7 @@ The model itself doesn't say which: a disease written as states and transitions 
 
 ## States, transitions, and rates
 
-A disease is declared the way a compartmental model is drawn: as boxes and the arrows between them. `S >> I @ 1.9*I` is the arrow from S to I, taken at a rate of 1.9 per day times the fraction of people who are infectious (frequency-dependent transmission, as in a textbook SIR model); `I >> R @ ss.days(8)` is the arrow from I to R, taken after 8 days on average.
+A disease is declared the way a compartmental model is drawn: as boxes (states) and the arrows between them (transitions), each with a rate or a duration. Here is the simplified measles outbreak that runs through the tutorials and this guide ([T1](../tutorials/t1_intro.qmd) builds it step by step):
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -91,9 +91,7 @@ measles_explicit.diagram()
 ```
 :::
 
-This is a simplified measles outbreak, the example that runs through the tutorials and this guide. Because the model is a description rather than code, Starsim can read it: it can write out its equations (`measles.equations()`), draw its diagram (as above), work out its basic reproduction number (`measles.R0()`, about 15 here), and list everything it assumed (`sim.describe()`). See [Writing models](building_writing.qmd).
-
-A transition is driven by one of a few things: a **rate** (events per person per unit of time), a **duration** (the mean time spent in the state, or a distribution of times), or a **transmission** rate, which depends on contact with people in another state. Several transitions out of the same state compete; one transition can split between several destinations, each with its probability.
+Because the model is a description rather than code, Starsim can read it: it can write out its equations, draw its diagram (as above), work out its basic reproduction number, choose a solver, and list everything it assumed. [Writing models](building_writing.qmd) covers the syntax, and [Diseases](building_diseases.qmd) what transitions can do (durations, branches, competing exits, and transmission).
 
 Most of a model is **declared** like this: states, transitions, rates, stratifications, interventions, and outcomes are descriptions that Starsim reads, which is what lets it print the equations, choose a solver, and run the model as compartments. What a declaration can't say, such as an antibody level that each person carries and that declines continuously, is **written as code**: a Python class with a `step()` method, called once each step, that can read and change anything in the sim. The two mix freely in one sim; a module written as code that keeps a value for each person makes the sim run as agents. See [Custom modules](building_modules.qmd), and [Architecture](architecture_index.qmd) for how the pieces fit together.
 

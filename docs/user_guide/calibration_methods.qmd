@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Claude draft, not yet reviewed; the comparison of the methods on two parameters, and the appendices, by AI
+  note: Claude draft, not yet reviewed; the comparison of the methods on two parameters, and the appendices, by AI; revised on Nov 12 by AI after the docs review
 ---
 
 `sim.fit()` chooses a method that suits the model, so most fits don't need to name one. This page is for choosing one yourself: what each method gives, needs, and costs, and how their answers compare on the same data. The data, parameters, and measures of fit, which are the same for every method, are in [Fitting a model](calibration_fitting.qmd).
@@ -21,8 +21,8 @@ authorship:
 | `'slsqp'` | Best fit | ODE | Gradients | As L-BFGS-B | As L-BFGS-B |
 | `'optuna'` | Best fit | Any; default for stochastic models and agents | Nothing | 50 trials per parameter (at least 100), each scored by a particle filter of 200 particles, or by 4 runs (1 for agents) | Runs are noisy, or as a first broad search |
 | `'if2'` | Maximum-likelihood best fit | Stochastic compartmental | A likelihood; each fitted parameter a single value of one of the model's rates | 4 chains × 50 passes × 1,000 particles | The maximum likelihood of a stochastic model |
-| `'nuts'` | Posterior | ODE with gradients (slowly without JAX, with `require_jax=False`) | A likelihood; gradients | 4 chains × 1,000 steps, each tens of runs with gradients | A posterior of an ODE whose data have little chance in them beyond the likelihood's |
-| `'pmcmc'` | Posterior | Stochastic compartmental, or an ODE | A likelihood | 4 chains × 2,000 draws × tens to hundreds of particles (one run a draw for an ODE) | A posterior of a stochastic model, with its process noise, or of an ODE that JAX can't run |
+| `'nuts'` | Posterior | ODE with gradients (slowly without JAX, with `require_jax=False`) | A likelihood; gradients | 4 chains × (500 warm-up + 500 sampling draws), each draw tens of runs with gradients | A posterior of an ODE whose data have little chance in them beyond the likelihood's |
+| `'pmcmc'` | Posterior | Stochastic compartmental, or an ODE | A likelihood | 4 chains × (1,000 warm-up + 1,000 sampling draws) × tens to hundreds of particles (one run a draw for an ODE) | A posterior of a stochastic model, with its process noise, or of an ODE that JAX can't run |
 | `'abc-smc'` | Approximate posterior | Any stochastic model, including agents; a deterministic model is an error | A goodness of fit (no likelihood) | 200 samples × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
 | A list | What its last stage gives | | What each stage needs | The sum of its stages | A broad search, then a local polish |
 
@@ -88,7 +88,7 @@ fit.table
 
 ### Iterated filtering: `'if2'`
 
-Iterated filtering (IF2; [Ionides et al. 2015](https://doi.org/10.1073/pnas.1410597112)), the method of the [pomp](https://kingaa.github.io/pomp/) package for R, finds maximum-likelihood values of a stochastic model by running a particle filter many times, with each particle's values taking small random steps that shrink from one pass to the next. Several chains (`chains=`, 4) each run `iterations=` passes (50) with `particles=` particles (1,000); `sd=` and `cooling=` set the size of the steps and how fast they shrink. The fit has converged if the chains end within 2 of each other in log-likelihood.
+Iterated filtering (IF2; [Ionides et al. 2015](https://doi.org/10.1073/pnas.1410597112)), the method of the [pomp](https://kingaa.github.io/pomp/) package for R, finds maximum-likelihood values of a stochastic model by running a particle filter many times, with each particle's values taking small random steps that shrink from one pass to the next. Several chains (`chains=`, 4) each run `iterations=` passes (50) with `particles=` particles (1,000); `sd=` and `cooling=` set the size of the steps and how fast they shrink. `fit.converged` is True if the chains, from different starts, end within 2 of the best log-likelihood: a sign that they agree, not proof that they found the maximum.
 
 ```{python}
 fit = fit_by('if2', stochastic, likelihood=likelihood, particles=200, iterations=25)
@@ -112,11 +112,11 @@ fit.pars
 
 ## Posteriors
 
-A posterior uses each parameter's `prior=`, or a uniform prior over its bounds. Its draws are in `fit.samples`, and `fit.table` adds the median, the 95% interval, and for chains R-hat and the effective sample size ([Fit diagnostics](calibration_diagnostics.qmd) covers reading them). The examples take fewer draws and chains than the defaults (`draws=`, `warmup=`, `chains=`) to run quickly, so they may report that they have not converged.
+A posterior uses each parameter's `prior=`, or a uniform prior over its bounds. Its draws are in `fit.samples`, and `fit.table` adds the median, the 95% interval, and for chains R-hat and the effective sample size ([Fit diagnostics](calibration_diagnostics.qmd) covers reading them). The defaults are in the table above (the number of warm-up draws, `warmup=`, which are discarded, and of sampling draws, `draws=`, for each of `chains=` chains). The examples take fewer to run quickly, so they may report that they have not converged.
 
 ### NUTS: `'nuts'`
 
-The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX. On a GPU, the last digits of the draws can differ from run to run (far inside the posterior's intervals).
+The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX. Its warm-up learns the scale of each parameter and the correlations between them (a dense mass matrix), so that strongly correlated parameters, such as an infection rate and a fraction reported, don't slow it down. On a GPU, the last digits of the draws can differ from run to run (far inside the posterior's intervals).
 
 ```{python}
 fit = fit_by('nuts', deterministic, likelihood=likelihood, draws=250, warmup=250, chains=2)
@@ -188,4 +188,4 @@ for method, func in ss.fitting.methods.items():
 pd.DataFrame(rows).set_index('method')
 ```
 
-A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fitting.method()` (see [ss.fitting](../api/fit.qmd)). The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`.
+A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fitting.method()` (see [ss.fitting](../api/internals.fitting.qmd)). The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`.

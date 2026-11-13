@@ -12,3 +12,8 @@ STARSIM_KERNELS=numba starsim init compile --check || starsim init compile --num
 
 # Run the tests (the developer tests, in devtests/, are slower and run separately: pytest devtests -n auto)
 pytest test_*.py -n auto --durations=0
+status=$?
+
+# The performance guard skips itself in parallel (timing is unreliable there), so run it on its own afterwards
+pytest test_baselines.py::test_performance_guard -p no:xdist -s || status=1
+exit $status

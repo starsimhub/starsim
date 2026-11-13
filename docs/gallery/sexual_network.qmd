@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; scope of the model stated on Nov 12 by AI after the docs review
 ---
 
-A sexually transmitted infection spreads only within partnerships, which form and dissolve over time, and how fast it spreads depends on who partners with whom and for how long, not just on the average number of partners. This needs a model of individual people and their partnerships: a network, and so agents. This page models a curable bacterial STI (an SIS model: people become susceptible again when cured) on Starsim's sexual network of men and women, with a different chance of transmission per sex act from men to women and from women to men.
+This model restricts transmission to sexual partnerships, which form and dissolve over time, so how fast the infection spreads depends on who partners with whom and for how long, not just on the average number of partners. That needs a model of individual people and their partnerships: a network, and so agents. This page models a curable bacterial STI (an SIS model: people become susceptible again when cured) on Starsim's sexual network of men and women, with a different chance of transmission per sex act from men to women and from women to men. The parameter values are illustrative, not estimates for a particular infection.
 
 ## The model
 
@@ -46,7 +46,7 @@ msim = ss.parallel(sim, n_runs=20)
 msim.plot('sti')
 ```
 
-The plot shows the median of the runs and the range that holds 95% of them. The number infected rises in the first year, as infections pass to the partners of the people infected at the start, and then falls slowly, as people are cured faster than new partnerships bring them new infections. Since an infection can only pass to a current partner, how many partners people have, and how long partnerships last, matter as much as the chance of transmission per act. The number infected at the end, and the infections over the ten years:
+The plot shows the median of the runs and the range that holds 95% of them. The number infected rises in the first year, as infections pass to the partners of the people infected at the start, and then falls slowly, as people are cured faster than new partnerships bring them new infections. Since in this model an infection can only pass to a current partner, how many partners people have, and how long partnerships last, matter as much as the chance of transmission per act. The number infected at the end, and the infections over the ten years:
 
 ```{python}
 msim.summarize().loc[['sti_I', 'sti_infection']]

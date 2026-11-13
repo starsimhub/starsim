@@ -93,6 +93,7 @@ website:
         - gallery/measles_london.qmd
         - gallery/beyond_disease.qmd
     - id: tutorials
+      collapse-level: 1
       contents:
         - href: index.qmd#top
           text: "**Home**"
@@ -106,7 +107,17 @@ website:
         - tutorials/t6_data.qmd
         - tutorials/t7_strata.qmd
         - tutorials/t8_modules.qmd
-        - tutorials/solutions.qmd
+        - section: Solutions # One entry, collapsed except on a solutions page; listing the pages gives them this sidebar
+          href: tutorials/solutions.qmd
+          contents:
+            - tutorials/solutions_t1_intro.qmd
+            - tutorials/solutions_t2_model.qmd
+            - tutorials/solutions_t3_disease.qmd
+            - tutorials/solutions_t4_mixing.qmd
+            - tutorials/solutions_t5_interventions.qmd
+            - tutorials/solutions_t6_data.qmd
+            - tutorials/solutions_t7_strata.qmd
+            - tutorials/solutions_t8_modules.qmd
     - id: user_guide
       collapse-level: 1
       contents:
@@ -437,6 +448,9 @@ filters:
   - interlinks
   - assets/github_alerts.lua # GitHub alerts (> [!NOTE]) as callouts, for the README on the home page
   - authorship # Each page's authorship front matter as a badge (quartopydoc's extension, in _extensions/sciris)
+
+language:
+  related-formats-title: "Download" # Above the tutorials' notebook download link (Quarto's default is "Other Formats")
 
 interlinks:
   sources: {} # Only link to Starsim itself (objects.json); external inventories made every page slower to render

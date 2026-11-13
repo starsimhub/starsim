@@ -2,16 +2,16 @@
 title: Scenarios
 jupyter: python3
 authorship:
-  human: 10
-  ai: 90
-  note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs; examples tidied and appendices added by AI; shortened on Nov 11 by AI
+  human: 9
+  ai: 91
+  note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs; examples tidied and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Let's be honest: there isn't much you can do with a single sim run. A scenario is a sim with something changed (an intervention added, a parameter set to another value, a different population), and 99.9% of the time you'll want to compare several, each run many times, since one stochastic run is just one draw of what could happen. [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) teaches the same through one example; [Running sims](running_sim.qmd) covers single sims.
 
 ## Scenarios by label
 
-Here, measles has reached a town of 20,000 people in which 90% are immune, with 50 infectious people on 1 January. The question is what a vaccination campaign that reaches half the town, with a vaccine that protects 95% of those who receive it, would avert, and whether it matters if it happens in February or March:
+Here, measles has reached a town of 20,000 people in which 90% are immune, with 50 infectious people on 1 January. The question is what a vaccination campaign that reaches half the town, with a vaccine that cuts each recipient's chance of infection by 95% (a leaky vaccine, the default; `leaky=False` would instead fully protect 95% of recipients and leave the rest unprotected: see [Products](interventions_products.qmd)), would avert, and whether it matters if it happens in February or March:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -100,6 +100,8 @@ msim.summarize(each=True, t='2025-03-01')
 ```
 
 Without `each=True`, `t=` gives the statistics across the runs of each scenario at that time point instead. `ss.parallel()` also takes a list of sims (each labeled by its own `label`), or several sims as arguments; its keywords say how to run them (see the [appendix](#appendix-multisims-and-ss.parallel)). It runs the sims it is given in place (`inplace=False` runs copies), which is why the scenarios above are made with `base.new()`.
+
+The sims that ran keep their people, so a run can be looked at person by person afterwards (`msim.sims['Campaign in March'][0].people.to_df()`, for a run of agents). Of each declared disease, agents keep only the times and histories the model reads (such as `ti_I`, when a duration needs it); make the sim with `keep_times=True` to read any other (see [People and demographics](populations_people.qmd)). For many runs of a large population, `shrink=True` removes the people from each sim once it has run, keeping the results, to save memory.
 
 ## Many runs of one model
 
@@ -343,7 +345,7 @@ pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
 | `pars` | none | Sets of values of the model's parameters, each a scenario of its own: a dict of lists, taken value by value, or a list of dicts |
 | `priors` | False | Draw `n_runs` sets of values from the parameters' priors (or bounds), on a Latin hypercube; or the draws themselves, e.g. from a posterior |
 | `workers` | one per CPU | The number of processes; 1 runs the sims one after the other in this process |
-| `shrink` | True | Remove the people from each sim once it has run, keeping the results |
+| `shrink` | False | Remove the people from each sim once it has run, keeping the results |
 | `inplace` | True | Update the sims given (with no `n_runs` or `pars`) with their results; False runs copies |
 | `verbose` | the sims' own | How much each run prints; by default the MultiSim shows the progress of the runs |
 | `until` | none | As for `sim.run()`, for each run: a time, or a condition that stops it |

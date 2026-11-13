@@ -1,14 +1,23 @@
-## T1 – Getting started
+---
+title: "Solutions: T1 – Getting started"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI; made a page of its own on Nov 12 by AI after the docs review
+---
+
+These are solutions to the exercises at the end of [T1 – Getting started](t1_intro.qmd). Many of the exercises are open-ended, so these are examples: there are often other good answers. This page runs on its own, from the setup below.
 
 ```{python}
 import starsim as ss
 ```
 
-### Exercise 1
+## Exercise 1
 
 **Suppose people with measles were infectious for only 5 days, with the same β. What would R0 be? Change the model, run it, and check the R0 the run prints. How does the epidemic change?**
 
-R0 = β × the infectious period = 1.9 × 5 = 9.5, as the second run prints. People recover sooner, so fewer are infectious at once and the peak is lower; but with R0 still well above 5, almost everyone is infected.
+R0 = β × the infectious period (β/γ) = 1.9 × 5 = 9.5, as `R0()` confirms. People recover sooner, so fewer are infectious at once and the peak is lower; but with R0 still well above 5, almost everyone is infected.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -22,9 +31,11 @@ sim8 = ss.Sim(measles8, total_pop=100_000, stop=ss.days(50))
 sim5 = ss.Sim(measles5, total_pop=100_000, stop=ss.days(50))
 msim = ss.parallel({'Infectious for 8 days': sim8, 'Infectious for 5 days': sim5})
 msim.plot('measles.I')
+for sim in msim.sims:
+    print(sim.label, '- R0 =', round(sim.diseases.measles.R0(), 1))
 ```
 
-### Exercise 2
+## Exercise 2
 
 **Run the agent version of the model with 1,000 agents instead of 10,000 (each standing for 100 people). What changes in the plot, and why?**
 
@@ -42,7 +53,7 @@ msim = ss.parallel({'10,000 agents': many, '1,000 agents': few})
 msim.plot('measles.I')
 ```
 
-### Exercise 3
+## Exercise 3
 
 **Using the output of `describe()`, find out how Starsim assumes that people mix, and how long people stay infectious (the distribution as well as the average).**
 

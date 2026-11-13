@@ -1029,7 +1029,7 @@ class Event(ss.products.EventSource, Intervention):
         self.in_compartments = ss.solvers.CompartmentalDelivery(self) if not isinstance(sim.solver, ss.solvers.abm) else None
         if self.boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Event) and d.product is self.product) is self: # Once for the product
             b = self.product.boxcar_form
-            ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim)
+            ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None) # With approximations="error", refused by the product's agent_reasons()
         return
 
     def check_coded(self, sim):
@@ -1578,7 +1578,7 @@ class Event(ss.products.EventSource, Intervention):
         except ss.CapabilityError:
             if selector.abm or strict or self.sim.pars.approximations == 'error':
                 raise
-            ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim)
+            ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim, verbose=0 if self.sim.pars.approximations == 'allow' else None)
             return None
         return np.broadcast_to(np.asarray(key, dtype=float), selector.shape)
 

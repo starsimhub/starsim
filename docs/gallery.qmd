@@ -3,17 +3,18 @@ title: Gallery
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; split into short examples and case studies on Nov 12 by AI after the docs review
 ---
 
-Complete models, each on a page of its own with the same parts: what the model is and why a modeler would build it this way, its state-transition diagram, its parameters, the code, a result with a plot, and where to go next. Each page runs as it is, in a few seconds. They cover a range of diseases and structures, rather than building one model up step by step as the [tutorials](tutorials.qmd) do.
+Complete models, each on a page of its own with the same parts: what the model is and why a modeler would build it this way, its state-transition diagram, its parameters, the code, a result with a plot, and where to go next. They cover a range of diseases and structures, rather than building one model up step by step as the [tutorials](tutorials.qmd) do. Each page runs as it is.
 
-## Models
+## Short examples
+
+Each of these is one model and one result, and runs in seconds.
 
 | Model | What it shows |
 |---|---|
 | [SIR, four ways](gallery/sir.qmd) | The four ways of writing a model, which give the same model; the same model as an ODE, two kinds of stochastic model, and agents |
-| [Checks against theory](gallery/theory_checks.qmd) | The final size against the Kermack–McKendrick equation, as an ODE; the chance of a major outbreak against 1 − 1/R0, with many stochastic runs |
 | [SEIR with a realistic infectious period](gallery/seir_erlang.qmd) | A latent period; an infectious period with Erlang stages against an exponential one |
 | [Hospitalization and death](gallery/hospitalization.qmd) | A split on entry (who goes to hospital) and competing hazards (death or discharge); severity by age as a Python function, run as compartments and as agents |
 | [Cholera with a water reservoir](gallery/cholera.qmd) | A state that is not people (bacteria in the water), with flows in from and out to outside the model |
@@ -21,40 +22,24 @@ Complete models, each on a page of its own with the same parts: what the model i
 | [Vaccination as a stratification](gallery/vaccination_strata.qmd) | Vaccinated and unvaccinated groups, and a campaign that moves people between them |
 | [Cases, hospitalizations, and deaths, fitted to data](gallery/outcomes_fit.qmd) | Outcomes with delays; data made from the model; fitting β with `sim.fit()` |
 | [An STI on a sexual network](gallery/sexual_network.qmd) | Transmission per sex act over partnerships; many runs as agents |
-| [Measles in London, two ways](gallery/measles_london.qmd) | He et al. (2010)'s stochastic measles model with school terms and cohort entry: declared with a little code, and as code; fitted with a likelihood of its own, compiled, and with a particle filter |
-| [Beyond disease](gallery/beyond_disease.qmd) | Agent-based models with no disease: wealth that becomes unequal, and birds that flock, each as a module written as code |
+
+## Case studies
+
+Longer pages, each with more than one model or many runs.
+
+| Model | What it shows |
+|---|---|
+| [Checks against theory](gallery/theory_checks.qmd) | The final size against the Kermack–McKendrick equation, as an ODE; the chance of a major outbreak against 1 − 1/R0, with 1,500 stochastic runs |
+| [Measles in London, three ways](gallery/measles_london.qmd) | He et al. (2010)'s stochastic measles model with school terms and cohort entry: declared with a little code, written as code, and declared with noise; a likelihood of its own, a compiled loop, and a particle filter at the published parameters. About a minute to run |
+| [Beyond disease](gallery/beyond_disease.qmd) | Agent-based models with no disease: wealth that becomes unequal, and birds that flock, with an animation |
 
 ## Models from other frameworks
 
-Each framework that Starsim can [import from](user_guide/building_import.qmd) has a page in the [Lingua Franca](https://starsim.org/lingua_franca/) docs, starting with a showcase model written in that framework and in Starsim, with how their results agree and how long each takes:
-
-| Framework | Model |
-|---|---|
-| [Atomica](https://starsim.org/lingua_franca/models/atomica/#the-same-model-in-both) | Atomica's SIR demo, from its framework workbook and databook |
-| [camdl](https://starsim.org/lingua_franca/models/camdl/#the-same-model-in-both) | A closed SIR, observed through weekly reported cases |
-| [EMULSION](https://starsim.org/lingua_franca/models/emulsion/#the-same-model-in-both) | EMULSION's compartmental SIR |
-| [EpiModel](https://starsim.org/lingua_franca/models/epimodel/#the-same-model-in-both) | An SIS over partnerships that form and dissolve |
-| [epipack](https://starsim.org/lingua_franca/models/epipack/#the-same-model-in-both) | An SIRS written as reaction processes |
-| [epydemix](https://starsim.org/lingua_franca/models/epydemix/#the-same-model-in-both) | An SIR in Kenya's population, with contact matrices between five age groups |
-| [epymorph](https://starsim.org/lingua_franca/models/epymorph/#the-same-model-in-both) | An SIRS in three places, with commuting between them |
-| [flepiMoP](https://starsim.org/lingua_franca/models/flepimop/#the-same-model-in-both) | An SEIR in two provinces whose residents commute between them |
-| [LASER](https://starsim.org/lingua_franca/models/laser/#the-same-model-in-both) | An SEIR in a city and fifteen smaller places, coupled by gravity |
-| [MEmilio](https://starsim.org/lingua_franca/models/memilio/#the-same-model-in-both) | An age-resolved SECIR with seasonality and a cut in contacts |
-| [NumPy](https://starsim.org/lingua_franca/models/numpy/#the-same-model-in-both) | A stochastic SEIR in daily steps for a million people |
-| [odin](https://starsim.org/lingua_franca/models/odin/#the-same-model-in-both) | A discrete-time stochastic SEIR in four age groups, with seasonal forcing |
-| [SimInf](https://starsim.org/lingua_franca/models/siminf/#the-same-model-in-both) | An SIR in each of 1,600 cattle herds, linked by movements |
-| [summer2](https://starsim.org/lingua_franca/models/summer2/#the-same-model-in-both) | An SIR with deaths, stratified by age and by location, with a mixing matrix for each |
+Each framework that Starsim can [import from](user_guide/building_import.qmd), from Atomica and EpiModel to odin and summer2, has a page in the [Lingua Franca](https://starsim.org/lingua_franca/) docs with a showcase model written in that framework and in Starsim, and how their results and run times compare; [Comparison with other frameworks](https://starsim.org/lingua_franca/models/comparison.html) lists them all.
 
 ## Library modules
 
-Starsim also comes with a library of example modules, which are illustrative rather than validated: their parameter values are indicative, and some are placeholders. Use them as starting points to copy and adapt. They are imported with `import starsim.library as ssl`:
-
-- **Diseases** (`ssl.diseases`): HIV with CD4 counts (with `ssl.diseases.ART` for treatment), cholera with an environmental reservoir, Ebola with transmission from unburied bodies, measles as an SEIR, a non-communicable disease, and simple models of malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea.
-- **Networks** (`ssl.networks`): households from survey data, people who move in space and connect to those nearby (`DiskNet`), and theoretical networks such as Erdős–Rényi.
-- **Maternal, newborn, and child health** (`ssl.mnch`): fetal health, neonatal sepsis, and congenital disease.
-- **Health economics** (`ssl.econ`): costs, disability-adjusted life years, discounting, and incremental cost-effectiveness ratios.
-
-[Library](user_guide/library_index.qmd) in the user guide describes them, and how to use them.
+The Starsim [library](user_guide/library_index.qmd) (`import starsim.library as ssl`) has more examples: diseases (HIV, cholera, malaria, TB, and others), networks (households, space, and theoretical networks), maternal-child health, and health economics. They are illustrative rather than validated, and meant to be copied and adapted.
 
 ## Scripts in the repository
 

@@ -2,9 +2,9 @@
 title: Connectors
 jupyter: python3
 authorship:
-  human: 15
-  ai: 85
-  note: Based on the AI-written v4 draft, which ports the HIV and STI examples and the timing of connectors from the Starsim 3 user guide page on connectors; examples made realistic, and modifiers as members of a disease, added by AI; shortened on Nov 11 by AI
+  human: 14
+  ai: 86
+  note: Based on the AI-written v4 draft, which ports the HIV and STI examples and the timing of connectors from the Starsim 3 user guide page on connectors; examples made realistic, and modifiers as members of a disease, added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 A **connector** links modules: it lets one part of a model change another, such as one disease raising the risk of another, or a disease lowering fertility. Most connectors are a single `ss.modify()`, the same call that [changes parameters](interventions_interventions.qmd#changing-parameters) (where its keywords, targets, and how modifiers combine are explained), given to the sim with `connectors=`; anything a modifier can't say is a connector written as code. The tutorial [T7 – Stratification and co-transmission](../tutorials/t7_strata.qmd) builds up a model of two interacting diseases, and [Strains](building_diseases.qmd#strains) covers several strains of one disease.
@@ -194,7 +194,7 @@ A connector that sets an array directly (`hiv.rel_sus[uids] = 2.7`) erases whate
 
 ## Under compartments and agents
 
-Modifiers work under every solver. A condition on a disease's state (`sti.I`) in a compartmental run needs the diseases to be tracked jointly, so that there is a compartment for each combination of their states; Starsim does this itself when a modifier of one declared disease reads the states of another, and says so in a note (`the states of a × b are tracked jointly`). A condition on a quantity that only agents have, such as a CD4 count of a disease written as code, or on how long ago something happened, runs as agents. So does a connector written as code that keeps a value for each person, as `Inflammation` does.
+Modifiers run under every solver, unless what they read needs agents (below). A condition on a disease's state (`sti.I`) in a compartmental run needs the diseases to be tracked jointly, so that there is a compartment for each combination of their states; Starsim does this itself when a modifier of one declared disease reads the states of another, and says so in a note (`the states of a × b are tracked jointly`). A condition on a quantity that only agents have, such as a CD4 count of a disease written as code, how long ago something happened, or how long someone has been in a state (`I.time_in`, as in `FadingSIR`), runs as agents. So does a connector written as code that keeps a value for each person, as `Inflammation` does.
 
 ## Pitfalls
 

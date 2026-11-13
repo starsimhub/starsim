@@ -205,7 +205,7 @@ Names were renamed where they meant different things in different places, or whe
 
 ### JAX and gradients
 
-- An ODE can be run in JAX, which `sim.gradient()` (derivatives of results with respect to parameters), `sim.log_density()`, gradient fits, NUTS, and `ss.parallel()` with many sets of values use without being asked; JAX is optional (`pip install "starsim[jax]"`), with `ss.options.jax` for the platform. What JAX compiles is kept for later sessions, in `~/.cache/starsim/jax`.
+- An ODE can be run in JAX, which `sim.gradient()` (derivatives of results with respect to parameters), `sim.log_density()`, gradient fits, NUTS, and `ss.parallel()` with many sets of values use without being asked; JAX is optional (`pip install "starsim[jax]"`), with `ss.options.jax` for the platform (the CPU by default, which runs these long loops of small steps several times faster than a GPU). What JAX compiles is kept for later sessions, in `~/.cache/starsim/jax`.
 
 ### Runs and scenarios
 

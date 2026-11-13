@@ -2,9 +2,9 @@
 title: People and demographics
 jupyter: python3
 authorship:
-  human: 9
-  ai: 91
-  note: Merged from "People and agents" and "Demographics" on Nov 11 by AI. "People and agents" was based on the AI-written v4 draft, with the sections on arrays and multi-column states adapted from the Starsim 3 user guide page on people; "Demographics" was based on the AI-written v4 draft, with the comparison of runs with and without demographics adapted from the Starsim 3 user guide. The examples made realistic, the new examples on changing rates, life tables, and migration, and the appendices, by AI. Shortened on Nov 11 by AI; the arrays and multi-column states moved to Array indexing
+  human: 8
+  ai: 92
+  note: Merged from "People and agents" and "Demographics" on Nov 11 by AI. "People and agents" was based on the AI-written v4 draft, with the sections on arrays and multi-column states adapted from the Starsim 3 user guide page on people; "Demographics" was based on the AI-written v4 draft, with the comparison of runs with and without demographics adapted from the Starsim 3 user guide. The examples made realistic, the new examples on changing rates, life tables, and migration, and the appendices, by AI. Shortened on Nov 11 by AI; the arrays and multi-column states moved to Array indexing; revised on Nov 12 by AI after the docs review
 ---
 
 Every model has a population: its size, the ages and sex of its people, and anything else about them the model needs. Over years, births, deaths, and aging change it.
@@ -17,7 +17,7 @@ The examples use the measles model from the tutorials:
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # β = 1.9 per day
+infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day (typed, beside annual demographics)
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 ```
@@ -114,7 +114,7 @@ Births and deaths for the whole population go in `demographics=`. `ss.birth(rate
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I       # β = 1.9 per day
+infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day (typed, beside annual demographics)
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
@@ -136,7 +136,7 @@ fig
 library(starsim)
 
 states("S I R")
-infection <- Transition(S, I, rate = 1.9 * I) # β = 1.9 per day
+infection <- Transition(S, I, rate = ss$perday(1.9) * I) # β = 1.9 per day (typed, beside annual demographics)
 recovery  <- Transition(I, R, dur = days(8))  # Infectious for 8 days on average
 measles <- Disease(infection, recovery, init_prev = 0.001)
 
@@ -158,7 +158,7 @@ fig
 ```{python}
 S, I, R = ss.states('S I R')
 measles_demog = ss.Disease(
-    infection = S >> I @ 1.9*I,
+    infection = S >> I @ ss.perday(1.9)*I,
     recovery  = I >> R @ ss.days(8),
     births    = ss.birth(S, rate=ss.peryear(0.03)), # Births into S, the first state, as a transition of the disease
     deaths    = ss.death(rate=ss.peryear(0.01)),    # Deaths from every state
@@ -202,7 +202,7 @@ library(starsim)
 
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+  infection = Transition(S, I, rate = ss$perday(1.9) * I), # β = 1.9 per day (typed, beside annual demographics)
   recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
   init_prev = 0.001
 )
@@ -345,9 +345,9 @@ As agents, `sim.people` holds every agent: its properties, and the states of eve
 
 Each module adds its own states, under its name, when the sim is initialized: a declared disease adds each of its states (`sim.people.measles.I`), and each person's relative susceptibility and transmissibility (`rel_sus` and `rel_trans`). A property that belongs to one module is best defined in that module, with `define_states()` (see [Custom modules](building_modules.qmd)); one that several modules use (such as `urban`) is best given to `ss.People` with `extra_states=`.
 
-The time each agent entered a state (`ti_I`) is kept only when something in the sim reads it; `ss.Sim(keep_times=True)` keeps them all. For the time people spent in a state, use the state's `stays` (e.g. `np.mean(sim.diseases.measles.I.stays)`).
-
 ### Looking at people
+
+A sim keeps its people after it has run, and so do the runs of `ss.parallel()` (`msim.sims['label'][0].people`), unless they were shrunk to save memory (`sim.shrink()`, `ss.parallel(..., shrink=True)`, or a finished sim saved to a file). Of each declared disease, agents keep only the times and histories the model reads: the time each agent entered a state (`ti_I`) is kept when something in the sim reads it, such as a duration of the state, and `ss.Sim(keep_times=True)` keeps them all (reading one that wasn't kept raises an error that says so). For the time people spent in a state, use the state's `stays` (e.g. `np.mean(sim.diseases.measles.I.stays)`).
 
 `sim.people.to_df()` gives a table, e.g. for the mean age of women and of men:
 
@@ -369,7 +369,7 @@ sim.people.get_person(10)
 Each agent who dies has one cause, the module whose death it was: its name is in `people.causes`, and its position in that list in `people.cause_of_death`:
 
 ```{python}
-measles_deaths = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), ss.death(I, rate=ss.perday(0.002)), init_prev=0.001, name='measles')
+measles_deaths = ss.Disease(S >> I @ ss.perday(1.9)*I, I >> R @ ss.days(8), ss.death(I, rate=ss.perday(0.002)), init_prev=0.001, name='measles')
 deaths = ss.Deaths(death_rate=ss.peryear(0.01), name='other') # Deaths from other causes, 10 per 1,000 people a year
 sim = ss.Sim(measles_deaths, demographics=deaths, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.run()

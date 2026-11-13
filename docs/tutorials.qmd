@@ -1,16 +1,16 @@
 ---
 pagetitle: "Tutorials"
 authorship:
-  human: 20
-  ai: 80
-  note: Adapted by AI from the Starsim 3 tutorials page; updated on Nov 11 by AI for the merged tutorials
+  human: 15
+  ai: 85
+  note: Adapted by AI from the Starsim 3 tutorials page; updated on Nov 11 by AI for the merged tutorials; setup, downloads, and choosing a tutorial revised on Nov 12 by AI after the docs review
 ---
 
 # Tutorials
 
-The tutorials teach Starsim through one example: a simplified measles outbreak in a town, which gains a latent period, age groups, vaccination, other towns, data to fit it to, and more. Each takes 10 to 20 minutes, starts with the model so far (so you can start at any one), and ends with exercises. The [user guide](user_guide.qmd) covers each topic in full.
+The tutorials teach Starsim through one example: a simplified measles outbreak in a town, which gains a latent period, age groups, vaccination, data to fit it to, and more. Each tutorial starts with the model so far, so you can start at any one, and ends with exercises. The [user guide](user_guide.qmd) covers each topic in full.
 
-Most tutorials run models as compartments (groups of people, by state and by age or place), which Starsim runs as equations, as stochastic models, or as agents. Each also shows what changes as agents, one simulated person at a time, for when people differ in ways compartments can't hold.
+If you are new to Starsim, start with T1–T3, which cover what every model needs. T4–T6 add what most real analyses need: who meets whom, interventions, and data. T7 and T8 are for when you need them. Sections marked "Advanced" can be skipped on a first read; many of them show the same model as agents, one simulated person at a time.
 
 ::: {.grid}
 ::: {.g-col-6}
@@ -40,13 +40,13 @@ Who meets whom: age groups and contact matrices, movement between towns, and net
 ::: {.g-col-6}
 [**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-It's not all doom and gloom: vaccination, isolating cases, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
+It's not all doom and gloom: vaccination, measures that cut transmission, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
 :::
 
 ::: {.g-col-6}
 [**T6 – Data and calibration**](tutorials/t6_data.qmd)
 
-Real places and populations, births and deaths, and fitting the model to reported cases to project a campaign.
+Fitting the model to reported cases, projecting a campaign with its uncertainty, and a real population with births and deaths.
 :::
 
 ::: {.g-col-6}
@@ -63,10 +63,14 @@ Writing your own behavior as code: an intervention for compartments, and a disea
 
 :::
 
-The answers to the exercises are in the [solutions](tutorials/solutions.qmd).
+The answers to the exercises are on the [solutions](tutorials/solutions.qmd) pages, one per tutorial.
 
-::: {.callout-tip}
-## Running tutorials locally
+## Running the tutorials yourself
 
-Each tutorial can be downloaded as a Jupyter notebook: look for the download button at the top of the page. Or, to run them all locally: clone the Starsim repository, install Starsim (`pip install -e .`), go to `docs/tutorials`, and open them in Jupyter (`jupyter lab`, with `jupytext` installed to open `.qmd` files directly, or run `./convert_notebooks` first).
-:::
+**Install Starsim** with `pip install "starsim[jax]"` (see [installation](index.qmd#installation)). JAX is used for gradients and for fitting by NUTS in the user guide; the tutorials run without it (`pip install starsim`).
+
+**Download a tutorial** as a Jupyter notebook from the "Jupyter notebook" link beside the page's contents. The notebook has the Python code as cells; the R code is included as text.
+
+**Data files**: T6 reads the reported cases from [`data/measles_cases.csv`](tutorials/data/measles_cases.csv) and [`data/measles_cases_after.csv`](tutorials/data/measles_cases_after.csv). Save them in a folder called `data` beside the notebook. The other tutorials need no files.
+
+To run all the tutorials at once, clone the [Starsim repository](https://github.com/starsimhub/starsim), install it (`pip install -e .`), and open the files in `docs/tutorials` in Jupyter (`jupyter lab`): with `jupytext` installed, Jupyter opens the `.qmd` files directly, or run `./convert_notebooks` there first to convert them.

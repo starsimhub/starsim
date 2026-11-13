@@ -2,9 +2,9 @@
 title: Diseases
 jupyter: python3
 authorship:
-  human: 50
-  ai: 50
-  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI; examples made realistic and the catalog appendix added by AI; shortened on Nov 11 by AI
+  human: 45
+  ai: 55
+  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI; examples made realistic and the catalog appendix added by AI; shortened on Nov 11 by AI; generated catalog replaced by an API link, and NCD labeled as written as code, on Nov 12 by AI after the docs review
 ---
 
 The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd) for what it is) has ready-made diseases: outbreak diseases such as measles, Ebola, and cholera, HIV with its treatment, short versions of published models of others, and SIR, SIS, and SEIR written as code. Most are declared as states and transitions, so they run as compartments or as agents (see [Diseases](building_diseases.qmd)); the rest are written as code, so they run as agents (see [Custom modules](building_modules.qmd)).
@@ -26,7 +26,7 @@ sim.plot('measles')
 The outbreak diseases give their natural history in days, and Starsim chooses a step of a day for them. With a step of a year, their durations are shorter than a step, and the dynamics are meaningless (see [Time](building_time.qmd)).
 :::
 
-The outbreak diseases, and those written as code (the rest are [further down](#declared-diseases)):
+The outbreak diseases, and those written as code (the rest are [further down](#declared-diseases); the [API reference](../api/library.diseases.qmd) has every class, with its parameters and defaults):
 
 | Class | Based on | Description |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ The outbreak diseases, and those written as code (the rest are [further down](#d
 | `ssl.HIV` | `ss.AgentDisease` | HIV, with CD4 counts, deaths that depend on them, and transmission from mother to child |
 | `ssl.ART` | `ss.Delivery` | Antiretroviral therapy for `ssl.HIV`, with `coverage=`, `who=` and `when=` as for `ss.treat()` |
 | `ssl.CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every step, for `ssl.HIV` |
-| `ssl.NCD` | `ss.Disease` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
+| `ssl.NCD` | `ss.Disease` (written as code) | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
 | `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR` | `ss.AgentDisease` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: teaching examples of what the declared `ss.SIR`, `ss.SIS`, and `ss.SEIR` do under the hood as agents, and starting points for a disease written as code (for the models themselves, use the declared ones) |
 
 ## Outbreak diseases: measles, Ebola, and cholera
@@ -177,6 +177,8 @@ Library modules are ordinary Starsim modules, so they can be changed in the usua
 measles = ssl.Measles(beta=ss.perday(1.2), dur_exp=ss.normal(mean=ss.days(10), std=ss.days(2)), p_death=0.01)
 ```
 
+### Advanced: building on a class
+
 For a change to how the disease works, build on the class. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune`, and a small daily chance of infection from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
 
 ```{python}
@@ -227,44 +229,3 @@ Copying a library module and editing it is also a good way to use it; that is wh
 - [HPVsim: repository](https://github.com/starsimhub/hpvsim): an agent-based model of HPV and cervical cancer
 - [Covasim: documentation](https://docs.covasim.org/): the agent-based COVID-19 model that Starsim grew out of
 - [The Epiverse: tools](https://epiverse-trace.github.io/): R packages for outbreak analytics, including natural history parameters of many diseases
-
-## Appendix: every library disease
-
-Every disease in `ssl.diseases`, generated from the classes themselves: whether it is declared (so it runs under any solver, except as noted [above](#declared-diseases)) or written as code (so it runs as agents), its first line of documentation, its default parameters (those its source marks as placeholders, to be set for the network, are flagged), and its results. `ssl.Dengue` is a set of `ssl.DengueSerotype` diseases, one per serotype (`den1` to `den4`), so it is listed as `ssl.DengueSerotype`.
-
-```{python}
-#| warning: false
-import re
-import inspect
-import pandas as pd
-
-def placeholders(cls):
-    """ The parameters that a class's source marks as placeholders """
-    return re.findall(r'(\w+)\s*=.*# Placeholder', inspect.getsource(cls))
-
-def network_for(disease):
-    """ A network the disease can be initialized on, to list its results """
-    beta = getattr(disease.pars.get('beta'), 'raw', disease.pars.get('beta'))
-    if isinstance(beta, ss.peract): # A probability per act needs partnerships
-        return ss.SexualNet()
-    return None if isinstance(disease, ssl.NCD) else ss.RandomNet()
-
-rows = []
-for name, obj in vars(ssl.diseases).items():
-    if name.startswith('_') or inspect.ismodule(obj) or (inspect.isclass(obj) and not issubclass(obj, ss.Disease)):
-        continue # Not a disease: ssl.ART is an intervention and ssl.CD4_analyzer an analyzer
-    disease = obj()
-    marked = placeholders(obj)
-    pars = [f'{k}={getattr(v, "raw", v)}' + (' (placeholder)' if k in marked else '') for k,v in disease.pars.items()]
-    sim = ss.Sim(diseases=disease, networks=network_for(disease), n_agents=100, verbose=0).init()
-    rows.append(dict(
-        disease = f'ssl.{name}',
-        written_as = 'declared' if disease.graph is not None else 'code',
-        description = inspect.getdoc(obj).split('\n')[0].rstrip('.'),
-        parameters = ', '.join(pars),
-        results = ', '.join(k for k in sim.results[disease.name].keys() if k != 'timevec'),
-    ))
-
-pd.set_option('display.max_colwidth', None) # Show each entry in full
-pd.DataFrame(rows).sort_values(['written_as', 'disease']).set_index('disease')
-```

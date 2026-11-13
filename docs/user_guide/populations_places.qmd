@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged on Nov 11 by AI from the data by place of "Population data" and the places, maps, and values by place of "Geography". Both were based on the AI-written v4 drafts (Claude's pages on contact matrices and data by place, and on places and movement, with the table of source data, the advice on using data of your own, and the checks of spatial models from Codex's); the coverage of the data, looking up a place, the Kenya example, and the appendices added by AI. Shortened on Nov 11 by AI, with movement between places moved here from Mixing
+  note: Merged on Nov 11 by AI from the data by place of "Population data" and the places, maps, and values by place of "Geography". Both were based on the AI-written v4 drafts (Claude's pages on contact matrices and data by place, and on places and movement, with the table of source data, the advice on using data of your own, and the checks of spatial models from Codex's); the coverage of the data, looking up a place, the Kenya example, and the appendices added by AI. Shortened on Nov 11 by AI, with movement between places moved here from Mixing; revised on Nov 12 by AI after the docs review
 ---
 
 A model of a particular setting needs data about its people and its places: how many people there are and of what ages, how fast they are born and die, who has contact with whom, and where they live. Starsim has these for 187 countries and territories, by name, and takes data of your own in the same forms. This page covers that data, and then places: geographies of towns or of a country's administrative units, movement between them, and maps of results.
@@ -119,7 +119,7 @@ sim$results$measles$I$by("patch")$plot()
 ```
 :::
 
-The sim takes its population from the geography. Without `mobility=`, people mix only within their own town. Places and movement work the same under every solver; as agents, each agent has a home place.
+The sim takes its population from the geography. Without `mobility=`, people mix only within their own town. Places run under every solver, and so does movement between them, except as agents stepped by events (`ss.solvers.abm(step='events')`); as agents, each agent has a home place.
 
 ### Geographies
 
@@ -273,7 +273,6 @@ for label, sim in {'As an ODE': ss.Sim(measles_slow, **kw), 'As agents': ss.Sim(
 - [UN World Population Prospects](https://population.un.org/wpp/): the populations, birth rates, and death rates that come with Starsim
 - [epydemix: Populations](https://epydemix.readthedocs.io/en/latest/guide/populations.html): populations and contact matrices by place, for compartmental models
 - [flepiMoP: Model description](https://iddynamics.gitbook.io/flepimop/gempyor/model-description): metapopulation models of US states and counties, with mobility between them
-- [MEmilio: Metapopulation models](https://memilio.readthedocs.io/en/latest/cpp/metapop.html): compartmental models of regions joined by commuting
 - [LASER: Migration](https://laser.idmod.org/laser-generic/software-overview/migration/): movement between places in an agent-based model, with gravity and radiation models
 
 ## Appendix: what a geography has

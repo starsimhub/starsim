@@ -954,8 +954,14 @@ def flow_terms(graph, engine=None, contacts=None):
     # The tracks an arrival is split between, symbolically
     def entry(name, weight=''):
         out = []
-        for track in engine.tracks[name]:
-            w = weight if track.p is None else f'{weight}{factor_str(track.p)} * '
+        tracks = engine.tracks[name]
+        given = [factor_str(t.p) for t in tracks if t.p is not None and not getattr(t, 'stay', False) and not getattr(t, 'trigger', False)]
+        rest = f'(1 - {" - ".join(given)}) * ' if given else '' # The branch with p=None takes what the others leave (see ss.solvers.Engine.branch_fracs())
+        for track in tracks:
+            if track.p is None:
+                w = weight if getattr(track, 'trigger', False) else f'{weight}{rest}'
+            else:
+                w = f'{weight}{factor_str(track.p)} * '
             if track.immediate:
                 for dst,frac in zip(track.tr.dest, branch_fracs(track.tr)[0]):
                     out += entry(dst.name, f'{w}{frac}')

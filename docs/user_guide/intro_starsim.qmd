@@ -2,22 +2,14 @@
 title: What is Starsim?
 jupyter: python3
 authorship:
-  human: 35
-  ai: 65
-  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI
+  human: 30
+  ai: 70
+  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI; repeated catalogs cut on Nov 12 by AI after the docs review
 ---
 
 ## Introduction
 
-Starsim is a framework for modeling the spread of diseases: as deterministic or stochastic compartmental models, as metapopulation models across places, or as agent-based models with dynamic transmission networks. Starsim supports:
-
-- Writing a disease as its states and the transitions between them (compartments and the rates of flow between them, as in a textbook model), and running the same model as a deterministic compartmental model, as a stochastic one, or as agents
-- Co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally
-- Non-infectious diseases, either on their own or as factors affecting the transmission or mortality of infectious diseases
-- Detailed modeling of mother-child relationships starting from conception, allowing investigation of infant and childhood diseases
-- Multiple types of transmission network, including theoretical (e.g. Erdős–Rényi) and realistic (e.g. age-assortative sexual partnerships)
-- Different intervention types, such as vaccines or treatments, and showing their impact through different delivery methods such as mass campaigns or targeted outreach
-- Calibration to data, and common random numbers, so that two scenarios differ by what was changed rather than by chance
+Starsim is a framework for modeling the spread of diseases: as deterministic or stochastic compartmental models, as metapopulation models across places, or as agents with dynamic transmission networks. A disease is written as its states and the transitions between them, as in a textbook model, and the same model then runs in any of these ways. Starsim also models several diseases at once and how they interact, non-infectious diseases, pregnancy and birth, interventions and how they are delivered, and fitting to data.
 
 Starsim is available for both Python and R (see [R-Starsim](https://r.starsim.org)), and is fully open-source under the MIT license.
 
@@ -32,8 +24,6 @@ Tools differ as much in how a model is written: by hand in a general-purpose lan
 ## Where Starsim fits
 
 Starsim's distinctive feature is that one model runs in more than one of these ways. A disease declared as states and transitions (`S >> I @ beta*I`; see [Writing models](building_writing.qmd)) is data that Starsim can read, so the same declaration runs as an ODE, as a stochastic compartmental model, or as agents, in one place or across several as a metapopulation. Starsim runs it as compartments unless something in it needs individuals, such as a contact network, and says which it chose; one argument overrides it (see [Solvers and backends](running_solvers.qmd)). So a model can start as an ODE, be fitted fast, and then run as agents to add a network or an intervention that targets individuals, without being written twice. What the declaration can't express is added by a module written as code ([Custom modules](building_modules.qmd)). The [conceptual overview](intro_concepts.qmd) explains how this works.
-
-Around that core are the parts most models need: stratification by age, sex, place, or anything else ([Stratification](building_stratification.qmd)); populations by country ([Places and data](populations_places.qmd)); contact matrices and networks ([Mixing](populations_mixing.qmd)); demographics and pregnancy ([People and demographics](populations_people.qmd)); vaccines, treatments, and other interventions ([Interventions](interventions_interventions.qmd)); costs ([Health economics](library_econ.qmd)); and calibration, including gradients through the model ([Fitting a model](calibration_fitting.qmd)).
 
 Starsim's design follows two principles: common tasks (defining parameters, running a sim, plotting results) should be simple, and custom tasks (a new vaccine, a new disease, a calibration function of your own) can't always be simple, but should still be possible. If you're modeling a complicated disease, some of that complexity is irreducible: Starsim's job is to help where it can, then get out of the way and let you write your code. See [Architecture](architecture_index.qmd#the-idea-and-the-principles) for the full set.
 
@@ -203,7 +193,7 @@ These models are inter-compatible: an HIV-TB coinfection model can combine the H
 
 ### The built-in library
 
-Starsim itself comes with a library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, malaria with its mosquitoes, TB, measles, and others), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), maternal, newborn, and child health (fetal health, neonatal sepsis), and health economics (costs, DALYs, and cost-effectiveness; see [Health economics](library_econ.qmd)). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
+Starsim also comes with a [library](library_index.qmd) of example diseases, networks, maternal-child health modules, and health economics, imported with `import starsim.library as ssl`. They are illustrative rather than validated, and meant to be copied and adapted.
 
 The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR` (see [Diseases](building_diseases.qmd#diseases-as-classes)).
 
@@ -222,17 +212,10 @@ Start from the smallest model that represents the mechanism your question depend
 | What is the effect of vaccination? | [Vaccination as a stratification](../gallery/vaccination_strata.qmd), [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) |
 | How does infection move between towns? | [T4 – Mixing](../tutorials/t4_mixing.qmd) |
 | What do surveillance data say about the parameters? | [Cases, hospitalizations, and deaths, fitted to data](../gallery/outcomes_fit.qmd), [T6 – Data and calibration](../tutorials/t6_data.qmd) |
-| What drives recurring epidemics, such as those of measles? | [Measles in London, two ways](../gallery/measles_london.qmd) |
+| What drives recurring epidemics, such as those of measles? | [Measles in London](../gallery/measles_london.qmd) |
 | Do individual partnerships matter? | [An STI on a sexual network](../gallery/sexual_network.qmd), [T4 – Mixing](../tutorials/t4_mixing.qmd) |
 
 A runnable example is a starting point, not a calibrated model of a particular population.
-
-## Finding your way around
-
-- **To see Starsim in action**, take the [tour](../tour.qmd), or browse the [gallery](../gallery.qmd) of complete models.
-- **To learn Starsim**, follow the [tutorials](../tutorials.qmd) in order; they build up one measles model, from a simple SIR to custom code.
-- **To look something up**, use this user guide: each page is a reference for one topic, and the [Architecture](architecture_index.qmd) pages explain how Starsim works under the hood. For the exact arguments of a function, see the [API reference](../api/index.qmd).
-- **If you work with an AI coding agent**, run `starsim init ai` in your project to give it Starsim's skills (see [ai.starsim.org](https://ai.starsim.org)).
 
 ## Further reading
 

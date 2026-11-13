@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged on Nov 11 by AI with "Parameter identification" (based on an AI draft, with the plot of the ridge and fixing a known value added by AI), now the section on whether the data can tell the parameters apart. Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI; shortened on Nov 11 by AI
+  note: Merged on Nov 11 by AI with "Parameter identification" (based on an AI draft, with the plot of the ridge and fixing a known value added by AI), now the section on whether the data can tell the parameters apart. Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 `sim.fit()` always returns values. Whether to trust them has several parts: does the model match the data, did the search find the best values, do the data determine the values, and does the fitted model predict data it hasn't seen? This page goes through the checks in that order. It assumes the basics of [Fitting a model](calibration_fitting.qmd).
@@ -80,7 +80,7 @@ print(seir_fit.converged)
 print(seir_fit.why)
 ```
 
-What "converged" means depends on the method (see the [appendix](#when-each-method-has-converged)). A fit that has not converged is not necessarily wrong, but can't be trusted until it has been run longer, or the reason is understood.
+What "converged" means depends on the method (see the [appendix](#when-each-method-has-converged)). A fit that has not converged is not necessarily wrong, but can't be trusted until it has been run longer, or the reason is understood. A fit that has converged has passed its method's check, which is evidence, not proof, that it found the best fit or the whole posterior: a search can settle on a local best, and chains can agree while all missing the same region.
 
 ### A best value at a bound
 
@@ -105,16 +105,16 @@ If the fits differ by more than matters, use more trials, more runs per trial (`
 
 ### The time step
 
-A model run as agents or a chain binomial takes whole steps, and when its rates are fast compared with the step, the step changes the fitted values (see [Solvers and backends](running_solvers.qmd#the-length-of-a-step)). `fit.sim.check_dt()` reruns the fitted sim with half the step and shows how much each result changes; if more than the mismatch of the fit, fit again with the smaller step.
+A model run as agents, or as a chain binomial with `ss.solvers.binomial(substeps=1)`, takes infection a step at a time, and when its rates are fast compared with the step, the step changes the fitted values (the chain binomial's default substeps keep this small) (see [Solvers and backends](running_solvers.qmd#the-length-of-a-step)). `fit.sim.check_dt()` reruns the fitted sim with half the step and shows how much each result changes; if more than the mismatch of the fit, fit again with the smaller step.
 
 ### A posterior
 
 For a posterior by NUTS or particle MCMC, `fit.summarize()` gives two checks for each parameter (ABC-SMC's has the effective sample size only):
 
 - **R-hat** (`rhat`) compares the spread within each chain with that between chains. Above 1.01, the chains disagree, and the posterior is not yet reliable.
-- **Effective sample size** (`ess`) is how many independent draws the correlated draws are worth. A few hundred is enough for a median and a 95% interval.
+- **Effective sample size** (`ess`) is how many independent draws the correlated draws are worth. A few hundred is usually enough for a median and a rough 95% interval; the ends of an interval, or a more precise one, need more.
 
-NUTS also counts **divergent** draws (`fit.diagnostics.divergences`), where the sampler's path went wrong; even a few mean the posterior may be missing a region. If any check fails, the fit warns (`ss.errors.NotConverged`). More warm-up (`warmup=`) sometimes fixes it, but a common cause is a ridge (see [below](#which-combinations-the-data-determine)): then fix a parameter, or get more data.
+NUTS also counts **divergent** draws (`fit.diagnostics.divergences`), where the sampler's path went wrong; even a few mean the posterior may be missing a region. If any check fails, the fit warns (`ss.errors.NotConverged`). More warm-up (`warmup=`) sometimes fixes it, but a common cause is a ridge (see [below](#which-combinations-the-data-determine)): then fix a parameter that is known from elsewhere, or get more data.
 
 ### Looking at the search
 
@@ -134,7 +134,7 @@ A parameter is *identifiable* if the data determine its value. This fails in two
 - **Structurally**: the model can't tell two parameters apart, whatever the data, e.g. when transmission depends only on the product of contacts and the chance of infection per contact.
 - **Practically**: these data can't, because there is too little of it, it is too noisy, or it doesn't cover the part of the epidemic that would show the difference.
 
-The way to check is to fit data made from the model with known values, as this page does: if the fit doesn't recover them, it won't recover the truth from real data either. Starsim also notes when two parameters appear in the model only multiplied together (e.g. `contacts*p_infect*I`), so that the data determine only their product: fit one and fix the other, or make their product one parameter. For a posterior, it notes parameters that are almost perfectly correlated.
+A practical check is to fit data made from the model with known values, as this page does. If the fit doesn't recover them, it is unlikely to recover the truth from real data. If it does, that is evidence for those values and data like these, not a proof of identifiability: other values, or other data, can behave differently. Starsim also notes when two parameters appear in the model only multiplied together (e.g. `contacts*p_infect*I`), so that the data determine only their product: fit one and fix the other, or make their product one parameter. For a posterior, it notes parameters that are almost perfectly correlated.
 
 ### Recovering known values
 
@@ -212,7 +212,7 @@ for days in [8, 6]:
 pd.DataFrame(rows).round(3)
 ```
 
-Fixing a parameter moves its uncertainty into the others, so fix only what is known, at its best estimate.
+Fixing a parameter at a wrong value biases the others, as the fit at 6 days shows. Even at the right value, fixing it leaves its uncertainty out: the intervals of the others are narrower than they would be if it were fitted too. So fix only what is well known from elsewhere, and say so when reporting the fit.
 
 ### Noise in the data
 
@@ -295,6 +295,5 @@ The messages a fit can give that are not covered above. Warnings are Python warn
 |---|---|---|---|
 | The profile stays within the threshold up to a bound | Warning, `ss.errors.AtBound` | A profile likelihood's interval may extend beyond the bounds | Wider bounds, or more values |
 | The scan tries fewer than 10 points for each parameter | Note | With more than 10 parameters, the scan is capped at 100 points | `scan=` to change it |
-| The R-hat and effective sample size need JAX | Note | Without BlackJAX, they are NaN, so a posterior can't be checked | `pip install "starsim[jax]"` |
 | The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or likelihood can't be run in JAX (e.g. a likelihood given as a function, or an initial value that is not linear in the fitted parameters) | A method without gradients (e.g. `'nelder-mead'`, or no `method=`), or `require_jax=False` to accept the slower way |
 | A data column matches no result | Note when the sim is initialized, and an error when it is fitted | A typo in a header, or a result that doesn't exist | Rename the column (`ss.SimData(aliases=...)`) |

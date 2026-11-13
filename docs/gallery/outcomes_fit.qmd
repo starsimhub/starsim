@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; admissions and occupancy distinguished on Nov 12 by AI after the docs review
 ---
 
 Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a fraction of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a fraction, a delay, and (for a stay in hospital) a stay, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
@@ -16,8 +16,8 @@ Data on an epidemic is rarely the number infected: it is reported cases, hospita
 | β | fitted, between 0.05 and 1 per day | Rate of infection; the data was made with 0.25 |
 | Infectious period | 10 days | Mean time in I (exponential) |
 | Cases | 50% of infections, 5 days later | Reported cases |
-| Hospitalizations | 5% of infections, 7 days later, for 10 days | People in hospital |
-| Deaths | 20% of those hospitalized, about 14 days later | Lognormal delay (mean 14 days, standard deviation 5) |
+| Hospital admissions | 5% of infections, 7 days later | Admissions, each staying 10 days (the outcome `hosp` counts admissions; the number in hospital is `n_hosp`) |
+| Deaths | 20% of admissions, about 14 days after admission | Lognormal delay (mean 14 days, standard deviation 5) |
 | Population | 1,000,000 | |
 | Infectious at the start | 0.1% | |
 
@@ -44,7 +44,7 @@ sir.diagram()
 
 ## Data
 
-The data is made from the model itself, with β = 0.25, as weekly counts of cases and deaths with Poisson noise, as in real reporting. Since the right answer is known, this checks that the fit can find it.
+The data is made from the model itself, with β = 0.25, as weekly counts of cases and deaths with Poisson noise (real reports usually vary more than this; [T6](../tutorials/t6_data.qmd) uses a negative binomial). Since the right answer is known, this checks that the fit can find it.
 
 ```{python}
 truth = ss.Sim(sir, pars=dict(beta=0.25), rand_seed=2, verbose=0, **pars)

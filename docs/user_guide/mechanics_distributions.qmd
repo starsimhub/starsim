@@ -2,14 +2,14 @@
 title: Distributions
 jupyter: python3
 authorship:
-  human: 25
-  ai: 75
-  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI; SciPy distributions and the appendix added by AI. Shortened on Nov 11 by AI
+  human: 24
+  ai: 76
+  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI; SciPy distributions and the appendix added by AI. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (priors; the generated list of distributions replaced by a link)
 ---
 
 Distributions appear in a model in three ways: as the distribution of a **duration** (how long people stay in a state, or the delay before an event is reported), as **variation between people** (each person's own value of a parameter), and, in modules written as code, as the **random draws** that decide what happens to each person (who is infected, who tests positive).
 
-Uncertainty about a single value, such as a parameter being fitted, is not variation between people; it is a prior, given with `ss.par(..., prior=...)` and used only in [calibration](calibration_fitting.qmd).
+Uncertainty about a single value is not variation between people; it is a prior, given with `ss.par(..., prior=...)` ([Parameters](building_parameters.qmd#named-parameters)). A prior is used in [calibration](calibration_fitting.qmd), and to carry the uncertainty into projections, with runs that each draw the value from it (`ss.parallel(sim, priors=True, n_runs=...)`; see [Scenarios](running_scenarios.qmd)).
 
 ## Durations and variation between people
 
@@ -73,7 +73,7 @@ More generally, a distribution given as a parameter's value gives each person th
 | Histogram | `ss.histogram` | `values`, `bins` | From a histogram of data |
 | Random | `ss.random` | | Between 0 and 1 |
 
-See the [API reference](../api/distributions.qmd) for each, and the [appendix](#appendix-every-distribution) for the full list with their parameters. The names are also in `ss.distributions.dist_list`; a parameter can also be given one as a dict with its name as `type` (`dict(type='poisson', mean=5)`), for parameters read from a file.
+See the [API reference](../api/distributions.qmd) for each, with its parameters and their defaults. The names are also in `ss.distributions.dist_list`; a parameter can also be given one as a dict with its name as `type` (`dict(type='poisson', mean=5)`), for parameters read from a file.
 
 A parameter can also be an array (or a list), for a distribution of each value: `ss.normal(mean=[3.5, 4.5], std=[0.9, 0.8]).rvs((1000, 2))` draws 1,000 from each, and `ss.poisson([[2.4, 0.9], [0.5, 1.6]])` is a matrix of contacts that differ between people (see [Networks](populations_mixing.qmd)). Drawn for agents (`rvs(uids)`), an array has a value for each agent.
 
@@ -211,7 +211,7 @@ In a module, `init()` is done for each of its distributions when the sim is init
 
 ## Pitfalls
 
-- **A distribution as a value or as a prior.** A distribution as a parameter's value is variation between people; uncertainty about one value is a prior.
+- **A distribution as a value or as a prior.** A distribution as a parameter's value is variation between people; uncertainty about one value is a prior, used in calibration and in runs with `priors=True`.
 - **The exponential default.** A single duration is exponential, with a lot of spread. For a latent or infectious period, an Erlang or lognormal distribution is usually closer to the data.
 - **A unit given twice, or not at all.** Give a distribution's unit on its parameters or with `unit=`; a bare number takes the model's unit.
 - **Making distributions at every step** in a module written as code. One made in `step()` is not initialized, so drawing from it raises an error, and initializing it there would break common random numbers. Make them once, in `__init__()`.
@@ -222,33 +222,6 @@ In a module, `init()` is done for each of its distributions when the sim is init
 - [NumPy: random generator](https://numpy.org/doc/stable/reference/random/generator.html): how random numbers are drawn from them
 - [Stan functions reference: positive continuous distributions](https://mc-stan.org/docs/functions-reference/positive_continuous_distributions.html): the lognormal, gamma, Weibull, and others, with their parameterizations
 
-## Appendix: every distribution
+## Appendix: distributions and units of time
 
-Every distribution in `ss.distributions.dist_list`, generated from the classes: its parameters with their defaults (each also takes the arguments of `ss.Dist`, such as `name`, `unit`, and `round`), and how it can carry a time unit (its `scaling`): with `unit=` or typed parameters if it can be scaled after the draw ("after" or "either"), only through typed parameters if only before ("before", e.g. a Poisson count given a rate), or not at all ("none").
-
-```{python}
-import re
-import inspect
-import pandas as pd
-import sciris as sc
-
-def how_scaled(dist):
-    """ When a distribution can be scaled to a time unit: after the draw, before it, either, or not at all """
-    scaling = set(sc.tolist(dist.scaling))
-    return 'either' if scaling == {'predraw', 'postdraw'} else 'after' if 'postdraw' in scaling else 'before' if 'predraw' in scaling else 'none'
-
-rows = []
-for name in ss.distributions.dist_list:
-    make = getattr(ss, name)
-    args = [str(arg) for arg in inspect.signature(make).parameters.values() if arg.kind is not arg.VAR_KEYWORD]
-    sentences = re.split(r'(?<=\.)\s+(?=[A-Z])', ' '.join(inspect.getdoc(make).split('\n\n')[0].split()))
-    rows.append(dict(
-        distribution = f'ss.{name}',
-        parameters = ', '.join(args),
-        scaling = how_scaled(make()), # ss.erlang() makes a gamma distribution
-        description = sentences[0].rstrip('.'),
-    ))
-
-pd.set_option('display.max_colwidth', None) # Show each entry in full
-pd.DataFrame(rows).set_index('distribution')
-```
+A distribution of durations or rates carries a unit of time in one of two ways: with `unit=` or typed parameters (`ss.lognormal(mean=ss.days(8), std=ss.days(2))`), if its values can be scaled after the draw, as for a duration; or only through typed parameters, if it must be scaled before the draw, as for a Poisson count given a rate (`ss.poisson(ss.perday(2))`). Each distribution's `scaling` says which; every distribution, with its parameters, is in the [API reference](../api/distributions.qmd), and the names are in `ss.distributions.dist_list`.

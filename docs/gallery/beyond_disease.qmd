@@ -2,9 +2,9 @@
 title: Beyond disease
 jupyter: python3
 authorship:
-  human: 15
-  ai: 85
-  note: Moved from the user guide page "Nonstandard usage" to the gallery on Nov 11 by AI. The wealth model is adapted from the Starsim 3 user guide page on nonstandard usage; the page, and the boids model, written by AI
+  human: 10
+  ai: 90
+  note: Moved from the user guide page "Nonstandard usage" to the gallery on Nov 11 by AI. The wealth model is adapted from the Starsim 3 user guide page on nonstandard usage; the page, and the boids model, written by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Starsim is built for infectious diseases, but its machinery for agents is general: a population of agents, each with properties kept as arrays over all of them; modules that change those properties at each step; results recorded over time; and random numbers drawn so that runs can be repeated and compared. A [module written as code](../user_guide/building_modules.qmd) can hold any property of people and any rule for changing it, so Starsim can run agent-based models with no disease at all. This page shows two classic ones: a model of wealth, from economics, and a model of flocking birds, from computer graphics.
@@ -83,7 +83,7 @@ plt.ylabel('Number of people')
 plt.show()
 ```
 
-Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once: the code is a little shorter, and faster for large populations.
+Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once, as operations on arrays.
 
 ## Flocking
 
@@ -185,9 +185,11 @@ msim.plot('boids.aligned')
 
 With alignment, most boids are moving with their neighbors within about 50 steps, and nearly all within 100; without it, their headings stay about as random as at the start.
 
-The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), keeping the boids' positions and headings every 3 steps, and then plays them back as an animation, with each boid as an arrow along its heading:
+The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), keeping the boids' positions and headings every 3 steps, and then plays them back as an animation, with each boid as an arrow along its heading (the plotting code is folded; click to show it):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code for the animation"
 from matplotlib import animation
 from IPython.display import HTML
 

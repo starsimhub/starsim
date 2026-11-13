@@ -2,12 +2,12 @@
 title: Solvers and backends
 jupyter: python3
 authorship:
-  human: 5
-  ai: 95
-  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft; merged on Nov 11 by AI with "Will my model run as an ODE?" (drafted by AI, revised by a human), now the appendix on what needs agents; shortened on Nov 11 by AI
+  human: 3
+  ai: 97
+  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft; merged on Nov 11 by AI with "Will my model run as an ODE?" (drafted by AI, revised by a human), now the appendix on what needs agents; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
-A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters, the compiled code (the backends) that runs each solver, and what runs under which solver ([Will my model run as an ODE?](#appendix-what-needs-agents)). How the solvers work inside is in [Engines and transmission](architecture_engines.qmd).
+A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters, the compiled code (the backends) that runs each solver, and what each solver supports, approximates, or can't run ([Will my model run as an ODE?](#appendix-what-needs-agents)). How the solvers work inside is in [Engines and transmission](architecture_engines.qmd).
 
 ## The solvers
 
@@ -146,7 +146,7 @@ So for the chance that an imported case starts an outbreak, or the uncertainty i
 
 ### Fade-out between epidemics
 
-Over longer periods, the ODE can carry an infection through a trough in which fewer than one person is infectious, after which it grows again. A stochastic model can't: when the last infectious person recovers, the infection is gone until it is introduced again. Here is the same town over 20 years, with births and deaths bringing in new susceptible children (the disease's rates are given with their units, `ss.perday(1.9)`, since the demographics are per year):
+Over longer periods, the ODE can carry an infection through a trough in which fewer than one person is infectious, after which it grows again. A stochastic model can't: when the last infectious person recovers, the infection is gone until it is introduced again. Here is the same town over 20 years, with births and deaths bringing in new susceptible children (β is typed, `ss.perday(1.9)`, to be clear beside the annual demographics; [Time](building_time.qmd) says how bare numbers are read):
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -175,7 +175,7 @@ In the stochastic runs, measles dies out after the first epidemic. Where fade-ou
 
 ### The length of a step
 
-The ODE takes as many small steps inside each time step as it needs, and Gillespie and tau-leaping work in continuous time, so for these the step only says when results are recorded. Agents, and the chain binomial with `ss.solvers.binomial(substeps=1)`, take each step whole: everyone's chance of moving is worked out at the start of the step, and someone infected during a step can't infect anyone until the next one. When rates are fast compared with the step, this slows the epidemic down. By default the chain binomial splits each step into enough substeps to keep this bias small.
+The ODE takes as many small steps inside each time step as it needs, Gillespie and tau-leaping work in continuous time, and the chain binomial by default splits each step into enough substeps that at most about a tenth of a compartment leaves in one. So for these, the step adds little error to the disease's own dynamics. It still matters, though: it is when results are recorded, when modules written as code (interventions, analyzers, networks) act and see each other's changes, and when values that change over time (`ss.timeseries()`, `ss.seasonal()`) are looked up, once a step, at its middle. Agents, and the chain binomial with `ss.solvers.binomial(substeps=1)`, take infection a step at a time: the chance of being infected is worked out once a step (as agents, after the step's other transitions: see [within a step](architecture_run.qmd#how-the-state-is-updated-within-a-step)), so someone infected during a step can't infect anyone until the next one. When rates are fast compared with the step, this slows the epidemic down.
 
 Measles in a town with no immunity is such a case: with β = 1.9 per day, the number infected can double in less than half a day. Here it is as an ODE, and as agents with steps of one day and of a quarter of a day:
 
@@ -204,7 +204,7 @@ A result that changes by more than a few percent when the step is halved depends
 
 ### Contacts between particular people
 
-A compartmental model assumes that everyone in a group mixes with everyone else in it at random. A contact network, in which each person has a few fixed contacts, breaks this: once someone's contacts are infected or immune, they have nobody left to infect, so the epidemic grows more slowly and infects fewer people than random mixing at the same number of contacts. A network needs agents; with `solver='ode'`, Starsim replaces it with random mixing at the network's mean number of contacts, and notes that it has done so.
+A compartmental model assumes that everyone in a group mixes with everyone else in it at random. A contact network, in which each person has a few fixed contacts, breaks this: once someone's contacts are infected or immune, they have nobody left to infect, so the epidemic grows more slowly and infects fewer people than random mixing at the same number of contacts. Only agents run a network as written; a compartmental solver asked for by name approximates it with random mixing at the network's mean number of contacts (or, for partnerships, a partner-change model), and notes that it has done so.
 
 Here is a less transmissible infection than measles, with β = 0.05 per contact per day and eight contacts each that never change (`dynamic=False`):
 
@@ -241,7 +241,7 @@ Whichever solver is chosen, the numbers are worked out by compiled code, which S
 
 If the first run after installing is slow, Numba is compiling. `ss.compile()` (or `starsim init compile`) does it ahead of time: once after installing, when building a container image, or before a long batch of runs on a cluster (see [Speed and scale](running_performance.qmd#on-a-cluster)). `ss.kernels.compile_status().summary` says which kernels are in use and whether they are compiled, and with `verbose=2` a run says which engine took it and why (or why a compartmental run was taken step by step rather than in one call).
 
-JAX is used for [gradients](calibration_gradients.qmd) and the fits that use them, and takes an ODE run when asked, with `sim.jax = True`. It takes about half a second to start, so it repays that only for long runs over many groups, on a GPU, or for tens of thousands of ODE runs in one call (`ss.parallel(sim, pars=...)`). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on (`'auto'`, `'cpu'`, `'cuda'`, ...). The rest (the step loop of agent-based runs, and modules written as code) is plain Python and NumPy, and your own loops can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)). How each engine is built, and how fast, is in [Engines and transmission](architecture_engines.qmd).
+JAX is used for [gradients](calibration_gradients.qmd) and the fits that use them, and takes an ODE run when asked, with `sim.jax = True`. It takes about half a second to start, so it repays that only for long runs over many groups, or for tens of thousands of ODE runs in one call (`ss.parallel(sim, pars=...)`). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on: `'cpu'` by default, since a run is a long loop of small steps, which a GPU runs several times slower; `'auto'` lets JAX choose (a GPU if it finds one), or name another platform, e.g. `'cuda'`. Starsim sets `JAX_PLATFORMS` to it the first time it uses JAX, so other JAX code in the same session (and processes started from it) then runs there too; if JAX had started elsewhere, it is restarted. The rest (the step loop of agent-based runs, and modules written as code) is plain Python and NumPy, and your own loops can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)). How each engine is built, and how fast, is in [Engines and transmission](architecture_engines.qmd).
 
 The ODE has no tolerance to set: by default, a step too fast for RK4 to be accurate is taken by Dormand–Prince instead, which sets its own substeps. Giving `ss.solvers.ode(substeps=)` takes every step by RK4 with that many.
 
@@ -269,82 +269,83 @@ The properties of each solver, for looking up (`ss.solvers.solver_names` lists t
 
 ## Appendix: what needs agents
 
-This appendix answers "will my model run as an ODE?", feature by feature, and then lists the rules Starsim checks. **Any** means every solver, **Compartments only** means it works as an ODE (or another compartmental solver) but not as agents, **Agents only** means the model runs as agents, and **None** means no solver does it yet. With `solver='auto'`, Starsim picks agents when it has to, and `sim.solver_reason` says why ([How Starsim chooses](#how-starsim-chooses)).
+This appendix answers "will my model run as an ODE?", feature by feature, and then lists the rules Starsim checks. "Compartments" is any of the four compartmental solvers (`'ode'`, `'binomial'`, `'gillespie'`, `'tau'`) unless a cell names one. In each cell, **supported** means the solver runs it as written; **approximated** means it runs a simpler form and notes what it changed (an error with `approximations='error'`); and **unsupported** means it raises an `ss.CapabilityError` that says what to do. With `solver='auto'`, Starsim picks agents when a compartmental solver can't run the model as written, and `sim.solver_reason` says why ([How Starsim chooses](#how-starsim-chooses)).
 
 ### People
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Have births, deaths, and migration? | Any | Declared: `ss.birth()`, `ss.death()`, `ss.migration()` ([People and demographics](populations_people.qmd)) |
-| Have deaths from a disease, or imported cases? | Any | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_people.qmd)) |
-| Use birth and death rates by country? | Any | `ss.birth(rate='Kenya')` ([Rates from data](populations_people.qmd)) |
-| Link each child to its mother? | Agents only | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_people.qmd)) |
-| Add or remove people from my own code? | Any | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Have births, deaths, and migration at a rate? | Supported | Supported | Declared: `ss.birth()`, `ss.death()`, `ss.migration()` ([People and demographics](populations_people.qmd)) |
+| Have deaths from a disease, or imported cases? | Supported | Supported | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_people.qmd)) |
+| Use a country's birth and death rates? | Unsupported | Supported | `ss.birth(rate='Kenya')` is `ss.Births(birth_rate='Kenya')`, which needs agents; a rate or a time series of rates runs under every solver. A country's migration, `ss.migration(rate='Kenya')`, is supported by both ([Rates from data](populations_people.qmd)) |
+| Link each child to its mother? | Unsupported | Supported | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_people.qmd)) |
+| Add or remove people from my own code? | Supported | Supported | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
 
 ### Groups
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Group people by age, sex, risk, or place? | Any | `stratify()` ([Stratification](building_stratification.qmd)) |
-| Have people age? | Any | Automatic with births or deaths ([Aging](populations_people.qmd)) |
-| Move people between groups (e.g. low to high risk)? | Any | `ss.transfer()` at a rate, `ss.Event()` once ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
-| Give rates a value for each group? | Any | `ss.by()` ([How groups differ](building_stratification.qmd#how-groups-differ)) |
-| Use a rate that depends on exact age? | Agents only | Compartments have age groups, not ages ([Severity by age](../gallery/hospitalization.qmd)) |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Group people by age, sex, risk, or place? | Supported | Supported | `stratify()` ([Stratification](building_stratification.qmd)) |
+| Have people age? | Supported | Supported | Automatic with births or deaths ([Aging](populations_people.qmd)) |
+| Move people between groups (e.g. low to high risk)? | Supported | Supported | `ss.transfer()` at a rate, `ss.Event()` once ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+| Give rates a value for each group? | Supported | Supported | `ss.by()` ([How groups differ](building_stratification.qmd#how-groups-differ)) |
+| Use a rate that depends on exact age? | Unsupported | Supported | Compartments have age groups, not ages ([Severity by age](../gallery/hospitalization.qmd)) |
 
 ### Moving people between states
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Move people between states? | Any | `ss.move(sir.I, sir.R, p=0.5)` ([Vaccine demand](../tutorials/t8_modules.qmd)) |
-| Move only some groups (e.g. children)? | Any | `ss.move(..., who=ss.person.age < 5)`, as agents or in a model stratified by age |
-| Move particular people? | Agents only | `ss.move(..., uids=uids)` |
-| Move between groups from my own code? | None | `ss.move()` takes states; use `ss.Event()` or `ss.transfer()` |
-| Move people on a date, or when cases pass a threshold? | Any | `ss.Event(S >> R, when=..., who=sir.I.n > 1000)` ([Events](interventions_interventions.qmd#events-moves-without-a-product)) |
-| Move a fraction of a person each step? | Any | As agents, `ss.move(..., n=0.3)` moves a whole agent now and then, 0.3 people a step on average |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Move people between states? | Supported | Supported | `ss.move(sir.I, sir.R, p=0.5)` ([Vaccine demand](../tutorials/t8_modules.qmd)) |
+| Move only some groups (e.g. children)? | Supported, if the model is stratified by what `who=` reads | Supported | `ss.move(..., who=ss.person.age < 5)` |
+| Move particular people? | Unsupported | Supported | `ss.move(..., uids=uids)` |
+| Move people between groups from my own code? | Unsupported | Unsupported | `ss.move()` moves between states; use `ss.Event()` or `ss.transfer()` |
+| Move people on a date, or when cases pass a threshold? | Supported | Supported | `ss.Event(S >> R, when=..., who=sir.I.n > 1000)` ([Events](interventions_interventions.qmd#events-moves-without-a-product)) |
+| Move a fraction of a person each step? | Supported | Supported, on average | As agents, `ss.move(..., n=0.3)` moves a whole agent now and then, 0.3 people a step on average |
 
-### Rates
+### Rates and durations
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Change a rate without moving anyone (e.g. double it)? | Any | `ss.modify(sir.pars.beta, multiply=2)` ([Changing parameters](interventions_interventions.qmd#changing-parameters)) |
-| Change a parameter from my own code? | Any | `sir.pars.beta = 0.6` in `step()` |
-| Have one disease change another's rates? | Any | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
-| Have rates change over time, or by season? | Any | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
-| Have noise on a rate? | Any | `ss.Transition(..., noise=0.1)`: the ODE uses its mean, and the exact (Gillespie) solver refuses it ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
-| Have rates depend on whether someone was ever infected? | Any | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
-| Have rates depend on how long ago, or how often? | Agents only | `.since`, `.n_times`; a count kept as a group (`increment=`) runs as any ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Change a rate without moving anyone (e.g. double it)? | Supported | Supported | `ss.modify(sir.pars.beta, multiply=2)` ([Changing parameters](interventions_interventions.qmd#changing-parameters)) |
+| Change a parameter from my own code? | Supported | Supported | `sir.pars.beta = 0.6` in `step()` |
+| Have one disease change another's rates? | Supported (the diseases are tracked jointly) | Supported | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
+| Have rates change over time, or by season? | Supported | Supported | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
+| Have noise on a rate? | Binomial and tau: supported. ODE: approximated (it uses the mean). Gillespie: unsupported | Supported | `ss.Transition(..., noise=0.1)` ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
+| Have a duration that is not exponential? | Erlang (gamma with a whole-number shape), and fixed delays of whole steps: supported. Others: approximated, by Erlang stages with the same mean and about the same spread, or a fixed delay rounded to whole steps (each with a note; see `ss.solvers.ode(dwells='exact')`) | Supported, with each dwell rounded to whole steps at random, keeping its mean | `ss.Transition(I, R, dur=ss.lognormal(mean=ss.days(10), std=ss.days(3)))` ([Diseases](building_diseases.qmd)) |
+| Have rates depend on whether someone was ever infected? | Supported | Supported | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
+| Have rates depend on how long ago, or how often? | Unsupported (a count kept as a group, `increment=`, is supported) | Supported | `.since`, `.n_times` ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
 
 ### Interventions
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Vaccinate, test, and treat? | Any | Products and deliveries ([Products](interventions_products.qmd)) |
-| Have protection wane with a fixed shape? | Any | `ss.boxcar()` ([Vaccines](interventions_products.qmd#vaccines)) |
-| Have protection wane from each person's own date? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
-| Trace contacts? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Vaccinate, test, and treat? | Supported | Supported | Products and deliveries ([Products](interventions_products.qmd)) |
+| Have protection wane with a fixed shape? | Approximated: the plateau of `ss.boxcar()` is a series of stages, so its end is spread out | Supported | `ss.boxcar()` ([Vaccines](interventions_products.qmd#vaccines)); exponential waning (`waning=ss.years(5)`) is supported by both |
+| Have protection wane as a function of each person's time since vaccination? | Unsupported | Supported | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+| Trace contacts? | Unsupported | Supported | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
 
 ### Contacts and differences between people
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Use a contact matrix? | Any | `ss.contacts()` ([Age groups and contacts](building_stratification.qmd#age-groups-and-contacts)) |
-| Use a network (partnerships, households)? | Agents only | `solver='ode'` uses random mixing instead, with a note ([Networks](populations_mixing.qmd)) |
-| Have susceptibility differ by group? | Any | `ss.by()` |
-| Have susceptibility differ person by person? | Agents only | `ss.attr()`; a compartmental solver uses the mean, with a note ([Parameters](building_parameters.qmd#values-that-vary-between-people)) |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Use a contact matrix? | Supported | Supported | `ss.contacts()` ([Age groups and contacts](building_stratification.qmd#age-groups-and-contacts)) |
+| Use a network (partnerships, households)? | Approximated: random mixing at the network's mean number of contacts, or for partnerships, a partner-change model (`ss.SexualNet` needs the model stratified by sex) | Supported | [Networks](populations_mixing.qmd) |
+| Have susceptibility differ by group? | Supported | Supported | `ss.by()` |
+| Have susceptibility differ person by person? | Approximated: it uses the mean | Supported | `ss.attr()` ([Parameters](building_parameters.qmd#values-that-vary-between-people)) |
 
 ### Code of my own
 
-| Can I... | Runs as | More |
-|---|---|---|
-| Write a module that reads counts and results? | Any | `sir.I.n`, `sim.results` ([Modules](architecture_index.qmd)) |
-| Write a module that keeps a value for each person? | Agents only | `define_states()` ([Custom modules](building_modules.qmd)) |
-| Write a rate as a Python function? | Any | If it works on groups ([Severity by age](../gallery/hospitalization.qmd)) |
-| Read counts by group from code? | Compartments only | `sir.I.values` is per group as compartments, per agent as agents; use results instead |
-| Write my own ODE in NumPy? | Any | As agents, it runs beside them, unconnected ([Measles in London](../gallery/measles_london.qmd)) |
+| Can I... | Compartments | Agents | More |
+|---|---|---|---|
+| Write a module that reads counts and results? | Supported | Supported | `sir.I.n`, `sim.results` ([Modules](architecture_index.qmd)) |
+| Write a module that keeps a value for each person? | Unsupported | Supported | `define_states()` ([Custom modules](building_modules.qmd)) |
+| Write a rate as a Python function? | Supported, if it works on groups | Supported | ([Severity by age](../gallery/hospitalization.qmd)) |
+| Read counts by group from code? | Supported: `sir.I.values` is per group | Supported, but `sir.I.values` is per agent: use `sir.I.n` or the results | |
+| Write my own ODE in NumPy? | Supported | Supported, running beside the agents, unconnected to them | ([Measles in London](../gallery/measles_london.qmd)) |
 
 ### The rules Starsim checks
 
-The rules that decide which engine runs a model are in `ss.solvers.solver_table()`. A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
+The rules that decide which engine runs a model are in `ss.solvers.solver_table()`. A model with any of these runs as agents under `solver='auto'`, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
 
 ```{python}
 import pandas as pd

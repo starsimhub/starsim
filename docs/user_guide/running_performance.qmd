@@ -2,9 +2,9 @@
 title: Speed and scale
 jupyter: python3
 authorship:
-  human: 25
-  ai: 75
-  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI
+  human: 24
+  ai: 76
+  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. The first half of this page covers what makes a run slow and what to do about it; the second, running many sims from a script, on a large computer, on a cluster, or behind a dashboard. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd), and making and comparing many sims in [Scenarios](running_scenarios.qmd).
@@ -20,7 +20,7 @@ pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.da
 
 ## A compartmental run in one call
 
-A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which is typically 30 to 100 times slower. The `plan` line of `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
+A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which for a small model can be 30 to 100 times slower (the ratio depends on the model and the computer). The `plan` line of `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
 
 ```{python}
 masks = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
@@ -61,7 +61,7 @@ For the same reason, rerun a sim with `sim.run()` again (or `sim.restart(pars=..
 
 ### Substeps, JAX, and compiling
 
-`substeps=1` (in `ss.solvers.ode()` or `ss.solvers.binomial()`) takes each step whole, which is faster but less accurate when rates are fast compared with the step. On a CPU, a small model is faster in the kernels than in JAX; JAX gains on large models, on a GPU, and on many runs at once. If a first run after installing is slow, the Numba kernels are being compiled, which `ss.compile()` does once ahead of time. All three are covered in [Solvers and backends](running_solvers.qmd#speed-and-backends).
+`substeps=1` (in `ss.solvers.ode()` or `ss.solvers.binomial()`) takes each step whole, which is faster but less accurate when rates are fast compared with the step. On a CPU, a small model is faster in the kernels than in JAX; JAX gains on large models and on many runs at once. If a first run after installing is slow, the Numba kernels are being compiled, which `ss.compile()` does once ahead of time. All three are covered in [Solvers and backends](running_solvers.qmd#speed-and-backends).
 
 ## Agents and code of your own
 
@@ -80,7 +80,7 @@ A module written as code runs its `step()` in Python, once a step, and Starsim t
 - **Compile a loop that can't be written as array operations.** `@ss.jit` compiles a function with Numba, keeps it on disk between sessions, and says why if it can't (see [Custom modules](building_modules.qmd)); called with JAX arrays, it is traced by JAX instead, so it can be differentiated. Numba's own `@nb.njit` works as well, and either works whether Starsim's own kernels are Rust or Numba.
 - **Draw random numbers from Starsim's distributions** (`ss.bernoulli`, `ss.normal`, and the others) rather than `np.random`, so that runs stay reproducible and scenarios share their random numbers (see [Random numbers](mechanics_random.qmd)); their draws are compiled already.
 
-For a module that updates a value for each of 50,000 agents, a loop in Python made the whole run about seven times slower; the same loop with `@ss.jit`, or NumPy on the whole array, made it 15–40% slower.
+As a rough guide from one test (a module that updates a value for each of 50,000 agents, on one computer), a loop in Python made the whole run about seven times slower, while the same loop with `@ss.jit`, or NumPy on the whole array, made it 15–40% slower; time your own model before and after.
 
 To find where the time goes, `sim.profile(kind='loop')` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes ([Profiling and debugging](running_debugging.qmd#profiling)). Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
 

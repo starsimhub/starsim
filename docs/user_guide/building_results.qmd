@@ -2,9 +2,9 @@
 title: Results and plotting
 jupyter: python3
 authorship:
-  human: 12
-  ai: 88
-  note: Merged on Nov 11 by AI from "Results" (written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results) and "Plotting" (written by AI, from the plotting functions in the Starsim code); examples made realistic and appendices added by AI; shortened on Nov 11 by AI
+  human: 11
+  ai: 89
+  note: Merged on Nov 11 by AI from "Results" (written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results) and "Plotting" (written by AI, from the plotting functions in the Starsim code); examples made realistic and appendices added by AI; shortened on Nov 11 by AI; the generated list of a result's methods replaced by a link on Nov 12 by AI after the docs review
 ---
 
 A run produces results: for each disease, the number of people in each state at each time point, the number who made each transition in each step, and any other quantities the model declares. This page covers reading, resampling, grouping, summarizing, exporting, and plotting them. Results know their labels, time points, and kinds, so most plots take one line.
@@ -87,7 +87,7 @@ A result's `kind` decides how it is added up over time (its `summarize_by`), whe
 
 A result of your own gives it as `ss.Result('protected', kind='stock')`, or by its name ([appendix](building_writing.qmd#appendix-what-starsim-names-and-fills-in)). `scale=` overrides whether it is scaled, and `kind=None` is for a result with no meaning over time, which isn't summarized. `summarize_by=` summarizes it another way without changing what it is: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is still a flow, whose summary over the run is its mean per step.
 
-A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not in `infection.sum()`.
+A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not in `infection.sum()`. A result also does what a NumPy array does (indexing, arithmetic, `sum()`, `max()`); every method of a result is listed in the [API reference](../api/results.qmd).
 
 A result has one value for each time point, from `start` to `stop`, and each time point is the step that starts there: `I[0]` is the number infectious at the start, and `infection[0]` the infections during the first step ([Time](building_time.qmd#the-time-span-the-step-and-units)).
 
@@ -288,21 +288,6 @@ with ss.style():
 - **Agents' results are scaled.** With each agent standing for several people, counts are multiplied by that number when the run ends; a count read in the middle of a run is in agents (see [Branching and rescaling](running_branching.qmd)).
 
 Further reading: [10 minutes to pandas](https://pandas.pydata.org/docs/user_guide/10min.html) (the tables `to_df()` gives), [Matplotlib style sheets](https://matplotlib.org/stable/gallery/style_sheets/style_sheets_reference.html) (the styles `style=` accepts), and [Ten simple rules for better figures](https://doi.org/10.1371/journal.pcbi.1003833).
-
-## Appendix: everything a result can do
-
-The methods and properties of a result (`ss.Result`), with the first paragraph of each one's description, listed from the code; a result also does what a NumPy array does (indexing, arithmetic, `sum()`, `max()`). See [`ss.Result`](../api/results.qmd) for the details.
-
-```{python}
-import inspect
-
-internal = ['disp', 'to_str', 'update'] # Used by Starsim itself
-for name, attr in ss.Result.__dict__.items():
-    if name.startswith('_') or name in internal or not isinstance(attr, (property, type(lambda: 0))):
-        continue
-    doc = ' '.join((attr.__doc__ or '').split('\n\n')[0].split()) # The first paragraph, on one line
-    print(name.ljust(16), doc)
-```
 
 ## Appendix: every plotting function
 

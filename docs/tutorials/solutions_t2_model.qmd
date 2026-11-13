@@ -1,15 +1,23 @@
-## T2 – Building a model
+---
+title: "Solutions: T2 – Building a model"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI; made a page of its own on Nov 12 by AI after the docs review
+---
+
+These are solutions to the exercises at the end of [T2 – Building a model](t2_model.qmd). Many of the exercises are open-ended, so these are examples: there are often other good answers. This page runs on its own, from the setup below.
 
 ```{python}
 import starsim as ss
 ```
 
-
-### Exercise 1
+## Exercise 1
 
 **A town of 2,000 people has had no measles for many years, and 70% of its people are immune. Five people arrive with measles. Using `init` and `init_n`, model the outbreak over a year. How many people are infected? Is the reproduction number at the start above or below 1?**
 
-With 30% susceptible, the reproduction number at the start is 15.2 × 0.3 ≈ 4.6 (printed as `R = 4.56 at the start`), well above 1, and almost all of the 600 susceptible people are infected. The run notes that with only 5 people infected at the start, whether an outbreak takes off is partly chance, which the ODE doesn't show; running it many times with a stochastic solver (`solver='gillespie'`, with `ss.parallel(n_runs=...)`) does.
+With 30% susceptible, the reproduction number at the start is 15.2 × 0.3 ≈ 4.6 (printed as `R = 4.53 at the start`), well above 1, and almost all of the 600 susceptible people are infected. The run notes that with only 5 people infected at the start, whether an outbreak takes off is partly chance, which the ODE doesn't show; running it many times with a stochastic solver (`solver='gillespie'`, with `ss.parallel(n_runs=...)`) does.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -22,7 +30,7 @@ sim.run()
 print('Infections:', round(sim.results.measles.infection.sum()))
 ```
 
-### Exercise 2
+## Exercise 2
 
 **Using the final size relation, a model with R0 = 1.5 should infect about 58% of people. Choose β to give R0 = 1.5 with an infectious period of 8 days, run the model for long enough for the outbreak to end, and check.**
 
@@ -39,7 +47,7 @@ sim.run()
 print('Fraction infected:', round(sim.results.measles.R[-1] / 100_000, 2))
 ```
 
-### Exercise 3
+## Exercise 3
 
 **Change the model to density-dependent transmission (`I.n`), choosing β so that R0 is still 15 in a town of 100,000. Then run it in a town of 10,000 and of 1,000,000. How does the outbreak change with the size of the town, and how does this differ from the frequency-dependent model?**
 
@@ -57,4 +65,3 @@ for pop in [10_000, 100_000, 1_000_000]:
     res = sim.results.measles
     print('Town of', pop, ' fraction infected:', round(res.R[-1] / pop, 2), ' peak infectious:', round(res.I.max()))
 ```
-

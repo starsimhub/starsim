@@ -540,6 +540,15 @@ def test_auto():
         ss.Sim(make_sir(), demographics=ss.Births(), solver='ode', start=2000, stop=2010, **kw).init()
     with pytest.raises(ss.CapabilityError): # Nor can a model with nothing declared
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', solver='ode', **kw).init()
+
+    # A modifier that is a member of a disease, and reads a clock, needs agents
+    class FadingSIR(ss.Disease):
+        S, I, R = ss.states('S I R')
+        infection = S >> I @ 0.5*I
+        recovery  = I >> R @ ss.days(10)
+        fading    = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), who=I)
+    fading = ss.Sim(FadingSIR(init_prev=0.01), total_pop=1000, stop=ss.days(10), **kw).run() # It chose the ODE, which then failed
+    assert isinstance(fading.solver, ss.solvers.abm) and 'I.time_in' in fading.solver_reason
     return sim
 
 
@@ -594,6 +603,11 @@ def test_describe():
     S, I, R = ss.states('S I R')
     fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, {R: None, ss.dead: 0.002}, dur=ss.days(8)), name='fatal')
     assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations() # A branch to ss.dead, given in a list, takes its share (it was "I / dur")
+    S, E, I, R, H = ss.states('S E I R H')
+    p_death, p_hosp = ss.par(0.002), ss.par(0.1)
+    branched = ss.Disease(S >> E @ 1.9*I, E >> I @ ss.days(10), I >> H @ dict(dur=ss.days(8), p=p_hosp), I >> R @ dict(dur=ss.days(8), p=None),
+                          I >> ss.dead @ dict(dur=ss.days(8), p=p_death), H >> R @ ss.days(5), init=dict(I=0.001))
+    assert '(1 - p_hosp - p_death) * E / dur_E' in branched.equations() # The branch with p=None takes what the others leave (it was "E / dur_E")
     text = fatal.describe()
     assert 'null1' in fatal.diagram('text') and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
     assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
@@ -1628,6 +1642,28 @@ def test_noise():
         ss.Transition(ss.State(), ss.State(), rate=0.1, noise=ss.par(0.04)**0.5)
     return
 
+
+@sc.timer()
+def test_approximations():
+    sc.heading('Testing that each approximation follows approximations=: a note with "note", kept quietly with "allow", an error with "error" (and agents under "auto")')
+    def noisy():
+        S, I, R = ss.states('S I R')
+        return dict(diseases=ss.Disease(ss.Transition(S, I, rate=0.3*I, noise=0.1), I >> R @ ss.days(10), init_prev=0.01, name='sir'))
+    def boxed():
+        return dict(diseases=ss.SIR(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.8, waning=ss.boxcar(plateau=ss.days(30))), coverage=0.5, start=ss.days(1)))
+    def delayed():
+        S, I, R = ss.states('S I R')
+        return dict(diseases=ss.Disease(S >> I @ 0.3*I, I >> R @ ss.constant(ss.days(2.5)), init_prev=0.01, name='sir'))
+    for make, word in [(noisy, 'noise'), (boxed, 'plateau'), (delayed, 'agents round')]:
+        sim = lambda solver, approximations: ss.Sim(**make(), total_pop=1000, stop=ss.days(10), unit='day', solver=solver, approximations=approximations, verbose=0)
+        for approximations in ['note', 'allow']:
+            ode = sim('ode', approximations).run()
+            assert any(word in note for note in ode.notes), (word, ode.notes) # Kept either way (it was said whatever approximations= was)
+        with pytest.raises(ss.CapabilityError, match='approximations="error"'):
+            sim('ode', 'error').run()
+        assert isinstance(sim('auto', 'error').init().solver, ss.solvers.abm) # Auto runs it as written instead
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1665,3 +1701,4 @@ if __name__ == '__main__':
     ends  = test_branch_ends()
     infs  = test_infected_sources()
     noise = test_noise()
+    approx = test_approximations()

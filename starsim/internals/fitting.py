@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as sps
 import scipy.special as spsp
+import scipy.fft as spfft
 import sciris as sc
 import starsim as ss
 from ..results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
@@ -217,11 +218,24 @@ def loglik(sim, data=None, likelihood=None, weights=None, by_series=False):
     return out if by_series else float(sum(out.values()))
 
 
-def logprior(par, x, xp=np):
+def freeze_prior(par):
+    """ A parameter's prior as SciPy's frozen distribution, for its density (None if it has no prior, or a uniform one, which `logprior()` handles itself) """
+    prior = par.prior
+    if prior is None or isinstance(prior, ss.uniform):
+        return None
+    frozen = sc.dcp(prior).init(force=True).dist # A copy, since initializing it changes it; costly (it copies what the prior refers to), so done once per fit (see Problem.frozen)
+    if frozen is None:
+        errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognormal(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
+        raise TypeError(errormsg)
+    return frozen
+
+
+def logprior(par, x, xp=np, frozen=None):
     """
     The log-density of a parameter's prior at a value: its `prior=` if it has one, else uniform over its bounds
 
     With `xp` as `jax.numpy`, in JAX (for the log-density in JAX), which covers normal, lognormal, gamma, beta, exponential, and uniform priors.
+    `frozen` is the prior from `freeze_prior()`, if made already (it is costly to make, so a fit makes it once).
     """
     prior = par.prior
     low, high = [b.value if isinstance(b, ss.TimePar) else b for b in par.bounds] # Uniform over the bounds is a constant, so the unit of typed bounds does not matter
@@ -230,11 +244,9 @@ def logprior(par, x, xp=np):
     stats = sps if xp is np else ss.gradients.jax().scipy.stats
     if isinstance(prior, ss.uniform):
         return stats.uniform.logpdf(x, prior.pars.low, prior.pars.high - prior.pars.low)
-    frozen = sc.dcp(prior).init(force=True).dist
     if frozen is None:
-        errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognormal(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
-        raise TypeError(errormsg)
-    elif xp is np:
+        frozen = freeze_prior(par)
+    if xp is np:
         return frozen.logpdf(x)
     name = getattr(getattr(frozen, 'dist', None), 'name', None) # In JAX: SciPy's distribution, by name
     kw = dict(loc=0.0, scale=1.0) | frozen.kwds
@@ -932,7 +944,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=
             if verbose:
                 print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
             ss.solvers.backends.compiling('the NUTS sampler', 'JAX', 1, 10)
-            adapt = blackjax.window_adaptation(blackjax.nuts, logp)
+            adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=False) # A dense mass matrix: fits have few values, often correlated
             (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
             step = jax.jit(blackjax.nuts(logp, **params).step)
             for i,draw_key in enumerate(jax.random.split(run_key, draws)):
@@ -969,7 +981,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, 
 
     def one_chain(key, start):
         warm_key, run_key = jax.random.split(key)
-        adapt = blackjax.window_adaptation(blackjax.nuts, logp)
+        adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=False) # A dense mass matrix: fits have few values, often correlated
         (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
         step = blackjax.nuts(logp, **params).step
         def body(state, key):
@@ -1003,25 +1015,80 @@ def diagnose(draws):
     """
     The R-hat (near 1 if the chains agree) and the effective sample size of each value, from draws (chains × draws × values)
 
-    Both are BlackJAX's, rank-normalized and from split chains (Vehtari et al. 2021, as in Stan and ArviZ): the R-hat is the
-    larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
-    Both are NaN for chains of fewer than 4 draws, too short to tell, and without BlackJAX (`pip install "starsim[jax]"`).
+    Both are rank-normalized and from split chains (Vehtari et al. 2021, as in Stan, ArviZ and BlackJAX, whose results these match):
+    the R-hat is the larger of that of the draws and that of their distance from the median, and the effective sample size is of the
+    bulk. Both are NaN for chains of fewer than 4 draws, too short to tell. In NumPy, since in JAX they took seconds to compile.
 
     Args:
         draws (array): the draws, with shape (chains, draws, values)
     """
+    draws = np.asarray(draws, dtype=float)
     if draws.shape[1] < 4:
         nans = np.full(draws.shape[2], np.nan)
         return nans, nans.copy()
-    try:
-        import blackjax.diagnostics as bd
-    except ImportError:
-        ss.note('the R-hat and effective sample size need JAX, which is not installed, so they are NaN: use pip install "starsim[jax]"')
-        nans = np.full(draws.shape[2], np.nan)
-        return nans, nans.copy()
-    jax = ss.gradients.jax()
-    with jax.enable_x64(True): # Otherwise in single precision
-        return np.array(bd.rhat(draws)).reshape(draws.shape[2]), np.array(bd.ess_bulk(draws)).reshape(draws.shape[2]) # BlackJAX drops an axis of one value
+    half = draws.shape[1] // 2 # Each chain split in two
+    split = np.concatenate([draws[:, :half], draws[:, half:2*half]], axis=0)
+    rhats, esss = [], []
+    for v in range(draws.shape[2]):
+        x = split[:, :, v]
+        folded = np.abs(x - np.median(x))
+        rhats.append(max(split_rhat(rank_normalize(x)), split_rhat(rank_normalize(folded))))
+        esss.append(ess(rank_normalize(x)))
+    return np.array(rhats), np.array(esss)
+
+
+def rank_normalize(x):
+    """ Draws (chains × draws) as normal scores of their ranks among all of them, with the Blom plotting position (Vehtari et al. 2021) """
+    if np.isnan(x).any():
+        return np.full(x.shape, np.nan)
+    ranks = sps.rankdata(x, method='average').reshape(x.shape)
+    return spsp.ndtri((ranks - 3/8)/(x.size + 1/4))
+
+
+def split_rhat(x):
+    """ The potential scale reduction of draws (chains × draws) """
+    n = x.shape[1]
+    between = n*x.mean(axis=1).var(ddof=1)
+    within = x.var(axis=1, ddof=1).mean()
+    ratio = between/within if within > 0 or between > 0 else 0.0 # Draws that never vary agree (as in BlackJAX)
+    return np.sqrt((ratio + n - 1)/n)
+
+
+def ess(x):
+    """ The effective sample size of draws (chains × draws), from their autocorrelation, summed by Geyer's initial monotone sequence """
+    m, n = x.shape
+    if np.isnan(x).any():
+        return np.nan
+    varies = np.any(x != x[:, :1])
+    means = x.mean(axis=1, keepdims=True)
+    size = spfft.next_fast_len(2*n)
+    f = np.fft.rfft(x - means, n=size, axis=1)
+    autocov = (np.fft.irfft(f*np.conjugate(f), n=size, axis=1)[:, :n]/n).mean(axis=0)
+    var0 = autocov[0]*n/(n - 1)
+    degenerate = np.isfinite(var0) and (not varies or var0 <= 0)
+    if degenerate:
+        return 0.0
+    weighted = var0*(n - 1)/n + (means.ravel().var(ddof=1) if m > 1 else 0)
+    n_even = n - n % 2
+    rho = np.concatenate([[1.0], 1 - (var0 - autocov[1:n_even])/weighted])
+    even, odd = rho[0::2], rho[1::2]
+    keep = np.logical_and.accumulate(even + odd > 0) # Up to the first pair whose sum is not positive
+    last = np.flatnonzero(keep)[-1] if keep.any() else 0
+    nxt = min(last + 1, len(even) - 1)
+    odd = np.where(keep, odd, 0)
+    keep_even = keep.copy()
+    if last + 1 < len(even):
+        keep_even[last + 1] = even[last + 1] > 0
+    even = np.where(keep_even, even, 0)
+    sums = even + odd
+    carry = sums[0]
+    for t in range(len(sums)): # Made monotone: no pair's sum above the one before
+        if sums[t] > carry:
+            even[t] = odd[t] = carry/2
+        else:
+            carry = sums[t]
+    tau = max(-1 + 2*np.sum(even + odd) - even[nxt], 1/np.log10(m*n))
+    return m*n/tau
 
 
 def converged_label(converged):
@@ -2008,6 +2075,7 @@ class Problem(sc.prettyobj):
             print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
         self.external = [i >= self.n_model for i in range(len(fitted))] # Parameters of a likelihood given at calibration time
         self.priors = [p.prior is not None for p in fitted.values()]
+        self.frozen = [freeze_prior(p) for p in fitted.values()] # Each prior as SciPy's distribution, made once: making one copies the prior, which takes far longer than a run
         self.use_map = False # Set with the method; see choose()
         self.base_lows = np.where(logs, np.log(np.where(logs, self.lows, 1.0)), self.lows) # The scale for sampling and random walks: see to_x()
         self.span = np.where(logs, np.log(np.where(logs, self.highs, 1.0)), self.highs) - self.base_lows
@@ -2128,11 +2196,11 @@ class Problem(sc.prettyobj):
 
     def logprior(self, x):
         """ The log of the priors' density at these values """
-        return sum(logprior(p, val) for p,val in zip(self.fitted.values(), x))
+        return sum(logprior(p, val, frozen=f) for p,val,f in zip(self.fitted.values(), x, self.frozen))
 
     def penalty(self, x):
         """ Minus the log of the priors, so that with likelihoods an optimizer finds the most probable values (the maximum a posteriori) rather than ignoring the priors; plus the penalty given on the values (`penalty=`) """
-        out = -sum(logprior(p, val) for p,val,has in zip(self.fitted.values(), x, self.priors) if has) if self.use_map else 0.0
+        out = -sum(logprior(p, val, frozen=f) for p,val,f,has in zip(self.fitted.values(), x, self.frozen, self.priors) if has) if self.use_map else 0.0
         return out + (float(self.penalty_fn(self.to_pars(x))) if self.penalty_fn is not None else 0.0)
 
     def scores(self, x, number=None):
