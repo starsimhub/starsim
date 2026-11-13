@@ -50,7 +50,7 @@ In almost all cases, yes. Starsim imports models from more than a dozen framewor
 
 ### Why is my first run slow?
 
-The first run after installing Starsim may compile its kernels with Numba, which takes a few minutes, once; they are then kept on disk. (The wheels from `pip install starsim` include a Rust copy of the kernels, compiled ahead of time, which avoids this.) To compile everything up front, e.g. when building a Docker image or before a batch of runs on a cluster, run `ss.compile()`, or `starsim init compile` from the command line. See [Solvers and backends](running_solvers.qmd#speed-and-backends).
+The first run after installing Starsim may compile its kernels with Numba, which takes a few minutes, once; they are then kept on disk. (The wheels from `pip install starsim` include a Rust copy of the kernels, compiled ahead of time, which avoids this.) To compile everything up front, run `ss.compile()`, or `starsim init compile` from the command line: see [Backends](running_performance.qmd#backends).
 
 ### How large a population can Starsim model?
 

@@ -841,8 +841,9 @@ class Result(ss.arrays.BaseArr):
     def summarize(self):
         """
         The result over the whole run, by its `summarize_by`: the total of a flow ('sum'), the final value of a stock ('last'),
-        and the mean of a ratio ('mean'; over time, of its numerator and denominator if it has them, each summed and then
-        divided); one for each run, for a result across runs (and with several scenarios, a dict of these by scenario, as `diff()`
+        and the mean of a ratio over time ('mean'; with or without groups, the mean of its value at each time point, which is
+        worked out across the groups; but for a ratio of flows, such as a delivery's coverage, the total of one over the total of
+        the other); one for each run, for a result across runs (and with several scenarios, a dict of these by scenario, as `diff()`
         gives); and for a result by group (`res.by('age')`), a pandas Series labeled by group
         """
         out = self._summarize()
@@ -858,14 +859,9 @@ class Result(ss.arrays.BaseArr):
             errormsg = f'"{self.name}" is not summarized over time (summarize_by=None)'
             raise ValueError(errormsg)
         t = self.t_axis
-        if self.summarize_by == 'mean':
-            if self.denom is not None and self.values.ndim == t + 1:
-                axes = tuple(range(t, self.denom.ndim)) # Over time and groups
-                num, den = self.strata.sum(axis=axes), self.denom.sum(axis=axes)
-                return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
-            if self.parts is not None and self.values.ndim == 1: # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
-                num, den = [part.values.sum() for part in self.parts]
-                return num/den if den else 0.0
+        if self.summarize_by == 'mean' and self.parts is not None and self.values.ndim == t + 1 and all(np.ndim(part.values) == self.values.ndim for part in self.parts): # A ratio of flows, e.g. a delivery's coverage, which is 0 between its rounds: the total of one over the total of the other
+            num, den = [np.asarray(part.values, dtype=float).sum(axis=t) for part in self.parts]
+            return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
         values = np.moveaxis(np.asarray(self.values), t, 0) # Time first
         n = len(values)
         return self.summarizers[self.summarize_by](values, np.array([0]), np.array([n-1]))[0]
@@ -1651,6 +1647,17 @@ def format_value(v):
     return f'{v:.3g}'
 
 
+def summary_attr(obj, attr):
+    """ A row of a `Summary` (or a value of one of its columns) by its result's name with `_` for `.`, e.g. `summary.value.sir_infection` for `summary.value['sir.infection']`; only for an attribute pandas does not have """
+    if not attr.startswith('_'):
+        index = object.__getattribute__(obj, 'index')
+        labels = index.get_level_values(0) if isinstance(index, pd.MultiIndex) else index
+        found = [label for label in dict.fromkeys(labels) if isinstance(label, str) and label.replace('.', '_') == attr]
+        if len(found) == 1:
+            return obj.loc[found[0]]
+    raise AttributeError(f"'{type(obj).__name__}' object has no attribute '{attr}'")
+
+
 class SummarySeries(pd.Series):
     """ A row or column of a `Summary`, shown the same way """
     @property
@@ -1661,6 +1668,12 @@ class SummarySeries(pd.Series):
     def _constructor_expanddim(self):
         return Summary
 
+    def __getattr__(self, attr):
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            return summary_attr(self, attr)
+
     def __repr__(self):
         with pd.option_context('display.float_format', format_value):
             return super().__repr__()
@@ -1669,10 +1682,19 @@ class SummarySeries(pd.Series):
 class Summary(sc.dataframe):
     """
     The table of `sim.summarize()` and `msim.summarize()`: a dataframe, shown with its numbers rounded to sensible units (see `format_value()`); its values are not rounded
+
+    Each row is a result, by its module and name, e.g. `summary.loc['sir.infection']`. A row (or a value of a column) can
+    also be read as an attribute, with `_` for `.`, e.g. `summary.sir_infection` or `summary.value.sir_infection`.
     """
     @property
     def _constructor_sliced(self):
         return SummarySeries
+
+    def __getattr__(self, attr):
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            return summary_attr(self, attr)
 
     def __repr__(self):
         with pd.option_context('display.float_format', format_value):
@@ -1707,6 +1729,25 @@ def summary_funcs(how, results):
         res = results.find(key)
         name = next(iter(results.matches(key)))
         out.update({k:func for k in split_columns({name:res}, sep='_')})
+    return out
+
+
+def summary_names(results, names):
+    """
+    The name of each result in the index of `sim.summarize()` and `msim.summarize()`, by module and name with `.` (e.g. 'sir.infection', or 'sis.infection.alpha' for a column of a 2D result), from its name in `to_df()` (e.g. 'sir_infection')
+
+    Args:
+        results (Results): the results the names are of
+        names (list): their names in `to_df()`, as `results.flatten(sep='_', columns=True)` and `results.matches()` give them
+    """
+    flat = lambda sep: results.flatten(sep=sep, only_results=False, columns=True).keys()
+    dotted = dict(zip(flat('_'), flat('.'))) # The same results in the same order, so their names pair up
+    out = []
+    for name in names:
+        if name not in dotted and name.endswith('_cum') and name[:-4] in dotted: # A flow's cumulative total (see Results.matches())
+            out.append(f'{dotted[name[:-4]]}.cum')
+        else:
+            out.append(dotted.get(name, name))
     return out
 
 
@@ -1918,7 +1959,7 @@ def check_data(sim, df, die=False):
         df (dataframe): the data
         die (bool): whether a column that matches no result is an error
     """
-    options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
+    options = [f'{mod.name}.{key}' for mod in sim.module_list for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
         if col in ss.SimData.time_cols and match_column(sim, col) is None: # A time column kept beside the index (e.g. Covasim's "date"), not a result
             continue
@@ -1935,7 +1976,7 @@ def check_data(sim, df, die=False):
                 raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
                                            f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with group_results=[...].')
         if match_column(sim, col) is None:
-            several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
+            several = [mod.name for mod in sim.module_list if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
                 msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.SimData(..., aliases=dict(...)).'
             else:

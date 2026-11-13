@@ -55,7 +55,7 @@ msim.plot('sir')
 Vaccinating half of the population lowers the reproduction number from 3 to 3 × (0.5 + 0.5 × 0.1) = 1.65: that is R0 weighted by the susceptibility of each group, for a population that is still almost all susceptible. By day 10 some people have already been infected, so the effective reproduction number on the day of the campaign is a little lower. The epidemic infects under half as many people:
 
 ```{python}
-msim.summarize().loc['sir_infection']
+msim.summarize().loc['sir.infection']
 ```
 
 ## Going further

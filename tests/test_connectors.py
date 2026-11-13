@@ -180,32 +180,33 @@ def test_lazy_arrays():
 
 @sc.timer()
 def test_where_count():
-    sc.heading('A condition on a count in where= is worked out at each step, under every solver; in when=, a clear error')
+    sc.heading('A condition on a count in when= is worked out at each step, under every solver; in who=, a clear error')
     def make():
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
     def peak(solver, thresh):
         d = make()
-        npi = ss.modify(d.infection, multiply=0.5, who=d.I.n > thresh)
+        npi = ss.modify(d.infection, multiply=0.5, when=d.I.n > thresh)
         return ss.Sim(d, connectors=npi, n_agents=2000, total_pop=2000, stop=100, solver=solver, rand_seed=1, verbose=0).run().results.d.I.max()
     for solver in ['ode', 'binomial', 'tau', 'gillespie', 'abm']:
         never, once = peak(solver, 2000), peak(solver, 200)
         assert 200 < once < 0.6*never, f'Under {solver}, the peak is {once:n} with a threshold of 200, and {never:n} without one reached'
     d = make()
-    vaccinate = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 200, coverage=0.1) # A delivery takes one too
+    vaccinate = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 200, coverage=0.1) # A delivery takes one too
     assert ss.Sim(d, interventions=vaccinate, n_agents=2000, stop=100, verbose=0).run().results.d.I.max() > 200
-    for make_when in [lambda d: ss.modify(d.infection, multiply=0.5, when=d.I.n > 200), lambda d: ss.modify(d.infection, multiply=0.5, when=d.I)]:
-        with pytest.raises(TypeError, match='goes in who='):
-            make_when(make())
-    with pytest.raises(TypeError, match='as who='): # For an event, a condition goes in who=, whether on people or on the population
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), when=make().I.n > 200)
+    with pytest.raises(TypeError, match='goes in who='): # A condition on people is not when
+        ss.modify(make().infection, multiply=0.5, when=make().I)
+    for make_who in [lambda d: ss.modify(d.infection, multiply=0.5, who=d.I.n > 200), lambda d: ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 200), lambda d: ss.Event(d.S >> d.R, who=d.I.frac > 0.1)]:
+        with pytest.raises(TypeError, match='give it as when='): # A count says when, for everyone at once
+            make_who(make())
     return
 
 
 def test_keywords():
-    sc.heading('who= chooses people (or decides for everyone at once), and when= is an event or a time')
+    sc.heading('who= chooses people, and when= is an event, a time, or a condition on the population')
     d = ss.SIR(beta=ss.perday(0.1), name='d')
-    assert ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 5).eligible is not None # A count decides for everyone at once, so it is a condition on the population
+    assert ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 5).eligible is not None # A count decides for everyone at once, so it is when
+    assert ss.screen(ss.Diagnostic(), when=d.infection & (d.I.n > 5)).eligible is not None # Joined to an event, while it holds
     with pytest.raises(TypeError, match='give the event as when='): # An event triggers, so it is not who=
         ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.infection)
     with pytest.raises(TypeError, match='give it as who='): # A condition on people is not when

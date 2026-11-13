@@ -31,7 +31,7 @@ class geography:
         year (int): for a country, the year of the populations (default: those bundled, for 2020; another year is fetched)
         places (list): for a country, only these units, by name, `dot_name` ('Kenya:Nairobi'), or p-code
         names (list): the name of each place (instead of `data`)
-        populations (list): the number of people in each place; sets the fraction of people who start in each (for a country, in place of the bundled ones), and the sizes of the places for movement between them (`ss.geo.gravity`, `ss.geo.radiation`)
+        populations (list): the number of people in each place; sets the fraction of people who start in each (for a country or a table, in place of its own), and the sizes of the places for movement between them (`ss.geo.gravity`, `ss.geo.radiation`)
         x (list): a position for each place, in any unit of distance
         y (list): the other coordinate
         lat (list): latitudes in degrees (instead of `x` and `y`); distances are then great-circle distances in km
@@ -71,15 +71,17 @@ class geography:
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if data is not None:
             cols = {key:data[key].tolist() for key in ['name', 'population', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
-            names, populations, x, y, lat, lon = [cols.get(key) for key in ['name', 'population', 'x', 'y', 'lat', 'lon']]
-            populations = sc.ifelse(populations, cols.get('pop'))
+            found = {key:cols.get(key) for key in ['name', 'population', 'x', 'y', 'lat', 'lon']}
+            found['population'] = sc.ifelse(found['population'], cols.get('pop'))
             if 'geometry' in data.columns: # Shapes: each place is at the centroid of its shape
                 if getattr(data, 'crs', None) is not None: # Found on an equal-area projection, in degrees
                     centroids = data.geometry.to_crs('EPSG:6933').centroid.to_crs('EPSG:4326')
-                    lat, lon = centroids.y.tolist(), centroids.x.tolist()
+                    found['lat'], found['lon'] = centroids.y.tolist(), centroids.x.tolist()
                 else: # Positions in the shapes' own units
                     centroids = data.geometry.centroid
-                    x, y = centroids.x.tolist(), centroids.y.tolist()
+                    found['x'], found['y'] = centroids.x.tolist(), centroids.y.tolist()
+            given = dict(name=names, population=populations, x=x, y=y, lat=lat, lon=lon)
+            names, populations, x, y, lat, lon = [sc.ifelse(given[key], found[key]) for key in given] # Those given by hand win, as for a country
         if names is None:
             errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
             raise ValueError(errormsg)

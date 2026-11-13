@@ -96,7 +96,7 @@ def test_multisim():
     assert np.all(low <= mid) and np.all(mid <= high)
     assert np.array_equal(res.median().values, np.median(res.values, axis=0))
     res.median().plot()
-    assert msim.summarize().loc['sis_I', 'std'] > 0
+    assert msim.summarize().loc['sis.I', 'std'] > 0
     text = msim.show() # Text that shows itself, as describe() returns
     assert isinstance(text, ss.display.Text) and 'Number of runs: 4' in text
     with pytest.raises(TypeError, match='text = msim.show()'):
@@ -138,7 +138,7 @@ def test_multisim():
     assert vx.sims['Vaccine'] is vx.sims[1]
     assert list(vx.results.vx.delivered.runs.scenario) == ['Vaccine'] # It was left out, so msim.plot('vx.delivered') raised KeyNotFoundError
     vx.plot('vx.delivered')
-    assert ('vx_delivered', 'Vaccine') in vx.summarize().index
+    assert ('vx.delivered', 'Vaccine') in vx.summarize().index
     plt.close('all')
 
     # Each draw has a seed of its own, restarted or built (with a function in its loop); seeds swept are runs of their scenario
@@ -184,7 +184,7 @@ def test_other():
     kw = dict(total_pop=10_000, dur=ss.days(100), solver='binomial', verbose=0)
     weekly = ss.Sim(sir, **kw).run().to_synthetic_data('sir.infection', resample='week') # Whole weeks only, as resample() keeps: not the last of the 101 steps', which is three days
     msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, when=20, coverage=0.5), **kw)}, n_runs=3)
-    averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
+    averted = msim.summarize(baseline='Base').loc[('sir.infection', 'Vaccine')]
     paired = msim.results.sir.infection.diff('Base').Vaccine.summarize()
     assert averted['median'] < 0 and np.isclose(float(averted['median']), np.median(paired), rtol=1e-3) # The paired differences, as msim.diff() gives
     ax = next(ax for ax in msim.plot(show_interventions=False).axes if 'infection' in ax.get_title())
@@ -213,7 +213,7 @@ def test_scenarios():
     # Summaries by scenario, and of one result
     res = msim.results.sir.infection
     assert list(res.summarize().keys()) == ['Base', 'Vaccine'] and len(res.summarize().Base) == 10
-    assert msim.summarize('sir.infection').equals(msim.summarize().loc['sir_infection'])
+    assert msim.summarize('sir.infection').equals(msim.summarize().loc['sir.infection'])
     sim = msim.sims[0]
     assert sim.summarize('sir.infection') == sim.summarize().value.sir_infection
     once = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, **kw, rand_seed=2), workers=1) # Each scenario run once: the same table as a sim's, with a value column
@@ -234,7 +234,7 @@ def test_scenarios():
     swept = ss.parallel(ss.Sim(sir, **kw), pars={'sir.beta': [0.2, 0.3]}, n_runs=2) # Restarted for their runs
     assert [s.label for s in swept.sims] == ['sir.beta=0.2']*2 + ['sir.beta=0.3']*2
     for m in [msim, swept]: # The results in the order of a sim's (the modules' first), however they were run
-        assert list(dict.fromkeys(m.summarize().index.get_level_values(0)))[:3] == ['sir_S', 'sir_I', 'sir_R']
+        assert list(dict.fromkeys(m.summarize().index.get_level_values(0)))[:3] == ['sir.S', 'sir.I', 'sir.R']
 
     # Sims with different steps: run, and plotted each on its own time axis, but not put together
     steps = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, dt=ss.days(0.5), **kw))
@@ -280,14 +280,35 @@ def test_one_way():
         ss.parallel(sim, **dict(parallel=False))
     msim = ss.parallel({'a': sim.new(), 'b': sim.new(rand_seed=2)}, n_runs=2, workers=1)
     each = msim.summarize(each=True) # A column for each run, as compare() gave
-    assert list(each.columns) == ['a (0)', 'a (1)', 'b (2)', 'b (3)'] and each.loc['sir_I', 'a (0)'] == msim.sims[0].results.sir.I[-1]
-    assert msim.summarize(each=True, t=10).loc['sir_I'].tolist() == [s.results.sir.I[10] for s in msim.sims]
+    assert list(each.columns) == ['a (0)', 'a (1)', 'b (2)', 'b (3)'] and each.loc['sir.I', 'a (0)'] == msim.sims[0].results.sir.I[-1]
+    assert msim.summarize(each=True, t=10).loc['sir.I'].tolist() == [s.results.sir.I[10] for s in msim.sims]
 
     # Text that shows itself, rather than output=
     text = sim.diseases.sir.equations()
     assert isinstance(text, str) and text.startswith('dS/dt') and isinstance(sim.describe(), str) and sim.check_dt().table is not None
     with pytest.raises(AttributeError, match='summarize'):
         getattr(sim, 'summary') # Removed, for sim.summarize()
+    return msim
+
+
+def test_multisim_args():
+    """ ss.MultiSim(s1, s2) takes several sims, as ss.parallel() does (s2 was the label), and the rows of summarize() by module and name """
+    sc.heading('Testing MultiSim arguments and summary rows')
+    kw = dict(diseases='sis', networks='random', n_agents=200, start=2000, stop=2005, verbose=0)
+    s1, s2 = ss.Sim(**kw, label='a'), ss.Sim(**kw, label='b')
+    msim = ss.MultiSim(s1, s2, label='both', workers=1)
+    assert len(msim.sims) == 2 and msim.label == 'both'
+    msim.run()
+    summary = msim.summarize()
+    assert 'sis.infection' in summary.index.get_level_values('result') and summary.sis_infection.equals(summary.loc['sis.infection']) # Read as an attribute, with _ for .
+    one = s1.summarize()
+    assert one.loc['sis.I', 'value'] == one.value.sis_I == s1.summarize('sis_I') == s1.results.sis.I[-1]
+
+    # A delivery's coverage over the runs is each run's, the total delivered over the total eligible, not the mean over steps (mostly between rounds)
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5, when=[2001, 2003], name='vx')
+    vmsim = ss.parallel(ss.Sim(**kw, interventions=vx), n_runs=2, workers=1)
+    each = [sim.summarize('vx.coverage') for sim in vmsim.sims]
+    assert np.allclose(vmsim.summarize(each=True).loc['vx.coverage'], each) and np.isclose(vmsim.summarize('vx.coverage')['mean'], np.mean(each))
     return msim
 
 
@@ -302,6 +323,7 @@ if __name__ == '__main__':
     msim2 = test_scenarios()
     msim3 = test_one_disease()
     msim4 = test_one_way()
+    msim5 = test_multisim_args()
 
     T.toc()
 

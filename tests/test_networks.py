@@ -982,6 +982,26 @@ def test_who_compartmental():
     return sim
 
 
+@sc.timer()
+def test_network_args():
+    """ A subclass that wraps step() keeps its parameters; an unknown keyword raises, naming the valid ones; a bare number is a duration on every network """
+    sc.heading('Testing network arguments')
+    class Wrapped(ss.SexualNet):
+        def step(self):
+            return super().step()
+    net = Wrapped(n_contacts=0.5, dur=ss.years(2))
+    assert net.pars.n_contacts == 0.5 and 'match' in net.pars
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, n_agents=300, stop=2002, verbose=0).run()
+    assert len(sim.networks[0])
+    with pytest.raises(ValueError, match='n_contacts'): # A typo is not an edge column
+        ss.RandomNet(n_contact=5)
+    with pytest.raises(ValueError, match='edges=dict'):
+        ss.Network(p1=[0], p2=[1], n_contact=5)
+    assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
+    sim = ss.Sim(networks=ss.PostnatalNet(dur=2), demographics=ss.Pregnancy(), n_agents=300, dur=2, verbose=0).run() # A bare number, in the sim's unit
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1022,5 +1042,6 @@ if __name__ == '__main__':
     certain = test_certain_transmission()
     sat = test_network_saturation()
     test_who_compartmental()
+    args = test_network_args()
 
     T.toc()

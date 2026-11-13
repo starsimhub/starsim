@@ -390,11 +390,12 @@ def test_time():
         ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(1), R >> S @ ss.days(100), name='mixed'), **kw).init()
     with pytest.raises(TypeError, match='mixed.rate'): # As is a bare number in a disease's death
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.dead @ 0.01, name='mixed'), **kw).init()
-    deaths = ss.death(rate=10) # But the deaths of everyone, as ss.Deaths reads them: per year, and above 1 per 1,000, with a note (not a warning: it is the usual spelling)
-    assert ss.birth(rate=30).rate.raw == ss.peryear(0.03) and ss.birth(rate=ss.peryear(0.02)).rate.raw == ss.peryear(0.02)
-    assert ss.birth(rate=ss.peryear(30)).rate.raw == ss.peryear(0.03) and ss.death(rate=ss.peryear(1.05)).rate.raw == ss.peryear(1.05/1000) # A typed rate is read as a bare number is: above 1 per year, per 1,000
+    deaths = ss.death(rate=10, rate_per=1000) # But the deaths of everyone, as ss.Deaths reads them: per year, with a note (not a warning: it is the usual spelling)
+    assert ss.birth(rate=0.03).rate.raw == ss.birth(rate=30, rate_per=1000).rate.raw == ss.birth(rate=ss.peryear(30), rate_per=1000).rate.raw == ss.peryear(0.03) # Per person, unless rate_per says
+    with pytest.warns(RuntimeWarning, match='rate_per=1000'): # A rate is never read as per 1,000 from its size, but one above 1 per person per year is warned about
+        assert ss.death(rate=ss.perday(0.005)).rate.raw == ss.perday(0.005) # 1.8 per year (Starsim read this as per 1,000, after converting it to per year)
     mixed = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=deaths, **kw).init()
-    assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and 'rate=10 is above 1 per year, so taken as per 1,000 people per year' in mixed.notes
+    assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and any('bare number, so taken as per 1000 people per year' in note for note in mixed.notes)
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
     assert ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), R >> S @ zero, name='mixed'), **kw).init().unit == 'day'
 
@@ -576,7 +577,7 @@ def test_describe():
     assert 'Infected: I ' in frac.describe() and np.isclose(frac.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
     S, I, R = ss.states('S I R')
     aged = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15])
-    births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts([[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe()
+    births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts(age=[[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe()
     assert '0.02 per year × (S + I + R).n' in births # A rate in another unit than the sim's keeps its own (it was "0.02", under "in total per day")
     assert 'literally' not in births # Births are in total, so the note about contacts does not apply to them
     seasonal = ss.Sim(ss.Disease(S >> I @ ss.seasonal(mean=ss.perday(17/13), amplitude=0.1, peak=0.25) * I, I >> R @ ss.perday(1/13), init=dict(I=1e-4), name='sir'), unit='day', total_pop=1.0, **kw).init()
@@ -1349,7 +1350,7 @@ def test_value():
             self.probs.append([self.pars.death.to_prob(), self.pars.death_ts.to_prob()]) # The same code, whichever form the rate is given in
             self.read = [self.pars.bites, 1*self.pars.f, np.exp(self.pars.em) - 1, float(self.pars.em), self.pars.em > 0, 2*self.pars.death_ts, 1*sir.pars.beta, float(sir.pars.beta)]
     sim = ss.Sim(ss.SIR(beta=0.3), modules=Mosquitoes(), interventions=ss.modify('sir.pars.beta', set=0.1, when=ss.schedule(start='2001-01-01')), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
-    mosq = [m for m in sim.modules if isinstance(m, Mosquitoes)][0]
+    mosq = [m for m in sim.module_list if isinstance(m, Mosquitoes)][0]
     bites, f, em, em_float, positive, death2, beta, raw = mosq.read
     assert isinstance(bites, ss.perday) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, np.expm1(2/365)) and np.isclose(em_float, 2/365) and positive
     probs = np.array(mosq.probs)
@@ -1366,7 +1367,7 @@ def test_value():
     with pytest.raises(RuntimeError, match=r'sim.new\(stop='):
         sim.pars.stop = 30
     sim.label = 'renamed' # Not a setting of the run
-    assert sim.new(stop=30).run().t.tvec[-1] == 30
+    assert sim.new(stop=30).run().t.tvec[-1] == ss.days(30)
     return
 
 

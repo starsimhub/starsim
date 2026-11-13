@@ -224,7 +224,7 @@ def test_summarize_by():
             self.define_results(ss.Result('by_age', dtype=int, kind='flow', shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
             self.results['log'] = dict(net=[[0, None]])
     sim = ss.Sim(ss.SIS(), analyzers=Odd(name='odd'), n_agents=small, stop=5, verbose=0).run()
-    assert 'sis_I' in sim.summarize().index and not any(k.startswith('odd') for k in sim.summarize().index)
+    assert 'sis.I' in sim.summarize().index and not any(k.startswith('odd') for k in sim.summarize().index)
     assert len(sim.summarize('odd.by_age')) == 3 # Asked for by key, it is one number per column
     return res
 
@@ -281,7 +281,7 @@ def test_results_by_group():
             self.results.prevalence.set_groups(self.ti, infected, groups.count())
 
     # Alongside a declared disease, whose results are kept by group already; agents of different weights, and people born and dying
-    kw = dict(networks='random', demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=15)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
+    kw = dict(networks='random', demographics=[ss.Births(birth_rate=0.02), ss.Deaths(death_rate=0.015)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
     sim = ss.Sim(ss.SIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male'], age=edges), **kw).init()
     sim.people.scale[sim.people.auids[::3]] = 3
     sim.run()

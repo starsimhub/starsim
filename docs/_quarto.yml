@@ -189,7 +189,7 @@ website:
             - user_guide/mechanics_indexing.qmd
             - user_guide/mechanics_distributions.qmd
             - user_guide/mechanics_random.qmd
-        - section: "Architecture"
+        - section: "Architecture (for developers)"
           href: user_guide/architecture_index.qmd
           contents:
             - user_guide/architecture_run.qmd

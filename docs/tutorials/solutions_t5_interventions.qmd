@@ -45,7 +45,7 @@ for date in ['2025-02-01', '2025-03-01', '2025-05-01']:
     sims['Campaign on ' + date] = ss.Sim(measles, interventions=campaign, **settings)
 msim = ss.parallel(sims)
 msim.plot('measles.I')
-msim.summarize().loc['measles_infection']
+msim.summarize().loc['measles.infection']
 ```
 
 A campaign on 1 February prevents about 90% of the outbreak; on 1 March, about three quarters; on 1 May, near the peak, only about one infection in eight. Every month of delay lets the outbreak grow by a large factor, so a campaign should follow the first cases quickly.
@@ -62,7 +62,7 @@ sims = {
     'Both':            ss.Sim(measles, interventions=[campaign, response], **settings),
 }
 msim = ss.parallel(sims)
-averted = -msim.summarize(baseline='No intervention').loc['measles_infection']
+averted = -msim.summarize(baseline='No intervention').loc['measles.infection']
 averted.round()
 ```
 
@@ -119,7 +119,7 @@ scenarios = {
 sims = {label: ss.Sim(sti, interventions=interventions, **settings) for label, interventions in scenarios.items()}
 msim = ss.parallel(sims)
 msim.plot('sti.I')
-msim.summarize().loc['sti_infection']
+msim.summarize().loc['sti.infection']
 ```
 
 **5. Screening everyone aged 15 to 49.**

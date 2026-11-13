@@ -364,7 +364,7 @@ def test_stratify():
     assert ss.Sim(make_sir(), **kw).stratify(age=[0, 15]).stratify(age=[0, 15]).init().groups.n_groups == 2 # Likewise for the sim
     with pytest.raises(ValueError, match='is already stratified by "age", in another way'): # In another way, it is an error
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 20])
-    with pytest.raises(TypeError, match='adjust= is now a value by level'): # A multiplier by level is ss.by()
+    with pytest.raises(TypeError, match='adjust= is given as a value by level'): # A multiplier by level is ss.by()
         make_sir().stratify(age=[0, 15], adjust={'recovery': [1, 2]})
     with pytest.raises(ValueError, match='has 2 values, but "age" has 3 levels'): # Caught when the sim is built, not when it runs
         S, I = ss.states('S I')
@@ -379,7 +379,7 @@ def test_stratify():
     assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(age=ss.levels([0, 15], states=['S', 'I'])), **kw).init().groups.strats] == ['age']
     assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(states=['low', 'high'], kind=[0, 1]), **kw).init().groups.strats] == ['states', 'kind']
     old_options = dict(age=[0, 15], fractions=[0.5, 0.5]) # An option beside the dimension, as before
-    with pytest.raises(TypeError, match='fractions= is now'):
+    with pytest.raises(TypeError, match='fractions= is given as'):
         ss.Sim(make_sir(), stratify=old_options, **kw).init()
     old_form = [dict(age=[0, 15]), dict(risk=['low', 'high'])] # A list of dicts, one per call of stratify(), as before
     with pytest.raises(TypeError, match='one dict of dimensions'): # Not a list of them
@@ -482,7 +482,7 @@ def test_outcomes():
         sir = ss.Disease(infection, I >> R @ 0.1, ss.outcome(0.5 * infection, name='cases', delay=ss.days(3)), ss.outcome(infection, name='hosp', dur=ss.days(5)), init_n=dict(I=ss.by(patch=[5, 0])), name='sir')
         sir.stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate')))
         return ss.Sim(sir, total_pop=1000, unit='day', stop=80, **kw)
-    kernel, stepped = by_patch().run().results.sir, by_patch().profile(kind='loop', plot=False).sim.results.sir # Recording the time of each step needs the loop
+    kernel, stepped = by_patch().run().results.sir, by_patch().perf_profile(kind='loop', plot=False).sim.results.sir # Recording the time of each step needs the loop
     agents = by_patch().new(n_agents=1000).run().results.sir
     for res in [kernel, stepped, agents]:
         assert np.allclose(res.cases.select(patch='a') + res.cases.select(patch='b'), res.cases)
@@ -667,7 +667,7 @@ def test_modify():
         return ss.Sim(sir, interventions=mods, unit='day', stop=120, **kw).init() # A yearly cycle needs a unit
     fast, slow = timed(), timed()
     assert fast._kernel_reason() is None
-    assert np.allclose(fast.run().results.sir.I, slow.profile(kind='loop', plot=False).sim.results.sir.I)
+    assert np.allclose(fast.run().results.sir.I, slow.perf_profile(kind='loop', plot=False).sim.results.sir.I)
 
     # A modifier can also be given as a path, and combines with others by multiplication
     both = [ss.modify('sir.pars.beta', multiply=0.5, when=ss.schedule(start=20), name='a'), ss.modify('sir.pars.beta', multiply=0.5, when=ss.schedule(start=20), name='b')]
@@ -718,7 +718,7 @@ def test_modify():
     n_I = runs.results.sir.I
     assert n_I.values.shape == (8, 61) and len(runs) == 8
     assert len(np.unique(n_I.values[:, 30])) > 1 # Each run has its own seed
-    assert runs.summarize().loc['sir_I', 'std'] > 0 # Summarized over the eight runs (before, over one sim: a standard deviation of 0)
+    assert runs.summarize().loc['sir.I', 'std'] > 0 # Summarized over the eight runs (before, over one sim: a standard deviation of 0)
     assert np.array_equal(n_I.select(run=3).values, n_I.values[3]) and np.allclose((n_I + 1).values, n_I.values + 1) # A result like any other
     low, mid, high = n_I.quantiles([0.025, 0.5, 0.975])
     assert np.all(low <= mid) and np.all(mid <= high)
@@ -862,11 +862,16 @@ def test_functions():
     inB = sim6.diseases.d.B.uids
     assert len(inB) > 100 and sim6.people.female[inB].all()
 
-    # A state's .n and .count(), which functions read, under both solvers
+    # A state's .n under both solvers, and .count() (agents) only as agents
     for solver in ['abm', 'ode']:
         S, I = ss.states('S I')
         counted = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), init_prev=0.1, name='d'), solver=solver, n_agents=1000, total_pop=10_000, **kw).init()
-        assert counted.diseases.d.I.n == 1000 and counted.diseases.d.I.count() in [100, 1000]
+        assert counted.diseases.d.I.n == 1000
+        if solver == 'abm':
+            assert counted.diseases.d.I.count() == 100 # Agents, each standing for 10 people
+        else:
+            with pytest.raises(ss.CapabilityError): # count() is of agents, which a compartmental run has none of
+                counted.diseases.d.I.count()
 
     # Arguments with defaults do not count: this is a function of the sim
     def recover(sim, factor=2):
@@ -945,7 +950,7 @@ def test_time_values():
         sis.stratify(age=[0, 20])
         return ss.Sim(sis, stop=100, **kw).run().results.sis.I
     series = by_age(ss.by(age=[ss.timeseries({0: 0.3, 50: 0.1}), 0.2]))
-    func = by_age(lambda sim: ss.by(age=[0.3 if sim.t.now() < 50 else 0.1, 0.2]).per_group(sim))
+    func = by_age(lambda sim: ss.by(age=[0.3 if sim.t.now() < ss.days(50) else 0.1, 0.2]).per_group(sim))
     assert np.allclose(series, func)
 
     # A rate times a trend in time or a function of the sim, in either order, also as the deaths of everyone (DuplicateDeclaration and IncompatibleTypes before)
@@ -1044,7 +1049,7 @@ def test_time_values():
     def school_run(make):
         S, E, I, R = ss.states('S E I R')
         m = ss.Disease(S >> E @ make()*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init=dict(I=0.001), name='measles').stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-        return ss.Sim(m, networks=ss.contacts([[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.infection.values
+        return ss.Sim(m, networks=ss.contacts(age=[[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.infection.values
     beta = ss.perday(0.125) * ss.by(age=[school, 1, 1])
     assert np.allclose(school_run(lambda: beta), school_run(lambda: ss.perday(0.125) * ss.by(age=[school, 1, 1])))
     with pytest.raises(TypeError, match='outside'):

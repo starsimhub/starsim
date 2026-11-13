@@ -143,6 +143,55 @@ def test_greek_letters():
 
 
 @sc.timer()
+def test_class_body_parts():
+    """ Parameters, arrays, and distributions in the class body of any module: each instance has its own, set by keyword, beside the __init__() form """
+    sc.heading('Testing parameters and arrays in the class body of a module')
+    class Decay(ss.Intervention):
+        half_life = ss.par(ss.years(2))
+        p_reset = ss.par(ss.bernoulli(p=0.1))
+        level = ss.FloatArr(default=1.0)
+        reset = ss.BoolArr(result=True)
+        noise = ss.normal(0, 1)
+        def step(self):
+            self.level[:] *= 0.5**(self.t.dt/self.pars.half_life)
+            self.reset[self.pars.p_reset.filter()] = True
+    a, b = Decay(half_life=ss.years(5)), Decay(pars=dict(half_life=ss.years(1)))
+    assert a.pars.half_life == ss.years(5) and b.pars.half_life == ss.years(1) and Decay.half_life.value == ss.years(2), 'Each instance has its own value'
+    assert a.level is not b.level and a.noise is not b.noise and a.pars.p_reset is not b.pars.p_reset, 'Each instance has its own arrays and distributions'
+    a.half_life = ss.years(3) # The attribute is the parameter, as for a declared disease
+    assert a.pars.half_life == ss.years(3)
+    with pytest.raises(TypeError, match='half_life'): # A misspelling is an error, suggesting the name
+        Decay(half_lfe=3)
+    sim = ss.Sim(n_agents=200, interventions=Decay(), pars=dict(half_life=ss.years(1)), dur=3, verbose=0).run() # Set by name from the sim
+    dec = sim.interventions.decay
+    assert dec.pars.half_life == ss.years(1) and np.isclose(dec.level.mean(), 0.5**len(sim.timevec)) and 'reset' in sim.results.decay # Halved on each step
+
+    # A subclass's default stands over its base's, and a coded disease and a declared one take them too
+    class MyNet(ss.RandomNet):
+        n_contacts = ss.par(4)
+    assert MyNet().pars.n_contacts.pars.value == 4 and MyNet(n_contacts=6).pars.n_contacts.pars.value == 6 # Numbers that set the base's distribution, as a keyword to ss.RandomNet() does
+    assert ss.Sim(diseases='sis', networks=MyNet(), n_agents=200, stop=2002, verbose=0).run().complete
+    class Boosted(ss.Vaccine): # A product's own keywords (efficacy=, waning=) go to its base, its parameters to itself
+        boost = ss.par(0.5)
+    vx = Boosted(efficacy=0.8, waning=ss.years(5), boost=0.3)
+    assert vx.waning == ss.years(5) and vx.efficacy == 0.8 and vx.pars.boost == 0.3
+    class Anemia(ss.Disease):
+        p_onset = ss.par(ss.bernoulli(0.05))
+        anemic = ss.BoolArr(result=True)
+        def step_state(self):
+            self.anemic[self.pars.p_onset.filter()] = True
+    assert Anemia(p_onset=0.1).graph is None
+    class SIRS(ss.Disease): # Parameters in the class body, states and transitions in __init__()
+        beta = ss.par(0.3)
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.states('S I R'))
+            self.define_transitions(infection=self.S >> self.I @ self.beta*self.I, recovery=self.I >> self.R @ ss.days(10), waning=self.R >> self.S @ ss.days(90))
+    sim = ss.Sim([Anemia(), SIRS(beta=0.5, init_prev=0.01)], n_agents=300, dur=ss.days(20), verbose=0).run()
+    assert sim.diseases.sirs.pars.beta.raw == 0.5 and sim.results.anemia.anemic[-1] > 0
+    return sim
+
+
 def test_migrate():
     """ Starsim 3 code rewritten by the migration script, and the warning about what it rewrites """
     sc.heading('Testing the migration script')
@@ -179,6 +228,7 @@ class Counter(ss.Module):
     todo = migrate_text('sir = ss.SIR(beta=0.1)')[2]
     assert any('ssl.AgentSIR' in note for _,note in todo) and any('probability per step' in note for _,note in todo) # A use of ss.SIR is flagged, not rewritten, and so is its bare beta, now per day
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
+    assert migrate_text("for mod in sim.modules: sim.profile()\nprint(sys.modules)")[0] == "for mod in sim.module_list: sim.perf_profile()\nprint(sys.modules)" # Starsim 3's sim.modules was every module
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
     path = sc.path('notes.qmd') # Only its suffix is read
@@ -186,7 +236,7 @@ class Counter(ss.Module):
     blocks = migrate.code_blocks(path, qmd)
     assert migrate.replace_blocks(path, qmd, [migrate_text(code)[0] for _,code in blocks]) == qmd.replace('x = ss.time_prob', 'x = ss.probperyear')
     assert 'sim.fit()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
-    assert migrate_text('preg = ss.demographics.Pregnancy(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)' # Starsim 3's pregnancy, by its old path
+    assert migrate_text('preg = ss.demographics.Pregnancy(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20, rate_per=1000)' # Starsim 3's pregnancy, by its old path, and its rates, per 1,000
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
     assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
@@ -235,7 +285,8 @@ class Counter(ss.Module):
     assert 'dict(n_agents=100, start=2000, dur=20)' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
     assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, start=2001, stop=2002)' in text and [line for line,_ in todo] == [5]
 
-    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20))' # Starsim 3's typed rate per 1,000 reads the same: above 1, so per 1,000
+    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20), rate_per=1000)' # Starsim 3's rates were per 1,000 by default; Starsim 4's are per person
+    assert migrate_text("deaths = ss.Deaths(death_rate='Kenya'); births = ss.Births(birth_rate=20, rate_units=1)")[0] == "deaths = ss.Deaths(death_rate='Kenya'); births = ss.Births(birth_rate=20, rate_per=1)" # A place, or rate_units given: left as they are
 
     return new
 
@@ -570,6 +621,7 @@ if __name__ == '__main__':
     sims1 = test_deepcopy()
     sims2 = test_deepcopy_until()
     mods  = test_custom_imports()
+    body  = test_class_body_parts()
     mig   = test_migrate()
 
     sc.toc(T)

@@ -477,7 +477,7 @@ class on:
 
     @property
     def outcome(self):
-        """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
+        """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.solvers.deliveries.trigger_moves()`) """
         x = self.x
         return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x))
 
@@ -1167,7 +1167,7 @@ def run_state(x):
     """ The disease and the declared state of a state as code sees it at run time (`sir.I`), or as declared """
     if isinstance(x, State):
         return x.module, x
-    mod = getattr(x, 'mod', None) or getattr(getattr(x, 'engine', None), 'mod', None) # Agents in a state (an ss.BoolState), or a count (ss.solvers.CountState)
+    mod = getattr(x, 'mod', None) or getattr(getattr(x, 'engine', None), 'mod', None) # Agents in a state (an ss.BoolArr), or a count (ss.solvers.CountState)
     graph = getattr(mod, 'graph', None)
     if graph is None or getattr(x, 'name', None) not in graph.states:
         raise TypeError(f'ss.move() moves people between the states of a declared disease (e.g. sir.I), not {type(x).__name__}')
@@ -1201,7 +1201,7 @@ class BirthOn:
         return self
 
 
-def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None, label=None, **kwargs):
+def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=None, name=None, label=None, **kwargs):
     """
     An inflow of people: at a crude (per-person) birth rate, e.g. `ss.birth(S, rate=ss.peryear(0.02))`; or driven by a
     flow, e.g. `ss.birth(NP, when=preg.delivery, children=2)`, `children` for each person who goes through the transition
@@ -1216,17 +1216,18 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`30` and `ss.peryear(30)` are `ss.peryear(0.03)`) (a time series by the median of its values); a place by name is `ss.Births(birth_rate=place)`, its UN rates as agents (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number is per year (`0.03` is `ss.peryear(0.03)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; a place by name is `ss.Births(birth_rate=place)`, its UN rates as agents (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
         when (Transition): instead of a rate, the transition whose flow drives the births
         children (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         p_female (float/Dist): the chance a child is female (default: as for anyone added)
+        rate_per (float): for the births of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`)
         name (str): the name of the transition
         label (str): a human-readable name
 
     Examples:
         ```python
         ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])
-        ss.Sim(sir, demographics=[ss.birth(rate=20), ss.death(rate=10)]) # The same: above 1 per year, so per 1,000 people
+        ss.Sim(sir, demographics=[ss.birth(rate=20, rate_per=1000), ss.death(rate=10, rate_per=1000)]) # The same, per 1,000 people per year
         ss.Sim(sir, demographics=[ss.birth(rate='Kenya'), ss.death(rate='Kenya')]) # Kenya's UN rates (as ss.Births and ss.Deaths, agents only)
         ```
     """
@@ -1235,20 +1236,23 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None
         raise TypeError(errormsg)
     elif kwargs:
         key = list(kwargs)[0]
-        errormsg = f'ss.birth() takes a state, rate=, when=, children=, p_female=, name=, and label=, not {key}={did_you_mean(key, ["rate", "when", "children", "p_female", "name", "label"])}'
+        errormsg = f'ss.birth() takes a state, rate=, when=, children=, p_female=, rate_per=, name=, and label=, not {key}={did_you_mean(key, ["rate", "when", "children", "p_female", "rate_per", "name", "label"])}'
         raise TypeError(errormsg)
     if isinstance(rate, str): # A place by name: its UN crude birth rates by year, with mothers, as agents
         if state is not None or when is not None:
             errormsg = f'ss.birth(rate={rate!r}) is the births of everyone, at the UN rates of {rate} (as ss.Births); it takes no state or when='
             raise ValueError(errormsg)
-        return ss.Births(birth_rate=rate, **({} if name is None else dict(name=name)))
+        return ss.Births(birth_rate=rate, rate_per=rate_per, **({} if name is None else dict(name=name)))
     on = when.x if isinstance(when, ss.on) and when.delay is None else when
+    if rate_per is not None and (state is not None or on is not None):
+        errormsg = 'rate_per= of ss.birth() is for a crude birth rate of everyone (with no state or when=); a rate of births into a state is per person'
+        raise ValueError(errormsg)
     if on is not None and rate is not None:
         errormsg = 'ss.birth() takes either rate= (a crude birth rate) or when= (a transition that drives the births), not both'
         raise ValueError(errormsg)
     note = None
     if state is None: # The births of everyone, a crude birth rate (as for ss.death(): births into a disease's state are in the model's unit)
-        rate, note = ss.demographics.bare_rate(rate, 'rate')
+        rate, note = ss.demographics.bare_rate(rate, 'rate of ss.birth()', rate_per)
     out = Transition(unborn, state, rate=rate, name=name, label=label)
     out.rate_note = note
     out.per_capita = on is None
@@ -1338,15 +1342,16 @@ class lifetable:
         return np.array(out)
 
 
-def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None, **kwargs):
+def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, name=None, label=None, **kwargs):
     """
     An outflow of people, e.g. `ss.death(I, rate=ss.peryear(0.1))`
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`10` and `ss.peryear(10)` are `ss.peryear(0.01)`) (a time series by the median of its values); a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number is per year (`0.01` is `ss.peryear(0.01)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
         dur (any): the mean time to death (instead of `rate`)
         lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
+        rate_per (float): for the deaths of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`)
         name (str): the name of the transition
         label (str): a human-readable name
     """
@@ -1356,13 +1361,16 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         raise TypeError(errormsg)
     elif kwargs:
         key = list(kwargs)[0]
-        errormsg = f'ss.death() takes a state, rate=, dur=, lifetable=, name=, and label=, not {key}={did_you_mean(key, ["rate", "dur", "lifetable", "name", "label"])}'
+        errormsg = f'ss.death() takes a state, rate=, dur=, lifetable=, rate_per=, name=, and label=, not {key}={did_you_mean(key, ["rate", "dur", "lifetable", "rate_per", "name", "label"])}'
         raise TypeError(errormsg)
     if isinstance(rate, str): # A place by name: its UN death rates by year, sex, and age, as agents
         if state is not None or dur is not None:
             errormsg = f'ss.death(rate={rate!r}) is the deaths of everyone, at the UN rates of {rate} (as ss.Deaths); it takes no state or dur='
             raise ValueError(errormsg)
-        return ss.Deaths(death_rate=rate, **({} if name is None else dict(name=name)))
+        return ss.Deaths(death_rate=rate, rate_per=rate_per, **({} if name is None else dict(name=name)))
+    if rate_per is not None and (state is not None or dur is not None or lifetable is not None):
+        errormsg = 'rate_per= of ss.death() is for a crude death rate of everyone (rate= with no state); a rate of deaths from a state, a duration, or a life table is per person'
+        raise ValueError(errormsg)
     if lifetable is not None:
         if rate is not None or dur is not None or state is not None:
             errormsg = 'ss.death(lifetable=) is the deaths of everyone, from a life table; it takes no state, rate=, or dur='
@@ -1376,7 +1384,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         return out
     note = None
     if state is None: # The deaths of everyone, a crude death rate (a disease's deaths, from one state, can be faster)
-        rate, note = ss.demographics.bare_rate(rate, 'rate')
+        rate, note = ss.demographics.bare_rate(rate, 'rate of ss.death()', rate_per)
     out = Transition(state, dead, rate=rate, dur=dur, name=name, label=label)
     out.rate_note = note
     out.every_state = state is None
@@ -1417,15 +1425,15 @@ def migration(rate=None, rate_per=None, name=None):
     a negative one is departures (`ss.emigration()`). Both go in `ss.Sim(demographics=[...])`, and run under every solver.
     Since the rates are net, they say nothing about who migrates: as agents, those who leave are chosen at random.
 
-    The rates are read as those of `ss.Births` and `ss.Deaths` are (see `ss.demographics.rate_per_of()`): a bare number (per year)
-    or a typed rate is per 1,000 people if it is above 1 per year (the median of the sizes, for a time series), else per person;
-    `rate_per=` says which. A place's UN rates are per 1,000.
+    The rates are read as those of `ss.Births` and `ss.Deaths` are (see `ss.demographics.rate_per_of()`): a bare number is per
+    year, and a rate is per person unless `rate_per=` says otherwise (e.g. `rate_per=1000`), with a warning if it is above 1 per
+    year (the median, for a time series) and `rate_per=` is not given. A place's UN rates are per 1,000, which is known.
 
     Args:
         rate (str/float/rate/timeseries): a place by name, for its UN crude net migration rates (by year, every ten years, linearly
-            interpolated); a bare number per year or a typed rate (e.g. `-5` or `ss.peryear(-5)` per 1,000, or `ss.peryear(-0.005)` per person),
+            interpolated); a bare number per year or a typed rate (e.g. `-0.005` or `ss.peryear(-0.005)` per person, or `-5` with `rate_per=1000`),
             or a time series of either
-        rate_per (float): how many people the rates are per: 1000 or 1 (per person); by default, read from their size
+        rate_per (float): how many people the rates are per, e.g. 1000 for per 1,000; by default 1 (per person)
         name (str): the name of the transitions (by default `immigration` and `emigration`)
 
     Returns:
@@ -1434,32 +1442,29 @@ def migration(rate=None, rate_per=None, name=None):
     Examples:
         ```python
         ss.Sim(demographics=[ss.Births(birth_rate='Albania'), ss.Deaths(death_rate='Albania'), ss.migration(rate='Albania')])
-        ss.Sim(demographics=[ss.birth(rate=20), ss.death(rate=10), ss.migration(rate=3)]) # 3 more people per 1,000 a year
-        ss.migration(rate=-0.5, rate_per=1000) # 0.5 fewer per 1,000 a year: below 1, so rate_per= says it is per 1,000
+        ss.Sim(demographics=[ss.birth(rate=0.02), ss.death(rate=0.01), ss.migration(rate=0.003)]) # 3 more people per 1,000 a year
+        ss.migration(rate=-0.5, rate_per=1000) # 0.5 fewer per 1,000 a year
         ```
     """
-    if isinstance(rate, str): # The UN's crude net migration rates, per 1,000 people a year
+    named = isinstance(rate, str)
+    if named: # The UN's crude net migration rates, per 1,000 people a year
         data = ss.data.rates(rate, 'migration')
         rate = ss.timeseries(dict(zip(data.Time.values.tolist(), data.CNMR.values.tolist())), interpolation='linear')
-        rate_per = sc.ifelse(rate_per, 1000)
+        rate_per = ss.demographics.named_rate_per(rate_per, 1000, 'The UN net migration rates of a place')
     per_year = lambda v: float(v) if sc.isnumber(v) else v.to('year').value if isinstance(v, ss.Rate) and np.ndim(v.value) == 0 else None # A bare number is per year
     series = isinstance(rate, ss.timeseries)
     values = [per_year(v) for v in rate.values] if series else [per_year(rate)]
     if not len(values) or any(v is None for v in values):
-        errormsg = f'ss.migration() takes a place by name, a bare number per year or a typed rate (e.g. -5 per 1,000, or ss.peryear(-0.005) per person), or a time series of either; not {rate!r}'
+        errormsg = f'ss.migration() takes a place by name, a bare number per year or a typed rate (e.g. -0.005 or ss.peryear(-0.005) per person, or -5 with rate_per=1000), or a time series of either; not {rate!r}'
         raise TypeError(errormsg)
-    per = ss.demographics.rate_per_of(rate_per, values, 'ss.migration()')
+    per = ss.demographics.rate_per_of(rate_per, values, 'rate of ss.migration()')
     values = [v/per for v in values]
     if series:
         make = lambda sign: ss.timeseries(rate.times, [ss.peryear(max(sign*v, 0.0)) for v in values], interpolation=rate.interpolation, period=rate.period) # The positive or negative part: linear between the times, the two still sum to the net rate
     else:
         make = lambda sign: ss.peryear(max(sign*values[0], 0.0))
-    bare = any(sc.isnumber(v) for v in sc.tolist(getattr(rate, 'values', rate)))
-    note = None
-    if rate_per is None and per == 1000:
-        note = 'the rate of ss.migration() is above 1 per year, so taken as per 1,000 people per year'
-    elif rate_per is None and bare:
-        note = 'the rate of ss.migration() is a bare number of 1 or below per year, so taken as per person per year'
+    bare = not named and any(sc.isnumber(v) for v in sc.tolist(getattr(rate, 'values', rate)))
+    note = f'the rate of ss.migration() is a bare number, so taken as per {"person" if per == 1 else f"{per:n} people"} per year' if bare else None
     out = []
     if max(values) > 0:
         arrive = Transition(outside, None, rate=make(1), name=f'{name}_in' if name else 'immigration')

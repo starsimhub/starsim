@@ -114,7 +114,7 @@ print('Peak infectious, aged 0-14:', round(sres.I.select(age='0-14').max()))
 sres.prevalence.by('age').plot()
 ```
 
-A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. A module written as code can keep its results by group too: stratify the sim (`stratify=dict(sex=['female', 'male'])`), make the result with `ss.Result(..., groups=True)`, and set it at each step with `set_groups()` from `sim.groups.count()`, which counts the people in each group for whom a condition holds. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone.
+A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. Over time it is different: `summarize()` gives the mean of the ratio over the steps, with or without groups, except for a ratio of two flows, such as a delivery's coverage, whose parts are each summed over the run and then divided; `resample()` gives the mean over each period too, unless the ratio keeps its parts (by group, or a delivery's coverage), when they are summed over the period and then divided (the table [above](#reading-results)). The two agree when the denominator is the same at every step. A module written as code can keep its results by group too: stratify the sim (`stratify=dict(sex=['female', 'male'])`), make the result with `ss.Result(..., groups=True)`, and set it at each step with `set_groups()` from `sim.groups.count()`, which counts the people in each group for whom a condition holds. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone.
 
 ### Results with several columns
 
@@ -148,7 +148,7 @@ Each column is a result of its own, as `infs.adults`, `infs['adults']`, or `infs
 
 Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data; it is the data that [calibration](calibration_fitting.qmd) fits to.
 
-`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow, the final value of a stock, and the mean of a ratio. It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs, so the two read the same way. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak.
+`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow, the final value of a stock, and the mean of a ratio over time. It is a table with a row for each result, by its module and name (`summary.loc['measles.infection']`), and one column, `value`, as `msim.summarize()` gives for many runs, so the two read the same way. `sim.summarize('measles.infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles.I', how='max')` for the peak.
 
 `to_df()` gives results as a table (a pandas dataframe), for the whole sim, one module (`sim.results.measles.to_df()`), or one result (`res.I.to_df()`), to save with `df.to_csv()` or `df.to_excel()`. `sim.results.flatten()` gives them as a flat dict, keyed like the columns (`measles_I`).
 

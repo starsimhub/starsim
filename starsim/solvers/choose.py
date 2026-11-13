@@ -189,7 +189,7 @@ class Undeclared(Transmission):
         return
 
     def record_states(self):
-        """ The count of each `ss.BoolState`, as for any module """
+        """ The count of each `ss.BoolArr` with `result=True`, as for any module """
         ss.Module.record_states(self.mod)
         return
 
@@ -210,7 +210,7 @@ class Undeclared(Transmission):
         return ss.expressions.evaluate(expr, self)
 
     def force(self, uids, tr, dst, srcs=None):
-        """ A cure by a delivery (see `ss.Event.cure()`): the disease's own `clear_infection()` """
+        """ A cure by a delivery (see `ss.Delivery._cure()`): the disease's own `clear_infection()` """
         if len(uids):
             self.mod.clear_infection(uids)
         return len(uids)
@@ -353,7 +353,7 @@ def check_solver_options(sim):
 
 def gather_modules(sim):
     """ The sim's modules as given, as `sim.gathered` (the rules read these, not the modifiers `init_where()` adds), and the declared ones, as `sim.declared` """
-    sim.gathered = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values()]
+    sim.gathered = [mod for key in ss.modules.module_types() + ['modules'] for mod in sim.pars[key].values()]
     sim.declared = [mod for mod in sim.gathered if getattr(mod, 'graph', None) is not None]
     return
 
@@ -377,7 +377,7 @@ def init_model(sim):
     sim.groups = ss.dimensions.Groups(sim) # The groups of people that the stratifications give: see ss.dimensions.Groups
     for key in [key for key in pars.keys() if key not in ss.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
         if any(key in mod.pars for mod in sim.declared):
-            sim.par_values = sc.mergedicts(sim.par_values, {key:pars.pop(key)})
+            sim._par_values = sc.mergedicts(sim._par_values, {key:pars.pop(key)})
     set_par_values(sim)
     for mod in sim.declared: # A level left out of a starting value by label starts at 0
         mod.graph.resolve_starting()
@@ -460,13 +460,14 @@ def init_compartments(sim, joints=None, mixing=None):
         spread = [(p.name, p.raw) for p in mod.graph.spread_pars()] + [(name, a.value) for name,a in mod.graph.attrs.items()] # Parameters, and traits (ss.attr), that are distributions
         for name,raw in spread:
             msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
+            binned = f'{mod.name}.stratify({name}_group=ss.levels({{"low": 0.5, "high": 0.5}}, {name}=[0.5, 1.5]))' if name in ['rel_sus', 'rel_trans'] else f'a value by level, ss.by(group=[0.5, 1.5]), in place of the distribution, with {mod.name}.stratify(group={{"low": 0.5, "high": 0.5}})' # A multiplier for each level
             if pars.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({name}=[...]).')
+                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {binned}.')
             else:
                 ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approximations == 'allow' else None)
     pars.record_people = False
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
-    boxed = any(mod.boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
+    boxed = any(mod._boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
     if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)): # Levels that the deliveries and transfers need now the solver is known: see ss.Event.dims()
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
@@ -479,7 +480,7 @@ def init_compartments(sim, joints=None, mixing=None):
         sim.mixing.init(approximations=pars.approximations)
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
-    pars.n_agents = sim.groups.n_groups
+    pars.n_agents = None # No agents: the people are one row for each group (sim.groups.n_groups); the number of people is total_pop
     return
 
 
@@ -592,7 +593,7 @@ def set_par_values(sim):
         for p in mod.graph.pars.values():
             if p.module is None or not any(p.module is m for m in sim.declared):
                 p.module = mod
-    coded = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
+    coded = [mod for key in ss.modules.module_types() + ['modules'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
     for mod in coded: # A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))): its code uses the value, and it is fitted and set by name as a parameter is
         if type(mod).__module__.partition('.')[0] == 'starsim': # Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
             continue
@@ -609,7 +610,7 @@ def set_par_values(sim):
                 mod.setattribute(key, val.value)
     values = {}
     levels = sc.ddict(dict)
-    for key,val in (sim.par_values or {}).items():
+    for key,val in (sim._par_values or {}).items():
         base, bracket, label = key.partition('[')
         if bracket and key.endswith(']'):
             levels[base][label[:-1]] = val
@@ -702,7 +703,7 @@ def init_named_people(sim):
         counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
         sim.given_pyramid = (edges, counts)
         if 'total_pop' not in sim.given:
-            pars.total_pop = pars.people.n_agents
+            pars.total_pop = len(pars.people)
             sim.pop_from = 'people'
     sim.named_people = None
     sim.named_unsized = False # A named population with no number of agents of its own does not make the model agent-based
@@ -757,7 +758,7 @@ def init_unit(sim):
     dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
     years = calendar == 'years' # A bare year as the start (or, with no start, as the stop)
     durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
-    mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
+    mods = [mod for key in ss.modules.module_types() + ['modules'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
     setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in sim.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
     def mod_units(mod):
         if mod in sim.declared: # Births and deaths of the population held by a disease (see init_flows()) are typed, and like demographics say nothing of the unit of its bare numbers
@@ -1313,7 +1314,7 @@ said_of = lambda e: str(e).split('\n')[0] # A CapabilityError's reason
 
 def memory_read(sim):
     """ How often or how long ago an event happened, which are each person's own (whether it happened, `.ever`, is a level of people) """
-    for (name,outcome),need in ss.interventions.memory_needs(sim).items():
+    for (name,outcome),need in ss.solvers.deliveries.memory_needs(sim).items():
         for kind in sorted(need - {'ever'})[:1]:
             yield dict(event=name if outcome is None else f'{name}.{outcome}', kind=kind)
 
@@ -1336,8 +1337,8 @@ def says_itself(sim, mod):
 
 
 def bad_age(sim, mod):
-    """ `at_age=` with no age group starting at the age (see `ss.Event.age_reason()`) """
-    reason = mod.age_reason(sim) if isinstance(mod, ss.Event) and mod.at_age is not None else None
+    """ `at_age=` with no age group starting at the age (see `ss.Event._age_reason()`) """
+    reason = mod._age_reason(sim) if isinstance(mod, ss.Event) and mod.at_age is not None else None
     return dict(reason=reason) if reason else None
 
 
@@ -1615,8 +1616,8 @@ def modifier_steps(mod):
 
 def own_steps(sim):
     """ A module with a step of its own: any written as code (an intervention, analyzer, connector, network, ...), or a modifier the engines cannot tabulate """
-    names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
-    others = [mod for mod in sim.modules if mod.name in names and mod not in sim.declared]
+    names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.module_list if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
+    others = [mod for mod in sim.module_list if mod.name in names and mod not in sim.declared]
     if not others:
         return None
     kinds = list(dict.fromkeys(modifier_steps(mod) if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))

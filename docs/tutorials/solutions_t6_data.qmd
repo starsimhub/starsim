@@ -61,7 +61,7 @@ scenarios = {
     'Campaign on 1 April, 50%':    ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-04-01', coverage=0.5),
 }
 proj = fit.project(scenarios)
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
 A campaign on 15 April prevents less than half as many cases as one on 1 April (about 140, rather than 340), since the outbreak is then near its peak. A campaign on 1 April reaching only half of children prevents more than one at 80% two weeks later: here, speed matters more than coverage.
@@ -77,7 +77,7 @@ for label, prior in [('With the prior', True), ('Without it', False)]:
     row = posts[label].table.set_index('par').loc['reported']
     proj = posts[label].project(n_runs=100)
     print(label, '- reported:', round(row['median'], 2), f"({round(row['lower'], 2)} to {round(row['upper'], 2)})",
-          '- projected cases:', proj.summarize().loc['measles_cases'].round().to_dict())
+          '- projected cases:', proj.summarize().loc['measles.cases'].round().to_dict())
 ```
 
 Without the prior, the interval for the fraction reported is a little wider (15% to 56%, rather than 18% to 45%), and the range of the projected outbreak wider (about 1,700 to 4,900 reported cases, rather than 1,800 to 4,400), since a lower fraction reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.

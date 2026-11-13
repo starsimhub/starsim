@@ -248,8 +248,8 @@ class CountState:
         return self.engine.frac([self.state])
 
     def count(self):
-        """ The number in this state, as `.n` (the same spelling as agents have, where count() is the number of agents) """
-        return self.n
+        """ The number of agents in this state, which a compartmental run does not have (as `people.alive.count()`); the number of people in it is `.n` under every solver """
+        self.no_agents('.count()')
 
     def __or__(self, other):   return ss.conditions.as_cond(self) | ss.conditions.as_cond(other) # As a condition, as agents' states are, e.g. (sir.I | sir.R).n
     def __ror__(self, other):  return ss.conditions.as_cond(other) | ss.conditions.as_cond(self)
@@ -2316,7 +2316,7 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in self.stock_people:
                 r[ti] = r[ti]*scale
-        if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
+        if self.coded: # The module's own results of boolean states (`ss.BoolArr` with `result=True`, and derived states), counted as for a module written as code
             ss.Module.record_states(mod, names=self.coded)
         if mod is self.sim.declared[-1]: # Once every declared module has its states for the step: the number alive, as agents record it at the start of the step
             record_people(self.sim, ti, keys=['alive'])
@@ -2421,7 +2421,7 @@ class Engine(Telling, Effects):
         res = self.mod.results
         n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)
         name = self.mod.name
-        if 0 < self.n_start < 10:
+        if 0 < self.n_start < 10 - 1e-6: # Allowing for rounding, e.g. 10 split over strata
             ss.note(f'"{name}" starts with {self.n_start:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
                     f'solver="gillespie" with ss.parallel(n_runs=...) does', sim=sim)
         low = np.flatnonzero((n > 0) & (n < 1))

@@ -177,7 +177,7 @@ def test_partner_targets():
 
     # In an open population with long partnerships, newcomers join and the target holds (before, 0.65 against 0.87, and nobody born in the run took part)
     mf = ss.SexualNet(n_contacts=0.87, dur=ss.lognormal(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=0.035), ss.Deaths(death_rate=0.015)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
     ppl, mf = sim.people, sim.networks.mf
     born = (ppl.alive & (ppl.age >= 18) & (ppl.age < 40)).uids # All born during the run, when the probability at birth was 0
     assert np.isclose(mf.participant[born].mean(), 0.9, atol=0.04)
@@ -386,15 +386,15 @@ def test_between():
     res = sim.networks[0].results
     assert np.isclose(res.match[-24:].mean(), 0.8, atol=0.05) and np.isclose(res.mean_degree[-1], 0.8, rtol=0.1), (res.match[-24:].mean(), res.mean_degree[-1])
 
-    # A subclass that forms its own partnerships gets none from the base, and only between= of its parameters; between men, its error suggests between='mm'
+    # A subclass that forms its own partnerships (forms_partnerships = False) gets none from the base; between men, its error suggests between='mm'
     class OwnMSM(ss.SexualNet):
+        forms_partnerships = False
         def step(self):
             self.end_pairs()
             if not len(self):
                 men = self.sim.people.male.uids
                 n = len(men)//2
                 self.append(p1=men[:n], p2=men[n:2*n], weight=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
-    assert list(OwnMSM().pars.keys()) == ['memory', 'between'] # And memory=, of every dynamic network
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm'), n_agents=500, verbose=0).init()
     assert len(sim.networks.msm) == 0
     with pytest.raises(ValueError, match="between='mm'"):

@@ -99,7 +99,7 @@ class FetalHealth(ss.Module):
         import starsim.library as ssl
 
         sim = ss.Sim(
-            demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
+            demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.01)), ss.Deaths(death_rate=ss.peryear(0.01))],
             modules=ssl.mnch.FetalHealth(),
             networks=ss.PrenatalNet(),
         )
@@ -413,7 +413,7 @@ class treat_pregnant(ss.Delivery):
         """
         if self.disease_name not in sim.diseases:
             raise ValueError(f'treat_pregnant requires disease "{self.disease_name}" but it was not found in the sim.')
-        if 'fetal_health' not in sim.custom:
+        if 'fetal_health' not in sim.modules:
             raise ValueError('treat_pregnant requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
         super().init_pre(sim)
         return
@@ -435,7 +435,7 @@ class PregnancyTreatment(ss.Product):
         tx      = self.delivery
         sim     = self.sim
         disease = sim.diseases[tx.disease_name]
-        fh      = sim.custom['fetal_health']
+        fh      = sim.modules['fetal_health']
         uids    = uids[disease.infected[uids]]
 
         # Cure infection
@@ -505,7 +505,7 @@ class fetal_infection(ss.Connector):
     @property
     def fh(self):
         """ Shortcut to the FetalHealth module """
-        return self.sim.custom['fetal_health']
+        return self.sim.modules['fetal_health']
 
     def init_pre(self, sim):
         """ Check that the sim has what the connector needs
@@ -516,7 +516,7 @@ class fetal_infection(ss.Connector):
         super().init_pre(sim)
 
         # Validate that the required modules exist
-        if 'fetal_health' not in sim.custom:
+        if 'fetal_health' not in sim.modules:
             raise ValueError('fetal_infection requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
         if 'sir' not in sim.diseases:
             raise ValueError('fetal_infection requires an SIR disease module.')

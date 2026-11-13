@@ -294,6 +294,19 @@ class par(Nameable, Expr):
             self.value = self.midpoint = float(np.sqrt(low*high) if low > 0 and high >= 10*low else (low + high)/2)
         return
 
+    def __set_name__(self, owner, name):
+        super().__set_name__(owner, name)
+        self.attr_name = name # The attribute of the class it was declared as, by which a module written as code finds its own copy (see __get__())
+        return
+
+    def __get__(self, obj, objtype=None):
+        """ Declared in the class body of a module written as code: read from an instance, the instance's own copy, which holds its value (see `ss.Module.define_class_parts()`) """
+        pars = getattr(obj, '__dict__', {}).get('pars')
+        bounded = getattr(pars, '_bounded', None) if isinstance(pars, ss.Pars) else None
+        if bounded:
+            return bounded.get(self.__dict__.get('attr_name'), self)
+        return self
+
     @classmethod
     def inline(cls, value, name=None):
         """ An anonymous value written inline, e.g. the 0.5 in `0.5*A`, kept as a number rather than made a parameter of the module; not for the user """

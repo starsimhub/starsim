@@ -343,7 +343,7 @@ class Compiled(Agents):
             if spec[0] == 'dist':
                 srcs = self.dist_pars(spec[1], spec[2])
                 dist = spec[2]
-                if type(dist) is ss.uniform and dist.ppf(np.full(1, 0.5, dtype=dist.hash_dtype or ss.dtypes.float)).dtype == np.float32: # Parameters that are plain numbers, which NumPy takes in single precision with the uniforms
+                if type(dist) is ss.uniform and dist._ppf(np.full(1, 0.5, dtype=dist.hash_dtype or ss.dtypes.float)).dtype == np.float32: # Parameters that are plain numbers, which NumPy takes in single precision with the uniforms
                     self.kplan.fam[d] = kernel.FAMILIES['uniform32']
             elif spec[1] == 'adjust':
                 name, changes = spec[2], spec[3]

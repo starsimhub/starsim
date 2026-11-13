@@ -110,7 +110,7 @@ The same log-density is what L-BFGS-B and NUTS use in a fit with a likelihood. I
 
 ### A best fit with gradients
 
-`sim.fit()` uses the gradient by default (`'l-bfgs-b'`) when a deterministic model has three or more fitted parameters; with one or two, Nelder–Mead is faster. Either can be asked for:
+`'l-bfgs-b'` searches with the gradient. It is the default for most fits of an ODE (see [Fitting methods](calibration_methods.qmd#choosing-a-method)), and can be asked for by name:
 
 ```{python}
 fit = sim.fit(method='l-bfgs-b')
@@ -124,7 +124,7 @@ With a likelihood for every series, this is the maximum likelihood estimate (wit
 A posterior is the whole distribution of values consistent with the data. `method='nuts'` draws from it, given a likelihood for every data series, with each parameter's `prior=`, or a uniform prior over its bounds:
 
 ```{python}
-post = sim.fit(method=ss.fitting.method('nuts', warmup=100, draws=200)) # Fewer draws than the default, to run quickly
+post = sim.fit(method='nuts', warmup=100, draws=200) # Fewer draws than the default, to run quickly
 post.summarize();
 ```
 
@@ -148,13 +148,13 @@ This posterior is narrow because the data were made by this very ODE with Poisso
 A profile likelihood gives a confidence interval for one parameter, without priors: at each value of it, the others are refitted, and the values whose negative log-likelihood is within 1.92 of the lowest form the 95% interval. A profile that stays flat up to a bound means the data don't determine the parameter.
 
 ```{python}
-prof = ss.fitting.profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
+prof = ss.fitting.likelihood_profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
 print('Best value of beta:', round(prof.best, 3))
 print('95% confidence interval:', np.round(prof.interval, 3))
 prof.table
 ```
 
-Without `values=`, `ss.fitting.profile()` chooses the values itself, which takes longer. Plotting the profile:
+Without `values=`, `ss.fitting.likelihood_profile()` chooses the values itself, which takes longer. Plotting the profile:
 
 ```{python}
 fig, ax = plt.subplots()
@@ -169,7 +169,7 @@ A profile needs a deterministic model whose data series all have a likelihood, a
 
 ### Projecting from a posterior
 
-`fit.project()` runs each scenario once for each of `n_runs` draws from the posterior, with the same draws in every scenario, so the spread of the runs carries the uncertainty in the fitted values. Here, a catch-up campaign on 1 April, compared with none:
+`post.project()` runs scenarios with draws from the posterior, so the spread of the runs carries the uncertainty in the fitted values (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)). Here, a catch-up campaign on 1 April, compared with none:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)
@@ -178,10 +178,10 @@ proj.plot('measles.cases')
 ```
 
 ```{python}
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
-For a stochastic model, the runs also differ by chance (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)). `post.plot()` shows the fit against the data, with 95% of the posterior as a band:
+`post.plot()` shows the fit against the data, with 95% of the posterior as a band:
 
 ```{python}
 post.plot()

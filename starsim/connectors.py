@@ -218,7 +218,7 @@ def check_applied(sim):
     from its graph (`unapplied()`), and a module written as code from what its own code reads (`ss.solvers.Effects.unapplied_par()`, and for a disease `ss.solvers.Undeclared.unapplied()`).
     A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
     """
-    modules = {mod.name:mod for mod in sim.modules}
+    modules = {mod.name:mod for mod in sim.module_list}
     for (modname, kind, name), mods in sim.modifiers.items():
         if not mods:
             continue
@@ -270,23 +270,26 @@ def unapplied(graph, modname, kind, name, mods):
 
 def parse_when(when, start=None, stop=None):
     """
-    The `when=` of a modifier, as (start, stop, schedule): a window, and an `ss.schedule()` of the steps within it it applies on, if not all;
-    a function of the date is the schedule of the steps it is true on. `start=` and `stop=` of `ss.modify()` are the window, as in `ss.schedule()`
+    The `when=` of a modifier, as (start, stop, schedule, cond): a window, an `ss.schedule()` of the steps within it it applies on, if not all
+    (a function of the date is the schedule of the steps it is true on), and a condition on the population while which it applies (e.g.
+    `sir.I.n >= 1000`). `start=` and `stop=` of `ss.modify()` are the window, as in `ss.schedule()`
     """
     if start is not None or stop is not None:
         if isinstance(when, ss.schedule) and (when.start is not None or when.stop is not None):
             errormsg = f'ss.modify() was given start= or stop=, and when={when!r}, which has a window of its own; give the window once, as start= and stop= or in ss.schedule()'
             raise ValueError(errormsg)
-        return (start, stop, parse_when(when)[2])
+        return (start, stop) + parse_when(when)[2:]
     if when is None:
-        return None, None, None
+        return None, None, None, None
     if isinstance(when, ss.schedule):
         steps = None if (when.every is None and when.at is None and when.when is None) else when
-        return when.start, when.stop, steps
+        return when.start, when.stop, steps, None
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.interventions.on_population(when): # While a condition on the population holds, e.g. sir.I.n >= 1000
+        return None, None, None, when
     if callable(when) and not isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition, ss.on, ss.TimePar)):
-        return None, None, ss.schedule(when)
+        return None, None, ss.schedule(when), None
     if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.on)):
-        errormsg = f'when= of ss.modify() is when it applies, on time alone: ss.schedule(start=..., stop=...), or a function of the date; {when!r} is a condition on people or the population, which goes in who='
+        errormsg = f'when= of ss.modify() is when it applies: a window (ss.schedule(start=..., stop=...)), a function of the date, or a condition on the population (e.g. when=sir.I.n >= 1000); {when!r} is a condition on people or an event, which goes in who='
         raise TypeError(errormsg)
     first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
     errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use start={first!r} to start then, or when=ss.schedule(at={when!r}) for those steps only'
@@ -342,11 +345,11 @@ class modify(Connector):
             `1 − frac·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
-        who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
+        who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), or a function of the sim (default: everyone); a condition on the population, such as a count, goes in `when=`; with `network=`, the people who would be infected
         start (date/float/dur): when it starts to apply (default: the start of the sim): a date, a bare number (a calendar year if the sim has a calendar, else a time in its unit from 0), or a duration, that long after the start of the sim; the same as `when=ss.schedule(start=...)`
         stop (date/float/dur): when it stops applying, likewise (default: never; a stop after the end of the sim never stops it)
-        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, or a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); a condition on anything else goes in `who=`
-        until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=`; while both hold, `who=` wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
+        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); or a condition on the population, while it holds (e.g. `sir.I.n > 1000`, a count, or `sir.I.frac`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels); a condition on people goes in `who=`
+        until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=` or a condition as `when=`; while both hold, that condition wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
         name (str): the name of the modifier
 
     Examples:
@@ -366,7 +369,7 @@ class modify(Connector):
         npi = ss.modify(sir.pars.beta, multiply=0.6, who=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, until=ss.days(14))
 
         # A lockdown that starts when 2% of people are infectious and ends when 1% are
-        lockdown = ss.modify(sir.pars.beta, multiply=0.5, who=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
+        lockdown = ss.modify(sir.pars.beta, multiply=0.5, when=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
 
         # Condoms, 90% effective against gonorrhea, used in a fraction of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
@@ -416,16 +419,20 @@ class modify(Connector):
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
         where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
         ss.conditions.check_not_time(where, 'ss.modify()')
+        if isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.interventions.on_population(where):
+            errormsg = f'who= of ss.modify() is who it applies to, a condition on people; {where!r} is a condition on the population, which says when, decided for everyone at once: give it as when={where!r}'
+            raise TypeError(errormsg)
+        self.start, self.stop, self.schedule, count = parse_when(when, start, stop) # A window, any steps within it (as an ss.schedule()), and a condition on the population
+        where = ss.conditions.join('&', [where, count]) # Both decide who it applies to now
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
-        self.start, self.stop, self.schedule = parse_when(when, start, stop) # A window, and any steps within it (as an ss.schedule())
         self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
         hold = until if isinstance(until, ss.Duration) or sc.isnumber(until) else None # A duration: held for at least this long
         until = None if hold is not None else until
         if hold is not None and where is None and self.schedule is None:
-            errormsg = f'until= of ss.modify() as a duration keeps the modifier on for a while after it applies to someone, so it needs who= or when= (with times, or a function of the date)'
+            errormsg = f'until= of ss.modify() as a duration keeps the modifier on for a while after it applies to someone, so it needs who= or when= (with times, a function of the date, or a condition on the population)'
             raise ValueError(errormsg)
         if until is not None and where is None:
-            errormsg = f'until= of ss.modify() as a condition keeps the modifier on after who= selects someone, until the condition holds, so it needs who='
+            errormsg = f'until= of ss.modify() as a condition keeps the modifier on after who= or when= selects someone, until the condition holds, so it needs who= or when= (e.g. when=sir.I.n >= 2000, until=sir.I.n <= 1000)'
             raise ValueError(errormsg)
         self.hold = hold
         self.until = None if until is None else ss.conditions.as_cond(ss.ref(until) if isinstance(until, str) else until)
@@ -473,7 +480,7 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
+        coded = {mod.name:mod for mod in sim.module_list if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
         people = {key:[] if key not in sim.diseases else ['rel_sus', 'rel_trans'] for key in coded} # What a disease written as code has for each person, as well as its parameters
         options += [f'{key}.{path}' for key,mod in coded.items() for path in [*[f'pars.{k}' for k in mod.pars], *people[key]]]
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
@@ -535,7 +542,7 @@ class modify(Connector):
     def init_post(self):
         """ A parameter of a module written as code with no engine of its own (an `ss.Module` or `ss.Connector`), whose code reads it from `self.pars`: written there at the start of each step, as the engine of a disease written as code does """
         super().init_post()
-        mod = next((mod for mod in self.sim.modules if mod.name == self.target_module), None)
+        mod = next((mod for mod in self.sim.module_list if mod.name == self.target_module), None)
         if self.target_kind == 'par' and getattr(mod, 'engine', None) is None and self.target_name in getattr(mod, 'pars', {}) and self.target_name != 'n_contacts':
             self.writer = ss.solvers.Effects(mod, self.sim)
             self.writer.init_pars()
@@ -704,7 +711,7 @@ class modify(Connector):
         if self.networks is not None:
             out += f'   network={sc.strjoin(self.networks)}'
         if self.where is not None:
-            out += f'   who={getattr(self.where, "__name__", self.where)}'
+            out += f'   {"who" if not ss.interventions.on_population(self.where) else "when"}={getattr(self.where, "__name__", self.where)}'
         window = ', '.join(f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None)
         if self.schedule is not None and self.schedule.when is None: # Its own repr has the window
             out += f'   when={self.schedule}'

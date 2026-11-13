@@ -31,7 +31,7 @@ sim.run()
 sim.diseases.measles.plot('prevalence', 'immune')
 ```
 
-In rates and conditions, a state gives its number and fraction directly: `I.n` is the number in `I`, and `I.frac` the fraction of people in it. Flows can be used the same way: `infection/S` is the incidence per susceptible person. A ratio is a ratio of sums: by group or over a longer period, its numerator and denominator are each summed, and then divided, never averaged.
+In rates and conditions, a state gives its number and fraction directly: `I.n` is the number in `I`, and `I.frac` the fraction of people in it. Flows can be used the same way: `infection/S` is the incidence per susceptible person. A ratio is a ratio of sums over groups; over time, see [Results](building_results.qmd#results-by-group).
 
 A result needs a name of its own. A parameter over time is a result of an expression of it under another name, `eir_now = 1*eir`; giving the parameter itself (`eir=eir`) raises an error. In a class, an expression with a value for each person, such as `age = ss.person.age` or `duration = affected.time_in`, is a helper for the rates, not a result.
 

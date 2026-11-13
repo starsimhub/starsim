@@ -452,7 +452,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if exits.held: # People who took ss.stay, with no exit of their own (p=0, entered only from the split)
                 tracks.append(Bunch(tr=None, p=ss.expressions.par.inline(0.0), immediate=False, stay=True))
             for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
-                if tr.trigger.outcome: # Moved when the outcome happens: see ss.interventions.trigger_moves()
+                if tr.trigger.outcome: # Moved when the outcome happens: see ss.solvers.deliveries.trigger_moves()
                     continue
                 if tr.trigger.event: # Moved by the other module's flow (see init_syncs()), or at the end of the step (see step_triggers())
                     continue
@@ -1846,6 +1846,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ Whether an attribute (`ss.attr`) has a compartmental form: a trait drawn from a distribution, with no modifier, which a compartmental run takes at its mean (see `attr()`) """
         return a.kind == 'trait' and isinstance(a.value, ss.Dist) and not sim.modifiers.get((mod.name, 'attr', a.name))
 
+    def mult_raw(self, kind, name=None, state=None):
+        """ As `ss.solvers.Engine.mult_raw()`, and for each person's `rel_sus` or `rel_trans` given as a distribution (`ss.SIR(rel_trans=ss.gamma(...))`, a trait), its mean (see `attr()`) """
+        out = super().mult_raw(kind, name, state)
+        if kind in ['rel_sus', 'rel_trans'] and kind in self.graph.attrs:
+            out = out*self.attr(self.graph.attrs[kind])
+        return out
+
     def attr(self, a):
         """ An attribute in a compartmental run: a trait is the mean of its distribution, as a parameter that is a distribution is (see `trait_mean()`) """
         mod = a.module if isinstance(a.module, ss.Module) else self.mod
@@ -1953,7 +1960,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def inline_modifiers(self):
         """
-        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`who=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
+        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`when=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
 
         The kernels work this out as they do any rate, so the run needs no Python between its steps. The ODE reads the
         comparison at each stage of a step, not once a step. Anything else about the modifier leaves it to be applied each step.
@@ -2960,7 +2967,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.kernels.Shifts` """
         sim = self.sim
         nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
-        self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Event) and mod.dis is self.mod and mod.tabulated]
+        self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Event) and mod._dis is self.mod and mod.tabulated]
         rows = [] # Each delivery, and for routine delivery that records who has been offered it, the new spells of being eligible before it (and after a transfer), each as a delivery that reaches nobody: see CompartmentalDelivery.respell()
         self.shift_of = [] # The row of each delivery, whose tally is its results
         for mod in self.deliveries:

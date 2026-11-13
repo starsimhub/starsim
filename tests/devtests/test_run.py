@@ -85,8 +85,8 @@ def test_combine_merge():
 
     # Each run side by side
     df = msim.summarize(each=True)
-    assert df.shape[1] == 3 and 'bysex_infected_male' in df.index # One column per run, one row per result
-    assert msim.summarize(each=True, t=-1).loc['sis_I'].tolist() == [s.results.sis.I[-1] for s in sims]
+    assert df.shape[1] == 3 and 'bysex.infected.male' in df.index # One column per run, one row per result
+    assert msim.summarize(each=True, t=-1).loc['sis.I'].tolist() == [s.results.sis.I[-1] for s in sims]
     assert msim.summarize('sis_I', each=True, t='2005-01-01').shape == (3,)
     assert msim.summarize('sis_I', t=-1)['median'] == np.median([s.results.sis.I[-1] for s in sims]) # The statistics across runs at one time point
 

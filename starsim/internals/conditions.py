@@ -591,9 +591,9 @@ def check_clocks(amount, where, what):
 
 
 def check_when(when):
-    """ A function in when= is of the date alone, so anything else (e.g. d.I.n > 1000, or sir.I) goes in who= """
+    """ A function in when= is of the date alone; a condition on people (e.g. sir.I) goes in who=, and one on the population (d.I.n > 1000) is when= itself """
     if when is not None and (isinstance(when, (Cond, ss.expressions.Expr, ss.State, ss.Arr)) or not callable(when)):
-        errormsg = f'when= as a function is of the date of each step, true on the steps it happens (e.g. when=lambda now: now.month == 1); for {when}, a condition, use who='
+        errormsg = f'when= as a function is of the date of each step, true on the steps it happens (e.g. when=lambda now: now.month == 1); for {when}, a condition on people, use who='
         raise TypeError(errormsg)
     return when
 
@@ -927,7 +927,7 @@ def check_not_time(who, what):
     if isinstance(who, (bool, int, float, np.bool_, np.number)):
         errormsg = f'who= of {what} says who it applies to (a condition, a state, agents, or a function of the sim), not {who!r}; leave it out for everyone'
         raise TypeError(errormsg)
-    names = getattr(getattr(who, '__code__', None), 'co_names', None)
+    names = None if isinstance(who, ss.Arr) else getattr(getattr(who, '__code__', None), 'co_names', None) # An array forwards attributes to its values, so is not asked
     if callable(who) and names and set(names) <= time_names:
         errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give the window as start= and stop= (which go with any when=, e.g. when=screening.positive, start=2001), or when= as a function of the date, e.g. when=lambda now: now.month == 1'
         raise TypeError(errormsg)
@@ -961,8 +961,10 @@ def split_delivery(on=None, who=None, where=None):
             trigger, rest = split_events(cond)
         if trigger is None or rest is not None:
             what = 'a condition' if trigger is None else f'an event joined to a condition ({rest})'
-            errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who='
-            raise TypeError(errormsg)
+            if trigger is None or on_people(as_cond(rest)):
+                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who='
+                raise TypeError(errormsg)
+            where = join('&', [where, rest]) # An event joined to a condition on the population (when=screening.positive & (sir.I.n > 1000)): while it holds
     for key,val in [('who', who), ('where', where)]:
         if isinstance(val, str) and (len(val.split('.')) != 2 or not all(val.split('.'))):
             errormsg = f'{key}= of a delivery as a string is a state by its path, "module.state", e.g. {key}="sir.I" (as ss.ref("sir.I")), or the state itself ({key}=sir.I); not {val!r}'
@@ -978,7 +980,7 @@ def split_delivery(on=None, who=None, where=None):
     if where is not None:
         cond = as_cond(where)
         if not isinstance(cond, (Cond, ss.expressions.Expr)) and not callable(cond):
-            errormsg = f'who= of an event takes a condition (e.g. who=d.I.n > 1000) or a function of the sim; not {where!r}'
+            errormsg = f'who= of an event takes a condition on people or a function of the sim, and when= a condition on the population (e.g. when=d.I.n > 1000); not {where!r}'
             raise TypeError(errormsg)
     return trigger, join('&', [who, where])
 
@@ -1040,7 +1042,7 @@ class Selector(sc.prettyobj):
             return self.mod
         mods = sim.__dict__.get('_modules_by_name') # Kept on the sim (each leaf of each condition asks, every step), and made again if a name is not in it
         if mods is None or name not in mods:
-            mods = sim.__dict__['_modules_by_name'] = {mod.name:mod for mod in sim.modules}
+            mods = sim.__dict__['_modules_by_name'] = {mod.name:mod for mod in sim.module_list}
         if name not in mods:
             errormsg = f'A condition refers to the module "{name}", which is not in the sim; the modules are {sc.strjoin(mods.keys())}'
             raise KeyError(errormsg)
@@ -1089,11 +1091,11 @@ class Selector(sc.prettyobj):
         elif op == 'incidence':
             return self.incidence(cond)
         elif op == 'event':
-            return ss.interventions.fired(self, cond)
+            return ss.solvers.deliveries.fired(self, cond)
         elif op == 'memory':
-            return ss.interventions.remembered(self, cond)
+            return ss.solvers.deliveries.remembered(self, cond)
         elif op == 'move':
-            reading = self.__dict__.get('reading') # A delayed delivery reading the events of the step before, which this reads only in this step (see ss.Event.delayed_arrivals())
+            reading = self.__dict__.get('reading') # A delayed delivery reading the events of the step before, which this reads only in this step (see ss.Event._delayed_arrivals())
             return self.nobody() if reading is not None and reading[0] != sim.ti else self.event_of(cond)
         elif op == 'people':
             name = args[0]
@@ -1366,9 +1368,10 @@ class Selector(sc.prettyobj):
         if isinstance(val, ss.expressions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
             val = self.expr(val, mask) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
+            typed = None if convert is None else lambda v: convert(v) if isinstance(v, ss.TimePar) else v # Its typed values converted, as one given alone is (below)
             if self.abm and val.on_people(sim): # Read from each person
-                return val.lookup(sim)
-            ds, grid = val.grid(sim)
+                return val.lookup(sim, convert=typed)
+            ds, grid = val.grid(sim, convert=typed)
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
             val = ss.utils.call_fn(val, self=self.mod if owner is None else owner, sim=sim)

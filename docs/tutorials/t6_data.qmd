@@ -54,12 +54,14 @@ states("S E I R")
 beta     <- par(0.14, bounds = c(0.05, 0.5)) # The rate of infection per contact with an infectious person, per day
 reported <- par(0.5, bounds = c(0.05, 1), prior = ss$beta_dist(mean = 0.35, std = 0.1)) # The fraction of infections that are reported
 
-infection <- Transition(S, E, rate = beta * I)
+infection   <- Transition(S, E, rate = beta * I)
+progression <- Transition(E, I, dur = days(10)) # Latent for 10 days on average
+recovery    <- Transition(I, R, dur = days(8))  # Infectious for 8 days on average
 measles <- Disease(
   infection   = infection,
-  progression = Transition(E, I, dur = days(10)), # Latent for 10 days on average
-  recovery    = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  cases       = outcome(reported * infection),    # Reported cases: a fraction of new infections
+  progression = progression,
+  recovery    = recovery,
+  cases       = outcome(reported * infection), # Reported cases: a fraction of new infections
   init        = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n      = list(I = 10)
 )
@@ -231,7 +233,7 @@ scenarios = {
 }
 proj = fit.project(scenarios)
 proj.plot('measles.cases')
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
 ## R
@@ -247,7 +249,7 @@ scenarios <- list(
 )
 proj <- fit$project(scenarios)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles_cases"]
+proj$summarize()$loc["measles.cases"]
 ```
 :::
 
@@ -287,7 +289,7 @@ The table gives each parameter's posterior median and 95% interval, and `rhat`, 
 ```{python}
 proj = post.project(scenarios, n_runs=100)
 proj.plot('measles.cases')
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
 ## R
@@ -295,7 +297,7 @@ proj.summarize().loc['measles_cases']
 ```r
 proj <- post$project(scenarios, n_runs = 100)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles_cases"]
+proj$summarize()$loc["measles.cases"]
 ```
 :::
 

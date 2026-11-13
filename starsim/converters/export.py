@@ -284,7 +284,7 @@ def flatten(sim):
     # What the sim has that these formats do not
     if not diseases:
         lost.append('not exported: the sim has no declared diseases')
-    for mod in [mod for key in ['custom', 'demographics', 'diseases'] for mod in sim[key]() if not isinstance(mod, ss.demographics.Flows)]: # Births and deaths declared for the population are, by now, transitions of a disease
+    for mod in [mod for key in ['modules', 'demographics', 'diseases'] for mod in sim[key]() if not isinstance(mod, ss.demographics.Flows)]: # Births and deaths declared for the population are, by now, transitions of a disease
         if not any(mod is dis for dis in diseases):
             lost.append(f'not exported: module "{mod.name}" ({type(mod).__name__}), which has no declared transitions')
             continue

@@ -8,6 +8,13 @@ import scipy.spatial as spsp
 
 __all__ = ['EmbeddingNet']
 
+def embedding_loc(module, sim, uids):
+    """ The mean position of each person in the embedding: their age, shifted for women so they are paired with older men """
+    loc = sim.people.age[uids]
+    loc[sim.people.female[uids]] += module.pars.male_shift
+    return loc
+
+
 class EmbeddingNet(ss.SexualNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding.
@@ -16,27 +23,8 @@ class EmbeddingNet(ss.SexualNet):
     RandomNet.
     """
 
-    def __init__(self, pars=None, **kwargs):
-        """
-        Create a sexual network from a 1D embedding based on age
-
-        Args:
-            male_shift is the average age that males are older than females in partnerships
-        """
-        super().__init__()
-        self.define_pars(
-            inherit = True, # ss.SexualNet already comes with pars, we want to keep those
-            embedding_func = ss.normal(name='EmbeddingNet', mean=self.embedding_loc, std=2),
-            male_shift = 5,
-        )
-        self.update_pars(pars, **kwargs)
-        return
-
-    @staticmethod
-    def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids]
-        loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
-        return loc
+    male_shift = ss.par(5) # The average number of years by which men are older than women in partnerships (the parameters of ss.SexualNet are kept)
+    embedding_func = ss.par(ss.normal(name='EmbeddingNet', mean=embedding_loc, std=2)) # Each person's position in the embedding
 
     def add_pairs(self):
         people = self.sim.people

@@ -426,7 +426,7 @@ class Dist:
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
         unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
-        round (bool/str): if True (or 'stochastic'), randomly round each value up or down to an integer; if 'nearest', round to the nearest integer (see `dist.rvs()`)
+        round (bool/str): if 'random', round each value up or down to an integer at random, in proportion to how close it is (so the mean is kept); if 'nearest', round to the nearest integer; if False, don't round (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int/str): the seed offset, in place of the one from its path in the sim (e.g. `offset='hiv_art'`), so that its draws stay the same if it moves (e.g. to another module); it must be unique within the sim. If None (the default), the path in the sim is hashed for it
         strict (bool): if True, require initialization
@@ -1251,8 +1251,8 @@ class Dist:
             raise ValueError(errormsg)
         return rvs
 
-    def ppf(self, rands):
-        """ Return default random numbers for array parameters; not for the user """
+    def _ppf(self, rands):
+        """ The inverse CDF of uniforms, with the parameters processed: the draws for array parameters; not for the user (see `ppf()`) """
         scale = self.dist.kwds.get('scale')
         if scale is not None and some(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
             with np.errstate(invalid='ignore'):
@@ -1260,6 +1260,84 @@ class Dist:
             return np.where(scale == 0, self.dist.kwds.get('loc', 0), rvs)
         rvs = self.dist.ppf(rands)
         return rvs
+
+    def _ready(self, what):
+        """ Process the parameters for `mean()`, `std()`, `ppf()`, and `cdf()`, which need values rather than functions of the sim; not for the user """
+        if not self.initialized:
+            if self.sim is None and self.module is None and self.own_dt() is not None: # As for rvs(): outside a sim, a distribution with a unit works in it with no setup
+                self.init(force=True)
+            else:
+                raise ss.errors.DistNotInitializedError(self)
+        if any(callable(v) and not isinstance(v, type) for v in self.pars.values()): # A type (e.g. a dtype) is not a function of the sim
+            errormsg = f'{self} has a parameter that is a function, so it has no single {what}: draw from it instead, e.g. dist.rvs(uids)'
+            raise ValueError(errormsg)
+        self.process_pars()
+        return
+
+    def _unit_factor(self):
+        """ What a value drawn is multiplied by for a distribution-level unit (`unit=`), as in `rvs()`; not for the user """
+        if self.unit is None:
+            return 1
+        val = self.unit(1)
+        return val/self.step_dt() if isinstance(val, ss.Duration) else (val*self.step_dt()).value
+
+    def to_scipy(self):
+        """
+        The distribution as a frozen SciPy distribution, with its parameters in the units it draws in (see `mean()`)
+
+        Not every distribution has one: e.g. `ss.choice()` and `ss.choose_n()` raise.
+        """
+        self._ready('SciPy form')
+        out = self._scipy()
+        if out is None:
+            errormsg = f'ss.{type(self).__name__}() has no SciPy form; draw from it instead, e.g. dist.rvs(10_000).mean()'
+            raise NotImplementedError(errormsg)
+        return out
+
+    def _scipy(self):
+        """ The frozen SciPy distribution, with the parameters processed (None if it has none): a distribution drawn by NumPy says its own; not for the user """
+        if isinstance(self.dist, scipy_dist):
+            return getattr(sps, self.dist.name)(**self.dist.kwds)
+        return self.dist
+
+    def mean(self):
+        """
+        The mean of the distribution, in the units it draws in: its own unit outside a sim (e.g. days for
+        `ss.lognormal(ss.days(5), ss.days(2))`), and steps in one, as for `rvs()`; rounding (`round=`) is not included
+
+        **Example**:
+
+            ss.lognormal(ss.days(5), ss.days(2)).mean() # 5.0
+        """
+        return self.to_scipy().mean()*self._unit_factor()
+
+    def std(self):
+        """ The standard deviation of the distribution, in the units it draws in (see `mean()`) """
+        return self.to_scipy().std()*abs(self._unit_factor())
+
+    def ppf(self, q):
+        """
+        The value below which a share `q` of the draws fall (the inverse of the CDF), in the units it draws in (see `mean()`)
+
+        Args:
+            q (float/array): the share (or shares), between 0 and 1
+
+        **Example**:
+
+            ss.lognormal(ss.days(5), ss.days(2)).ppf([0.025, 0.975]) # 95% of draws are between these
+        """
+        self._ready('ppf')
+        q = np.asarray(q, dtype=float)
+        return self._ppf(q)*self._unit_factor()
+
+    def cdf(self, x):
+        """
+        The share of draws at or below `x` (the cumulative distribution function), with `x` in the units it draws in (see `mean()`)
+
+        Args:
+            x (float/array): the value (or values)
+        """
+        return self.to_scipy().cdf(np.asarray(x, dtype=float)/self._unit_factor())
 
     def rvs(self, n=1, round=None, reset=False, repeats=False):
         """
@@ -1275,7 +1353,7 @@ class Dist:
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
-            round (bool/str): if True (or 'stochastic'), randomly round up or down based on how close the value is; if 'nearest', round to the nearest integer; if None, use the value set when the distribution was created
+            round (bool/str): if 'random', round up or down at random based on how close the value is; if 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
             repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers, except for `ss.choice` and `ss.histogram`, whose repeats are drawn after every slot)
         """
@@ -1322,10 +1400,10 @@ class Dist:
                 for k in range(1, occ.max() + 1):
                     rep = occ == k
                     rands[rep] = hash_uniforms(self.seed, self.ind + _REPEAT_IND + k*2**40, self._slots[rep], dtype=self.hash_dtype)
-            rvs = self.ppf(rands) # Convert to actual values via the PPF
+            rvs = self._ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
-            rvs = self.ppf(rands) # Convert to actual values via the PPF
+            rvs = self._ppf(rands) # Convert to actual values via the PPF
         else:
             if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's
                 self._size = slots.max() + 1 if len(slots) else 0
@@ -1431,13 +1509,16 @@ class Dist:
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """
-        if round not in [None, False, True, 'stochastic', 'nearest']:
-            errormsg = f'Invalid rounding option "{round}": must be True/"stochastic", "nearest", or False'
+        if round is True or round == 'stochastic': # Starsim 3's spellings
+            errormsg = f"round={round!r} is from Starsim 3: use round='random' to round each value up or down at random (keeping the mean), or round='nearest'. See {ss.v3_deprecations.guide} for help migrating from Starsim 3"
+            raise ValueError(errormsg)
+        if round not in [None, False, 'random', 'nearest']:
+            errormsg = f"Invalid rounding option {round!r}: must be 'random' (up or down at random, keeping the mean), 'nearest', or False"
             raise ValueError(errormsg)
         return round
 
     def round_rvs(self, rvs, round):
-        """ Round the values (in timesteps, for durations); usually called via `dist.rvs(round=True)` """
+        """ Round the values (in timesteps, for durations); usually called via `dist.rvs(round='random')` """
         if round == 'nearest':
             return np.round(rvs).astype(ss_int)
         self.validate_round(round)
@@ -1445,7 +1526,7 @@ class Dist:
 
     def randround(self, rvs, slots=None):
         """
-        Round the values up or down to an integer stochastically; usually called via `dist.rvs(round=True)`
+        Round the values up or down to an integer stochastically; usually called via `dist.rvs(round='random')`
 
         Args:
             rvs (array): the values to round

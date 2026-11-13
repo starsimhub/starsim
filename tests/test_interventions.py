@@ -141,7 +141,7 @@ def test_routine_delivery():
     assert late > 3*early, f'Expected screening to scale up with the coverage; got early={early}, late={late}'
 
     # No window: the whole sim, offered at every step with a probability per year (Starsim 3's annual_prob=True)
-    sim = ss.Sim(make_pars(start=2010, stop=2014), dt=0.5, interventions=ss.screen(make_dx(), coverage=ss.probperyear(0.5), name='screening')).run()
+    sim = ss.Sim(make_pars(start=2010, stop=2014), dt=0.5, interventions=ss.screen(make_dx(), rate=ss.probperyear(0.5), name='screening')).run()
     n_screened = sim.results.screening.delivered
     assert n_screened.min() > 0, 'Expected screening on every step when no window is given'
     assert np.isclose(n_screened[0]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
@@ -174,7 +174,7 @@ def test_campaign_delivery():
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
     # A campaign, or a start, after the sim ends never runs, so a sim can be run to an earlier stop
-    for late in [ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening'), ss.screen(make_dx(), when=ss.schedule(every=ss.years(1), start=2030), coverage=0.5, name='screening'), ss.screen(make_dx(), start=2030, coverage=ss.peryear(0.5), name='screening')]:
+    for late in [ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening'), ss.screen(make_dx(), when=ss.schedule(every=ss.years(1), start=2030), coverage=0.5, name='screening'), ss.screen(make_dx(), start=2030, rate=ss.peryear(0.5), name='screening')]:
         assert ss.Sim(pars, interventions=late).run().results.screening.delivered.sum() == 0
     late = ss.Sim(pars, interventions=ss.modify('sis.pars.beta', multiply=0, start=2030)).run() # So does a modifier
     assert np.array_equal(late.results.sis.prevalence, ss.Sim(pars).run().results.sis.prevalence)
@@ -205,7 +205,7 @@ def test_state_results_at_start():
     class Program(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_states(ss.BoolState('never_reached', default=True))
+            self.define_states(ss.BoolArr('never_reached', default=True, result=True))
             self.define_aliases(reached=lambda mod: ~mod.never_reached)
 
         def init_results(self):
@@ -273,7 +273,7 @@ def test_modify_fast_paths():
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, coverage=ss.peryear(0.5)), require_kernels=True, **kw).run().complete
+    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, rate=ss.peryear(0.5)), require_kernels=True, **kw).run().complete
 
     # An amount or share that varies in time is not taken for a dated one
     series = ss.timeseries({30: 1.0, 100: 0.2})
@@ -287,22 +287,22 @@ def test_modify_fast_paths():
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
     make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), require_kernels=True, **kw)
-    assert make(when=ss.schedule(start='2026-03-01')).run().complete and make(who=sir.I.n >= 20_000).run().complete
-    for mod in [dict(who=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
+    assert make(when=ss.schedule(start='2026-03-01')).run().complete and make(when=sir.I.n >= 20_000).run().complete
+    for mod in [dict(when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
         with pytest.raises(ss.CapabilityError, match='require_kernels'):
             ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), require_kernels=True, **kw).run()
 
     # A comparison of counts is part of the rate: the same as writing it there
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000), **kw).run()
+    sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, when=sir.I.n >= 20_000), **kw).run()
     beta2 = ss.par(0.3, name='beta')
     written = ss.Sim(ss.Disease(infection=S >> I @ (beta2*(1 - 0.25*(I.n >= 20_000)))*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir'), **kw).run()
     assert sim._kernel_reason() is None and sim.interventions()[0].inlined
     assert np.allclose(sim.results.sir.I.values, written.results.sir.I.values, rtol=1e-12)
 
     # What needs memory is applied each step, and the other sim from the same disease is unchanged
-    held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
+    held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
     assert not held.interventions()[0].inlined and held._kernel_reason() is not None
     assert ss.Sim(sir, **kw).run().results.sir.I.values.max() > 2.9e5
     return sim
@@ -320,7 +320,48 @@ def test_old_keywords():
     assert 'when=ss.on(' in late.agent_reasons(sim)[0] and 'ss.capacity(' in queue.agent_reasons(sim)[0] and 'who=' in fn.agent_reasons(sim)[0]
     with pytest.raises(TypeError, match='who='):
         ss.Intervention(eligibility=lambda sim: None)
+    with pytest.raises(TypeError, match='ss.Delivery'): # Who is served first is for a delivery, which takes a move too
+        ss.Event(sir.S >> sir.R, n=ss.capacity(5, priority=ss.person.age))
+    with pytest.raises(TypeError, match='rate='): # coverage= is a fraction; a rate is rate=
+        ss.vaccinate(efficacy=0.9, coverage=ss.peryear(0.5)) # old-name-ok
+    with pytest.raises(TypeError, match='unit of time'):
+        ss.vaccinate(efficacy=0.9, rate=0.5)
+    with pytest.raises(ValueError, match='give one'):
+        ss.vaccinate(efficacy=0.9, coverage=0.5, rate=ss.peryear(0.5))
     return sim
+
+
+@sc.timer()
+def test_rate():
+    sc.heading('rate= reaches those eligible at a rate, as agents and as compartments, and a function given as coverage= must not return a rate')
+    def make(solver, **kw):
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+        return ss.Sim(sir, interventions=ss.vaccinate(efficacy=1.0, name='vx', **kw), n_agents=2000, total_pop=2000, unit='day', stop=50, solver=solver, verbose=0)
+    for solver in ['ode', 'abm']:
+        frac = make(solver, rate=ss.peryear(2)).run().results.vx.delivered.sum()/2000
+        assert np.isclose(frac, 1 - np.exp(-2*50/365), rtol=0.15), (solver, frac) # Nearly everyone stays eligible: few are infected
+    with pytest.raises(TypeError, match='rate= instead'):
+        make('abm', coverage=lambda sim: ss.peryear(2)).run()
+    with pytest.raises(TypeError, match='its function returned 0.5'): # A rate needs a unit, however it is given
+        make('abm', rate=lambda sim: 0.5).run()
+    with pytest.raises(TypeError, match='unit of time'):
+        make('abm', rate=ss.timeseries({0: 0.5, 20: 0.5}))
+
+    # A rate by group, one for each level
+    S, V = ss.states('S V')
+    sim = ss.Sim(ss.Disease(S, V, name='d'), interventions=ss.Event(S >> V, rate=ss.by(risk=[ss.peryear(0.1), ss.peryear(2)]), name='ev'), start=2000, stop=2001, n_agents=2000, verbose=0)
+    sim.stratify(risk=ss.levels({'lo':0.5, 'hi':0.5}))
+    reached = sim.run().results.d.V.strata[-1]/1000
+    assert np.allclose(reached, 1 - np.exp(-np.array([0.1, 2])), atol=0.06), reached
+
+    # describe() with a plain event and a transition no delivery drives
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1)*I, cure=I >> R @ 0, init=dict(I=0.1), name='dis')
+    sim = ss.Sim(dis, interventions=[ss.Event(S >> I, n=2, when=[2001], name='seed'), ss.treat(cure={dis.cure: 0.9}, who=dis.I, coverage=0.5, when=[2002], name='tx')], start=2000, stop=2003, n_agents=500, verbose=0).run()
+    with sc.capture():
+        sim.describe()
+    return
 
 
 @sc.timer()
@@ -340,6 +381,8 @@ def test_check_eligibility():
     young = (sims['cond'].people.age < 15).sum()
     assert n['everyone'] == 500 and n['cond'] == n['fn'] == n['uids'] == young, n
     assert 0 < n['path'] == sims['path'].results.sis.I[0] < 500, n
+    aged = ss.Sim(interventions=Count(who=ss.at_age(5), name='count'), diseases=ss.SIS(), n_agents=500, dt=ss.years(1), dur=ss.years(3), verbose=0).run()
+    assert 0 < aged.results.count.n_eligible[0] < 50 # Those who reached the age on the step (a year)
     return sims
 
 
@@ -393,5 +436,6 @@ if __name__ == '__main__':
     once  = test_disease_resolved_once()
     test_old_keywords()
     elig  = test_check_eligibility()
+    test_rate()
 
     T.toc()

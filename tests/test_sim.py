@@ -243,7 +243,7 @@ def test_complex_api():
     assert ss.debugtools.check_sims_match(s1, s3), 'Sims should match'
     sir = ss.SIR()
     s4 = ss.Sim(sir, networks='random', pars=dict(start=2000, dur=2, n_agents=200, verbose=0, beta=0.2), n_agents=300) # Settings and the model's parameters in pars=, told apart by name; a keyword wins
-    assert s4.pars.n_agents == 300 and s4.pars.dur == 2 and s4.par_values == dict(beta=0.2)
+    assert s4.pars.n_agents == 300 and s4.pars.dur == 2 and s4._par_values == dict(beta=0.2)
     with pytest.raises(TypeError, match='in pars='):
         ss.Sim(sir, beta=0.1) # A parameter of the model as a keyword
     with pytest.raises(sc.KeyNotFoundError):
@@ -334,7 +334,7 @@ def test_creation_syntax():
     )
     sim.run()
     
-    assert isinstance(sim.custom[0], FirstClass)
+    assert isinstance(sim.modules[0], FirstClass)
     assert len(sim.demographics) == 2 and all(isinstance(mod, ss.Demographics) for mod in sim.demographics())
     assert isinstance(sim.connectors[0], SecondClass)
     assert isinstance(sim.diseases[0], ss.Disease)
@@ -349,8 +349,8 @@ def test_creation_syntax():
     )
     sim2.run()
     
-    assert isinstance(sim2.custom[0], FirstClass)
-    assert isinstance(sim2.custom[1], SecondClass)
+    assert isinstance(sim2.modules[0], FirstClass)
+    assert isinstance(sim2.modules[1], SecondClass)
     assert isinstance(sim2.demographics[0], ss.Demographics)
     assert isinstance(sim2.networks[0], ss.Network)
     assert isinstance(sim2.diseases[0], ss.Disease)
@@ -513,7 +513,7 @@ def test_shrink_declared():
     sc.heading('Testing shrinking a declared disease and a treatment')
     S, L, I, R, C = ss.states('S L I R C')
     tb = ss.Disease(S, L, I, R, C, infection=S >> L @ ss.peryear(2)*I, activation=L >> I @ ss.peryear(0.3), recovery=I >> R @ ss.years(1), clear=ss.Transition(L, C, rate=0), name='tb', init=dict(L=0.2, I=0.02))
-    tx = ss.treat(ss.Treatment(cure={tb.clear: 0.7}), who=tb.L, when=ss.schedule(start=2005), coverage=ss.peryear(0.5), name='tpt')
+    tx = ss.treat(ss.Treatment(cure={tb.clear: 0.7}), who=tb.L, when=ss.schedule(start=2005), rate=ss.peryear(0.5), name='tpt')
     sim = ss.Sim(tb, interventions=tx, n_agents=2000, start=2000, stop=2020, dt=ss.months(1), verbose=0).run()
     sim.shrink(size_limit=0.3) # Raises if a module is still big; the delivery reaches the disease (through its moves), whose results and arrays are not its own
     assert sim.results.tb.I.values.sum() > 0 and sim.results.tpt.delivered.values.sum() > 0
@@ -531,7 +531,7 @@ def test_save_mixed_dt():
     """ Test that export works when modules span different time axes (issue #1411) """
     sc.heading('Testing export with heterogeneous timelines...')
     fn = 'sim_mixed.json'
-    births = ss.Births(birth_rate=20, dt=ss.years(1)) # An annual module in a sub-annual sim
+    births = ss.Births(birth_rate=20, rate_per=1000, dt=ss.years(1)) # An annual module in a sub-annual sim
     sim = ss.Sim(n_agents=n_agents, dur=ss.years(3), dt=0.5, diseases='sis', networks='random', demographics=births).run()
 
     # With heterogeneous timelines, to_df() returns one dataframe per module rather than a single dataframe
@@ -626,7 +626,7 @@ def test_init_order():
             super().init_post()
             self.unset = np.mean(self.sim.demographics[0].district[self.sim.people.auids] < 0)
     sim = ss.Sim(n_agents=1000, demographics=Demography(), modules=Lifestyle(name='life'), start=2010, stop=2011, verbose=0).init()
-    assert sim.custom.life.unset == 0 # Was 1: the custom module came first
+    assert sim.modules.life.unset == 0 # Was 1: the custom module came first
 
     # Whatever reads the disease in init_post() sees who starts infected
     seen = {}
@@ -636,7 +636,7 @@ def test_init_order():
             seen[self.name] = self.sim.diseases.sir.I.n
         def step(self):
             pass
-    class Custom(ss.Module): # Of no standard type, so kept in sim.custom
+    class Custom(ss.Module): # Of no standard type, so kept in sim.modules
         def init_post(self):
             super().init_post()
             seen[self.name] = self.sim.diseases.sir.I.n
@@ -664,7 +664,7 @@ def test_step_order():
     log.clear()
     sim = make('given').run()
     assert log[:3] == ['first', 'net', 'last']
-    assert len(sim.custom) == 2 and len(sim.networks) == 1 # Still found by kind
+    assert len(sim.modules) == 2 and len(sim.networks) == 1 # Still found by kind
     with pytest.raises(sc.KeyNotFoundError): # Modules of no standard kind are given with modules=
         ss.Sim(custom=Mark(), n_agents=100)
     return sim
@@ -728,7 +728,7 @@ def test_given_modules():
 
     # The model's modules are sorted into their kinds when the sim is made, after those given by keyword, as they are once it is initialized
     sim = ss.Sim(ss.SIR(), [ss.RandomNet(), Status(name='status')], diseases=ss.SIS(), n_agents=10, verbose=0)
-    assert [d.name for d in sim.pars.diseases] == ['sis', 'sir'] and len(sim.pars.networks) == 1 and len(sim.pars.modules) == 1 # Of no standard kind: in sim.custom once initialized
+    assert [d.name for d in sim.pars.diseases] == ['sis', 'sir'] and len(sim.pars.networks) == 1 and len(sim.pars.modules) == 1 # Of no standard kind: in sim.modules once initialized
     assert list(sim.init().diseases.keys()) == ['sis', 'sir']
 
     # Whole days are ints, as for pandas
@@ -762,7 +762,7 @@ def test_printed_output():
     # No notes on models written as the docs write them: density dependence, a chain binomial in whole steps, and typed rates
     sims = [ss.Sim(ss.Disease(S >> I @ ss.perday(0.1)*I.n, I >> R @ ss.perday(1), init_n=dict(I=1)), total_pop=20, solver='gillespie', **kw),
             ss.Sim(ss.Disease(S >> I @ ss.perday(0.2)*I, I >> R @ ss.perday(0.1), init_n=dict(S=1000, I=10)), total_pop=1010, solver=ss.solvers.binomial(substeps=1), **kw),
-            ss.Sim(ss.Disease(ss.birth(S, rate=ss.peryear(1.4)), ss.death(rate=ss.peryear(1.05)), init_n=dict(S=100)), total_pop=100, unit='year', stop=1, verbose=0)]
+            ss.Sim(ss.Disease(ss.birth(S, rate=ss.peryear(1.4)), ss.death(rate=ss.peryear(1.05), rate_per=1000), init_n=dict(S=100)), total_pop=100, unit='year', stop=1, verbose=0)]
     for sim in sims:
         with warnings.catch_warnings():
             warnings.simplefilter('error')
@@ -831,6 +831,38 @@ def test_small_fixes():
     assert rerun.started and rerun.ti == 0 # One step taken: sim.ti + sim.started
     assert rerun.run().results.sir.infection.sum() == 0
     return sim
+
+@sc.timer()
+def test_sim_names():
+    """ sim.modules (those of no standard kind) and sim.module_list (all of them, a list), sim.custom gone, ss.demo()'s one beta, run(verbose=) for one run, crn=, and the step warning """
+    sc.heading('Testing sim.modules, sim.module_list, demo(), run(verbose=), crn=, and the step warning')
+    class Tally(ss.Module):
+        def step(self): pass
+    sim = ss.Sim(diseases='sis', networks='random', modules=Tally(), n_agents=200, start=2000, stop=2010, dt=ss.weeks(1), verbose=0).init()
+    assert isinstance(sim.module_list, list) and len(sim.module_list) == len(sim.module_list) == 3 # It was a generator: empty the second time, and len() raised
+    assert list(sim.modules.keys()) == ['tally'] and sim.modules.tally is sim.tally
+    with pytest.raises(AttributeError, match='sim.modules'): # Starsim 3's sim.custom
+        sim.custom # old-name-ok
+    with pytest.raises(AttributeError, match='perf_profile'): # The performance profiler, apart from ss.fitting.likelihood_profile()
+        sim.profile
+    assert not hasattr(sim.people, 'n_agents') # len(people), the number of agents taking part
+    beta = lambda **kw: repr(ss.demo(run=False, n_agents=100, verbose=0, **kw).init().diseases[0].pars.beta)
+    assert beta() == beta(networks='random') == 'par(perday(0.03))' # It was 0.3/day once networks= or diseases= was given
+    sim.run(until=2003, verbose=2) # A partial run: its verbosity is for that run only
+    assert sim.verbose == 0
+    sim.run(verbose=1)
+    assert sim.verbose == 0 and sim.pars.verbose == 0
+    kw = dict(diseases='sis', networks='random', n_agents=200, start=2000, stop=2005, dt=ss.weeks(1), verbose=0)
+    I = lambda **k: ss.Sim(**kw, **k).run().results.sis.I.values
+    with ss.options(crn=False):
+        off = I()
+    assert np.array_equal(I(crn=False), off) and not np.array_equal(I(), off) and ss.options.crn # For one sim only
+    with ss.options(max_steps=0): # No warnings of many steps; the sim's own warning ignored this
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            ss.Sim(diseases=ss.SIR(dur_inf=ss.days(10)), networks='random', n_agents=100, start=2000, stop=2010, verbose=0).init()
+    return sim
+
 
 @sc.timer()
 def test_solver_options():
@@ -917,6 +949,7 @@ if __name__ == '__main__':
     test_step_order()
     test_printed_output()
     test_small_fixes()
+    test_sim_names()
     test_agent_settings()
 
     T.toc()

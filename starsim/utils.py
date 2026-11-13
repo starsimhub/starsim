@@ -626,11 +626,14 @@ def num_str(x):
 
 
 def time_str(x, sim=None, plural=False):
-    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath) """
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath, or with no sim) """
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
     unitless = sim is not None and sim.t.unitless
-    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.Duration) and not unitless else sim._unit_name
+    if isinstance(x, ss.Duration) and not unitless:
+        unit_name = type(x).base.removesuffix('s')
+    else:
+        unit_name = sim._unit_name if sim is not None else 'step' # With no sim, a bare number is a step
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 

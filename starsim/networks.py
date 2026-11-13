@@ -209,7 +209,7 @@ class Network(Route):
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         weight (array): the weight of each edge, which scales the hazard of transmission over it (1 if not given; see `net_beta()`); a disease's own beta on the network is on the disease
         one_way (bool): whether it transmits only from p1 to p2, as mother-to-child networks do (by default, both ways)
-        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as columns of the edges
+        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; any other keyword raises (other columns of the edges go in `edges=`)
 
     All the columns of the edges must be arrays of the same length when the sim is
     initialized, though not all need be given when the network is made.
@@ -229,7 +229,7 @@ class Network(Route):
         # Convert one network to another with extra columns
         index = np.arange(n)
         self_conn = p1 == p2
-        network2 = ss.Network(edges=network.edges, index=index, self_conn=self_conn, label=network.label)
+        network2 = ss.Network(edges=dict(network.edges, index=index, self_conn=self_conn), label=network.label)
         ```
     """
 
@@ -246,14 +246,14 @@ class Network(Route):
         self.participant = ss.BoolArr('participant')
         self.agent_edges = None # The edges of each agent, once the edges have stayed the same for a step (see edge_index())
 
-        # Standard module arguments are parameters; the rest are edges
+        # The columns of the edges (p1=, p2=, weight=, or any in edges=) are edges; the rest are parameters, and update_pars() raises for any it does not know
         if 'sides' in kwargs: # The kinds of people at the two ends of its edges; see directions
             self.sides = kwargs.pop('sides')
         if 'one_way' in kwargs: # Whether it transmits only from p1 to p2
             self.one_way = kwargs.pop('one_way')
-        standard_args = ss.modules.module_args + ss.Timeline.time_args
         edges = dict(edges) if edges is not None else {} # dict() also handles dataframes
-        edges.update({k:kwargs.pop(k) for k in list(kwargs) if k not in standard_args})
+        check_edges(kwargs)
+        edges.update({k:kwargs.pop(k) for k in list(kwargs) if k in self.meta})
         check_edges(edges)
         for key, value in edges.items():
             self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
@@ -839,6 +839,18 @@ class DynamicNetwork(Network):
         self.add_pairs()
         return
 
+    def edge_steps(self, p1):
+        """ How many steps each new edge lasts after this one, from `dur=`: drawn for each if a distribution (by the UIDs in `p1`); a typed duration is converted, and a bare number is in the sim's unit """
+        dur = self.pars.dur
+        if isinstance(dur, ss.Dist):
+            return dur.rvs(p1)
+        n = len(p1)
+        if dur == 0:
+            return np.zeros(n, dtype=ss_float) # In its dtype (half the memory of float64), as validate() would make it
+        unit = self.sim.unit_base
+        dur = ss.solvers.convert(dur, unit) if isinstance(dur, ss.TimePar) else dur
+        return np.full(n, dur/self.t.dt.to(unit).value, dtype=ss_float)
+
     def end_pairs(self):
         """ Remove partnerships whose duration has expired or whose members have died """
         n = len(self)
@@ -1130,18 +1142,6 @@ class RandomNet(DynamicNetwork):
         scaled = v*needed/orig # The same arithmetic as add_pairs(), for one agent
         return int(scaled) if needed > 0 and float(scaled).is_integer() else None
 
-    def edge_steps(self, p1):
-        """ How many steps each new edge lasts after this one, from `dur=`: drawn for each if a distribution; a bare number is in the sim's unit """
-        dur = self.pars.dur
-        if isinstance(dur, ss.Dist):
-            return dur.rvs(p1)
-        n = len(p1)
-        if dur == 0:
-            return np.zeros(n, dtype=ss_float) # In its dtype (half the memory of float64), as validate() would make it
-        unit = self.sim.unit_base
-        dur = ss.solvers.convert(dur, unit) if isinstance(dur, ss.TimePar) else dur
-        return np.full(n, dur/self.t.dt.to(unit).value, dtype=ss_float)
-
     def add_pairs(self):
         """ Add the new edges needed to bring each agent up to their number of contacts """
         p = self.pars
@@ -1210,8 +1210,9 @@ class DegreeNet(DynamicNetwork):
     default), people who have no partner are paired on every step, so nobody has more
     than one at a time.
 
-    A subclass that overrides `step()` forms its own partnerships: the base starts none for
-    it, and has none of the parameters for forming them, only `between`.
+    A subclass that forms its own partnerships (its own `step()`, not calling `super().step()`) says so
+    with `forms_partnerships = False` in its class: the base then starts none for it. A subclass
+    that changes how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
 
     Note: not CRN safe when people are born or die.
 
@@ -1248,20 +1249,21 @@ class DegreeNet(DynamicNetwork):
         sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.freqperweek(1))
         ```
     """
+    forms_partnerships = True # Whether the base forms the partnerships; False for a subclass whose own step() forms them, so the base starts none
+
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
-        self.define_pars(between=None)
-        if not self.forms_own: # A subclass that forms its own partnerships uses none of these
-            self.define_pars(
-                n_contacts = None, # No target: at most one partner
-                dur = 10,
-                concurrency = None,
-                max_contacts = None,
-                match = None,
-                acts = None,
-                who = None,
-            )
+        self.define_pars(
+            between = None,
+            n_contacts = None, # No target: at most one partner
+            dur = 10,
+            concurrency = None,
+            max_contacts = None,
+            match = None,
+            acts = None,
+            who = None,
+        )
         self.update_pars(pars, **kwargs)
         self.set_between()
         if self.pars.get('acts') is not None:
@@ -1295,10 +1297,6 @@ class DegreeNet(DynamicNetwork):
         self.sides = None if groups[0] == groups[1] else {dict(male='m', female='f').get(g, g):g for g in groups} # Its directions: m2f and f2m between men and women; within one group, one beta
         return
 
-    @property
-    def forms_own(self):
-        """ Whether a subclass forms its own partnerships (it overrides `step()`), so the base forms none for it """
-        return type(self).step is not DegreeNet.step
 
     @property
     def targeted(self):
@@ -1343,7 +1341,7 @@ class DegreeNet(DynamicNetwork):
         self.match_extra = np.zeros(len(match or {})) # For each property, how many more look within their level than by the target alone: see match_pairs()
         self.match_results = {key:'match' if len(match) == 1 else f'match_{key}' for key in match or {}} # The result of the fraction at the same level of each property
         super().init_pre(sim)
-        if self.forms_own:
+        if not self.forms_partnerships:
             return
         p = self.pars
         check_acts(self, p.acts)
@@ -1580,7 +1578,7 @@ class DegreeNet(DynamicNetwork):
         Args:
             add_pairs (bool): whether to add partnerships
         """
-        if self.forms_own: # Start no partnerships for a subclass that forms its own, unless with its own add_pairs()
+        if not self.forms_partnerships: # Start no partnerships for a subclass that forms its own, unless with its own add_pairs()
             super().init_post(add_pairs=add_pairs and type(self).add_pairs is not DegreeNet.add_pairs)
             return
         self.set_network_states()
@@ -1770,8 +1768,9 @@ class SexualNet(DegreeNet):
     transmission on the network reads, e.g.
     `ss.modify(hiv.infection, efficacy=0.8, frac=lambda net: net.edges.condoms, network='sexualnet')`.
 
-    A subclass that overrides `step()` forms its own partnerships: the base starts none for
-    it, and has none of the parameters for forming them, only `between`.
+    A subclass that forms its own partnerships (its own `step()`, not calling `super().step()`) says so
+    with `forms_partnerships = False` in its class: the base then starts none for it. A subclass
+    that changes how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
 
     For several types of partnership with their own rules, see STIsim; for partnerships that
     are not sexual (e.g. needle sharing), `ss.DegreeNet`.
@@ -1802,17 +1801,16 @@ class SexualNet(DegreeNet):
     def __init__(self, pars=None, between=_, dur=_, debut=_, acts=_, participation=_, n_contacts=_, concurrency=_, max_contacts=_, match=_, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
-        self.define_pars(between='mf')
-        if not self.forms_own: # A subclass that forms its own partnerships uses none of these
-            self.define_pars(
-                n_contacts = None,
-                dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
-                acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
-                debut = ss.normal(mean=16),
-                participation = ss.bernoulli(p=0.9), # Drawn at debut
-            )
+        self.define_pars(
+            between = 'mf',
+            n_contacts = None,
+            dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
+            acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
+            debut = ss.normal(mean=16),
+            participation = ss.bernoulli(p=0.9), # Drawn at debut
+        )
         given = dur if dur is not None else (pars or {}).get('dur')
-        single = not self.forms_own and (isinstance(given, ss.Duration) or sc.isnumber(given))
+        single = isinstance(given, ss.Duration) or sc.isnumber(given)
         if single: # A single duration (or a bare number, in the sim's unit) is a mean, and partnerships end at a constant rate, as for ss.DegreeNet: it replaces the default's distribution rather than setting its mean
             pars = {k:v for k,v in (pars or {}).items() if k != 'dur'}
             dur = None # So update_pars() does not read it from this frame
@@ -1861,7 +1859,7 @@ class SexualNet(DegreeNet):
 
 def find_pregnancy(net):
     """ The sim's `ss.Pregnancy`, which makes the edges of a prenatal or postnatal network; raises an error if it does not have exactly one """
-    pregs = [mod for mod in net.sim.modules if isinstance(mod, ss.Pregnancy)]
+    pregs = [mod for mod in net.sim.module_list if isinstance(mod, ss.Pregnancy)]
     if len(pregs) != 1:
         raise RuntimeError(f'{type(net).__name__} requires one ss.Pregnancy, which makes its edges; the sim has {len(pregs)}')
     return pregs[0]
@@ -1923,7 +1921,7 @@ class PostnatalNet(DynamicNetwork):
 
     Args:
         pars (dict): passed to `ss.DynamicNetwork`
-        dur (ss.Duration/ss.Dist): edge duration (postpartum period); if None, edges persist until agents die
+        dur (ss.Duration/ss.Dist/float): edge duration (postpartum period), a bare number in the sim's unit; if None, edges persist until agents die
         **kwargs (dict): merged with `pars`
     """
 
@@ -1956,12 +1954,7 @@ class PostnatalNet(DynamicNetwork):
         n = len(mother_uids) if mother_uids is not None else 0
         p = self.pars
         if n:
-            if isinstance(p.dur, ss.Dist):
-                dur = p.dur.rvs(mother_uids) + 1 # +1 since edges are added by Pregnancy before end_pairs() decrements them in the same step
-            elif p.dur is None:
-                dur = np.full(n, np.inf)
-            else:
-                dur = np.full(n, p.dur/self.t.dt + 1)
+            dur = np.full(n, np.inf) if p.dur is None else self.edge_steps(mother_uids) + 1 # +1 since edges are added by Pregnancy before end_pairs() decrements them in the same step
             self.append(p1=mother_uids, p2=infant_uids, weight=np.ones(n), dur=dur)
         return n
 
@@ -2548,16 +2541,18 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     """
     Mixing between groups from a contact matrix; returns `ss.networks.MixingPools`
 
-    A matrix, and what it is over:
+    A matrix says what it is over. Given by position, it is over:
 
-    - a country's, by name (`ss.contacts('Kenya')`), from `starsim_data`, by 5-year age group;
-    - its own age groups, given by their lower edges (`ss.contacts(matrix, ages=[0, 15, 65])`), which need not be the model's (it is regrouped to them);
-    - the model's own stratifications: its age groups (`ss.contacts(matrix)`), another one, by name (`ss.contacts(risk=matrix)`), or several together
-      (`ss.contacts(matrix, dims=['sex', 'risk'])`), for mixing that is not a product, e.g. men mix with women, and by risk differently for each sex;
-    - nobody in particular: a number (`ss.contacts(10)`) is homogeneous mixing, with that many contacts per person per unit time (an `ss.MixingPool` of everyone).
+    - a place's age groups, by its name (`ss.contacts('Kenya')`), from `starsim_data`, by 5-year age group;
+    - its own age groups, given by their lower edges (`ss.contacts(matrix, ages=[0, 15, 65])`), which need not be the model's (it is
+      regrouped to them); a table labeled by age group (as `ss.data.contacts()` gives) says its own;
+    - several of the model's stratifications together (`ss.contacts(matrix, dims=['sex', 'risk'])`), for mixing that is not a product,
+      e.g. men mix with women, and by risk differently for each sex.
 
-    Mixing that is a product over stratifications takes a matrix for each, by name (`ss.contacts(age=..., area=...)`): the contacts between
-    two groups are the product of the entries for each. The matrix by age can have its own age groups here too (`ss.contacts(age=..., area=..., ages=[0, 15, 65])`).
+    Given by keyword, it is over the model's stratification of that name: its age groups (`ss.contacts(age=matrix)`), or another
+    (`ss.contacts(risk=matrix)`). With several, the mixing is their product (`ss.contacts(age=A, area=B)`): the contacts between two
+    groups are the product of the entries for each. A matrix by age with its own age groups combines with them the same way
+    (`ss.contacts(A, ages=[0, 15, 65], area=B)`). For everyone mixing with everyone, use `ss.MixingPool(n_contacts=10)`.
 
     What the matrix multiplies is said by the rate of the infection, with I_j and N_j the number infectious and the number of people in group j, and N everyone:
 
@@ -2569,15 +2564,15 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     So a textbook's matrix goes in as the textbook gives it, with no rescaling. See the user guide's page on population data for more.
 
     Args:
-        matrix (array/str/df/float/`ss.Dist`): `matrix[i,j]`, the number of contacts per unit time that one person in group `i` has with people in group `j` (as in a contact survey); or a distribution whose parameters are matrices by age (with `ages=`) or tables by age group, for contacts that differ between people (e.g. `ss.contacts(ss.poisson(ss.data.contacts('Kenya')))`: see `ss.networks.MixingPools`); or a country, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or a table by age group, as `ss.data.contacts()` gives (with labels such as '0-4' and '75+', or an index named "age"; a table labeled otherwise is a matrix as it is); or a number, for homogeneous mixing
-        ages (list/array): the lower edge of each age group of the matrix (or of its matrix by age), e.g. `[0, 15, 65]` for 0–14, 15–64, and 65+
+        matrix (array/str/df/`ss.Dist`): `matrix[i,j]`, the number of contacts per unit time that one person in group `i` has with people in group `j` (as in a contact survey), with `ages=` or `dims=`; or a place, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or a table by age group, as `ss.data.contacts()` gives (with labels such as '0-4' and '75+', or an index named "age"); or a distribution whose parameters are matrices by age (with `ages=`) or tables by age group, for contacts that differ between people (e.g. `ss.contacts(ss.poisson(ss.data.contacts('Kenya')))`: see `ss.networks.MixingPools`)
+        ages (list/array): the lower edge of each age group of the matrix, e.g. `[0, 15, 65]` for 0–14, 15–64, and 65+
         dims (list): for one matrix over several of the model's stratifications together: their names, and `matrix[i, k, j, l]` is the number of contacts per unit time
             that one person at levels `(i, k)` has with people at levels `(j, l)`, or the same as a square matrix over the combinations of levels, the first stratification slowest
         name (str): the name of the mixing (default: 'contacts', or the layer, e.g. 'home')
-        study (str): for a country, the study: 'prem' (the default: Prem 2021, bundled, for 177 countries, with Prem 2017 for 10 more, e.g. Japan and Australia), 'prem2021' (177), 'prem2017' (152), or 'mistry2021' (36, by single year of age); for a US state, 'mistry2021_us' (the default; by single year of age); all but Prem 2021 are downloaded on first use
-        layer (str/list): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'; or a list of them, for a list of layers, each named by its setting
-        unit (str): the unit of time the contacts are counted over, e.g. 'day' for contacts a day; by default 'day' for a country's matrix (as the studies give them), and otherwise the sim's unit, as for any bare number
-        by_dim (dict): a matrix over each of the model's stratifications, by name, e.g. `risk=[[2, 1], [4, 8]]`; with several, the contacts are the product of their entries
+        study (str): for a place, the study: 'prem' (the default: Prem 2021, bundled, for 177 countries, with Prem 2017 for 10 more, e.g. Japan and Australia), 'prem2021' (177), 'prem2017' (152), or 'mistry2021' (36, by single year of age); for a US state, 'mistry2021_us' (the default; by single year of age); all but Prem 2021 are downloaded on first use
+        layer (str/list): for a place, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'; or a list of them, for a list of layers, each named by its setting
+        unit (str): the unit of time the contacts are counted over, e.g. 'day' for contacts a day; by default 'day' for a place's matrix (as the studies give them), and otherwise the sim's unit, as for any bare number
+        by_dim (dict): a matrix over each of the model's stratifications, by name, e.g. `age=[[10, 3], [3, 5]]` or `risk=[[2, 1], [4, 8]]`; with several, the contacts are the product of their entries
 
     Examples:
         ```python
@@ -2593,7 +2588,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
         sim = ss.Sim(sir, networks=[home, school], stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100)
 
         # A product: by age, then 90% of contacts within one's own area
-        mixing = ss.contacts(age=[[10, 3], [3, 5]], area=[[0.9, 0.1], [0.1, 0.9]], ages=[0, 18])
+        mixing = ss.contacts([[10, 3], [3, 5]], ages=[0, 18], area=[[0.9, 0.1], [0.1, 0.9]])
 
         # Keeling & Rohani's Program 3.1: a matrix of rates per year on fractions of everyone, so the rate is I.frac
         S, I = ss.states('S I')
@@ -2614,6 +2609,12 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     if 'source' in by_dim: # Otherwise read as a matrix over a stratification called "source"
         errormsg = f"ss.contacts() takes no source= (the infectious side of a mixing pool): the study a country's matrix is from is study=, e.g. ss.contacts('Japan', study={by_dim['source']!r})"
         raise TypeError(errormsg)
+    if sc.isnumber(matrix): # Homogeneous mixing is a mixing pool of everyone
+        errormsg = f'ss.contacts() takes a contact matrix; for everyone mixing with everyone, with {matrix} contacts per person per unit time, use ss.MixingPool(n_contacts={matrix})'
+        raise TypeError(errormsg)
+    if 'age' in by_dim and ages is not None: # Over the model's own age groups, or its own: not both
+        errormsg = 'ss.contacts(age=matrix) is a matrix over the model\'s own age groups, so it takes no ages=; for a matrix with its own age groups, give it by position: ss.contacts(matrix, ages=[0, 15, 65]), and any others by name, e.g. ss.contacts(matrix, ages=[0, 15, 65], area=[[...]])'
+        raise TypeError(errormsg)
     if isinstance(matrix, ss.Dist): # Contacts that differ between people, e.g. ss.contacts(ss.poisson(C), ages=[0, 15])
         return dist_contacts(matrix, ages=ages, name=name or 'contacts', unit=unit)
     if isinstance(layer, (list, tuple)): # Several settings, e.g. ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
@@ -2625,23 +2626,13 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     if isinstance(dims, str): # One stratification is a keyword
         errormsg = f'a matrix over one of the model\'s stratifications is given by its name: ss.contacts({dims}=matrix), not ss.contacts(matrix, dims={dims!r}); dims= is for one matrix over several together, e.g. dims=["sex", "risk"]'
         raise TypeError(errormsg)
-    if by_dim:
-        if matrix is not None or dims is not None:
-            errormsg = f'ss.contacts() takes one matrix (with dims= for several stratifications together) or a matrix for each stratification by name ({sc.strjoin(by_dim)}), not both (the age groups of a matrix are ages=)'
-            raise TypeError(errormsg)
-        matrix = by_dim
-    elif sc.isnumber(matrix): # Homogeneous mixing: a pool of everyone
-        if ages is not None or dims is not None:
-            errormsg = f'ss.contacts({matrix}) is homogeneous mixing, with {matrix} contacts per person per unit time, so it takes no ages= or dims='
-            raise ValueError(errormsg)
-        return MixingPool(n_contacts=getattr(ss, f'per{unit.removesuffix("s")}')(matrix) if unit is not None else matrix, name=name)
-    if dims is not None and (isinstance(matrix, str) or ages is not None):
-        errormsg = f'ss.contacts(matrix, dims={dims!r}) is a matrix over the model\'s own stratifications, so it takes no ages= (a matrix with its own age groups is ss.contacts(matrix, ages=[...])), and a matrix, not a name'
+    if dims is not None and (by_dim or isinstance(matrix, str) or ages is not None):
+        errormsg = f'ss.contacts(matrix, dims={dims!r}) is one matrix over several of the model\'s stratifications together, so it takes no ages= (a matrix with its own age groups is ss.contacts(matrix, ages=[...])), no matrix by name, and a matrix, not a place'
         raise ValueError(errormsg)
     ref = None
     if isinstance(matrix, str): # A country's matrix, from starsim_data, as a table by age group
         matrix = ss.data.contacts(matrix, study=study, layer=layer)
-    if isinstance(matrix, pd.DataFrame): # A table by age group (e.g. ss.data.contacts('Kenya')), with the lower edge of each from its labels; any other table is a matrix over the model's own groups
+    if isinstance(matrix, pd.DataFrame): # A table by age group (e.g. ss.data.contacts('Kenya')), with the lower edge of each from its labels
         if ages is None and dims is None and ss.data.is_age_index(matrix.index):
             ages, ref = ss.data.age_edges(matrix.index), matrix.attrs.get('ref')
         matrix = matrix.values
@@ -2663,47 +2654,46 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
         out.full = sc.obj(dims=over, matrix=matrix, levels=levels) # So a compartmental run can use the matrix directly
         out.unit = unit
         return out
-    if matrix is not None and not isinstance(matrix, (str, dict)) and ages is None: # Over the model's own age groups
-        matrix = dict(age=matrix)
-    age_edges = None
-    if isinstance(matrix, dict) and ages is not None: # A matrix by age with its own age groups, with a matrix for each of other dimensions: regrouped to the model's age groups when the sim is built
-        if 'age' not in matrix:
-            errormsg = f'ss.contacts(..., ages=...) gives the age groups of the matrix by age, but there is none, only {sc.strjoin(matrix.keys())}; e.g. ss.contacts(age=[[...]], {list(matrix)[0]}=[[...]], ages=[0, 15, 65])'
+    if matrix is not None and ages is None: # A matrix by position says what it is over
+        errormsg = 'ss.contacts() needs to know what a matrix given by position is over: its own age groups, by their lower edges (ss.contacts(matrix, ages=[0, 15, 65])), '
+        errormsg += 'or several stratifications together (ss.contacts(matrix, dims=["sex", "risk"])); a matrix over one of the model\'s stratifications is given by its name, e.g. ss.contacts(age=matrix) for its age groups'
+        raise TypeError(errormsg)
+    if matrix is None and ages is not None:
+        errormsg = f'ss.contacts(ages={list(ages)}) gives the age groups of a matrix given by position, but there is none, e.g. ss.contacts(matrix, ages=[0, 15, 65])'
+        raise ValueError(errormsg)
+    if matrix is None and not by_dim:
+        errormsg = 'ss.contacts() needs a matrix: a place (ss.contacts("Kenya")), a matrix with its own age groups (ss.contacts(matrix, ages=[...])), or one over the model\'s stratifications (ss.contacts(age=matrix), ss.contacts(risk=matrix))'
+        raise ValueError(errormsg)
+
+    # A matrix by age with its own age groups (checked here), alone or in a product with matrices over the model's stratifications
+    if matrix is not None:
+        matrix = np.array(matrix, dtype=float)
+        if len(ages) != matrix.shape[0] or matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+            errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, e.g. ss.contacts(matrix, ages=[0, 15, 65]); got a matrix of shape {matrix.shape} and ages={list(ages)}'
             raise ValueError(errormsg)
-        if len(matrix) == 1: # Only by age: a matrix with its own age groups
-            matrix = matrix['age']
-        else:
-            mat = np.array(matrix['age'], dtype=float)
-            if len(ages) != len(mat) or mat.ndim != 2 or mat.shape[0] != mat.shape[1] or np.any(np.diff(np.array(ages, dtype=float)) <= 0):
-                errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, increasing, e.g. ss.contacts(matrix, ages=[0, 15, 65]); got a matrix of shape {mat.shape} and ages={list(ages)}'
-                raise ValueError(errormsg)
-            age_edges = np.asarray(ages) # As given (e.g. whole numbers)
-            ages = None
-    if isinstance(matrix, dict): # A matrix for each of the model's own dimensions
-        mats = {dim:np.array(mat, dtype=float) for dim,mat in matrix.items()}
-        for dim,mat in mats.items():
-            if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
-                errormsg = f'The contact matrix of ss.contacts() for "{dim}" needs to be square, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
-                raise ValueError(errormsg)
-            check_contacts(mat, dim)
-        out = MixingPools(source={}, target={}, n_contacts=np.zeros((0, 0)), name=name)
-        out.dims = mats # So a compartmental run can use the matrices directly
-        out.age_edges = age_edges # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
-        out.unit = unit
-        return out
-    if matrix is None:
-        errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its own age groups (ss.contacts(matrix, ages=[...])), or one over the model\'s stratifications (ss.contacts(matrix), ss.contacts(risk=matrix))'
-        raise ValueError(errormsg)
-    matrix = np.array(matrix, dtype=float)
-    if ages is None or len(ages) != matrix.shape[0] or matrix.shape[0] != matrix.shape[1]:
-        errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, e.g. ss.contacts(matrix, ages=[0, 15, 65]); got a matrix of shape {matrix.shape} and ages={ages}'
-        raise ValueError(errormsg)
-    check_contacts(matrix, 'age')
-    groups = age_groups(ages)
-    out = MixingPools(source=groups, target=dict(groups), n_contacts=matrix, name=name) # ss.networks.MixingPools is indexed as a contact survey, [target, source]
-    out.ref = ref # Where a named matrix came from
-    out.edges = np.asarray(ages, dtype=float)
-    out.unit = unit or ('day' if ref is not None else None) # A country's matrix is contacts a day, whatever the sim's unit
+        if not by_dim:
+            check_contacts(matrix, 'age')
+            groups = age_groups(ages)
+            out = MixingPools(source=groups, target=dict(groups), n_contacts=matrix, name=name) # ss.networks.MixingPools is indexed as a contact survey, [target, source]
+            out.ref = ref # Where a named matrix came from
+            out.edges = np.asarray(ages, dtype=float)
+            out.unit = unit or ('day' if ref is not None else None) # A country's matrix is contacts a day, whatever the sim's unit
+            return out
+        if np.any(np.diff(np.array(ages, dtype=float)) <= 0):
+            age_groups(ages) # Raises, naming them
+        by_dim = dict(age=matrix) | by_dim # Regrouped to the model's age groups when the sim is built
+
+    # A matrix for each of the model's own stratifications
+    mats = {dim:np.array(mat, dtype=float) for dim,mat in by_dim.items()}
+    for dim,mat in mats.items():
+        if mat.ndim != 2 or mat.shape[0] != mat.shape[1]:
+            errormsg = f'The contact matrix of ss.contacts() for "{dim}" needs to be square, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
+            raise ValueError(errormsg)
+        check_contacts(mat, dim)
+    out = MixingPools(source={}, target={}, n_contacts=np.zeros((0, 0)), name=name)
+    out.dims = mats # So a compartmental run can use the matrices directly
+    out.age_edges = np.asarray(ages) if matrix is not None else None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
+    out.unit = unit
     return out
 
 

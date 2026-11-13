@@ -27,9 +27,11 @@ replaced = {
 
     # sim.run(), and the sim's attributes
     ('Sim', 'run', 'shrink'): 'call sim.shrink() after the run',
-    ('Sim', 'run', 'profile'): "sim.profile(kind='loop') runs it recording how long each call of the loop takes (then sim.loop.plot_cpu())",
+    ('Sim', 'run', 'profile'): "sim.perf_profile(kind='loop') runs it recording how long each call of the loop takes (then sim.loop.plot_cpu())",
+    ('Sim', None, 'profile'): "use sim.perf_profile(), which takes kind='line' (the default), 'function', or 'loop' (a profile of the likelihood is ss.fitting.likelihood_profile())",
+    ('Sim', None, 'custom'): 'the modules of no standard kind, given with modules=, are sim.modules; every module of the sim is sim.module_list',
     ('Sim', None, 'summary'): 'use sim.summarize(), which makes the table of each result over the run',
-    ('Sim', None, 'cprofile'): "use sim.profile(kind='function')",
+    ('Sim', None, 'cprofile'): "use sim.perf_profile(kind='function')",
     ('People', None, 'n_alive'): 'the number of people alive is people.n (as agents, the people they stand for), and the number of agents alive is people.alive.count()',
 
     # Running many sims

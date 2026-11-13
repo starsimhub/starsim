@@ -41,6 +41,7 @@ The units have one-unit instances, `ss.day`, `ss.week`, `ss.month`, and `ss.year
 Used with: agents and compartments; declared and coded modules
 """
 import types
+import operator
 import warnings
 import collections
 import datetime as dt
@@ -128,6 +129,9 @@ def type_str(obj):
 def is_number(val):
     """ Whether a value is a plain number or an array of them, not e.g. an array of durations """
     return sc.isnumber(val) or (isinstance(val, np.ndarray) and val.dtype != object)
+
+
+compare_ops = {'<': operator.lt, '>': operator.gt, '<=': operator.le, '>=': operator.ge, '==': operator.eq, '!=': operator.ne}
 
 
 def incompatible(a, op, b, hint=''):
@@ -640,38 +644,41 @@ class Duration(TimePar):
     def __neg__(self):
         return -1*self
 
-    def _compare_args(self, other):
-        """ Normalize arguments for comparison: use years for date/dur types, raw value for numbers """
+    def _own_number(self):
+        """ The value compared with a bare zero: the value itself (see `datedur`, whose value is a date offset) """
+        return self.value
+
+    def _compare(self, other, op):
+        """
+        Compare with a duration or a date (by their values in years), or with a bare zero
+
+        A bare number has no unit, so it is only comparable with a duration when it is zero:
+        `ss.days(5) == 5` is False (as `ss.years(1) == 1` is, which would otherwise give
+        `ss.days(365) == ss.years(1) == 1`), and `ss.days(5) < 10` is a `TypeError`.
+        `ss.days(5) > 0` is allowed, since zero is the same in every unit.
+        """
         if isinstance(other, (ss.Duration, ss.date)):
-            return self.years, other.years, True
-        elif sc.isnumber(other) or isinstance(other, np.ndarray):
-            return self.value, other, True
+            a,b = self.years, other.years
+        elif is_number(other):
+            if not np.all(np.asarray(other) == 0):
+                if op in ('==', '!='):
+                    out = np.full(np.broadcast_shapes(np.shape(self.value), np.shape(other)), op == '!=')
+                    return out if out.ndim else bool(out)
+                errormsg = f'cannot compare {self!r} {op} {other!r}: a bare number has no unit of time, so it is not comparable with a duration (except 0). '
+                example = f'ss.{self.base}({other:g})' if sc.isnumber(other) else f'ss.{self.base}(values)'
+                errormsg += f'Give it a unit, e.g. {example}, or compare the value in one unit, e.g. dur.{self.base} {op} {other!r}.'
+                raise TypeError(errormsg)
+            a,b = self._own_number(), other
         else:
-            return None, None, False
+            return NotImplemented
+        return compare_ops[op](a, b)
 
-    def __lt__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a < b if impl else NotImplemented
-
-    def __gt__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a > b if impl else NotImplemented
-
-    def __le__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a <= b if impl else NotImplemented
-
-    def __ge__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a >= b if impl else NotImplemented
-
-    def __eq__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a == b if impl else NotImplemented
-
-    def __ne__(self, other):
-        a,b,impl = self._compare_args(other)
-        return a != b if impl else NotImplemented
+    def __lt__(self, other): return self._compare(other, '<')
+    def __gt__(self, other): return self._compare(other, '>')
+    def __le__(self, other): return self._compare(other, '<=')
+    def __ge__(self, other): return self._compare(other, '>=')
+    def __eq__(self, other): return self._compare(other, '==')
+    def __ne__(self, other): return self._compare(other, '!=')
 
     def __abs__(self):
         return self._new(abs(self.value))
@@ -925,7 +932,9 @@ class Rate(TimePar):
         return NotImplemented
 
     def __eq__(self, other):
-        """ Equal if the same once converted to this rate's unit; anything else, including an array, is not equal """
+        """ Equal if the same once converted to this rate's unit, or to a bare 0 if zero (a bare number has no unit, so no other is equal); anything else, including an array, is not equal """
+        if is_number(other):
+            return bool(np.all(np.asarray(other) == 0) and np.all(self.value == 0))
         try:
             if self.unit is None:
                 return other.unit is None and bool(self.value == other.value)

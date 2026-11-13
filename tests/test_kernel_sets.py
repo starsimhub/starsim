@@ -392,7 +392,7 @@ def test_met_counts():
         rate = 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 0.2*I.n_infectious/(S + I + R).n if weighted else 2e-6*I.n + 0.1*I.frac
         sir = ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.days(8), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
         sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4))).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-        return ss.Sim(sir, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
+        return ss.Sim(sir, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
     for weighted in [False, True]:
         for solver in ['rk4', 'binomial']:
             same(lambda s: make(s, weighted, **how(solver)), compiled + ['python'], seeds=[0])

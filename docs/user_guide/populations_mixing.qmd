@@ -18,6 +18,11 @@ The disease and the mixing are separate: changing from homogeneous mixing to a n
 - **A contact matrix**, `ss.contacts(...)`: mixing between groups, such as age groups, with a number of contacts for each pair of groups (see [below](#a-contact-matrix-by-age)).
 - **A network**, such as `ss.RandomNet(n_contacts=10)` or `ss.SexualNet()`: contacts between particular people, with β per contact (or per sex act, on a network with acts).
 
+::: {.callout-warning}
+## β changes meaning with the route
+With no route, β is a rate per person per unit time; with any route (a mixing pool, a contact matrix, or a network), it is a rate per contact. So a β taken from a model without routes, including the default β of a ready-made disease such as `ssl.Measles()`, has to be divided by the number of contacts when a route is added (as in [T4](../tutorials/t4_mixing.qmd)). `describe()` shows which it is.
+:::
+
 Which to choose depends on how people meet:
 
 | How people meet | Use | Runs as |
@@ -171,16 +176,17 @@ With a contact matrix, the R0 that the sim prints is β × the infectious period
 
 ### The forms of a matrix
 
-`ss.contacts()` takes a matrix and what it is over:
+`ss.contacts()` takes a matrix and what it is over. A matrix given by position says what it is over with `ages=` or `dims=` (or by being a place's); one given by keyword is over the model's stratification of that name:
 
 | Form | Example | The groups |
 |---|---|---|
+| A place's matrix, by name | `ss.contacts('Kenya')` | 5-year age groups, from a published study |
 | A matrix with its own age groups | `ss.contacts(matrix, ages=[0, 15, 65])` | The matrix's own, given by their lower edges; they need not be the model's |
-| A matrix over the model's groups | `ss.contacts(matrix)` (its age groups), `ss.contacts(risk=matrix)` | The levels of the model's stratification by that name, in order |
+| A matrix over one of the model's stratifications | `ss.contacts(age=matrix)`, `ss.contacts(risk=matrix)` | The levels of the model's stratification by that name, in order |
+| A matrix for each of several stratifications | `ss.contacts(age=..., risk=...)`, or `ss.contacts(matrix, ages=[0, 15, 65], risk=...)` | Every combination of their levels, with the product of the entries for each |
 | One matrix over several stratifications together | `ss.contacts(matrix, dims=['sex', 'risk'])`, with an axis for each, rows before columns (e.g. shape 2 × 2 × 2 × 2) | Every combination of their levels |
-| Everyone with everyone | `ss.contacts(10)`: 10 contacts per person per unit time (an `ss.MixingPool` of everyone) | None |
-| A matrix for each of several stratifications | `ss.contacts(age=..., risk=...)` | Every combination of their levels, with the product of the entries for each |
-| A country's matrix, by name | `ss.contacts('Kenya')` | 5-year age groups, from a published study |
+
+Everyone mixing with everyone is not a matrix: it is `ss.MixingPool(n_contacts=10)`, with 10 contacts per person per unit time.
 
 A matrix with its own age groups suits data from a study. In a compartmental run it is aggregated to the model's age groups, weighted by population; as agents, each person is counted in the matrix's group for their age. Groups need not be ages: here 20% of people are at high risk, with four times as many contacts with each other as people at low risk have:
 

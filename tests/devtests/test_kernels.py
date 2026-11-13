@@ -72,13 +72,13 @@ def make_met():
 models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
-    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
-    met     = (make_met,     dict(unit='day', stop=150, total_pop=100_000, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    met     = (make_met,     dict(unit='day', stop=150, total_pop=100_000, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
 )
 
 
@@ -88,7 +88,7 @@ def run(key, how, **kwargs):
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
         assert sim._kernel_reason() is None
-    return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
+    return sim.perf_profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
 def largest_diff(sim1, sim2):
@@ -119,7 +119,7 @@ def test_stochastic():
     # Many places, most of which have no events (skipped until something changes them): the same run as step by step
     herds = make_plain(0.3, init_n=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=ss.levels([str(i) for i in range(600)], kind='space'))
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
-    assert largest_diff(base.new().run(), base.new().profile(kind='loop', plot=False).sim) == 0
+    assert largest_diff(base.new().run(), base.new().perf_profile(kind='loop', plot=False).sim) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
     lognormal = [ss.SIR(dur_inf=ss.lognormal(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages

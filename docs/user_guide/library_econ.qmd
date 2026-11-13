@@ -175,6 +175,8 @@ The API reference for this page: [Products](../api/products.qmd), [Economics](..
 The tools in `ssl.econ`, with the first line of each one's documentation (see the API reference, [Economics](../api/library.econ.qmd)):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 
 for module in [ssl.econ.costs, ssl.econ.dalys]:

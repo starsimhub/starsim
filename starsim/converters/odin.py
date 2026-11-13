@@ -524,13 +524,13 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
                 strat['fractions'] = list(fracs/fracs.sum())
             src.stratify(**strat)
         if mixing is not None and strat is not None: # Age groups with a contact matrix between them
-            src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})')
+            src.config.networks = Code(f'ss.contacts(age={mixing[1].tolist()!r})')
         elif mixing is not None:
             src.skip(f'contact matrix {mixing[0]}', 'the levels it is between are not a stratification, so it was not translated')
     elif mixing is not None:
         levels = [str(lev) for lev in range(1, n_levels + 1)]
         src.stratify(**{dim:levels}, fractions=list(fracs/fracs.sum()))
-        src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})' if dim == 'age' else f'ss.contacts({dim}={mixing[1].tolist()!r})')
+        src.config.networks = Code(f'ss.contacts({dim}={mixing[1].tolist()!r})')
         notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({dim}={mixing[0]})')
     elif arrayed and not copies:
         src.skip('arrays', f'{sc.strjoin(arrayed)} are arrays over {n_levels} levels with no flows between levels: they could be a stratification (stratify()) with values by level (ss.by()), written by hand')

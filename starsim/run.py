@@ -55,8 +55,8 @@ class MultiSim:
     `msim.init_sims()`.
 
     Args:
-        sims (Sim/list/dict): a single sim, a list/tuple of sims, a dict of sims by label, or another MultiSim (or list of MultiSims); the first is `msim.base_sim`, whose label and settings the MultiSim shows
-        label (str): the name of the multisim
+        sims (Sim/list/dict): a single sim, a list/tuple of sims, a dict of sims by label, or another MultiSim (or list of MultiSims); the first is `msim.base_sim`, whose label and settings the MultiSim shows. Several can also be given one after another, as for `ss.parallel()`, e.g. `ss.MultiSim(s1, s2)`
+        label (str): the name of the multisim (by keyword)
         n_runs (int): the number of runs of each sim, each with its own seed (by default, 1)
         pars (dict/list): sets of values of parameters to run each sim with; see `ss.parallel()`
         priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters, or the draws to run; see `ss.parallel()`
@@ -81,6 +81,7 @@ class MultiSim:
 
     Examples:
         ```python
+        import numpy as np
         import starsim as ss
 
         s1 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.02), label='Low transmission')
@@ -101,9 +102,11 @@ class MultiSim:
     """
     run_options = run_options # Those of a subclass go to its make_run()
 
-    def __init__(self, sims=None, label=None, n_runs=None, pars=None, priors=False, inplace=True, **kwargs):
+    def __init__(self, sims=None, *more, label=None, n_runs=None, pars=None, priors=False, inplace=True, **kwargs):
 
-        # The sims: one, a list of them (or of MultiSims), a dict of them by label, or another MultiSim
+        # The sims: one, a list of them (or of MultiSims), a dict of them by label, or another MultiSim; or several, as ss.parallel() takes them, e.g. ss.MultiSim(s1, s2)
+        if more:
+            sims = [sim for arg in (sims, *more) for sim in (labeled(arg) if isinstance(arg, dict) else sc.tolist(arg))]
         if isinstance(sims, MultiSim):
             sims = list(sims.sims)
         elif isinstance(sims, dict):
@@ -467,7 +470,7 @@ class MultiSim:
         combined_sim.metadata = dict(parallelized=True, combined=True, n_runs=n_runs) # Store how this was parallelized
         pars = combined_sim.pars.freeze(False) # Its settings say what it combines (it is not run again)
         pops = np.array([sim.pars.total_pop for sim in self.sims]) # Used to weight the non-count results
-        pars.n_agents = sum(sim.pars.n_agents for sim in self.sims)
+        pars.n_agents = sum(sim.pars.n_agents for sim in self.sims) if all(sim.pars.n_agents is not None for sim in self.sims) else None # None for compartmental runs, which have no agents
         pars.total_pop = pops.sum()
         pars.freeze()
 
@@ -481,9 +484,6 @@ class MultiSim:
                 raise ValueError(errormsg)
             raw = np.array(vals) # Shape (n_runs, npts), or (n_runs, npts, ncols) for 2D results
             res[:] = raw.sum(axis=0) if res.scale else np.average(raw, axis=0, weights=pops)
-
-        # Compute and store final results
-        combined_sim.summarize()
         return combined_sim
 
     def summarize(self, key=None, interval=0.95, how=None, baseline=None, each=False, t=None):
@@ -495,7 +495,7 @@ class MultiSim:
         that are 0 throughout are kept, so the tables of different runs (and of `sim.summarize()`) line up row for row.
 
         Args:
-            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`), as `msim.summarize().loc[key]`: its row (or a row per scenario, if there are several)
+            key (str): if given, only this result (e.g. `'sir.infection'`, or `'sir_infection'`), as `msim.summarize().loc['sir.infection']`: its row (or a row per scenario, if there are several)
             interval (float): the fraction of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
             how (str/dict): how to summarize each result over each run: 'mean', 'median', 'sum', 'last', 'max', 'min', or a function, or a dict of these by result key, as for `sim.summarize()`
             baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
@@ -503,14 +503,15 @@ class MultiSim:
             t (int/str/date): if given, each result's value at this time point (a timestep index, or a date, the nearest time point to it) rather than over the whole run
 
         Returns:
-            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std` (or `value`, if each scenario was run once; or a column for each run, with `each=True`); with `key`, the rows of that result
+            A dataframe with a row for each result, by its module and name (e.g. `'sir.infection'`; and by scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std` (or `value`, if each scenario was run once; or a column for each run, with `each=True`); with `key`, the rows of that result
 
         Example:
             ```python
             msim = ss.parallel(sim, n_runs=20)
             msim.summarize()                     # Every result
-            msim.summarize('sir_infection')      # The total infections
-            msim.summarize(how=dict(sir_I='max')) # The peak number infectious in each run, over the runs
+            msim.summarize('sir.infection')      # The total infections
+            msim.summarize().loc['sir.infection'] # The same, as rows of the table
+            msim.summarize(how={'sir.I': 'max'}) # The peak number infectious in each run, over the runs
             msim.summarize(baseline='No intervention') # Each scenario's difference from the baseline, e.g. the infections averted (negative)
             msim.summarize(each=True)            # The scenarios side by side, a column for each run
             msim.summarize(each=True, t='2030-01-01') # The value of each result on that date, in each run
@@ -564,8 +565,9 @@ class MultiSim:
                     vals = vals - base
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
                 rows[name if n_scenarios == 1 else (name, scenario)] = {k:float(v) for k,v in stats.items()}
+        dotted = dict(zip(flat, ss.results.summary_names(self.results, flat))) # Each row by its module and name, e.g. 'sir.infection'
         if each:
-            summary = ss.results.Summary(columns, index=self._run_labels()).T
+            summary = ss.results.Summary({dotted[name]:col for name,col in columns.items()}, index=self._run_labels()).T
             summary.index.name = 'result'
             if one:
                 if not len(summary):
@@ -573,6 +575,7 @@ class MultiSim:
                     raise ValueError(errormsg)
                 return summary.iloc[0] if len(summary) == 1 else summary
             return summary
+        rows = {(dotted[row[0]], row[1]) if isinstance(row, tuple) else dotted[row]:val for row,val in rows.items()}
         several = any(isinstance(row, tuple) for row in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
         summary = ss.results.Summary(list(rows.values()), index=index)
@@ -1058,6 +1061,12 @@ class MultiResults(ss.Results):
                 if modname not in out:
                     out[modname] = ss.Results(modname)
                 out[modname][key] = res
+        for (modname,key),arr in arrays.items(): # A ratio made of other results (e.g. a delivery's coverage, of its deliveries and those eligible) is made of theirs across the runs
+            parts = getattr(arr['like'], 'parts', None)
+            if parts is not None and modname is not None:
+                mod = out[modname]
+                res = mod[key]
+                res.parts = tuple(mod[part.name] for part in parts) if all(part.name in mod and mod[part.name].values.shape == res.values.shape for part in parts) else None # Without them, summarized as the mean over time
         if timevec is not None:
             out['timevec'] = timevec
         if order is not None: # The modules and the sim's own results in the sim's order

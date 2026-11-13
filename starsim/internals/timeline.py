@@ -616,9 +616,8 @@ class Timeline:
                 start = self.start
                 stop = self.stop
                 dt = self.dt
-                eps = min(1e-6, self.dt/2) # Avoid rounding errors
                 decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
-                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start + eps)/dt)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004)
+                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start)/dt + 1e-6)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004); the 1e-6 (of a step) avoids rounding errors
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
                     self.tvec = self.default_type(np.round(steps(start.value, stop.value, dt.value), decimals=decimals))
                     self.yearvec = np.round(self.tvec.years, decimals=decimals)

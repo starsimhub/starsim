@@ -129,7 +129,7 @@ def test_timeline():
     print('Testing numeric 2')
     s6 = sim(start=2, stop=None, dt=None)  # Will default to start=ss.years(2), a length of ss.years(50)
     assert s6.t.tvec[0] == ss.years(2)
-    assert s6.t.tvec[-1] == ss.years(52).years
+    assert s6.t.tvec[-1] == ss.years(52)
     assert len(s6.t) == 51
 
     print('Testing that a timeline is not a timestep index')

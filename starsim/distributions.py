@@ -64,8 +64,11 @@ class random(Dist):
         super().__init__(distname='random', dtype=ss.dtypes.float if dtype is None else dtype, **kwargs)
         return
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         return rands
+
+    def _scipy(self):
+        return sps.uniform()
 
 
 class uniform(Dist):
@@ -88,11 +91,15 @@ class uniform(Dist):
 
     def make_rvs(self):
         """ Scaled from the raw uniform draws, which are in Starsim's precision (NumPy's uniform takes no dtype) """
-        return self.ppf(self.rand(self._size))
+        return self._ppf(self.rand(self._size))
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         p = self._pars
         return rands * (p.high - p.low) + p.low
+
+    def _scipy(self):
+        p = self._pars
+        return sps.uniform(loc=p.low, scale=p.high - p.low)
 
 
 class normal(Dist):
@@ -125,12 +132,12 @@ class normal(Dist):
     def make_rvs(self):
         return self.rng.normal(loc=self._pars.mean, scale=self._pars.std, size=self._size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
         kwds = self.dist.kwds
         scale = kwds['scale']
         if not positive(scale): # Leave the unusual cases to SciPy
-            return super().ppf(rands)
+            return super()._ppf(rands)
         return sp_special.ndtri(rands)*np.asarray(scale) + kwds['loc']
 
 
@@ -157,7 +164,7 @@ class truncnorm(Dist):
         super().__init__(distname='truncnorm', mean=mean, std=std, low=low, high=high, **kwargs)
         return
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF: a uniform draw between the normal's CDF at the two ends """
         p = self._pars
         a = sp_special.ndtr((p.low - p.mean)/p.std)
@@ -165,7 +172,11 @@ class truncnorm(Dist):
         return p.mean + p.std*sp_special.ndtri(a + rands*(b - a))
 
     def make_rvs(self):
-        return self.ppf(self.rand(self._size))
+        return self._ppf(self.rand(self._size))
+
+    def _scipy(self):
+        p = self._pars
+        return sps.truncnorm((p.low - p.mean)/p.std, (p.high - p.mean)/p.std, loc=p.mean, scale=p.std)
 
 
 class lognormal(Dist):
@@ -261,13 +272,13 @@ class lognormal(Dist):
         log_mean, log_std = self.log_pars()
         return self.rng.lognormal(mean=log_mean, sigma=log_std, size=self._size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         kwds = self.dist.kwds
         s, scale = kwds['s'], kwds['scale']
         if positive(s) and positive(scale): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
             return np.exp(np.asarray(s)*sp_special.ndtri(rands))*np.asarray(scale) + kwds['loc']
         s = np.asarray(s)
-        rvs = Dist.ppf(self, rands)
+        rvs = Dist._ppf(self, rands)
         if some(s == 0): # SciPy gives NaN for a standard deviation of 0, but NumPy (and the limit) gives exp(log_mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
         return rvs
@@ -300,11 +311,11 @@ class expon(Dist):
     def make_rvs(self):
         return self.rng.exponential(scale=self._pars.mean, size=self._size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
         if not positive(scale):
-            return super().ppf(rands)
+            return super()._ppf(rands)
         rvs = inverse('expon', rands, scale)
         return rvs + loc if some(loc) else rvs
 
@@ -337,7 +348,7 @@ class poisson(Dist):
     def make_rvs(self):
         return self.rng.poisson(lam=self._pars.mean, size=self._size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """
         Fast inverse-CDF sampling for the common-random-number (ppf) path.
 
@@ -465,11 +476,11 @@ class nbinom(Dist):
             p.p = p.n/(p.n + mean)
         return super().sync_pars()
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30, and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n > 0) and every(p > 0) and every(p <= 1)):
-            return super().ppf(rands)
+            return super()._ppf(rands)
         big = n*(1 - p)/p > ss.solvers.backends.draws.INV_MAX
         return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
@@ -489,11 +500,11 @@ class binom(Dist):
         super().__init__(distname='binomial', dist='binom', n=n, p=p, **kwargs)
         return
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n >= 0) and every(n == np.floor(n)) and every(p >= 0) and every(p <= 1)):
-            return super().ppf(rands)
+            return super()._ppf(rands)
         big = n*np.minimum(p, 1 - p) > ss.solvers.backends.draws.INV_MAX
         return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
@@ -538,11 +549,15 @@ class randint(Dist):
         p = self._pars
         return np.float64 if np.any(p.high - p.low > 2**24) else None
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         p = self._pars
         rvs = (rands * (p.high - p.low)).astype(p.dtype) + p.low  # Map [0,1) to [low, high), matching np.random.integers (exclusive high); convert before adding low so it floors rather than truncates
         rvs = np.minimum(rvs, p.high - 1)  # Clamp guards against rands rounding up to high
         return rvs
+
+    def _scipy(self):
+        p = self._pars
+        return sps.randint(p.low, p.high)
 
 
 class weibull(Dist):
@@ -574,12 +589,12 @@ class weibull(Dist):
         self.update_dist_pars(spars)
         return spars
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
         kw = self.dist.kwds
         c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
         if not (every(np.asarray(c) > 0) and every(np.asarray(scale) > 0)):
-            return super().ppf(rands)
+            return super()._ppf(rands)
         rvs = inverse('weibull', rands, c, scale)
         return rvs + loc if some(loc) else rvs
 
@@ -685,8 +700,21 @@ class constant(Dist):
     def make_rvs(self):
         return np.full(self._size, self._pars.value)
 
-    def ppf(self, rands): # The random numbers aren't needed, but drawing them keeps it like any other distribution
+    def _ppf(self, rands): # The random numbers aren't needed, but drawing them keeps it like any other distribution
         return np.full(rands.shape, self._pars.value)
+
+    def mean(self):
+        """ The value itself (SciPy has no constant distribution) """
+        self._ready('mean')
+        return self._pars.value*self._unit_factor()
+
+    def std(self):
+        """ Zero """
+        return 0*self.mean()
+
+    def cdf(self, x):
+        """ 0 below the value, 1 from it on """
+        return (np.asarray(x, dtype=float) >= self.mean()).astype(float)
 
 
 class bernoulli(Dist):
@@ -714,8 +742,15 @@ class bernoulli(Dist):
     def make_rvs(self):
         return self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         return rands < self._pars.p
+
+    def _scipy(self):
+        return sps.bernoulli(self._pars.p)
+
+    def ppf(self, q):
+        """ The inverse of the CDF: False up to 1 - p, True above it (the draws use `rands < p` instead, which is the same distribution) """
+        return self.to_scipy().ppf(q).astype(bool)
 
     def filter(self, uids=None, both=False):
         """ The agents for whom it is True, or with both=True, those for whom it is True and those for whom it is False
@@ -783,7 +818,7 @@ class choose_n(Dist):
     def make_rvs(self):
         return self.rand(self._size)
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         return rands
 
     def rvs(self, n=1, round=None, reset=False):
@@ -913,7 +948,7 @@ class choice(Dist):
             slots = None
         return size, slots
 
-    def ppf(self, rands):
+    def _ppf(self, rands):
         """ The choice for each uniform random number, by the inverse CDF """
         pars = self._pars
         a = np.arange(pars.a) if np.isscalar(pars.a) else np.asarray(pars.a) # E.g. a=[30, 70] given as a list
@@ -941,7 +976,7 @@ class choice(Dist):
             if not self._pars.replace:
                 errormsg = f'{self} has a row of probabilities per agent, which needs replace=True'
                 raise ValueError(errormsg)
-            return self.ppf(self.rand(self._size))
+            return self._ppf(self.rand(self._size))
         return super().make_rvs()
 
 
@@ -1030,9 +1065,16 @@ class histogram(Dist):
 
     def make_rvs(self):
         """ Draws without UIDs: the same inverse CDF as ppf(); not for the user """
-        return self.ppf(self.rand(self._size))
+        return self._ppf(self.rand(self._size))
 
-    def ppf(self, rands):
+    def _scipy(self):
+        """ SciPy's histogram distribution, as the draws are; none for one histogram for each group (see `by_group()`) """
+        if self.parts is not None:
+            return None
+        values, bins, density = self.hist
+        return sps.rv_histogram((values, bins), density=density)
+
+    def _ppf(self, rands):
         """ The inverse of the CDF, which is piecewise linear """
         def one(rands, cdf, bins):
             return np.where(rands == 0, bins[0], np.interp(rands, cdf, bins)) # SciPy gives the lowest bin edge for 0, even if the first bins are empty

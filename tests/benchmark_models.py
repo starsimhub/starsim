@@ -64,7 +64,7 @@ class HumanSEIS(ss.AgentDisease):
         )
         self.update_pars(**kwargs)
         self.define_states(
-            ss.BoolState('exposed'),
+            ss.BoolArr('exposed', result=True),
             ss.FloatArr('ti_infectious'),
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('heterogeneity', default=0.0),
@@ -267,7 +267,7 @@ def make_contra(n_agents=10_000):
     women = sum([s for k, s in st.items() if k not in ['male', 'young']], st['young'])
     users = sum([st[m] for m in methods[1:]], st[methods[0]])
     contra = ss.Disease(*st.values(), **tr, cpr=users/women, default_state='young', name='contra')
-    people = ss.People(n_agents, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.3)), ss.FloatArr('parity', default=ss.poisson(2))])
+    people = ss.People(n_agents, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.3), result=True), ss.FloatArr('parity', default=ss.poisson(2))])
     return ss.Sim(diseases=contra, people=people, start=2000, stop=2010, dt=ss.months(1), aging=True, rand_seed=1, verbose=0)
 
 

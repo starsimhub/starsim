@@ -115,7 +115,7 @@ def test_fetal_health(do_plot=do_plot):
         fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4))
 
         for sim, label in [(sim_baseline, 'Baseline'), (sim_disease, 'Disease'), (sim_treated, 'Treated')]:
-            fh = sim.custom['fetal_health']
+            fh = sim.modules['fetal_health']
             born = fh.birth_weight > 0
             ax0.hist(np.asarray(fh.birth_weight[born]), bins=30, alpha=0.4, label=label, edgecolor='k')
         ax0.axvline(2500, color='r', ls='--', label='LBW threshold')
@@ -254,7 +254,7 @@ def test_coded_modifiers():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.probperyear(0.2))
-            self.define_states(ss.BoolState('affected', label='Affected'), ss.FloatArr('rel_sus', default=1.0))
+            self.define_states(ss.BoolArr('affected', label='Affected', result=True), ss.FloatArr('rel_sus', default=1.0))
             self.update_pars(**kwargs)
         def init_pre(self, sim):
             super().init_pre(sim)

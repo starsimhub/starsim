@@ -105,7 +105,7 @@ def _():
     W = ss.State(people=False)
     ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.outside >> W @ 10*I.n)
 
-@trigger('adjust= is now a value by level', TypeError)
+@trigger('adjust= is given as a value by level', TypeError)
 def _(): sir().stratify(age=[0, 15], adjust={'recovery': [1, 2]})
 
 @trigger('is already stratified by "age", in another way', ValueError)

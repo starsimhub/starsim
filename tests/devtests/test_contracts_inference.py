@@ -459,7 +459,7 @@ def test_optimize():
     return best
 
 
-def test_profile():
+def test_likelihood_profile():
     sc.heading('Testing the profile likelihood of a parameter, with the others refitted')
     def make(solver='ode'):
         beta, gamma = ss.par(ss.perday(0.3), bounds=[0.05, 1.0], name='beta'), ss.par(ss.perday(0.15), bounds=[0.01, 0.5], name='gamma')
@@ -472,16 +472,16 @@ def test_profile():
     days = np.arange(0, len(truth) - 6, 7) # Whole weeks, each from its day
     sim = make()
     sim.data = ss.SimData(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t:t+7].sum()) for t in days])))
-    prof = ss.fitting.profile(sim, 'beta', values=np.linspace(0.37, 0.43, 7))
+    prof = ss.fitting.likelihood_profile(sim, 'beta', values=np.linspace(0.37, 0.43, 7))
     low, high = prof.interval
     assert low < 0.4 < high and 0.37 < low and high < 0.43, f'Expected a 95% interval around 0.4 within the values, not {prof.interval}'
     assert {'beta', 'gamma', 'nll', 'within'} <= set(prof.table.columns) and prof.table.gamma.is_monotonic_increasing # Refitted: a faster recovery makes up for a higher beta
-    alone = ss.fitting.profile(sim, 'beta', pars=['beta']) # With gamma fixed, on the default grid: narrower
+    alone = ss.fitting.likelihood_profile(sim, 'beta', pars=['beta']) # With gamma fixed, on the default grid: narrower
     assert alone.interval[0] < 0.4 < alone.interval[1] and alone.interval[1] - alone.interval[0] < high - low
     noisy = make(solver='binomial')
     noisy.data = sim.data
     with pytest.raises(ValueError, match='deterministic'):
-        ss.fitting.profile(noisy, 'beta')
+        ss.fitting.likelihood_profile(noisy, 'beta')
     return prof
 
 

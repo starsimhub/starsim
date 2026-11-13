@@ -69,13 +69,12 @@ The states, transitions and deaths are declared as usual. The rest is written as
 ```{python}
 class Noise(ss.Connector):
     """ Gamma noise on the force of infection, with mean 1, drawn once a step """
-    def __init__(self, sigma_se):
-        super().__init__(name='noise')
-        self.var = sigma_se**2*365.25 # The variance of a day's noise
-        self.value = 1.0
+    sigma_se = ss.par(pars.sigma_se) # The scale of the noise
+    value    = 1.0                   # The noise in the current step
 
     def init_post(self):
         super().init_post()
+        self.var = self.pars.sigma_se**2*365.25 # The variance of a day's noise
         self.rng = np.random.default_rng(self.sim.pars.rand_seed)
 
     def step(self):
@@ -109,7 +108,7 @@ def make_measles():
         name      = 'measles',
     )
 
-sim = ss.Sim(make_measles(), connectors=Noise(pars.sigma_se), solver='binomial', total_pop=lookup('pop', start),
+sim = ss.Sim(make_measles(), connectors=Noise(), solver='binomial', total_pop=lookup('pop', start),
              start=start, stop=stop, dt=ss.days(1), data=data)
 sim.run()
 ```
@@ -140,17 +139,15 @@ The most direct way is to write the model as one module, in NumPy, with nothing 
 ```{python}
 class He2010(ss.Module):
     """ He et al.'s model, as code: n copies of S, E, I and R, advanced each day by the function euler """
-    def __init__(self, n=1, euler=None):
-        super().__init__(name='he2010')
-        self.n = n
-        self.euler = euler
+    n     = ss.par(1)    # The number of copies
+    euler = ss.par(None) # The function that advances them by a day
 
     def init_post(self):
         super().init_post()
         self.rng = np.random.default_rng(self.sim.pars.rand_seed)
         N0 = lookup('pop', self.sim.t.start)
-        self.S, self.E, self.I = [np.full(self.n, np.round(N0*x)) for x in [pars.s0, pars.e0, pars.i0]]
-        self.C = np.zeros(self.n) # Recoveries in the last step
+        self.S, self.E, self.I = [np.full(self.pars.n, np.round(N0*x)) for x in [pars.s0, pars.e0, pars.i0]]
+        self.C = np.zeros(self.pars.n) # Recoveries in the last step
         self.recoveries = []
 
     def step(self):
@@ -161,9 +158,9 @@ class He2010(ss.Module):
         seas = 1 + p.amplitude*0.2411/0.7589 if any(lo <= now.dayofyear <= hi for lo,hi in terms) else 1 - p.amplitude
         beta = p.R0*seas*(1 - np.exp(-(p.gamma + p.mu)))
         var = p.sigma_se**2*365.25
-        noise = self.rng.gamma(1/var, var, self.n)
+        noise = self.rng.gamma(1/var, var, self.pars.n)
         rates = (p.iota, p.alpha, p.sigma, p.gamma, p.mu)
-        self.C = self.euler(self.S, self.E, self.I, beta, pop, births, noise, self.rng, rates)
+        self.C = self.pars.euler(self.S, self.E, self.I, beta, pop, births, noise, self.rng, rates)
         self.recoveries.append(self.C.mean())
 
 def euler_step(S, E, I, beta, pop, births, noise, rng, rates):
@@ -181,10 +178,10 @@ def euler_step(S, E, I, beta, pop, births, noise, rng, rates):
     return rec
 
 def make_coded(n=1, euler=euler_step, **kwargs):
-    return ss.Sim(modules=He2010(n, euler), start=start, stop=stop, dt=ss.days(1), verbose=0, **kwargs)
+    return ss.Sim(modules=He2010(n=n, euler=euler), start=start, stop=stop, dt=ss.days(1), verbose=0, **kwargs)
 
 sims = ss.parallel([make_coded(rand_seed=seed) for seed in range(6)]).sims
-totals = [pars.rho*np.sum(s.custom.he2010.recoveries) for s in sims]
+totals = [pars.rho*np.sum(s.modules.he2010.recoveries) for s in sims]
 print(f'Reported cases over 21 years: {np.mean(totals):,.0f} ± {np.std(totals):,.0f}')
 ```
 

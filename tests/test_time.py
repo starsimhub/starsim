@@ -39,10 +39,10 @@ def test_classes():
     d3 = ss.years(2/0.1)
     d4 = ss.years(3/0.2)
 
-    assert d1 + d2 == 2+3
-    assert d3 + d4 == 2/0.1 + 3/0.2
-    assert d3 * 2 == 2/0.1*2
-    assert d3 / 2 == 2/0.1/2
+    assert d1 + d2 == ss.years(2+3)
+    assert d3 + d4 == ss.years(2/0.1 + 3/0.2)
+    assert d3 * 2 == ss.years(2/0.1*2)
+    assert d3 / 2 == ss.years(2/0.1/2)
 
     # Test rate dt
     r1 = ss.freq(2, 'year')
@@ -279,6 +279,13 @@ def test_timepar_float():
     assert np.isnan(ss.freq(np.nan, 'year'))
     assert np.sign(ss.peryear(2)) == 1
 
+    # Comparing with a bare number is strict, since a number has no unit: otherwise ss.years(1) == ss.days(365) == 365, and ss.years(1) == 1
+    assert ss.years(1) == ss.days(365) and ss.days(365) != 365 and ss.years(1) != 1 and ss.perday(1) != 1
+    with pytest.raises(TypeError, match='no unit of time'):
+        ss.days(5) < 10
+    assert ss.days(5) > 0 and ss.days(0) == 0 and ss.perday(0) == 0 and list(ss.days(np.array([0, 2])) > 0) == [False, True] # Zero is the same in every unit
+    assert ss.days(5).days < 10 # The number in one unit
+
     # Dates are unaffected, since a date has an unambiguous float representation
     assert float(ss.date(1500)) == 1500
 
@@ -503,6 +510,13 @@ def test_bare_units():
     sir = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), name='sir')
     sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', n_agents=500, verbose=0).init()
     assert sim.unit == 'day'
+
+    # A rate of zero needs no unit, declared or written as code, with no warning that its unit was guessed
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        zero = ss.Disease(S, I, R, infection=S >> I @ 0*I, recovery=I >> R @ ss.days(8), wane=R >> S @ 0, die=I >> ss.dead @ ss.years(50), init_prev=0.1, name='zero')
+        assert ss.Sim(zero, n_agents=200, stop=ss.days(10), verbose=0).run().results.zero.infection.sum() == 0
+        ss.Sim(ssl.AgentSIS(beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), waning=0), networks='random', n_agents=200, stop=ss.days(10), verbose=0).run()
 
     # A peak of a seasonal value outside the year is refused, and a time of year works (T6a: 142 was taken as January)
     with pytest.raises(ValueError):

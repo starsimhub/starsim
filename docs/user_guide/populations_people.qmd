@@ -82,7 +82,7 @@ ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.days(10), coverage=0.8
 A property of your own is given to `ss.People` as a state, with a value for each agent, which can be drawn from a distribution, and can be used in a rate as well as in a condition. Here 30% of people live in towns, where the rate of infection is doubled; two campaigns give the same number of doses, one to anyone and one to people in towns:
 
 ```{python}
-urban = ss.BoolState('urban', default=ss.bernoulli(p=0.3))
+urban = ss.BoolArr('urban', default=ss.bernoulli(p=0.3), result=True)
 ppl = ss.People(10_000, extra_states=urban)
 
 infection = S >> I @ 1.9*(1 + ss.person.urban)*I # Twice the rate in towns
@@ -247,7 +247,7 @@ These modules run as agents. They give each newborn a mother (`people.parent`), 
 
 Rates of your own are given as a table: crude birth rates with columns `Year` and `CBR` (`ss.Births(birth_rate=df)`), and death rates with columns `Time`, `Sex` (`Male` or `Female`), `AgeGrpStart`, and `mx` (`ss.Deaths(death_rate=df)`). For other column names, give `columns=`. Each rate holds from its year until the next.
 
-**Per person or per 1,000.** For births, deaths, conceptions, and migration, a rate's size says what it is per: a rate above 1 a year is per 1,000 people, and one of 1 or below is per person (for a table, judged by its median). So `ss.Births(birth_rate=35)` and `ss.peryear(0.035)` are both 35 per 1,000 people a year. `rate_per=1000` or `rate_per=1` says which, for rates whose size could mislead (such as net migration of under 1 per 1,000).
+**Per person or per 1,000.** For births, deaths, conceptions, and migration, a rate (a bare number per year, a typed rate, or a table) is per person, unless `rate_per=` says otherwise: `ss.Births(birth_rate=0.035)` and `ss.Births(birth_rate=35, rate_per=1000)` are both 35 per 1,000 people a year. Data are often per 1,000 (the UN's crude birth rates and fertility rates are), so a rate above 1 a year (for a table, its median) with no `rate_per=` gives a warning: give `rate_per=1000` if it is per 1,000, or `rate_per=1` if per person is meant. A place by name needs neither, since Starsim knows what its UN rates are per.
 
 ### Life tables
 
@@ -285,7 +285,7 @@ People age if the model has births or deaths (or with `aging=True` in the sim). 
 import pandas as pd
 
 fertility = pd.read_csv('test_data/nigeria_asfr.csv') # Age-specific fertility rates by year and single year of age
-pregnancy = ss.Pregnancy(fertility_rate=fertility) # Per 1,000 women per year, as the UN's; or fertility_rate='Nigeria'
+pregnancy = ss.Pregnancy(fertility_rate=fertility, rate_per=1000) # Per 1,000 women per year, as the UN's; or fertility_rate='Nigeria'
 
 nigeria = dict(
     people = ss.population('Nigeria', year=2000, n_agents=5000),
@@ -336,8 +336,8 @@ As agents, `sim.people` holds every agent: its properties, and the states of eve
 | `people.parent` | The UID of each agent's mother, for agents born in the run (-1 for none) |
 | `people.scale` | The number of people the agent stands for, relative to the others (1 unless set) |
 | `people.causes`, `people.cause_of_death` | The causes of death by name, and the cause of each agent's death (its position in `causes`; -1 for none) |
-| `people.n` | The number of people alive, under every solver: as agents, the people the agents stand for |
-| `len(people)`, `people.auids` | The number of agents taking part (alive and not removed), and their UIDs |
+| `people.n` | The number of people alive, under every solver: as agents, the people the agents stand for ([How many?](mechanics_indexing.qmd#how-many)) |
+| `len(people)`, `people.auids` | The number of agents taking part (those alive, and any who died during the current step, who are removed at its end), and their UIDs |
 | `people.died_of(module)` | The agents who died of a module in the step just finished, for code in a module |
 | `people.keys()`, `people.brief()` | The names of the states, and a one-line summary |
 | `people.to_df()`, `people.get_person(uid)` | A table with a row for each agent and a column for each state; everything about one agent |
@@ -415,7 +415,7 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 | Parameter | What it is | Default |
 |---|---|---|
 | `fertility_rate` | Age-specific fertility rates: a table, a place by name, or one rate; or the hazard of conception itself, as a function of `(sim, uids)` | `ss.peryear(0.1)`: 100 per 1,000 women a year |
-| `rate_per` | How many women the rates are per: 1000 or 1 | None: from their size |
+| `rate_per` | How many women the rates are per, e.g. 1000 (not needed for a place by name) | None: per woman, with a warning if the rates are above 1 a year |
 | `rel_fertility` | A multiplier on the fertility rates | 1 |
 | `min_age`, `max_age` | The ages at which women can conceive | 15 and 50 |
 | `p_infertile` | The fraction of women with primary infertility | 0 |

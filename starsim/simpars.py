@@ -48,6 +48,7 @@ class SimPars(ss.Pars):
         self.dt        = None  # The timestep, in the sim's unit (default 1): smaller is more accurate, but slower
         self.rand_seed = 1     # The random seed, from which every module's random numbers are drawn, so the same seed gives the same results; if None, the seed is not reset
         self.even_draws = False # Whether to space each call's random numbers evenly for agents, for less variable runs (see ss.Sim)
+        self.crn        = None  # Whether to use common random numbers, for this sim only (None: ss.options.crn, True by default)
         self.keep_times = None  # Whether a declared disease run as agents keeps the time of entering every state, and the history of every transition; off by default to save memory (None: ss.options.keep_times)
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
@@ -91,11 +92,8 @@ class SimPars(ss.Pars):
         return super().__setitem__(key, value)
 
     def check_key_mismatch(self, pars):
-        """ As for any parameters, but a setting of Starsim 3's says what replaces it; `custom` holds the modules of no standard type, which are given with `modules=` """
+        """ As for any parameters, but a setting of Starsim 3's says what replaces it """
         ss.v3_deprecations.check('Sim', '__init__', pars)
-        if 'custom' in pars and not isinstance(pars['custom'], ss.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.SimPars(...))
-            available = [key for key in self.keys() if key != 'custom']
-            raise sc.KeyNotFoundError(f"Key(s) ['custom'] not found; available keys are {available}{ss.v3_deprecations.hint(keys='custom')}")
         return super().check_key_mismatch(pars)
 
     @classmethod
@@ -106,8 +104,7 @@ class SimPars(ss.Pars):
         return cls._names
 
     def _reset_modules(self):
-        """ Empty the list of modules of each kind (`custom` for those of no standard kind, and `modules` for those given with `modules=`) """
-        self.custom        = ss.ndict()
+        """ Empty the list of modules of each kind (`modules` for those of no standard kind, which are given with `modules=`, with modules of any kind) """
         self.demographics  = ss.ndict()
         self.connectors    = ss.ndict()
         self.networks      = ss.ndict()
@@ -141,8 +138,10 @@ class SimPars(ss.Pars):
             raise ValueError(f"step_order={self.step_order!r} is not 'type' or 'given'")
         if self.approximations not in approximations:
             raise ValueError(f'approximations={self.approximations!r} is not one of {sc.strjoin(approximations)}')
-        if self.even_draws and not ss.options.crn:
-            raise ValueError('even_draws=True needs common random numbers, but ss.options.crn is False')
+        if self.crn is not None and not isinstance(self.crn, (bool, np.bool_)):
+            raise TypeError(f'crn= is True or False (or None, for ss.options.crn), not {self.crn!r}')
+        if self.even_draws and not sc.ifelse(self.crn, ss.options.crn):
+            raise ValueError('even_draws=True needs common random numbers, but crn is False (give crn=True, or set ss.options.crn = True)')
         if self.keep_times is None:
             self.keep_times = ss.options.keep_times
         self.solver = ss.solvers.as_solver(self.solver) # A solver by name is the solver itself, e.g. 'ode' is ss.solvers.ode(); the one that runs, if 'auto', is chosen when the sim is initialized (see ss.solvers.choose_solver())
@@ -219,7 +218,7 @@ class SimPars(ss.Pars):
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
         for source, mod in modules:
             if source == 'modules': # Sorted by kind
-                modkey = next((key for key, modclass in modmap.items() if isinstance(mod, modclass)), 'custom')
+                modkey = next((key for key, modclass in modmap.items() if isinstance(mod, modclass)), 'modules') # Of no standard kind: kept in sim.modules
             else: # Where they were given
                 modkey = source
             self.validate_name(mod, modkey, names)

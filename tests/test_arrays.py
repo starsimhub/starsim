@@ -493,6 +493,24 @@ def test_catarr():
 
 
 # %% Run as a script
+def test_boolarr_result():
+    """ A BoolArr with result=True is counted as a result of its module; one without is not """
+    sc.heading('Testing BoolArr(result=True)')
+    class Flags(ss.Module):
+        counted = ss.BoolArr(default=True, result=True)
+        hidden = ss.BoolArr(default=True)
+    sim = ss.Sim(n_agents=50, modules=Flags(), dur=2, verbose=0).run()
+    assert 'counted' in sim.results.flags and 'hidden' not in sim.results.flags
+    assert not (~sim.modules.flags.counted).result, 'A new array is not a result'
+    with pytest.raises(ValueError, match='2D'):
+        ss.BoolArr('x', result=True, columns=2)
+    with pytest.raises(AttributeError, match='result=True'): # Starsim 3's name
+        ss.BoolState  # old-name-ok
+    from starsim.converters.migrate import migrate_text
+    assert migrate_text("x = ss.BoolState('a', label='A')\n")[0] == "x = ss.BoolArr('a', label='A', result=True)\n"  # old-name-ok
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -511,6 +529,7 @@ if __name__ == '__main__':
     const = test_uids_construction()
 
     cat2  = test_catarr()
+    res   = test_boolarr_result()
     sc.toc(T)
     plt.show()
     print('Done.')

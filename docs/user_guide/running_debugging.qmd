@@ -157,7 +157,7 @@ R0 comes out at 0.24 instead of 15. Give a duration with its unit (`ss.days(8)`)
 - **Data is matched to results by name.** A column called `reported` is not compared with the result `cases` (Starsim notes it, and `sim.fit()` stops); rename it, or use `ss.SimData(data, aliases=dict(cases='reported'))` ([Fitting a model](calibration_fitting.qmd#the-data)).
 - **Counts over a period are compared with totals over the same period.** Infections are summed between data points, while the number infectious is compared at each; check which kind each column is ([Fitting a model](calibration_fitting.qmd#the-data)).
 - **A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_post()`, `finish_step()`, and the like without calling the base class's version leaves part of it unset; Starsim warns at the end of the run ([Custom modules](building_modules.qmd#pitfalls)).
-- **`len(sim.people)` still counts those who died this step.** For a fraction worked out in an analyzer, use `sim.people.n`, the number alive.
+- **`len(sim.people)` counts agents, including those who died this step.** For a fraction worked out in an analyzer, divide people by people, `sir.I.n / sim.people.n` (the number alive, in people); see [How many?](mechanics_indexing.qmd#how-many).
 - **A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01')` with weekly steps does nothing; compare with `>=`, or give the module `start=`.
 
 More are in the pitfalls of [Custom modules](building_modules.qmd#pitfalls) and [Interventions](interventions_interventions.qmd#pitfalls).
@@ -192,29 +192,29 @@ A function given as an analyzer (`analyzers=show_infectious`) does the same, but
 
 ## Profiling
 
-Compartmental models run in well under a second, so profiling is mostly for models run as agents, especially with networks or modules written as code. Start with how long each part of each step takes: `sim.profile(kind='loop')` runs the sim recording the time of each call of the loop, and plots the time spent in each (`sim.loop.plot_cpu()` plots it again):
+Compartmental models run in well under a second, so profiling is mostly for models run as agents, especially with networks or modules written as code. Start with how long each part of each step takes: `sim.perf_profile(kind='loop')` runs the sim recording the time of each call of the loop, and plots the time spent in each (`sim.loop.plot_cpu()` plots it again):
 
 ```{python}
 big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
-big.profile(kind='loop');
+big.perf_profile(kind='loop');
 ```
 
-To see which lines of a function take the time, follow it with `sim.profile()` (`kind='line'`, the default), which runs a copy of the sim with a line-by-line profiler on the functions given:
+To see which lines of a function take the time, follow it with `sim.perf_profile()` (`kind='line'`, the default), which runs a copy of the sim with a line-by-line profiler on the functions given:
 
 ```{python}
 big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
-prof = big.profile(follow=ss.RandomNet.add_pairs, plot=False)
+prof = big.perf_profile(follow=ss.RandomNet.add_pairs, plot=False)
 prof.disp(maxentries=5)
 ```
 
-`sim.profile(kind='function')` profiles every function the run calls, for when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as building the sim, use `sc.profile()` from Sciris directly. When the time is in your own code, [Speed and scale](running_performance.qmd#code-of-your-own) has the remedies. A fit runs the model thousands of times, so profile the model before fitting it.
+`sim.perf_profile(kind='function')` profiles every function the run calls, for when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as building the sim, use `sc.profile()` from Sciris directly. When the time is in your own code, [Speed and scale](running_performance.qmd#code-of-your-own) has the remedies. A fit runs the model thousands of times, so profile the model before fitting it.
 
 ## Further reading
 
 If none of this finds the problem, cut it down to the smallest script that shows it (a small population, a short run, one disease, no data files) and ask on the [Starsim GitHub issues](https://github.com/starsimhub/starsim/issues), with the script, what it printed, and what you expected; see [How to contribute](../contributing/index.qmd).
 
-- [line_profiler](https://github.com/pyutils/line_profiler): the line-by-line profiler behind `sim.profile()`
-- [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.profile(kind='function')`
+- [line_profiler](https://github.com/pyutils/line_profiler): the line-by-line profiler behind `sim.perf_profile()`
+- [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.perf_profile(kind='function')`
 - [Python: pdb](https://docs.python.org/3/library/pdb.html): the debugger, for stepping through a module written as code
 
 ## Appendix: every diagnostic tool
@@ -240,9 +240,9 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `sim.run_one_step()` | One step at a time, for a debugger | Runs one step |
 | `sim.loop.to_df()`, `sim.loop.plot()` | Every call in every step, in order | Builds |
 | `sim.loop.insert()` | Runs a function of your own at any point in the step | No (it runs with the sim) |
-| `sim.profile(kind='loop')`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
-| `sim.profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
-| `sim.profile(kind='function')` | How long every function the run calls takes | Runs |
+| `sim.perf_profile(kind='loop')`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
+| `sim.perf_profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
+| `sim.perf_profile(kind='function')` | How long every function the run calls takes | Runs |
 | `sim.elapsed` | The seconds the last run took | No |
 | `STARSIM_CHECK_COUNTS=1` (environment variable) | Checks, at every step, the counts the agent engine keeps against a new count (for testing the engine) | Applies to every run as agents |
 
@@ -251,6 +251,8 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 Most errors are Python's own (`KeyError`, `TypeError`, `ValueError`); these are the ones that are classes of their own, in `starsim/internals/errors.py`, so that code can catch or filter them by kind (see [Model execution](architecture_run.qmd#errors-warnings-and-notes) for the policy behind them):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 import pandas as pd
 pd.set_option('display.max_colwidth', None) # Show each entry in full

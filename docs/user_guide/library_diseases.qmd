@@ -51,7 +51,7 @@ scenarios = {
     'A quarter of burials safe': ss.Sim(diseases=ebola(0.25), networks=ss.RandomNet(), **outbreak),
     'Every burial safe':         ss.Sim(diseases=ebola(1.0),  networks=ss.RandomNet(), **outbreak),
 }
-msim = ss.parallel(scenarios, n_runs=5, workers=1)
+msim = ss.parallel(scenarios, n_runs=5)
 msim.plot(['ebola.infected', 'ebola.infection.cum'])
 ```
 
@@ -61,9 +61,9 @@ msim.plot(['ebola.infected', 'ebola.infection.cum'])
 town = dict(start='2000', dur=ss.years(1), total_pop=10_000)
 scenarios = {
     'Person to person and water': ss.Sim(diseases=ssl.Cholera(), **town),
-    'Person to person only':      ss.Sim(diseases=ssl.Cholera(beta_env=ss.perday(0)), **town),
+    'Person to person only':      ss.Sim(diseases=ssl.Cholera(beta_env=0), **town),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot(['cholera.infected', 'cholera.infection.cum', 'cholera.env_conc'])
 ```
 
@@ -88,7 +88,7 @@ scenarios = {
     'No ART':   ss.Sim(diseases=hiv(), networks=net(), analyzers=ssl.CD4_analyzer(), **endemic),
     'With ART': ss.Sim(diseases=hiv(), networks=net(), analyzers=ssl.CD4_analyzer(), interventions=art, **endemic),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot(['hiv.prevalence', 'hiv.death'])
 ```
 
@@ -106,7 +106,7 @@ scenarios = {
     'Current care':                ss.Sim(diseases=ssl.NCD(), **chronic),
     'Treatment doubling survival': ss.Sim(diseases=ssl.NCD(prognosis=ss.weibull(shape=2, scale=ss.years(10))), **chronic),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot(['ncd.prevalence', 'ncd.death'])
 ```
 
@@ -146,7 +146,7 @@ sim.run()
 sim.diseases.malaria.plot('Ih', 'Iv')
 ```
 
-Starsim's `R0()` counts each passage through a mosquito as a generation, so it is the square root of the classical Ross-Macdonald value, m·a²·b·c/(γ·μ_v) = 213.
+Starsim's `R0()` counts each passage through a mosquito as a generation, so its 14.6 is the square root of the classical Ross-Macdonald value, m·a²·b·c/(γ·μ_v) = 213, which counts the whole cycle from person to person as one.
 
 The Garki model adds immunity, and with it the result the source is known for: malaria dies out below a critical vectorial capacity, (α₁ + δ)/g, which is 0.022 contacts per person per day with these parameters:
 
@@ -179,16 +179,13 @@ measles = ssl.Measles(beta=ss.perday(1.2), dur_exp=ss.normal(mean=ss.days(10), s
 
 ### Advanced: building on a class
 
-For a change to how the disease works, build on the class. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune`, and a small daily chance of infection from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
+For a change to how the disease works, build on the class. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune`, and a small daily chance of infection from outside the population (`p_import`). The new class adds two parameters and a state in its class body, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
 
 ```{python}
 class WaningSEIR(ssl.AgentSEIR):
-    def __init__(self, dur_immune=ss.expon(mean=ss.years(1)), p_import=ss.bernoulli(p=1e-4), **kwargs):
-        super().__init__(**kwargs)
-        self.define_pars(dur_immune=dur_immune, p_import=p_import)
-        self.update_pars(**kwargs)
-        self.define_states(ss.TimeArr('ti_susceptible', label='Time of losing immunity'))
-        return
+    dur_immune = ss.par(ss.expon(mean=ss.years(1))) # How long immunity lasts
+    p_import   = ss.par(ss.bernoulli(p=1e-4))       # The chance each day of an infection from outside the population
+    ti_susceptible = ss.TimeArr(label='Time of losing immunity')
 
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources)
@@ -216,7 +213,7 @@ scenarios = {
     'Lifelong immunity':              ss.Sim(diseases=WaningSEIR(dur_immune=ss.constant(ss.years(100)), **cold), **pars),
     'Immunity for a year on average': ss.Sim(diseases=WaningSEIR(**cold), **pars),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot(['cold.infectious', 'cold.susceptible'])
 ```
 

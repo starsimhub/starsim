@@ -92,7 +92,7 @@ measles = ss.Disease(
 )
 sim = ss.Sim(
     diseases  = measles,
-    networks  = ss.contacts(1), # Everyone mixes with everyone, with one contact per person per day
+    networks  = ss.MixingPool(n_contacts=1), # Everyone mixes with everyone, with one contact per person per day
     total_pop = N,
     start     = ss.days(0),
     stop      = ss.days(50),

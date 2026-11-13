@@ -42,7 +42,7 @@ scenarios = {
     'Random contacts only': ss.Sim(diseases=sir(), networks=ss.RandomNet(n_contacts=6), **kw),
     'Households and random contacts': ss.Sim(diseases=sir(), networks=[ssl.ClusterNet(cluster_size=ss.poisson(6)), ss.RandomNet(n_contacts=1)], **kw),
 }
-msim = ss.parallel(scenarios, n_runs=3, workers=1)
+msim = ss.parallel(scenarios, n_runs=3)
 msim.plot(['sir.I', 'sir.R'])
 ```
 
@@ -55,9 +55,9 @@ flu = lambda **beta: ss.SIR(beta=ssl.HybridNet.betas(ss.perday(0.02)) | beta, du
 kw = dict(n_agents=2000, start='2000', dur=ss.days(120), dt=ss.days(1))
 scenarios = {
     'Schools open':   ss.Sim(diseases=flu(), networks=ssl.HybridNet(), **kw),
-    'Schools closed': ss.Sim(diseases=flu(s=ss.perday(0)), networks=ssl.HybridNet(), **kw),
+    'Schools closed': ss.Sim(diseases=flu(s=0), networks=ssl.HybridNet(), **kw),
 }
-msim = ss.parallel(scenarios, n_runs=5, workers=1)
+msim = ss.parallel(scenarios, n_runs=5)
 
 sim = msim.sims[0]
 for name, net in sim.networks.items():
@@ -139,7 +139,7 @@ scenarios = {
     'Small world': ss.Sim(diseases=sir(), networks=ssl.SmallWorldNet(n_contacts=10, rewire=0.05), **kw),
     'Random regular': ss.Sim(diseases=sir(), networks=ssl.StaticNet(graph=nx.random_regular_graph, d=10), **kw),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot('sir.I')
 ```
 
@@ -184,6 +184,8 @@ For comparing scenarios that add or remove people (births, deaths, migration), t
 Every network in `ssl.networks`, generated from the classes themselves: the class it builds on, its parameters and arguments with their defaults, and what its documentation says about common random numbers ("CRN safe": whether adding or removing a person leaves everyone else's contacts unchanged; see [Random numbers](mechanics_random.qmd)). The networks built on `ssl.StaticNet` are fixed when the sim starts, so people born later have no contacts in them.
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import re
 import inspect
 import pandas as pd

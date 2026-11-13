@@ -108,17 +108,16 @@ coverage_by_age = ss.by(coverage_table)
 ```
 :::
 
-`ss.levels()` gives the levels of the new dimension with their options: the fractions, and the states the dimension applies to (here only `S`; see below). `ss.modify()` then changes a quantity of the disease by level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated:
+`ss.levels()` gives the levels of the new dimension with their options: the fractions, the states the dimension applies to (here only `S`; see below), and the relative susceptibility of each level (`rel_sus`), 1 for the unvaccinated and 0.03 for the vaccinated. (For a dimension that is already there, `ss.modify(measles.rel_sus, multiply=ss.by(vaccinated=[1, 0.03]))` does the same.)
 
 ::: {.panel-tabset group="language"}
 ## Python
 
 ```{python}
 measles = make_measles()
-measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_age, states=['S']))
-protection = ss.modify('measles.rel_sus', multiply=ss.by(vaccinated=[1, 0.03])) # The vaccinated are 3% as susceptible
+measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_age, states=['S'], rel_sus=[1, 0.03])) # The vaccinated are 3% as susceptible
 
-sim = ss.Sim(measles, networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), connectors=protection, **settings)
+sim = ss.Sim(measles, networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), **settings)
 sim.run()
 sim.results.measles.infection.by('vaccinated').plot()
 ```
@@ -127,16 +126,15 @@ sim.results.measles.infection.by('vaccinated').plot()
 
 ```r
 measles <- make_measles()
-measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_age, states = list("S")))
-protection <- modify("measles.rel_sus", multiply = ss$by(vaccinated = c(1, 0.03))) # The vaccinated are 3% as susceptible
+measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_age, states = list("S"), rel_sus = c(1, 0.03))) # The vaccinated are 3% as susceptible
 
-sim <- make_sim(measles, networks = contacts(ages = c(0, 15, 65), matrix = age_contacts), connectors = protection)
+sim <- make_sim(measles, networks = contacts(ages = c(0, 15, 65), matrix = age_contacts))
 sim$run()
 sim$results$measles$infection$by("vaccinated")$plot()
 ```
 :::
 
-The run prints an R0 of about 2.3, not 16: R0 here is worked out for the whole population, vaccinated included, and most of it is protected. Who is infected?
+The run prints an R0 of about 2.3, not 16. R0 is still for a population in which nobody has left `S`, as in [T2](t2_model.qmd), but it counts each person in `S` with the susceptibility they have, and here the vaccinated are in `S`, at 3% of it. So protection written as a level of `S` (with `rel_sus`) lowers R0 itself, while immunity written as starting in `R` (as in T2) leaves R0 at 16 and lowers only the R at the start. Who is infected?
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -180,7 +178,7 @@ def make_community_measles():
     """ The measles model, by age, community, and vaccination """
     measles = make_measles()
     measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-    measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_community, states=['S']))
+    measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_community, states=['S'], rel_sus=[1, 0.03]))
     return measles
 ```
 
@@ -194,7 +192,7 @@ coverage_by_community <- ss$by(rbind(c(0.02, 0.98),  # General: 2% unvaccinated,
 make_community_measles <- function() { # The measles model, by age, community, and vaccination
   measles <- make_measles()
   measles$stratify(community = list("general" = 0.95, "close-knit" = 0.05))
-  measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S")))
+  measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S"), rel_sus = c(1, 0.03)))
   measles
 }
 ```
@@ -206,12 +204,12 @@ Contacts are now between groups of two dimensions. With a matrix for each, the c
 ## Python
 
 ```{python}
-clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65]) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
-mixed     = ss.contacts(age=age_contacts, community=[[0.95, 0.05], [0.95, 0.05]], ages=[0, 15, 65])
+clustered = ss.contacts(age_contacts, ages=[0, 15, 65], community=[[0.984, 0.016], [0.3, 0.7]]) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
+mixed     = ss.contacts(age_contacts, ages=[0, 15, 65], community=[[0.95, 0.05], [0.95, 0.05]])
 
 sims = {
-    'Mixing with everyone': ss.Sim(make_community_measles(), networks=mixed, connectors=protection, **settings),
-    'Close-knit':           ss.Sim(make_community_measles(), networks=clustered, connectors=protection, **settings),
+    'Mixing with everyone': ss.Sim(make_community_measles(), networks=mixed, **settings),
+    'Close-knit':           ss.Sim(make_community_measles(), networks=clustered, **settings),
 }
 msim = ss.parallel(sims)
 msim.plot('measles.infection')
@@ -220,12 +218,12 @@ msim.plot('measles.infection')
 ## R
 
 ```r
-clustered <- contacts(age = age_contacts, community = rbind(c(0.984, 0.016), c(0.3, 0.7)), ages = c(0, 15, 65)) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
-mixed     <- contacts(age = age_contacts, community = rbind(c(0.95, 0.05), c(0.95, 0.05)), ages = c(0, 15, 65))
+clustered <- contacts(age_contacts, ages = c(0, 15, 65), community = rbind(c(0.984, 0.016), c(0.3, 0.7))) # The rest of the town makes 1.6% of its contacts with the community, so that the contacts each way add up
+mixed     <- contacts(age_contacts, ages = c(0, 15, 65), community = rbind(c(0.95, 0.05), c(0.95, 0.05)))
 
 msim <- parallel(list(
-  "Mixing with everyone" = make_sim(make_community_measles(), networks = mixed, connectors = protection),
-  "Close-knit"           = make_sim(make_community_measles(), networks = clustered, connectors = protection)
+  "Mixing with everyone" = make_sim(make_community_measles(), networks = mixed),
+  "Close-knit"           = make_sim(make_community_measles(), networks = clustered)
 ))
 msim$plot("measles.infection")
 ```
@@ -268,16 +266,16 @@ catchup = ss.transfer(dict(vaccinated=True), rate=ss.peryear(ss.by(community=[0,
 
 measles = make_measles()
 measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_community, states=['S']), catchup=catchup)
+measles.stratify(vaccinated=ss.levels([False, True], fractions=coverage_by_community, states=['S'], rel_sus=[1, 0.03]), catchup=catchup)
 
 sims = {
-    'No catch-up': ss.Sim(make_community_measles(), networks=clustered, connectors=protection, **settings),
-    'Catch-up':    ss.Sim(measles, networks=clustered, connectors=protection, **settings),
+    'No catch-up': ss.Sim(make_community_measles(), networks=clustered, **settings),
+    'Catch-up':    ss.Sim(measles, networks=clustered, **settings),
 }
 msim = ss.parallel(sims)
 msim.plot('measles.infection')
 print('Doses given:', round(msim.sims['Catch-up'].results.measles.catchup.sum()))
-msim.summarize().loc['measles_infection']
+msim.summarize().loc['measles.infection']
 ```
 
 ## R
@@ -287,15 +285,15 @@ catchup <- ss$transfer(list(vaccinated = TRUE), rate = peryear(ss$by(community =
 
 measles <- make_measles()
 measles$stratify(community = list("general" = 0.95, "close-knit" = 0.05))
-measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S")), catchup = catchup)
+measles$stratify(vaccinated = ss$levels(c(FALSE, TRUE), fractions = coverage_by_community, states = list("S"), rel_sus = c(1, 0.03)), catchup = catchup)
 
 msim <- parallel(list(
-  "No catch-up" = make_sim(make_community_measles(), networks = clustered, connectors = protection),
-  "Catch-up"    = make_sim(measles, networks = clustered, connectors = protection)
+  "No catch-up" = make_sim(make_community_measles(), networks = clustered),
+  "Catch-up"    = make_sim(measles, networks = clustered)
 ))
 msim$plot("measles.infection")
 cat("Doses given:", round(msim$sims[["Catch-up"]]$results$measles$catchup$sum()), "\n")
-msim$summarize()$loc["measles_infection"]
+msim$summarize()$loc["measles.infection"]
 ```
 :::
 
@@ -419,7 +417,7 @@ sims = {
 }
 msim = ss.parallel(sims)
 msim.plot(['measles.I', 'pneumococcus.C'])
-msim.summarize().loc['pneumococcus_acquisition']
+msim.summarize().loc['pneumococcus.acquisition']
 ```
 
 ## R
@@ -430,7 +428,7 @@ msim <- parallel(list(
   "Interacting" = make_sim(diseases = list(measles, pneumococcus), connectors = amnesia)
 ))
 msim$plot(c("measles.I", "pneumococcus.C"))
-msim$summarize()$loc["pneumococcus_acquisition"]
+msim$summarize()$loc["pneumococcus.acquisition"]
 ```
 :::
 

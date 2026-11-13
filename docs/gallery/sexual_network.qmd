@@ -49,7 +49,7 @@ msim.plot('sti')
 The plot shows the median of the runs and the range that holds 95% of them. The number infected rises in the first year, as infections pass to the partners of the people infected at the start, and then falls slowly, as people are cured faster than new partnerships bring them new infections. Since in this model an infection can only pass to a current partner, how many partners people have, and how long partnerships last, matter as much as the chance of transmission per act. The number infected at the end, and the infections over the ten years:
 
 ```{python}
-msim.summarize().loc[['sti_I', 'sti_infection']]
+msim.summarize().loc[['sti.I', 'sti.infection']]
 ```
 
 ## Going further

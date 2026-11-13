@@ -877,7 +877,7 @@ def run_sets(sim, par_sets):
         for j,mod in enumerate(mods):
             captured[j].append(capture(mod.engine))
     outs = outputs(sim, captured, kind='many')
-    base = sim.par_values
+    base = sim._par_values
     results = sc.obj()
     for j,mod in enumerate(mods): # The number in each state, by group
         engine = mod.engine
@@ -890,13 +890,13 @@ def run_sets(sim, par_sets):
             stocks, flows = stocks.sum(axis=-1, keepdims=True), flows.sum(axis=-1, keepdims=True)
         runs = []
         for i,pars in enumerate(par_sets): # Results worked out from the values of the parameters in each run (an outcome can depend on them)
-            sim.par_values = sc.mergedicts(base, pars)
+            sim._par_values = sc.mergedicts(base, pars)
             ss.solvers.set_par_values(sim)
             engine.cache.clear()
             runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
         results[mod.name] = sc.obj({key:(sc.obj({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
         results[mod.name].group_ti = None # The values by group, if kept, are at every time point
-    sim.par_values = base
+    sim._par_values = base
     ss.solvers.set_par_values(sim)
     return results
 
@@ -1018,7 +1018,7 @@ def entries(sim, names=None):
     x0, types = ss.fitting.start_values(raws)
     bounds = np.array([elements[name][2:4] if name in elements else [ss.fitting.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
     keys = list(found.keys())
-    pars = sim.par_values
+    pars = sim._par_values
 
     def set_pars(x):
         sim.restart(pars=sc.mergedicts(pars, ss.fitting.to_pars(keys, found, x, types, elements)))

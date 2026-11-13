@@ -94,7 +94,7 @@ scenarios = {
     'Infection, untreated': fetal(beta=ss.peryear(20)),
     'Infection, treated from 2001': fetal(beta=ss.peryear(20), treat=True),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 for label, sim in zip(scenarios, msim.sims):
     res = sim.results.fetal_health
     births = int(res.birth.sum())

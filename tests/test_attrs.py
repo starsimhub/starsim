@@ -234,7 +234,7 @@ def test_attr_dist_par():
 def test_attr_births():
     """ An attribute with init= read by a modifier, in a sim with births: newborns have the init, and spare slots in the arrays are not read """
     d = make_nab(ss.uniform(0.5, 0.95), rate=ss.peryear(2))
-    demog = lambda: [ss.Births(birth_rate=25), ss.Deaths(death_rate=10)]
+    demog = lambda: [ss.Births(birth_rate=0.025), ss.Deaths(death_rate=0.01)]
     sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ValueError at the first step
     nab = sim.diseases.d.nab
     auids = sim.people.auids

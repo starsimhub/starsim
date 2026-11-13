@@ -66,7 +66,7 @@ Ask the user, rather than choosing, when a value would change the answer and has
 - Use `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` for programs, rather than writing an intervention as code.
 - Use `sim.fit()` to fit: it fits each parameter that has bounds (`ss.par(0.5, bounds=[0.1, 1])`) to each result that has data, with no objective function to write.
 - After a run, read `sim.diseases.x`, not the object you made: the sim copies its modules.
-- In a module written as code, keep per-person values in `define_states()`, make distributions once in `__init__()` and draw from them rather than from `np.random`, and call `super()` in each method you override.
+- In a module written as code, declare its parameters (`ss.par`), per-person arrays (`ss.FloatArr`, `ss.BoolArr`), and distributions in the class body, with no `__init__()` needed; draw from those distributions rather than from `np.random`; and call `super()` in each method you override. The "Custom modules" page of the user guide shows the pattern.
 - Plot with `sim.plot()` and `msim.plot()` before writing plots of your own.
 
 ## Where to read

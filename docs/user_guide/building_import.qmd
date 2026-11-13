@@ -256,6 +256,8 @@ A target named "cum ..." is the total since the start, and "peak size ..." the l
 Every format that `ss.import_from()` reads and `ss.export_to()` writes, generated from their registries, `ss.converters.importers` and `ss.converters.exporters`, with the first line of each function's documentation, and the version of the framework it was tested with (`ss.converters.tested`; another version may work too, and importing from or exporting to one installed alongside Starsim notes the difference) (the table in [The formats](#the-formats) says what each reads and how). `ss.converters.sniff(filename)` tells which format a file is in, if it can. Three kinds of model have no importer, since there is no file to read: [LASER](https://starsim.org/lingua_franca/models/laser/) and [NumPy](https://starsim.org/lingua_franca/models/numpy/) models are translated by hand, and Starsim 3 code is rewritten by `python -m starsim.converters.migrate` (see the [migration guide](../migration/v3_v4.md#the-migration-script)).
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 import pandas as pd
 

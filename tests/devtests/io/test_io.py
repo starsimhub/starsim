@@ -243,7 +243,7 @@ def test_code(tmp_path):
     code = check(sim)
     for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, interpolation='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
                  'infection = S >> I @ (beta * season * I)', '{R: 0.99, D: None}', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
-                 "model.stratify(risk=dict(lo=0.6, hi=0.4))", "rel_sus_by_risk = ss.modify('model.rel_sus', multiply=ss.by(risk=[1, 2]))"]:
+                 "model.stratify(risk=ss.levels(dict(lo=0.6, hi=0.4), rel_sus=[1, 2]))"]:
         assert text in code, f'Expected "{text}" in the code'
     assert sim.results.model.cases.sum() > 0
 

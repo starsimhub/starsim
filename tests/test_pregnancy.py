@@ -75,6 +75,22 @@ def test_mmr():
     # The reproduction: no KeyError
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=500, start=2000, stop=2002).run()
     assert len(sim.results.pregnancy.mmr) == len(sim.timevec)
+
+    # Maternal deaths are those at delivery and while pregnant, the same during and after the run, and finalizing again changes nothing
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death_rate=ss.peryear(0.05), p_maternal_death=0.02), n_agents=2000, start=2000, stop=2003, dt=ss.months(1), verbose=0).run()
+    preg, r = sim.demographics.pregnancy, sim.results.pregnancy
+    md, asfr = r.maternal_death.values.copy(), preg.asfr.copy()
+    assert md.sum() > r.antepartum.sum() > 0
+    preg.finalize_results()
+    assert np.array_equal(r.maternal_death.values, md) and np.array_equal(preg.asfr, asfr), 'Finalizing twice added the antepartum deaths, and the annual sums of the ASFR, again'
+
+    # The relative risk of preterm birth by age: each edge is the upper edge of its group, so 18 and 35 are in the next group, and edges need not be whole years
+    uids = ss.uids(np.arange(5))
+    sim.people.age[uids] = [17.9, 18, 34.9, 35, 40.4]
+    preg.rel_preterm_base[uids] = 1
+    preg.pars.preterm.by_age = np.array([[18, 35, 40.5, 1000], [1.2, 1, 1.2, 1.5]])
+    preg.preterm_risk(uids)
+    assert np.allclose(preg.rel_preterm[uids], [1.2, 1, 1, 1.2, 1.2]), '1.2 below 18, 1 from 18 to 35, 1.2 from 35 to 40.5'
     return sim
 
 

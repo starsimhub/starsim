@@ -222,8 +222,8 @@ class Mixing(Telling):
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (who=). {fix}')
 
         # The side of each group: by sex on a network between men and women (between='mf') or men ('mm')
-        if net.forms_own:
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} forms its own partnerships (its own step()), which only agents follow. {fix}')
+        if not net.forms_partnerships:
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} forms its own partnerships (forms_partnerships = False), which only agents follow. {fix}')
         sexual = net.groups is not None
         if sexual and not set(net.groups) <= {'male', 'female'}:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')
@@ -301,7 +301,7 @@ class Mixing(Telling):
         if isinstance(p.dur, ss.Dist) and not isinstance(p.dur, ss.expon):
             dist = ss.transitions.numeric_dist(p.dur, lambda v: convert(v, unit))
             dist.init(force=True)
-            durs = np.asarray(dist.ppf((np.arange(32) + 0.5)/32), dtype=float)
+            durs = np.asarray(dist._ppf((np.arange(32) + 0.5)/32), dtype=float)
             durs = durs*dur/durs.mean()
         acts = p.get('acts')
         formed = k/dur # Partnerships formed per person per unit time, in each cell
@@ -391,7 +391,7 @@ class Mixing(Telling):
         if len(bands) != len(levels) or not np.allclose(bands, levels):
             how = 'aggregated from {} age groups to' if len(bands) > strat.n else 'split from {} age groups into' if len(bands) < strat.n else 'regrouped from {} age groups into'
             self.regrouped.setdefault((how, len(bands)), []).append(net.name) # Said once for all the matrices (e.g. the layers of a country's), in note_regrouped()
-        if getattr(net, 'ages', None) is not None or getattr(net, 'age_edges', None) is not None: # A matrix given with its age groups, checked over them as ss.contacts(matrix) is over the model's
+        if getattr(net, 'ages', None) is not None or getattr(net, 'age_edges', None) is not None: # A matrix given with its age groups, checked over them as ss.contacts(age=matrix) is over the model's
             self.check_bands(net, bands, contacts, cdf)
         return d, matrix
 
@@ -483,7 +483,7 @@ class Mixing(Telling):
             return sc.obj(kind='matrix', cells=cells, matrix=full.matrix, name=net.name, dim=names.index(full.dims[0]), dims=[names.index(dim) for dim in full.dims])
         mats = dict(net.dims)
         edges = getattr(net, 'age_edges', None)
-        if edges is not None: # A matrix by age with its own age groups (ss.contacts(age=..., area=..., ages=...)): over the model's age groups, first, since it can add them
+        if edges is not None: # A matrix by age with its own age groups (ss.contacts(matrix, ages=..., area=...)): over the model's age groups, first, since it can add them
             bands = np.column_stack([edges, np.append(edges[1:], np.inf)])
             mats['age'] = self.regroup_ages(net, bands, bands, np.asarray(mats['age'], dtype=float))[1]
         matrix = np.ones((1, 1))

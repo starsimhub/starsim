@@ -53,7 +53,7 @@ A **contact matrix** gives the daily contacts between age groups: row *i*, colum
 | 15–64 | 3 | 8 | 1 |
 | 65+ | 3 | 6 | 3 |
 
-[`ss.contacts()`](../api/networks.qmd) takes the matrix, with the lower edge of each age group (`ages=`), and is given to the sim as `networks=`. With contacts, β is the daily rate of infection per contact with an infectious person. People here average about 13.5 contacts a day, so β = 1.9 under equal mixing becomes about 0.14 per contact: a β fitted under one assumption about mixing needs refitting under another.
+[`ss.contacts()`](../api/networks.qmd) takes the matrix, with the lower edge of each age group (`ages=`), and is given to the sim as `networks=`. With contacts, β is the daily rate of infection per contact with an infectious person. People here average about 13.5 contacts a day, so β = 1.9 under equal mixing becomes about 0.14 per contact: a β fitted under one assumption about mixing needs refitting under another. R0 also changes a little: with a contact matrix it is worked out from the whole matrix (its dominant eigenvalue, weighting the groups that mix most), so the run prints R0 = 15.8 rather than 15.2; later tutorials, which use this matrix, round it to 16.
 
 ::: {.panel-tabset group="language"}
 ## Python

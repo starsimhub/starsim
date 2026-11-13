@@ -137,17 +137,13 @@ For a disease with [strains](building_diseases.qmd#strains), each row also has t
 
 ## Following agents from step to step
 
-An analyzer can keep a value for each agent, declared with `define_states()` as a module's states are, and seeded in `init_post()`. To follow transmission as the sim runs, it reads the infections of each step from the infection log, `disease.infection_log.to_df(ti=self.ti)`, which needs an `ss.infection_log` analyzer in the sim. This analyzer counts each step's new infections in two ways, from the log and from the people who are infected now but were not at the previous time point, and counts how many times each person is infected:
+An analyzer can keep a value for each agent, declared in its class body as a module's states are, and seeded in `init_post()`. To follow transmission as the sim runs, it reads the infections of each step from the infection log, `disease.infection_log.to_df(ti=self.ti)`, which needs an `ss.infection_log` analyzer in the sim. This analyzer counts each step's new infections in two ways, from the log and from the people who are infected now but were not at the previous time point, and counts how many times each person is infected:
 
 ```{python}
 class Reinfections(ss.Analyzer):
     """ New infections each step, from the infection log and from the states, and the number of times each person is infected """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.define_states(
-            ss.BoolArr('was_infected'),           # Infected at the previous time point
-            ss.FloatArr('infections', default=0), # The times each person has been infected
-        )
+    was_infected = ss.BoolArr()             # Infected at the previous time point
+    infections   = ss.FloatArr(default=0)   # The times each person has been infected
 
     def init_results(self):
         super().init_results()
@@ -212,6 +208,8 @@ The API reference for this page: [Analyzers](../api/analyzers.qmd).
 The analyzers in Starsim and its library, with the first line of each one's documentation (see the API reference, [Analyzers](../api/analyzers.qmd), [Economics](../api/library.econ.qmd), and [Diseases in the library](../api/library.diseases.qmd)):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 import starsim.library as ssl
 

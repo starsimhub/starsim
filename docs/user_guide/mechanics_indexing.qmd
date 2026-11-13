@@ -13,11 +13,11 @@ A declared model needs none of this: conditions such as `who=ss.person.age < 5` 
 
 ## Arrays and UIDs
 
-A state such as `alive`, `female`, or a disease's `I` is an `ss.BoolState`, an array of true or false values; a number, such as `age`, is an `ss.FloatArr` (or `ss.IntArr` for whole numbers); the kinds are listed in the [appendix](#appendix-the-kinds-of-array). These arrays work like NumPy arrays, with sums, means, comparisons, and arithmetic, but are made for three things nearly every agent-based model needs:
+A state such as `alive`, `female`, or a disease's `I` is an `ss.BoolArr`, an array of true or false values; a number, such as `age`, is an `ss.FloatArr` (or `ss.IntArr` for whole numbers); the kinds are listed in the [appendix](#appendix-the-kinds-of-array). These arrays work like NumPy arrays, with sums, means, comparisons, and arithmetic, but are made for three things nearly every agent-based model needs:
 
 1. **Growth**: as people are born or arrive, the arrays grow, in chunks rather than one agent at a time, so that adding agents is cheap.
 2. **Indexing**: agents who die or leave stay in the arrays, so that what happened to them can still be looked up, but are left out of counts, sums, and means.
-3. **Random values**: a state's default can be a distribution (e.g. `ss.BoolState('urban', default=ss.bernoulli(p=0.3))`), so each new agent draws its own value, with [common random numbers](mechanics_random.qmd) so that two runs give each agent the same draw.
+3. **Random values**: a state's default can be a distribution (e.g. `ss.BoolArr('urban', default=ss.bernoulli(p=0.3), result=True)`), so each new agent draws its own value, with [common random numbers](mechanics_random.qmd) so that two runs give each agent the same draw.
 
 Every agent has a **UID** (a unique identifier): a whole number, given in order from 0 as agents are made. An agent's UID never changes, and isn't reused after the agent dies, so a UID can be used to look up any agent, alive or dead.
 
@@ -50,6 +50,24 @@ print('Ages of every agent:', ppl.age.raw)
 ```
 
 The dead agents are still in `raw`, but not in `auids` or in an array's `values`.
+
+### How many? {#how-many}
+
+With `total_pop=` and `n_agents=` both given, each agent stands for several people, so "how many" has two answers: people (what the model represents, and what results are in) and agents (rows in the arrays). This is the one table of them; other pages link here.
+
+| To count | Write | As agents | In a compartmental run |
+|---|---|---|---|
+| People alive now | `sim.people.n` | Each agent counted by the people it stands for | The people in the compartments |
+| People in a state | `sir.I.n` | Likewise | Likewise |
+| People alive at each time point, after a run | `sim.results.alive` | In people | In people |
+| Agents alive now | `sim.people.alive.count()` | The agents | An error: there are no agents |
+| Agents in a state | `sir.I.count()` | The agents | An error: there are no agents |
+| Agents taking part in this step | `len(sim.people)` | The active agents, including any who died during this step, who are removed at its end | The number of groups |
+| Agents ever made | `sim.people.n_uids` | Alive or not | 1 |
+| Agents at the start | `sim.pars.n_agents` | The setting, not changed by births and deaths | None |
+| People at the start | `sim.pars.total_pop` | The setting | The setting |
+
+For a fraction, divide people by people (`sir.I.n / sim.people.n`) or, as agents, agents by agents (`sir.I.count() / sim.people.alive.count()`), never one by the other. With one agent per person (only `n_agents=` given), the two are the same.
 
 ## Rules for indexing
 
@@ -207,8 +225,7 @@ The kinds of array that hold what agents are and have (see [Arrays](../api/inter
 
 | Array | Holds | Default |
 |---|---|---|
-| `ss.BoolState` | True or false, for a state people are in that is worth counting (such as `alive`, `female`, or a disease's `I`): a module records the number in each of its states as a result | False |
-| `ss.BoolArr` | True or false, for a flag used inside a module (such as `preterm`), with no result of its own; otherwise the same, with `.uids` for the agents for whom it is true | False |
+| `ss.BoolArr` | True or false, with `.uids` for the agents for whom it is true. With `result=True`, for a state people are in that is worth counting (such as `alive`, `female`, or a disease's `I` as agents), its module records the number for whom it is true as a result; without it, a flag used inside a module (such as `preterm`) | False |
 | `ss.FloatArr` | A number, such as an age or a relative risk | NaN |
 | `ss.IntArr` | A whole number, such as a count | -999999 (for none, since whole numbers have no NaN) |
 | `ss.TimeArr` | The step on which something happened (such as `ti_dead`) | NaN |

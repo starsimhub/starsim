@@ -69,12 +69,12 @@ n = b.offspring[b.complete]
 print('Cases:', len(n), ' Mean offspring:', n.mean().round(2), ' Variance:', n.var().round(1), ' Fraction with none:', (n == 0).mean().round(2))
 ```
 
-To give the cases different infectiousness, give the disease `rel_trans` as an attribute drawn for each person, `ss.attr()`. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*. Here, for a SARS-like infection (R0 = 2, *k* = 0.2), the offspring with and without it, each over 8 runs of 20 imported cases:
+To give the cases different infectiousness, give the disease a distribution as `rel_trans`, drawn for each person. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*. Here, for a SARS-like infection (R0 = 2, *k* = 0.2), the offspring with and without it, each over 8 runs of 20 imported cases:
 
 ```{python}
 k = 0.2
 offspring = {}
-for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.attr(ss.gamma(shape=k, scale=1/k))))]: # Each person's infectiousness, with mean 1
+for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.gamma(shape=k, scale=1/k)))]: # Each person's infectiousness, with mean 1
     S, I, R = ss.states('S I R')
     sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='sars', **extra)
     sim = ss.Sim(sars, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)

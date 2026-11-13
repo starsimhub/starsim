@@ -26,22 +26,14 @@ import starsim as ss
 class Fishing(ss.Module):
     """ Each person goes fishing with a chance p_fishing, and catches a fish with a chance p_catch """
 
-    def __init__(self, banned=None, **kwargs):
-        super().__init__()
-        self.define_pars(
-            p_fishing = ss.bernoulli(p=0.5),
-            p_catch = ss.bernoulli(p=0.2),
-            banned = ss.uids(banned),
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('fish', default=0, label='Fish caught'),
-        )
-        return
+    p_fishing = ss.par(ss.bernoulli(p=0.5))
+    p_catch   = ss.par(ss.bernoulli(p=0.2))
+    banned    = ss.par([]) # The people who may not fish
+    fish      = ss.FloatArr(default=0, label='Fish caught')
 
     def step(self):
         fishing = self.pars.p_fishing.filter() # Everyone decides whether to go fishing
-        fishing = fishing.remove(self.pars.banned)
+        fishing = fishing.remove(ss.uids(self.pars.banned))
         caught = self.pars.p_catch.filter(fishing) # Those who go decide whether they catch a fish
         self.fish[caught] = self.fish[caught] + 1
         print(f'Day {self.ti}: caught by {caught}')
@@ -51,22 +43,18 @@ class Fishing(ss.Module):
 First, run both scenarios with common random numbers turned off, so that the random numbers are handed out in turn:
 
 ```{python}
-pars = dict(n_agents=20, stop=ss.days(3), rand_seed=15, verbose=0)
-
-ss.options.crn = False # Turned off for this example only
+pars = dict(n_agents=20, stop=ss.days(3), rand_seed=16, verbose=0)
 
 print('Everyone fishes')
-ss.Sim(Fishing(), **pars).run()
+ss.Sim(Fishing(), crn=False, **pars).run()
 
 print('Person 0 is banned')
-ss.Sim(Fishing(banned=[0]), **pars).run();
+ss.Sim(Fishing(banned=[0]), crn=False, **pars).run();
 ```
 
 Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned: fewer people fishing, more fish caught, which is impossible. That is the noise. Now the same with common random numbers, as Starsim runs by default:
 
 ```{python}
-ss.options.crn = True # The default
-
 print('Everyone fishes')
 ss.Sim(Fishing(), **pars).run()
 
@@ -81,7 +69,7 @@ Now the only difference is that person 0 catches nothing: everyone else makes th
 A module keeps common random numbers if it draws every random number from a Starsim distribution (see [Distributions](mechanics_distributions.qmd)), in this way:
 
 1. **One distribution for each decision.** Use a separate distribution for each thing that is decided (going fishing, catching a fish), and ideally draw from each once a step.
-2. **Make each distribution once.** Make it in `__init__()`, as an attribute or a parameter of the module, not in `step()`.
+2. **Make each distribution once.** Make it in the class body, as a parameter (`p_catch = ss.par(ss.bernoulli(p=0.2))`) or an attribute (`noise = ss.normal(0, 1)`), each instance getting its own copy; or in `__init__()`. Not in `step()`.
 3. **Draw for people, not for a number.** Pass the UIDs of the people the draw is for, or a boolean state with a value for each person, so that each person gets their own random number.
 4. **Put what varies in the parameter.** If a probability differs by person or by time, give the distribution a function as its parameter, rather than setting it anew each step.
 5. **Choose a fixed number of people with `ss.choose_n()`.** To pick exactly 20 people, `ss.choose_n(20)` keeps the pairing: if the candidates change slightly, most of the same people are still chosen. `ss.choice()` and NumPy's random choice don't.
@@ -101,9 +89,7 @@ def p_by_age(self, sim, uids):
     p[sim.people.age[uids] < 18] = 0.1
     return p
 
-def __init__(self):
-    super().__init__()
-    self.dist = ss.bernoulli(p=p_by_age)
+dist = ss.bernoulli(p=p_by_age) # In the class body
 
 uids = self.dist.filter(eligible) # filter() gives the UIDs for whom the draw is true
 
@@ -151,7 +137,7 @@ def first_success(states, p, n_max): # For each person, the act (up to n_max) th
                 break
     return out
 
-acts = first_success(self.acts.streams(uids), 0.1, 20) # self.acts is any distribution made in __init__(), e.g. ss.random()
+acts = first_success(self.acts.streams(uids), 0.1, 20) # self.acts is any distribution made once, in the class body or __init__(), e.g. ss.random()
 ```
 
 ## How it works
@@ -204,7 +190,7 @@ The key is the agent's *slot*, a persistent index: an agent's uniform for a give
 
 Common random numbers pair the draws, not the outcomes. In an epidemic, an intervention changes who infects whom, and the two scenarios drift apart, more so for a large change or late in an epidemic. A network can undo the pairing too: `ss.RandomNet` pairs people up from the whole population, so one death or birth in a scenario changes many people's contacts, and `ss.RandomNet(method='safe')` is the version that keeps them (see [Networks](library_networks.qmd), whose [appendix](library_networks.qmd#appendix-every-library-network) says which of the library's networks keep them). Nor do they cover sampling without replacement or joint draws across agents. In a stochastic compartmental run there are no people to pair, so two scenarios start from the same draws but drift apart once their counts differ. So common random numbers can reduce the number of runs needed to see a difference, but don't replace running several seeds: see [Scenarios](running_scenarios.qmd#comparing-scenarios-with-many-runs).
 
-`ss.options.crn = False` turns them off, e.g. to check how much they help in a given model (compare the spread of the paired differences over a few seeds with `crn` on and off). It is a global option, so set it back to `True` afterwards. Even turned off, each person draws from each distribution in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios.
+`ss.Sim(crn=False)` turns them off for one sim, e.g. to check how much they help in a given model (compare the spread of the paired differences over a few seeds with `crn` on and off); `ss.options.crn = False` turns them off for every sim. Even turned off, each person draws from each distribution in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios.
 
 With agents, `ss.Sim(even_draws=True)` also makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time: in a simple SIR, the variance of the final size between runs fell 3 to 10 times. It changes the model slightly (small outbreaks die out less often, and a peak can shift by around 10%) and runs slower, so it suits comparing scenarios better than estimating absolute numbers; it has no effect on compartmental solvers.
 

@@ -2571,7 +2571,7 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
                 if e <= 0 or n <= 0:
                     continue
                 p = sh.cov[k, c, g]
-                tally[k, 0, sh.rest[k, g]] += n*e*p # The expected number, as a compartmental run counts them, in the group of those offered it (see ss.Event.mark_offered())
+                tally[k, 0, sh.rest[k, g]] += n*e*p # The expected number, as a compartmental run counts them, in the group of those offered it (see ss.Event._mark_offered())
                 tally[k, 1, g] += n*e
                 if whole:
                     a = binomial(rng, n, e*p)

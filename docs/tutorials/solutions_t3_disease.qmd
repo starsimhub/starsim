@@ -129,13 +129,9 @@ def make_sim(k=None):
     recovery    = I >> R @ ss.days(8)
     init = dict(init=dict(R=0.8), init_n=dict(I=1))
     sim_pars = dict(n_agents=5000, stop=ss.days(365), verbose=0)
-    if k is None:
-        measles = ss.Disease(infection, progression, recovery, **init)
-        return ss.Sim(measles, **sim_pars)
-    infectiousness = ss.attr(ss.gamma(shape=k, scale=1/k))
-    measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, **init)
-    superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
-    return ss.Sim(measles, connectors=superspreading, **sim_pars)
+    rel_trans = None if k is None else ss.gamma(shape=k, scale=1/k)
+    measles = ss.Disease(infection, progression, recovery, rel_trans=rel_trans, **init)
+    return ss.Sim(measles, **sim_pars)
 
 for label, k in {'Everyone equally infectious': None, 'k = 0.2': 0.2}.items():
     msim = ss.parallel(make_sim(k), n_runs=40)

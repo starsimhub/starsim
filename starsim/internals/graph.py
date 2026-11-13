@@ -629,6 +629,9 @@ class Graph:
                 state = self.infectious[0].name if self.infectious else 'I'
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}".\n'
                                           f'     To start with people in a state, use init=dict({state}=0.01) for a fraction of people, or init_n=dict({state}=10) for a number; init_prev= seeds the state a new infection enters (by default 1% of people), as a fraction or a number of people.')
+            elif name in ['rel_sus', 'rel_trans'] and name not in self.pars:
+                raise TypeError(f'{name}= of "{self.module.name}" is a distribution that each person\'s {name} is drawn from, e.g. {name}=ss.gamma(shape=0.2, scale=5) (a mean of 1); not {value!r}. '
+                                f'For a value by group, use ss.levels(..., {name}=[...]) in stratify(); to scale it for everyone, scale the rate (e.g. beta) instead')
             elif name not in self.pars:
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.{ss.v3_deprecations.hint(keys=name, call=f"ss.{type(self.module).__name__}")}\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
@@ -841,7 +844,7 @@ class Graph:
                 dst = (flow.dest or [None])[0]
                 raise ss.CapabilityError(f'"{name}" reads the incidence of "{flow.name}" in its rate, which is not supported yet: a flow over a window, in a rate, needs the history of the flow in every solver.\n'
                                          f'     Use a count of a state instead, e.g. {getattr(dst, "name", "X")}.n, which is about the flow into it times the time people spend there. '
-                                         f'The incidence can be used in who= of ss.modify(), e.g. ss.modify(..., multiply=0.6, who={path}.incidence(over=ss.days(7)) > 0.001)')
+                                         f'The incidence can be used in when= of ss.modify(), e.g. ss.modify(..., multiply=0.6, when={path}.incidence(over=ss.days(7)) > 0.001)')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
                 if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
                     continue # Another module's clock: checked when it runs

@@ -56,7 +56,7 @@ def test_mnch():
                  interventions=ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2001)),
                  networks=networks(), **mnch_pars)
     sim.run()
-    fh = sim.custom.fetal_health
+    fh = sim.modules.fetal_health
     n_treated = sim.interventions.treat_pregnant.ti_treated.notnan.sum()
     n_weighed = fh.birth_weight.notnan.sum()
     print(f'  Newborns weighed: {n_weighed:n}; LBW: {fh.lbw.sum():n}; treated: {n_treated:n}')

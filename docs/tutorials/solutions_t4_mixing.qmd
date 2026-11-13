@@ -124,7 +124,7 @@ sims = {
 }
 msim = ss.parallel(sims)
 msim.plot('disease.I')
-msim.summarize().loc['disease_infection']
+msim.summarize().loc['disease.infection']
 ```
 
 Now it matters a great deal: with random mixing, most people are infected, but with the same 3 contacts every day, far fewer (how many varies a lot from one run to the next, since the outbreak can stall early or find its way through). Over a contact that lasts for the whole infectious period, the chance of passing the infection on is only about 1 − e^(−0.083 × 8) ≈ 50%, and one of each person's 3 contacts is usually the person who infected them, so each case infects on average not much more than one new person. Measles passes along nearly every link, so for measles the network changed the timing but not the size of the outbreak.
@@ -168,7 +168,7 @@ sims = {
 }
 msim = ss.parallel(sims)
 msim.plot('measles.I')
-msim.summarize().loc['measles_infection']
+msim.summarize().loc['measles.infection']
 ```
 
 The community alone gives an R0 of 0.19 × 2 × 8 ≈ 3, and infects most people. Households make the epidemic faster and infect nearly everyone, but they add less than their number of contacts suggests: once one person in a household is infected, the others are soon infected too, so most household contacts after that are wasted.

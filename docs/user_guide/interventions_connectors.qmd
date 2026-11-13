@@ -109,7 +109,7 @@ msim.plot(['hiv.infected', 'sti.I'])
 
 ## Modifiers as connectors
 
-A modifier can be given as a connector (`connectors=`) or as an intervention (`interventions=`); by convention, what is part of the biology goes in `connectors=`, and policy in `interventions=`.
+`ss.modify()` is explained under [Changing parameters](interventions_interventions.qmd#changing-parameters); its API reference is with the connectors, since it is one. A modifier can be given as a connector (`connectors=`) or as an intervention (`interventions=`); by convention, what is part of the biology goes in `connectors=`, and policy in `interventions=`.
 
 Connectors need not be between diseases. Here the STI lowers fertility, a quantity of pregnancy, a module of its own: women with the STI conceive half as often:
 
@@ -157,14 +157,10 @@ The safe pattern is for the code to work out a quantity, and for a modifier to a
 ```{python}
 class Inflammation(ss.Connector):
     """ Inflammation from an STI, which raises the risk of HIV and fades after the STI clears """
-    def __init__(self, rel_sus=2.7, half_life=ss.months(3), **kwargs):
-        super().__init__(**kwargs)
-        self.define_pars(rel_sus=rel_sus, half_life=half_life)
-        self.define_states(
-            ss.FloatArr('level', default=0.0),  # 1 while infected, then halving every half-life
-            ss.FloatArr('factor', default=1.0), # The resulting multiplier of HIV susceptibility
-        )
-        return
+    rel_sus   = ss.par(2.7)            # The multiplier of HIV susceptibility while the STI lasts
+    half_life = ss.par(ss.months(3))   # How quickly inflammation fades once the STI clears
+    level     = ss.FloatArr(default=0.0) # 1 while infected, then halving every half-life
+    factor    = ss.FloatArr(default=1.0) # The resulting multiplier of HIV susceptibility
 
     def step(self):
         sti = self.sim.diseases.sti
@@ -186,10 +182,10 @@ for sim in msim.sims:
     print(sim.label, '– new HIV infections:', round(sim.results.hiv.infection.sum()))
 ```
 
-A connector's parameters (`define_pars()`) can be changed when it is made, `Inflammation(half_life=ss.months(6))`, and fitted like any other (see [Custom modules](building_modules.qmd)).
+A connector's parameters (`ss.par` in its class body) can be changed when it is made, `Inflammation(half_life=ss.months(6))`, and fitted like any other (see [Custom modules](building_modules.qmd)).
 
 ::: {.callout-warning}
-A connector that sets an array directly (`hiv.rel_sus[uids] = 2.7`) erases whatever any other module did to it, such as a vaccine's protection or another interaction, and has to undo its own change when the condition ends. Let the code work out a value or a state, and let a modifier apply it, as above.
+Reading `hiv.rel_sus` gives its base value, without the modifiers; `hiv.current_value('rel_sus', uids)` gives the value transmission uses ([How changes combine](interventions_interventions.qmd#how-changes-combine)). A connector that sets an array directly (`hiv.rel_sus[uids] = 2.7`) erases whatever any other module did to it, such as a vaccine's protection or another interaction, and has to undo its own change when the condition ends. Let the code work out a value or a state, and let a modifier apply it, as above.
 :::
 
 ## Under compartments and agents

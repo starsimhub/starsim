@@ -36,9 +36,11 @@ def test_contacts():
     assert school.loc['10-14', '10-14'] == school.values[2, 2] and school.index[-1] == '75+' and school.attrs['ref']['layer'] == 'school'
     table = ss.contacts(school)
     assert np.array_equal(table.edges, ss.contacts('Kenya', layer='school').edges) and table.ref == school.attrs['ref'] and table.unit == 'day'
-    m = [[10, 3], [3, 5]] # A table not labeled by age group is a matrix over the model's own groups, as a list is
+    m = [[10, 3], [3, 5]] # A table not labeled by age group says nothing of its groups: by position it needs ages=, and by name it is over the model's own, as a list is
     for df in [pd.DataFrame(m), pd.DataFrame(m, index=['young', 'old'], columns=['young', 'old'])]:
-        assert ss.contacts(df).edges is None and np.array_equal(ss.contacts(df).dims['age'], ss.contacts(m).dims['age'])
+        with pytest.raises(TypeError, match='age=matrix'):
+            ss.contacts(df)
+        assert np.array_equal(ss.contacts(age=df).dims['age'], ss.contacts(age=m).dims['age'])
     assert np.array_equal(ss.contacts(pd.DataFrame(m, index=['0-17', '18+'])).edges, [0, 18])
 
     # A place a source does not have says which do
@@ -69,6 +71,11 @@ def test_geo():
     assert len(both) == 47 + len(ssd.load_nodes('Uganda', level=1)) and both.names[0].startswith('Kenya:')
     with pytest.raises(KeyError, match='the unit "Atlantis" was not found'):
         ss.geo.geography('Kenya', places=['Atlantis'])
+
+    # A table, with populations or positions given by hand, which win over its own (as for a country)
+    df = sc.dataframe(name=['a', 'b'], population=[100, 200], x=[0, 3], y=[0, 4])
+    assert ss.geo.geography(df).populations.tolist() == [100, 200] and ss.geo.geography(df, populations=[5, 6]).populations.tolist() == [5, 6]
+    assert ss.geo.geography(df, x=[0, 6], y=[0, 8]).distances[0, 1] == 10
 
     # As the places of a model, with travel between them
     sir = make_sir()

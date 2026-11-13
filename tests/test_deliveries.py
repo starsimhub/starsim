@@ -648,7 +648,7 @@ def test_modify_until():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=1e-3, name='sir')
         kw = dict(until=sir.I.frac <= 0.05) if until else {}
-        measure = ss.modify(sir.pars.beta, multiply=0.6, who=sir.I.frac >= 0.1, **kw)
+        measure = ss.modify(sir.pars.beta, multiply=0.6, when=sir.I.frac >= 0.1, **kw)
         return ss.Sim(sir, interventions=measure, total_pop=pop, dur=ss.days(200), solver=solver, verbose=0).run().results.sir.infection.values.sum()
     assert run('ode') < run('ode', until=False) # It stays on longer than the bare threshold
     assert run('abm', pop=20_000) < 20_000
@@ -667,7 +667,7 @@ def test_paths():
     R = lambda sim: sim.results.seir.R[-1]
     for solver in ['ode', 'abm']:
         kw = dict(solver=solver, init_n=dict(I=10))
-        assert R(run(lambda d: ss.treat(cure=1.0, who=d.I, coverage=ss.perday(0.1)), **kw)) == R(run(lambda d: ss.treat(cure=1.0, who='seir.I', coverage=ss.perday(0.1)), **kw))
+        assert R(run(lambda d: ss.treat(cure=1.0, who=d.I, rate=ss.perday(0.1)), **kw)) == R(run(lambda d: ss.treat(cure=1.0, who='seir.I', rate=ss.perday(0.1)), **kw))
         moves = [R(run(lambda d: ss.Event(move(d), when=ss.days(10), p=0.3), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
         assert moves[0] == moves[1] == moves[2]
         mods = [R(run(lambda d: ss.modify('seir.infection', multiply=0.5, who=where(d)), key='connectors', **kw)) for where in [lambda d: d.I, lambda d: 'seir.I']]

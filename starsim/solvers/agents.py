@@ -397,7 +397,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
         self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
-        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
+        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
         self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
@@ -455,10 +455,10 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'min_stay', None) is not None for tr in graph.exits[state.name].hazards)]
         exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dest or [])) for s in (tr.source or []) if getattr(s, 'people', False)}
-        self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolState.stays
+        self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolArr.stays
         for state in graph.people_states:
             name = state.name
-            arrs += [ss.BoolState(name, label=state.label or name)]
+            arrs += [ss.BoolArr(name, label=state.label or name, result=True)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
                 arrs.append(internal(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index'))) # See stamp()
@@ -554,7 +554,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for name,tr in graph.transitions.items():
             add(f'dst_{name}', ss.random())
             if tr.trigger is not None and tr.trigger.outcome:
-                add(f'trig_{name}', ss.random()) # Who of the people of the outcome move: see ss.interventions.trigger_moves()
+                add(f'trig_{name}', ss.random()) # Who of the people of the outcome move: see ss.solvers.deliveries.trigger_moves()
             add(f'mix_{name}', ss.random())
             if carriage and tr.contact:
                 add(f'pass_{name}', ss.random()) # Which strain someone who carries several passes on
@@ -1156,7 +1156,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return {name:ss.uids(found[offsets[k]:offsets[k+1]]) for name,k in order.items()}
 
     def wrote(self, name, entered, left):
-        """ Some agents have been put in a state of people, or taken out of it, by anything (see `ss.BoolState`): keep its count by group (each counted once) """
+        """ Some agents have been put in a state of people, or taken out of it, by anything (see `ss.BoolArr`): keep its count by group (each counted once) """
         if not len(entered) and not len(left):
             return
         unique = lambda u: u if len(u) < 2 or (u[1:] > u[:-1]).all() else np.unique(u)
@@ -1363,7 +1363,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         nets = [net for net in self.sim.networks.values() if isinstance(net, ss.networks.MixingPools)]
         other = next((net for net in nets if net.name not in mixing.pool_terms), None)
         if other is not None:
-            errormsg = f'"{self.mod.name}" has a count in a rate ({self.graph.met_counts[0]}) that the contact matrix "{other.name}" acts on, which as agents it does only over the model\'s own groups, not age groups of its own; stratify by them, e.g. ss.contacts(matrix) with sim.stratify(age=[...]), or run as compartments'
+            errormsg = f'"{self.mod.name}" has a count in a rate ({self.graph.met_counts[0]}) that the contact matrix "{other.name}" acts on, which as agents it does only over the model\'s own groups, not age groups of its own; stratify by them, e.g. ss.contacts(age=matrix) with sim.stratify(age=[...]), or run as compartments'
             raise ss.CapabilityError(errormsg)
         return mixing.count_terms([mixing.pool_terms[net.name] for net in nets])
 

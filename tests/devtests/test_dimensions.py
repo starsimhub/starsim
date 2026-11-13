@@ -698,7 +698,7 @@ def test_mixing():
         assert not any('literally' in note for note in sim.notes)
         return sim.results.sir.I.values
     assert np.allclose(counted(lambda S, I, R: 0.05*I.n/(S + I + R).n), counted(lambda S, I, R: 0.05*I.frac))
-    for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(matrix=[[1, np.nan], [1, 1]])]:
+    for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(age=[[1, np.nan], [1, 1]])]:
         with pytest.raises(ValueError):
             ss.contacts(**bad)
 
@@ -1021,7 +1021,7 @@ def test_contacts_ages():
         return m
     pars = dict(total_pop=100_000, n_agents=10_000, dur=ss.days(30), rand_seed=1, **kw)
     for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
-        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(age=C, area=area, ages=[0, 15, 65])]]
+        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(C, ages=[0, 15, 65], area=area)]]
         assert np.allclose(*[sim.results.measles.infection.values for sim in sims])
         assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once, as agents too (it was never checked for ages=, and then only in a compartmental run)
     res = sims[0].results.measles.infection

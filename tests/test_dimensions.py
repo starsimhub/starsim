@@ -205,7 +205,7 @@ def test_register():
 
     # Stepping gives what the whole run in one call does; a date is placed on the sim's calendar; a whole number is a count of people
     with pytest.warns(RuntimeWarning):
-        stepped = ss.Sim(make(), solver='ode', total_pop=10_000, unit='day', stop=60, **kw).profile(kind='loop', plot=False).sim
+        stepped = ss.Sim(make(), solver='ode', total_pop=10_000, unit='day', stop=60, **kw).perf_profile(kind='loop', plot=False).sim
     assert np.allclose(stepped.results.sir.I.values, sims.ode.results.sir.I.values)
     dated = register.copy()
     dated['date'] = [ss.date('2020-01-01') + ss.days(int(d)) for d in register['date']]
@@ -269,7 +269,7 @@ def test_property_values():
 
     # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and shares for it raise
     def make(urban=[False, True]):
-        ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
+        ppl = ss.People(5000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.9), result=True), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
         S, I = ss.states('S I')
         sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
         sim.stratify(urban=urban)
@@ -306,7 +306,7 @@ def test_given_splits():
     # Stratifying by a property the people already have keeps it, and is not described as guessed (everyone was put at False, the first level)
     N = 10_000
     tob = np.random.default_rng(1).random(N) < 0.3
-    ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
+    ppl = ss.People(N, extra_states=[ss.BoolArr('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool), result=True)])
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), default_state='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
@@ -337,7 +337,7 @@ def test_sex():
     for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex={'female': 0.7, 'male': 0.3})]:
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), init_prev=0.05, name='si')
-        sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
+        sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=0.03), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
         if isinstance(kw['sex'], dict):
             assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
         start = (sim.people.female & sim.diseases.si.S).sum()
@@ -431,7 +431,7 @@ def test_levels():
         assert np.array_equal(g.group_inside[:, d], (g.group_coords[:, 0] == 0) & (g.group_coords[:, 1] >= 1)), f'{solver}: parity only for women of 15 and over'
     assert [s.name for s in make().stratify(states=['low', 'high'], kind=[0, 1]).graph.strats] == ['states', 'kind'] # An option's name can be a dimension's
     for old in [dict(fractions=[0.8, 0.2]), dict(adjust={'infection': [1, 3]}), dict(kind='space'), dict(where=dict(sex='female'))]:
-        with pytest.raises(TypeError, match='stratify\(\) takes only dimensions'):
+        with pytest.raises(TypeError, match=r'stratify\(\) takes only dimensions'):
             make().stratify(risk=['low', 'high'], **old)
     with pytest.raises(TypeError, match='one dict of dimensions'):
         old_form = [dict(age=[0, 15]), dict(risk=['low', 'high'])] # A list of dicts, one per call of stratify(), as before
@@ -449,6 +449,41 @@ def test_levels_fractions():
     return sim
 
 
+def test_levels_effects():
+    sc.heading('ss.levels(rel_sus=, rel_trans=): a dimension with its own effect, the same as a modifier by level')
+    def make(effect):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
+        sir.stratify(vaccinated=ss.levels({False: 0.3, True: 0.7}, states=['S'], **(dict(rel_sus=[1, 0.1]) if effect else {})), risk=ss.levels({'lo': 0.7, 'hi': 0.3}, **(dict(rel_trans=[1, 3]) if effect else {})))
+        mods = None if effect else [ss.modify('sir.rel_sus', multiply=ss.by(vaccinated=[1, 0.1])), ss.modify('sir.rel_trans', multiply=ss.by(risk=[1, 3]))]
+        return sir, mods
+    for solver in ['ode', 'abm']:
+        size = dict(total_pop=5000) if solver == 'ode' else dict(n_agents=5000)
+        totals = [ss.Sim(sir, connectors=mods, stop=ss.days(100), solver=solver, **size, **kw).run().results.sir.infection.sum() for sir,mods in [make(True), make(False)]]
+        assert totals[0] == totals[1], f'ss.levels(rel_sus=, rel_trans=) should be the same as the modifiers ({solver})'
+    sir, _ = make(True)
+    sim = ss.Sim(sir, total_pop=1000, **kw)
+    assert 'rel_sus: False 1, True 0.1' in str(sim.describe()) and 'by level of vaccinated' in str(sim.what_modifies(sir.rel_sus))
+    with pytest.raises(TypeError, match='one multiplier for each level'):
+        ss.levels([False, True], rel_sus=0.5)
+    return
+
+
+def test_strains_class_twice():
+    sc.heading('A class with an outcome for each strain carried can be made twice: the strains change the copies of its transitions, not the class')
+    class TB(ss.Disease):
+        S, L, I, Tx, R = ss.states('S L I Tx R')
+        infection = S >> L @ ss.peryear(4)*I
+        activation = L >> I @ ss.peryear(0.3)
+        diagnosis = I >> Tx @ ss.peryear(2)
+        treatment = ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain='each')
+    strains = lambda: ss.Strains(['DS', 'RIF'], max_strains=2, cure=[0.9, 0.3])
+    TB(strains=strains())
+    tb = TB(strains=strains(), name='tb')
+    ss.Sim(tb, n_agents=500, start=2000, stop=2002, **kw).run()
+    return
+
+
 if __name__ == '__main__':
     cure    = test_strain_cure()
     slev = test_strain_levels()
@@ -462,3 +497,5 @@ if __name__ == '__main__':
     places  = test_places_by_name()
     levels  = test_levels()
     test_levels_fractions()
+    test_levels_effects()
+    test_strains_class_twice()

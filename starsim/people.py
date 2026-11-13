@@ -131,9 +131,9 @@ class People:
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         states = [
-            ss.BoolState('alive', default=True),  # Whether the agent is alive
+            ss.BoolArr('alive', default=True, result=True),  # Whether the agent is alive
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
+            ss.BoolArr('female', default=ss.bernoulli(name='female', p=p_female), result=True),
             ss.TimeArr('ti_dead'),  # The step of death
             ss.TimeArr('ti_removed'),  # The step of leaving for another reason (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
@@ -388,18 +388,18 @@ class People:
     @property
     def auto_state_list(self):
         """
-        The people's own `ss.BoolState` states (e.g. alive, female), each of which makes a result of the same name, the number of people in it
+        The people's own boolean states that are results (`ss.BoolArr` with `result=True`, e.g. alive, female), each of which makes a result of the same name, the number of people in it
 
         Not those of modules (named like "sir.S"), which make their own results; for all states, see `People.states`.
         """
         return [state for key, state in self.states.items()
-                if isinstance(state, ss.BoolState) and '.' not in key]
+                if isinstance(state, ss.BoolArr) and state.result and '.' not in key]
 
     def init_results(self):
         """
         Make the results of the people; called by `Sim.init_results()`
 
-        Each of the people's own `ss.BoolState` states makes a result of the number in it (e.g. `alive`, the
+        Each of the people's own boolean states with `result=True` makes a result of the number in it (e.g. `alive`, the
         number alive); for a state that makes no result, use `ss.BoolArr` instead. There are also the flows of
         people who died and who left (`died` and `emigrated`; `results.died.cum` is the cumulative total).
 
@@ -496,15 +496,10 @@ class People:
 
     def init_mock(self):
         """ Link the people to a mock sim and give them their values, so they can be used without a sim (for testing and debugging) """
-        sim = ss.debugtools.mock_sim(n_agents=self.n_agents)
+        sim = ss.debugtools.mock_sim(n_agents=len(self))
         self.link_sim(sim, init=True)
         self.init_vals()
         return
-
-    @property
-    def n_agents(self):
-        """ The number of active agents, as `len(people)` (for the number of people alive, see `people.n`) """
-        return len(self)
 
     @property
     def n_uids(self):
@@ -557,7 +552,7 @@ class People:
             n = len(new_slots)
 
         if n == 0:
-            return np.array([], dtype=ss.dtypes.int)
+            return ss.uids()
 
         start_uid = self.uid.len_used
         stop_uid = start_uid + n
@@ -760,7 +755,7 @@ class People:
             sim = self.sim
             mods = [disease for disease in sim.diseases() if isinstance(disease, ss.Disease)]
             mods += [mod for mod in getattr(sim, 'declared', []) if all(mod is not m for m in mods)] # A declared disease given as another kind of module: its agents leave its states as well
-            mods += [mod for mod in sim.modules if type(mod).on_death is not ss.Module.on_death and all(mod is not m for m in mods)]
+            mods += [mod for mod in sim.module_list if type(mod).on_death is not ss.Module.on_death and all(mod is not m for m in mods)]
             if sim.initialized: # Kept once the modules are all there
                 self._death_mods = mods
         return mods
@@ -769,7 +764,7 @@ class People:
         """ Tell each module that defines `on_birth()` about these newborns (see `ss.Module.on_birth()`); called wherever children are born """
         if len(children):
             parents = None
-            for mod in self.sim.modules:
+            for mod in self.sim.module_list:
                 if type(mod).on_birth is not ss.Module.on_birth:
                     if parents is None:
                         parents = ss.uids(self.parent.raw[children])
@@ -834,10 +829,10 @@ class People:
         return dying if dying is not None else ss.uids()
 
     def record_states(self):
-        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
+        """ Record the population counts at the start of the step (each `ss.BoolArr` with `result=True`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
-        states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. alive, female
+        states = [getattr(self, state.name) for state in self.auto_state_list] # Each automatic result, e.g. alive, female
         counts = None
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
             w = self.scale.raw[self.auids]
@@ -923,8 +918,8 @@ class People:
         """
         kwargs.setdefault('figsize', figsize)
         if key is None: # What can be shown: not the solvers' own bookkeeping, or a state with no values (e.g. the time of death when nobody has died)
-            data = lambda state: state.values if alive else state.raw
-            shown = lambda state: not state.internal and (isinstance(state, ss.BoolArr) or (isinstance(state, ss.FloatArr) and not np.all(np.isnan(data(state)))))
+            values_of = lambda state: state.values if alive else state.raw
+            shown = lambda state: not state.internal and (isinstance(state, ss.BoolArr) or (isinstance(state, ss.FloatArr) and not np.all(np.isnan(values_of(state)))))
             key = [k for k,state in self.states.items() if shown(state)]
         key = sc.tolist(key)
         if max_plots:
@@ -939,12 +934,15 @@ class People:
                 data = sc.rmnans(data)
                 if not len(data):
                     print(f'Not plotting "{k}" since all values are NaN')
+                    ax.set_title(f'{state.name} (all NaN)')
+                    continue
                 ax.hist(data, bins=bins, **sc.mergedicts(hist_kw))
             elif isinstance(state, ss.BoolArr):
                 ax.bar(['False', 'True'], [(~data).sum(), data.sum()], color=['#E0D3DE', '#3C88A3'])
             else:
                 warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
                 ss.warn(warnmsg)
+                continue
             ax.set_title(f'{state.name} (mean={ss.results.format_value(data.mean())})')
             ax.set_ylabel('Count')
             sc.commaticks(ax)

@@ -236,7 +236,7 @@ def treated_event(solver):
     a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S, rate=0), name='a')
     S, F = ss.states('S F')
     b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
-    tx = ss.treat(ss.Treatment(cure={a.cure: 1.0}), who=a.I, coverage=ss.peryear(1.0), name="tx")
+    tx = ss.treat(ss.Treatment(cure={a.cure: 1.0}), who=a.I, rate=ss.peryear(1.0), name="tx")
     size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
     return ss.Sim([a, b], interventions=tx, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run().results
 
