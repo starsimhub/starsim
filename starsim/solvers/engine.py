@@ -1964,6 +1964,7 @@ class Engine(Telling, Effects):
         ng = self.sim.groups.n_groups
         self.stock_groups = sc.obj()
         self.flow_groups = sc.obj()
+        self.keep_at = self.kept_y = None # A time point to keep the compartments at in a run the kernels take whole, and those compartments: see ss.fitting.run_kept()
         self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.solvers.group_rows()
         self.row_flows = sc.obj() # Then, the flows by group so far in the current row
         if ng > 1:

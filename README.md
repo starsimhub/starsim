@@ -4,7 +4,7 @@
 [![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
 [![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yml)
 
-> **Note: Starsim v4 is now available.** It's quite different from v3, with a new and simpler syntax for creating diseases, and support for compartmental and geospatial models. Models written for v3 will need to be [migrated](https://docs.starsim.org/v3v4); see the [changelog](https://starsim.org/v4/whatsnew.html) for details, or [contact us](mailto:info@starsim.org) for help. To continue using [Starsim v3](https://starsim.org/v3), use `pip install starsim<4`.
+> **Note: Starsim v4 is now available.** It's quite different from v3, with a new and simpler syntax for creating diseases, and support for compartmental and geospatial models. Models written for v3 will need to be [migrated](https://docs.starsim.org/v3v4); see the [changelog](https://starsim.org/v4/whatsnew.html) for details, or [contact us](mailto:info@starsim.org) for help. To continue using [Starsim v3](https://starsim.org/v3), use `pip install starsim<4`; the [v3 docs](https://starsim.org/v3) are also still available. But really, please upgrade to v4! You'll be glad you did!
 
 [Starsim](https://starsim.org) is a fast, flexible disease modeling framework, from compartments to agents. It supports modeling multiple co-transmitting diseases, including infectious and non-infectious diseases plus other health states (such as pregnancy and birth), and captures their biological and behavioral interactions. It lets users compare intervention strategies, such as vaccines or treatments, across delivery methods like mass campaigns or targeted outreach. It also includes built-in tools for scenario analyses and calibrating models to real-world data.
 
@@ -19,7 +19,7 @@ Starsim includes an extensive library of features aimed to support a broad diver
 
 - **Modeling modalities:** Switch between compartmental, stochastic compartmental, metapopulation, and agent-based modeling using a flag (`solver='abm'`) without needing to rewrite any code ([solvers](https://starsim.org/v4/user_guide/running_solvers.html));
 - **Performance:** Numeric kernels are heavily optimized, with Numba and Rust kernels that give the same numbers, plus GPU support (via JAX) ([performance](https://starsim.org/v4/user_guide/running_performance.html));
-- **Diseases:** A large library of already-implemented diseases including HIV, TB, malaria, COVID, flu, measles, syphilis, gonorrhea, typhoid, cholera, Ebola and many others (plus HPV, chlamydia, rotavirus, and others in the models below); diseases support coinfection between different diseases, as well as multiple strains of a single disease ([library diseases](https://starsim.org/v4/user_guide/library_diseases.html), [diseases](https://starsim.org/v4/user_guide/building_diseases.html));
+- **Diseases:** A large library of already-implemented diseases including COVID, flu, measles, malaria, syphilis, gonorrhea, cholera, Ebola and many others (plus HIV, TB, COVID, HPV, chlamydia, typhoid, and others in the models below); diseases support coinfection between different diseases, as well as multiple strains of a single disease ([library diseases](https://starsim.org/v4/user_guide/library_diseases.html), [diseases](https://starsim.org/v4/user_guide/building_diseases.html));
 - **Networks:** Contact networks including age-stratified contact matrices, sexual (including male-female, male-male, and commercial), respiratory (household/workplace/school); also supports other forms of disease transmission including environmental and vector-borne ([networks](https://starsim.org/v4/user_guide/populations_mixing.html), [library networks](https://starsim.org/v4/user_guide/library_networks.html));
 - **Interventions:** Flexible options for representing interventions, including screening, diagnostics, treatments, vaccination, and care cascades; health system considerations such as prioritization, capacity constraints, and clinic visits ([interventions](https://starsim.org/v4/user_guide/interventions_interventions.html), [products](https://starsim.org/v4/user_guide/interventions_products.html));
 - **Costing:** Support for intervention- and disease-related costs, health outcomes like disability-adjusted life years (DALYs), and budget optimization ([costs](https://starsim.org/v4/user_guide/library_econ.html), [optimization](https://starsim.org/v4/user_guide/calibration_optimization.html));
@@ -43,6 +43,7 @@ Starsim is the basis of several other established disease modeling frameworks. T
 - [STIsim](https://stisim.org), for modeling HIV, syphilis, gonorrhea, chlamydia, trichomoniasis, and bacterial vaginosis (including co-transmission);
 - [TBsim](https://starsim.org/tbsim), for modeling tuberculosis, including drug resistance;
 - [FPsim](https://fpsim.org), for modeling family planning and women's life courses.
+- [Typhoidsim](https://starsim.org/typhoidsim/), for modeling typhoid, including environmental transmission.
 
 A full list of diseases modeled using Starsim is available in the [documentation](https://starsim.org/v4/user_guide/intro_starsim.html#models-built-with-starsim).
 
@@ -65,11 +66,11 @@ pip install "starsim[jax]"
 starsim init
 ```
 
-JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works. Intel Macs are not supported.
+JAX is recommended if you'll be calibrating compartmental models -- otherwise you can skip it, i.e. `pip install starsim`.
 
-`starsim init` compiles Numba's kernels if the Rust ones are not available (which takes a few minutes, once, and makes the first runs faster; the wheels on PyPI include the Rust kernels, so there is usually nothing to compile) and, if an AI coding agent such as Claude Code or Codex is installed, links Starsim's skills into your project (type `/starsim` to use them). To do just one of these, run `starsim init compile` or `starsim init ai`.
+`starsim init` compiles numeric kernels if needed (usually it's not). It also asks if you want to install Starsim's AI skills (so you can type `/starsim` in your agent to use them). To do either the compile or the AI install, run `starsim init compile` or `starsim init ai`.
 
-Or with [uv](https://github.com/astral-sh/uv):
+You can also of course install with [uv](https://github.com/astral-sh/uv):
 ```sh
 uv init example
 cd example
@@ -98,9 +99,11 @@ init_starsim()
 See [r.starsim.org](https://r.starsim.org) for more information.
 
 
-## Usage and documentation
+## Documentation
 
 Full documentation, including tutorials and an API reference, is available at [docs.starsim.org](https://docs.starsim.org).
+
+## Usage
 
 You can run a simple demo via:
 
@@ -114,10 +117,10 @@ Here's a minimal SIR model, with an infection rate of β = 0.3 per day and an in
 ```py
 import starsim as ss
 
-S, I, R = ss.states('S I R')
-infection = S >> I @ 0.3*I         # From S to I, at a rate of β times the fraction infectious
-recovery  = I >> R @ ss.days(10)   # From I to R, after 10 days on average
-sir = ss.Disease(infection, recovery)
+S, I, R = ss.states('S I R') # Create the SIR states
+infection = S >> I @ 0.3*I # From S to I, at a rate of β times the fraction infectious
+recovery  = I >> R @ ss.days(10) # From I to R, after 10 days on average
+sir = ss.Disease(infection, recovery) # Create the disease from the transitions
 
 sim = ss.Sim(sir)
 sim.run()
@@ -129,13 +132,17 @@ The same model, written out in full:
 ```py
 import starsim as ss
 
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+S = ss.State(label='Susceptible')
+I = ss.State(label='Infectious')
+R = ss.State(name='Recovered')
+beta = ss.perday(0.3)
+dur_inf = ss.expon(mean=ss.days(10))
 sir = ss.Disease(
+    name = 'SIR',
     transitions = [
-        ss.Transition(source=S, dest=I, rate=ss.perday(0.3)*I, name='infection'),
-        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(10)), name='recovery'),
+        ss.Transition(source=S, dest=I, rate=beta*I, name='infection'),
+        ss.Transition(source=I, dest=R, dur=dur_inf, name='recovery'),
     ],
-    name = 'sir',
 )
 
 sim = ss.Sim(diseases=sir, solver='ode')
@@ -143,9 +150,9 @@ sim.run()
 sim.plot()
 ```
 
-These run as a compartmental model (an ODE). To run the same model as agents, give the number of agents, `ss.Sim(sir, n_agents=5_000)`; agents also allow networks of contacts between particular people ([mixing](https://starsim.org/v4/user_guide/populations_mixing.html)).
+These run as a compartmental model (an ODE). To run the same model as agents, give the number of agents, e.g. `ss.Sim(sir, n_agents=5_000)`.
 
-Or from R:
+You can also run the same example from R:
 
 ```R
 library(starsim)
@@ -166,7 +173,7 @@ More usage examples are available in the tutorials and user guide.
 
 ## AI integration
 
-Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim 3. `starsim init ai` (part of `starsim init`) links them into your project, and `starsim ai install --global` sets them up for all your projects instead; tools that read skills from installed packages, such as `uvx library-skills`, find them too. `starsim ai "how would I model a leaky vaccine?"` asks your agent a question about Starsim (`-i` for an interactive session), and `starsim help RandomNet` looks a name or term up in the docs, without an agent. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
+Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim v3. `starsim init ai` links them into your project, and `starsim ai install --global` sets them up for all your projects instead. You can also install them with other standard tools, such as `uvx library-skills`. `starsim ai "how would I model a leaky vaccine?"` asks your agent a question about Starsim (`-i` for an interactive session), and `starsim help RandomNet` looks a name or term up in the docs, without an agent. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
 
 
 ## Contributing
@@ -178,4 +185,4 @@ We welcome contributions of all kinds! Questions or comments can be directed to 
 
 We believe in being transparent about AI use. Each page comes with a little note estimating the human vs. AI contribution; hover to get more info. For this page:
 
-[*Authorship*: 🧠85%, 🤖15%](# "Humans wrote everything, except some of the code examples were AI-generated; the usage examples were revised by AI on Nov 12")
+[*Authorship*: 🧠90%, 🤖10%](# "Humans wrote everything, except some of the code examples were AI-generated, which were then human-reviewed")

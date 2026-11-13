@@ -521,12 +521,26 @@ def run_kept(sim, end):
     compartments of each engine or joint states at `end` between them
     """
     ys = {}
-    if 0 < end < sim.t.npts:
-        sim.run(until=sim.t.timevec[end - 1]) # Through the step from end-1, so the compartments are those at end
-        for mod in sim.declared:
-            engine = mod.engine
-            ys.setdefault(mod.name if engine.joint is None else engine.joint.names[0], np.array((engine.joint if engine.joint is not None else engine).y))
-    sim.run()
+    engines = [mod.engine for mod in sim.declared]
+    if 0 < end < sim.t.npts and all(e.joint is None and e.rows is None for e in engines): # The kernels take the run whole, in two parts, keeping the compartments where the first ends (much faster than a step at a time)
+        for engine in engines:
+            engine.keep_at, engine.kept_y = end, None
+        try:
+            sim.run()
+        finally:
+            for engine in engines:
+                engine.keep_at = None
+        ys = {e.mod.name:e.kept_y for e in engines}
+        if any(y is None for y in ys.values()):
+            errormsg = f'run_kept() needs a run that the kernels take whole, but {sc.strjoin(k for k,y in ys.items() if y is None)} was run a step at a time'
+            raise RuntimeError(errormsg)
+    else:
+        if 0 < end < sim.t.npts: # A step at a time up to end, for joint states or results by group kept every few steps
+            sim.run(until=sim.t.timevec[end - 1]) # Through the step from end-1, so the compartments are those at end
+            for mod in sim.declared:
+                engine = mod.engine
+                ys.setdefault(mod.name if engine.joint is None else engine.joint.names[0], np.array((engine.joint if engine.joint is not None else engine).y))
+        sim.run()
     out = sc.obj()
     for mod in sim.declared:
         engine = mod.engine
@@ -1087,7 +1101,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, warmup, verbose, stop, f
         n0 = stop['batch'] if stop['auto'] else stop['draws']
         held = lowered.out_info # The chains' states and settings, as the batches take them
         compiled[n0] = together(draw_n(n0)).lower(split(jax.random.split(jax.random.key(0), chains)), *held).compile()
-    compiling = T.tt(output=True)
+    compiling = T.tt(output=True) # Which starts the timer again, for the sampling
     state, params = compiled['warm'](*warm_args)
     keys = [key]
 
@@ -1101,7 +1115,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, warmup, verbose, stop, f
 
     out = nuts_batches(sample, d, chains, stop)
     if verbose:
-        print(f'NUTS: {chains} chains on {n_dev} core{"s" if n_dev != 1 else ""}, each of {warmup} warm-up draws and then {out[0].shape[1]} draws{" (enough: see draws=)" if stop["auto"] and out[0].shape[1] < stop["max_draws"] else ""}: compiled in {compiling:.1f} s, sampled in {T.tt(output=True) - compiling:.1f} s')
+        print(f'NUTS: {chains} chains on {n_dev} core{"s" if n_dev != 1 else ""}, each of {warmup} warm-up draws and then {out[0].shape[1]} draws{" (enough: see draws=)" if stop["auto"] and out[0].shape[1] < stop["max_draws"] else ""}: compiled in {compiling:.1f} s, sampled in {T.tt(output=True):.1f} s')
     return out
 
 
