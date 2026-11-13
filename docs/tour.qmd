@@ -5,18 +5,37 @@ authorship:
   human: 0
   ai: 100
   note: Written by AI; the intervention, fitting, and uncertainty examples made more realistic by AI
+format: # Also downloadable as a Jupyter notebook (not executed: the page already is), as for the tutorials
+  html: default
+  ipynb:
+    execute:
+      enabled: false
+format-links:
+  - text: Jupyter notebook
+    format: ipynb
+    icon: journal-code
 ---
 
 This page is a ten-minute tour of Starsim. It builds one model step by step: a simple epidemic, then the same epidemic with age groups, an intervention, data to fit it to, and many runs to show the uncertainty. Each step is a few lines of code, and each step says what the code means in the terms of an epidemiological model. The parameters are illustrative, not estimates for any particular disease or setting.
 
-To follow along, install Starsim with `pip install "starsim[jax]"`, and paste each block into a notebook or a Python script, in order.
+To follow along, install Starsim with `pip install "starsim[jax]"`, then download this page as a Jupyter notebook from the "Jupyter notebook" link beside the page's contents, and run its cells in order. You can also clone the [Starsim repository](https://github.com/starsimhub/starsim) and open `docs/tour.qmd` in Jupyter (with `jupytext` installed, Jupyter opens `.qmd` files directly).
 
 ## An SIR model
 
-In an SIR model, everyone is in one of three compartments: susceptible (S), infectious (I), or recovered (R). People move between them along two transitions:
+In an SIR model, everyone is in one of three compartments: susceptible (S), infectious (I), or recovered (R). The model is the standard set of equations:
+
+$$
+\begin{aligned}
+\frac{dS}{dt} &= -\beta \frac{S I}{N} \\
+\frac{dI}{dt} &= \beta \frac{S I}{N} - \gamma I \\
+\frac{dR}{dt} &= \gamma I
+\end{aligned}
+$$
+
+where N = S + I + R is the population size. People move between the compartments along two transitions:
 
 - **Infection**, from S to I. Each susceptible person is infected at a rate of β times the fraction of people who are infectious, so the number infected per day is β S I / N (frequency-dependent transmission).
-- **Recovery**, from I to R. People stay infectious for 10 days on average, so they recover at a rate of 1/10 per day.
+- **Recovery**, from I to R. People stay infectious for 10 days on average, so they recover at a rate of γ = 1/10 per day.
 
 In Starsim, the compartments are states, and each transition says where people move from, where they move to, and at what rate (after `@`):
 
@@ -29,7 +48,7 @@ recovery  = I >> R @ ss.days(10)  # From I to R, after 10 days on average
 sir = ss.Disease(infection, recovery)
 ```
 
-A state in a rate, like `I` in `0.3*I`, is the fraction of people in it. A duration, like `ss.days(10)`, is the average time spent in a state before leaving it. Since the duration is in days, β = 0.3 is per day. The model is the standard set of equations:
+A state in a rate, like `I` in `0.3*I`, is the fraction of people in it. A duration, like `ss.days(10)`, is the average time spent in a state before leaving it. Since the duration is in days, β = 0.3 is per day. Starsim writes out the same equations from the model:
 
 ```{python}
 sir.equations()
