@@ -257,7 +257,7 @@ ss.parallel(scenarios).plot('measles.I')
 msim.plot('measles.I') # The 20 runs above: the median and the range of 95% of them
 ```
 
-Plots mark when interventions act (a dashed line at each round of a delivery, a shaded span for an `ss.modify()` or routine delivery), in gray for marks every scenario shares and in a scenario's color for its own; `show_interventions=False` leaves them out. `msim.plot_each()` plots each run on its own time axis, for sims with different time points.
+Plots mark when interventions act (a dashed line at each round of a delivery, and at the start of an `ss.modify()` or routine delivery), in gray for marks every scenario shares and in a scenario's color for its own; `show_interventions='fill'` shades the span from each one's start to its stop instead (lightly, so overlapping ones show darker), and `show_interventions=False` leaves them out. `msim.plot_each()` plots each run on its own time axis, for sims with different time points.
 
 ### Styles, saving, and Matplotlib
 

@@ -1616,13 +1616,15 @@ class Results(ss.ndict):
         return {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(scenarios)}
 
 
-def intervention_marks(sim):
-    """ When the interventions and modifiers of a sim act, for marking on plots: those with fixed times (see `ss.Event.marks()` and `ss.modify.marks()`; an intervention written as code can define its own `marks()`) """
+def intervention_marks(sim, fill=False):
+    """ When the interventions and modifiers of a sim act, for marking on plots: those with fixed times (see `ss.Event.marks()` and `ss.modify.marks()`; an intervention written as code can define its own `marks()`); a (start, stop) span as its start time, unless `fill=True` """
     mods = list(sim.interventions.values()) + [m for mods in sim.modifiers.values() for m in mods if isinstance(m, ss.modify)]
     out = []
     for mod in {id(m):m for m in mods}.values():
         marks = getattr(mod, 'marks', None)
         for mark in (marks() if callable(marks) else []):
+            if isinstance(mark, tuple) and not fill: # Many interventions never stop, so mark when they start
+                mark = mark[0]
             if mark not in out:
                 out.append(mark)
     return out
@@ -1634,7 +1636,7 @@ def draw_marks(ax, marks, colors=None):
         color = (colors or {}).get(scenario, 'k')
         for mark in items:
             if isinstance(mark, tuple):
-                ax.axvspan(*mark, color=color, alpha=0.08, lw=0, zorder=0)
+                ax.axvspan(*mark, color=color, alpha=0.08, lw=0, zorder=0) # Light, so that overlapping spans darken as they add up
             else:
                 ax.axvline(mark, color=color, ls='--', lw=1.2, alpha=0.8 if scenario is not None else 0.5, zorder=1.5) # Above the bands of scenarios, below their lines
     return

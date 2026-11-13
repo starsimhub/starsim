@@ -633,7 +633,7 @@ class MultiSim:
             legend (bool): whether to label the scenarios, if there is more than one
             lines (bool): plot every run instead of the median and interval
             show_data (bool): plot the data of the first sim that has any, as `sim.plot()` does (a flow with data at a longer period than the step is shown as its totals over the data's periods)
-            show_interventions (bool): mark when interventions act, as `sim.plot()` does: in gray those of every scenario, and in a scenario's color those of that scenario alone
+            show_interventions (bool/str): mark when interventions act, as `sim.plot()` does (`'fill'` to shade the span they're active): in gray those of every scenario, and in a scenario's color those of that scenario alone
             **kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()` for all valid options
         """
         if not self._same_times and (lines or self.runs['scenario'].is_unique): # Each run on its own time axis, which needs no combining of the runs
@@ -642,17 +642,17 @@ class MultiSim:
         sims = list(getattr(self.sims, 'runners', self.sims) or []) # Of sims restarted for their runs, the sim of each scenario, which was run
         withdata = next((sim for sim in sims if getattr(sim, 'data', None) is not None and sim.results_ready), None) if show_data else None
         data = ss.results.plot_data(withdata) if withdata is not None else None
-        marks = self.marks(sims) if show_interventions else None
+        marks = self.marks(sims, fill=(show_interventions == 'fill')) if show_interventions else None
         return self.results.plot(key=key, fig=fig, legend=legend, lines=lines, data=data, marks=marks, **kwargs)
 
-    def marks(self, sims):
-        """ When the interventions of each scenario act, for marking on plots (see `plot()`): those of every scenario by None, the others by their scenario """
+    def marks(self, sims, fill=False):
+        """ When the interventions of each scenario act, for marking on plots (see `plot()`): those of every scenario by None, the others by their scenario; spans as their starts unless `fill=True` """
         scenarios = list(dict.fromkeys(self.runs['scenario'])) if hasattr(self.sims, 'runners') else list(self.runs['scenario'])
         by_scenario = {}
         for sim,scenario in zip(sims, scenarios):
             if sim.results_ready and isinstance(getattr(sim, 'interventions', None), dict):
                 found = by_scenario.setdefault(scenario, [])
-                found += [mark for mark in ss.results.intervention_marks(sim) if mark not in found]
+                found += [mark for mark in ss.results.intervention_marks(sim, fill=fill) if mark not in found]
         if not by_scenario:
             return None
         lists = list(by_scenario.values())
