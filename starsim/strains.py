@@ -237,7 +237,7 @@ class Strains:
         immunity (immunity/list): protection between strains, one `ss.immunity` or a list of them; the matrices have rows and columns in the order of the strains
         max_strains (int): the most strains anyone carries at once (default 1); more allows coinfection (e.g. drug-sensitive and resistant TB together), at the cost of a level for each set of strains
         transmit (str): what a carrier of several strains passes on: 'one' (the default: one strain per transmission, chosen in proportion to the strains' rel_trans, at the infectiousness of the most infectious), or 'each' (each strain at its own rate)
-        fractions (list/dict): the share of each strain among the people infected at the start (default: equal); or, by label, the share of each strain or set of strains carried together, e.g. `fractions={'DS': 0.5, 'DS+INH': 0.5}`
+        fractions (list/dict): the fraction of each strain among the people infected at the start (default: equal); or, by label, the fraction of each strain or set of strains carried together, e.g. `fractions={'DS': 0.5, 'DS+INH': 0.5}`
         name (str): the name of the strain dimension, for results (`res.I.by('strain')`) and conditions (default 'strain')
         label (str): its label, for plots and printing (default: the name)
         values (dict): values for each strain by parameter, e.g. `rel_trans=[1, 0.575], cure=[1, 1/3]`
@@ -419,12 +419,12 @@ class Strains:
         n = len(self.sets)
         split = np.zeros(n)
         if self.fraction_sets is not None:
-            for label,share in self.fraction_sets.items():
+            for label,frac in self.fraction_sets.items():
                 parts = label.split('+')
                 unknown = [p for p in parts if p not in self.names]
                 if unknown:
                     raise ValueError(f'fractions= of "{self.name}" names {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its strains ({sc.strjoin(self.names)})')
-                split[self.level_of([self.names.index(p) for p in parts], what=f'fractions= of "{self.name}" at "{label}"')] += share
+                split[self.level_of([self.names.index(p) for p in parts], what=f'fractions= of "{self.name}" at "{label}"')] += frac
         else:
             split[:len(self.names)] = self.fractions if self.fractions is not None else 1/len(self.names)
         adjust = {key:self._level_values(key) for key in self.values}

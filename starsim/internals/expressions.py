@@ -54,7 +54,7 @@ def as_expr(obj):
             return sum(states[1:], states[0])
         return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.source is None: # e.g. S >> I + R @ 0.1, where @ binds before +
-        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a dict of each and its share, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
+        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a dict of each and its fraction, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
         raise TypeError(errormsg)
     elif isinstance(obj, ss.transitions.Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
@@ -174,7 +174,7 @@ class Expr:
     def __radd__(self, other):     return binop('+', other, self)
     def __sub__(self, other):      return binop('-', self, other)
     def __rsub__(self, other):     return binop('-', other, self)
-    def __mul__(self, other):      return NotImplemented if isinstance(other, (ss.transitions.Transition, ss.transitions.outcome, ss.transitions.FlowSum)) else binop('*', self, other) # A parameter times a flow is a share of the flow, e.g. rho * infection
+    def __mul__(self, other):      return NotImplemented if isinstance(other, (ss.transitions.Transition, ss.transitions.outcome, ss.transitions.FlowSum)) else binop('*', self, other) # A parameter times a flow is a fraction of the flow, e.g. rho * infection
     def __rmul__(self, other):     return binop('*', other, self)
     def __truediv__(self, other):  return binop('/', self, other)
     def __rtruediv__(self, other): return binop('/', other, self)
@@ -412,7 +412,7 @@ def as_stocks(expr):
 
 
 def count_power(expr, kinds=('n', 'total')):
-    """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n`; with `kinds=['frac']`, how many shares of people (1 for `beta * I.frac`, frequency-dependent) """
+    """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n`; with `kinds=['frac']`, how many fractions of people (1 for `beta * I.frac`, frequency-dependent) """
     if isinstance(expr, Count):
         return int(expr.kind in kinds and all(getattr(s, 'people', True) for s in expr.states))
     elif isinstance(expr, BinOp):
@@ -424,7 +424,7 @@ def count_power(expr, kinds=('n', 'total')):
 def dependence(rate, people=()):
     """
     How a rate per person grows with the people in states it counts: 'density' with their number (`beta*I.n`), 'frequency' with their
-    share (`beta*I.frac`; or, given the states that are `people`, their number over the total of them, `beta*I.n/N.n`), or None
+    fraction (`beta*I.frac`; or, given the states that are `people`, their number over the total of them, `beta*I.n/N.n`), or None
     """
     if rate is None:
         return None
@@ -439,7 +439,7 @@ def dependence(rate, people=()):
 
 
 class Prop(Expr):
-    """ A property of people, or a condition, in a rate: each person's value (`ss.person.age`), or 1 for the people a condition holds for and 0 for the others (`ss.person.age > 65`); in a compartmental run, each group's value (a condition: the share of the group it holds for) """
+    """ A property of people, or a condition, in a rate: each person's value (`ss.person.age`), or 1 for the people a condition holds for and 0 for the others (`ss.person.age > 65`); in a compartmental run, each group's value (a condition: the fraction of the group it holds for) """
     def __init__(self, cond):
         self.cond = cond
         return
@@ -497,7 +497,7 @@ def substitute(expr, subs):
 
 def unheld(expr):
     """ A rate with each parameter that holds an expression of states or counts (`ss.par(beta*I)`) replaced by that expression, since that is what it is: worked out as the rate is, under every solver, rather than as a value """
-    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, HeldShare)) for part in nodes(expr.value)):
+    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, HeldFrac)) for part in nodes(expr.value)):
         if expr.bounds is not None or expr.prior is not None:
             errormsg = f'The parameter {expr.name or ""} holds the rate {expr.value}, which reads the model\'s states, so it cannot be fitted as a value; give the bounds or prior to the parameters inside it instead, e.g. beta = ss.par(0.3, bounds=[0.1, 1]) in ss.par(beta*I)'
             raise ValueError(errormsg)
@@ -534,11 +534,11 @@ class Func(Expr):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
 
-class HeldShare(Expr):
+class HeldFrac(Expr):
     """
-    The share holding a product, as a quantity in a rate (`itn.held_share`): the share of the people in the same place who hold it,
+    The fraction holding a product, as a quantity in a rate (`itn.held_frac`): the fraction of the people in the same place who hold it,
     each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
-    of the time since delivery: `itn.held_share(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
+    of the time since delivery: `itn.held_frac(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
 
     In a compartmental run, the people holding it are counted at each level of holding it (see `ss.boxcar`); a function is read
     at the middle of each level's time, relative to the plateau (so a product of boxcars of the same length, e.g. a bed net's usage,
@@ -551,7 +551,7 @@ class HeldShare(Expr):
     Examples:
         ```python
         itn = ss.Vaccine(efficacy=dict(bite_indoor=0.6), waning=ss.boxcar(plateau=ss.years(3)), name='itn')
-        mortality = Sv >> ss.dead @ 1/life + a*f_in*itn.held_share(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
+        mortality = Sv >> ss.dead @ 1/life + a*f_in*itn.held_frac(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
         ```
     """
     def __init__(self, product, weight=None):
@@ -561,11 +561,11 @@ class HeldShare(Expr):
 
     @property
     def name(self):
-        return f'{self.product.name}.held_share'
+        return f'{self.product.name}.held_frac'
 
     def __call__(self, weight):
-        """ The share with each holder counted by a function of the time since delivery """
-        return HeldShare(self.product, weight)
+        """ The fraction with each holder counted by a function of the time since delivery """
+        return HeldFrac(self.product, weight)
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
@@ -598,7 +598,7 @@ class HeldShare(Expr):
 
 class Clock(Expr):
     """
-    Time in a state (`X.time_in`), in a set of states since entering it from outside (`(A | B).time_in`), or the share
+    Time in a state (`X.time_in`), in a set of states since entering it from outside (`(A | B).time_in`), or the fraction
     of the scheduled dwell time in a state that has elapsed (`X.progress`, from 0 to 1)
 
     A duration in the sim's unit, so `X.time_in / ss.years(1)` is a number of years. It is NaN for anyone
@@ -743,7 +743,7 @@ class attr(Expr):
         cd4_preart = ss.attr('cd4', when=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
-        dose       = ss.attr({contact: dose_hi, environment: cfu.n/N*share})        # Recorded, a value for each event
+        dose       = ss.attr({contact: dose_hi, environment: cfu.n/N*frac})        # Recorded, a value for each event
         nab        = ss.attr(ss.uniform(0.5, 0.95), when=clearance, combine='max', init=0)
         n_inf      = ss.attr(1, when=I.enter, combine='sum', init=ss.poisson(mean=ss.person.age/20)) # Past infections at the start
         ```
@@ -1019,13 +1019,13 @@ def is_total(expr, people):
     return states is not None and set(map(id, states)) == set(map(id, people))
 
 
-def as_share(rate, people):
+def as_frac(rate, people):
     """
-    A rate per person written with a state over the total, as the share of people in it: `beta*I/N`, with `N` the total
+    A rate per person written with a state over the total, as the fraction of people in it: `beta*I/N`, with `N` the total
     of the states that are people, is `beta*I.frac`. Any other rate is returned as it is, including one written with counts
-    (`beta*I.n/N.n`, which is the share as written).
+    (`beta*I.n/N.n`, which is the fraction as written).
 
-    A state written on its own in a rate (`beta*I`) is contact with the people in it; over the total, it is the share of
+    A state written on its own in a rate (`beta*I`) is contact with the people in it; over the total, it is the fraction of
     people in it, as it would be in a result (`prevalence = I/N`).
 
     Args:
@@ -1034,10 +1034,10 @@ def as_share(rate, people):
     """
     num, den = factors(rate)
     totals = [i for i,f in enumerate(den) if is_total(f, people)]
-    shares = [i for i,f in enumerate(num) if not isinstance(f, Count) and counted_in(f)]
-    if len(totals) != 1 or len(shares) != 1:
+    fracs = [i for i,f in enumerate(num) if not isinstance(f, Count) and counted_in(f)]
+    if len(totals) != 1 or len(fracs) != 1:
         return rate
-    num[shares[0]] = Count(counted_in(num[shares[0]]), kind='frac')
+    num[fracs[0]] = Count(counted_in(num[fracs[0]]), kind='frac')
     den.pop(totals[0])
     out = num[0]
     for f in num[1:]:
@@ -1053,7 +1053,7 @@ def per_person(rate, src, people):
 
     A rate with its source as a factor (`S >> I @ beta*S*I/N`) is the whole flow, so it is divided by the
     source, and its other states are numbers of people: `beta*S*I` is `beta*I.n` (density-dependent), and
-    `beta*S*I/N`, over the total of the people, `beta*I.n/N.n`, the share of them (see `as_share()`), `beta*I.frac`.
+    `beta*S*I/N`, over the total of the people, `beta*I.n/N.n`, the fraction of them (see `as_frac()`), `beta*I.frac`.
     Any other rate is per person already, and is returned as it is.
 
     Args:
@@ -1073,14 +1073,14 @@ def per_person(rate, src, people):
             out = BinOp('/', out, f)
         return out
     out = product(num, den)
-    share = as_share(out, people)
-    if share is not out: # A state over the total: its share
-        return share
+    frac = as_frac(out, people)
+    if frac is not out: # A state over the total: its fraction
+        return frac
     return product([as_counts(f) for f in num], [as_counts(f) for f in den]) # Otherwise, numbers of people
 
 
 def divide(a, b, xp=np):
-    """ Division in an expression: nothing divided by anything is nothing, e.g. the infectious share of an empty group; the inner where keeps a gradient finite """
+    """ Division in an expression: nothing divided by anything is nothing, e.g. the infectious fraction of an empty group; the inner where keeps a gradient finite """
     if type(a) is float and type(b) is float or (np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape')):
         return 0.0 if a == 0 else a / b
     return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
@@ -1125,8 +1125,8 @@ def evaluate(expr, ctx):
         return ctx.flow(expr)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
-    elif isinstance(expr, HeldShare):
-        return ctx.held_share(expr)
+    elif isinstance(expr, HeldFrac):
+        return ctx.held_frac(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
     elif isinstance(expr, mother):
@@ -1232,7 +1232,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
             inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}{"_infectious" if e.trans else ""}'
-        elif isinstance(e, (Clock, mother, HeldShare)):
+        elif isinstance(e, (Clock, mother, HeldFrac)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

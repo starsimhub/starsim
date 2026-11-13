@@ -38,7 +38,7 @@ infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not peopl
 ```
 
 - **Compartments joined only by events** (age categories joined by `intTrans`) are declared as people by the import. By hand, write `ss.State(people=True)`, or v4 treats them as counts.
-- **Outbreaks die out early in some runs** (about 7% in the herds example). Compare with 100 runs or more, or compare the share that died out separately from the mean of the rest.
+- **Outbreaks die out early in some runs** (about 7% in the herds example). Compare with 100 runs or more, or compare the fraction that died out separately from the mean of the rest.
 
 ## Worked example
 

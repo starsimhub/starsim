@@ -49,8 +49,8 @@ class Particles(sc.prettyobj):
         p = self.program
         self.state_of, self.register, self.shifts = state_of, engine.register, engine.shifts
         self.tables = [table[None] for table in tables] # The same values for every run
-        self.own_share = p.sh_val.copy()
-        self.shares = self.own_share[None] # The same time share between places for every run
+        self.own_frac = p.sh_val.copy()
+        self.fracs = self.own_frac[None] # The same time fraction between places for every run
         nk = n_groups if by_group else 1
         self.stocks = np.zeros((n, self.npts, n_states, nk))
         self.flows = np.zeros((n, self.npts, p.n_trans + p.n_movers, nk))
@@ -64,21 +64,21 @@ class Particles(sc.prettyobj):
         self.done = 0
         return
 
-    def advance(self, end, tables=None, shares=None, row0=0):
+    def advance(self, end, tables=None, fracs=None, row0=0):
         """
         Take every run to time point `end` (through the steps before it), if it is not there already
 
         Args:
             end (int): the time point, after the last step to take
             tables (list): the parts of the program that vary in time, as `ss.kernels.advance()` takes them, if not the engine's own: one entry for every run, or one for each (as each particle of IF2 has its own values)
-            shares (array): the time share between places of every run (runs by entries), if not the engine's own
+            fracs (array): the time fraction between places of every run (runs by entries), if not the engine's own
             row0 (int): the row of a whole run's tables that the first row of `tables` is
         """
         if end <= self.done:
             return
         tables = self.tables if tables is None else tables
-        shares = self.shares if shares is None else shares
-        rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
+        fracs = self.fracs if fracs is None else fracs
+        rest = (self.solver, self.n_sub, *tables, fracs, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
         n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
         kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done, self.solver, n_sub))
         if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
@@ -101,8 +101,8 @@ class Particles(sc.prettyobj):
         return
 
     def restore(self):
-        """ Give the engine back its program as it was (a run with a time share of its own writes it there), without what the runs left in its cache """
-        self.program.sh_val[:] = self.own_share
+        """ Give the engine back its program as it was (a run with a time fraction of its own writes it there), without what the runs left in its cache """
+        self.program.sh_val[:] = self.own_frac
         for engine in self.engines:
             engine.cache.clear()
         return

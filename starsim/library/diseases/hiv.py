@@ -114,8 +114,8 @@ class HIV(ss.AgentDisease):
         )
         return
 
-    def record_flows(self):
-        super().record_flows()
+    def record_events(self):
+        super().record_events()
         ti = self.ti
         self.results.death[ti] = np.count_nonzero(self.ti_dead == ti) # Died in this step
         return
@@ -167,8 +167,8 @@ class ART(ss.Delivery):
         self.define_results(ss.Result('n_art', dtype=int, label='Number on ART', kind='stock'))
         return
 
-    def record_stocks(self):
-        super().record_stocks()
+    def record_states(self):
+        super().record_states()
         self.results['n_art'][self.ti] = np.count_nonzero(self.sim.diseases.hiv.on_art)
         return
 

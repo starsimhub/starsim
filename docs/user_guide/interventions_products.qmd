@@ -37,7 +37,7 @@ kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 
 A vaccine's `efficacy` is its protection against infection: the chance of infection of everyone who holds it is multiplied by 1 − `efficacy`. A dict gives efficacy against infectiousness, death, any transition, several diseases, or each strain (see the [appendix](#appendix-what-efficacy-and-waning-can-be)).
 
-By default a vaccine is **leaky**: everyone vaccinated is partly protected. With `leaky=False` it is **all or nothing**: a share `efficacy` of those vaccinated are fully protected, and the rest not at all. `waning=` is how protection fades: a duration means it is lost after an exponentially distributed time with that mean. Here are all three, given to half of people in 2010:
+By default a vaccine is **leaky**: everyone vaccinated is partly protected. With `leaky=False` it is **all or nothing**: a fraction `efficacy` of those vaccinated are fully protected, and the rest not at all. `waning=` is how protection fades: a duration means it is lost after an exponentially distributed time with that mean. Here are all three, given to half of people in 2010:
 
 ```{python}
 kw_vx = dict(coverage=0.5, when='2010')
@@ -51,9 +51,9 @@ msim = ss.parallel(scenarios)
 msim.plot('sis.I')
 ```
 
-`doses=[0.85, 1.0]` gives a vaccine in doses, with the share of the full protection after each; each delivery to someone who already holds the vaccine gives the next dose.
+`doses=[0.85, 1.0]` gives a vaccine in doses, with the fraction of the full protection after each; each delivery to someone who already holds the vaccine gives the next dose.
 
-Protection can also fade by its own shape. `ss.boxcar(plateau=..., decay=...)` is full protection for `plateau`, then (with `decay=`) an exponential decline with that mean; it runs under every solver. Any other shape is a function of the time since delivery, `t` (a duration, so `t.years` works in any sim), returning the share of protection left; a function of `(t, sim, uids)` also gets the sim and the people who hold it. A function runs as agents only.
+Protection can also fade by its own shape. `ss.boxcar(plateau=..., decay=...)` is full protection for `plateau`, then (with `decay=`) an exponential decline with that mean; it runs under every solver. Any other shape is a function of the time since delivery, `t` (a duration, so `t.years` works in any sim), returning the fraction of protection left; a function of `(t, sim, uids)` also gets the sim and the people who hold it. A function runs as agents only.
 
 ```{python}
 scenarios = {
@@ -66,7 +66,7 @@ msim.plot('sis.I')
 
 `during=` holds a product only while people are in some states: `ss.Treatment(efficacy=dict(transmission=0.5), during=sis.I)` makes people half as infectious while they are infected, and they stop holding it when they recover.
 
-The share of people holding a product is also a quantity a rate can read: `itn.held_share` is the share of the people in the same place who hold it, each counted by the protection they have left, and `itn.held_share(fn)` counts each by a function of the time since delivery (e.g. the share of mosquitoes a net kills). A disease made with the product can use it in any rate, e.g. `Sv >> ss.dead @ 1/life + a*kill*itn.held_share`.
+The fraction of people holding a product is also a quantity a rate can read: `itn.held_frac` is the fraction of the people in the same place who hold it, each counted by the protection they have left, and `itn.held_frac(fn)` counts each by a function of the time since delivery (e.g. the fraction of mosquitoes a net kills). A disease made with the product can use it in any rate, e.g. `Sv >> ss.dead @ 1/life + a*kill*itn.held_frac`.
 
 ### One product, several deliveries
 
@@ -308,11 +308,11 @@ The transitions of a disease (`measles.infection`, or a branch, `tr.to(state)`) 
 | | A dict by transition, e.g. `dict(progression=0.5)` | Scales the rate of that transition | All |
 | | A dict by disease, e.g. `dict(hpv16=0.9975, hpv18=0.9975)` | Protection against each disease, with `disease=[...]` | All |
 | | An `ss.by()` over the strains of a disease, one value per strain | Protection against acquiring each strain | All |
-| `leaky=False` | A number | All or nothing: that share fully protected, the rest not at all | All |
-| `doses=` | A list, e.g. `[0.85, 1.0]` | The share of the full protection after each dose | All |
+| `leaky=False` | A number | All or nothing: that fraction fully protected, the rest not at all | All |
+| `doses=` | A list, e.g. `[0.85, 1.0]` | The fraction of the full protection after each dose | All |
 | `waning=` | A duration, e.g. `ss.years(3)` | Protection lost after an exponentially distributed time with that mean | All |
 | | `ss.boxcar(plateau=..., decay=...)` | Full for `plateau`, then (with `decay=`) an exponential decline; `stages=` is the number of levels in a compartmental run | All |
-| | A function, `fn(t)` or `fn(t, sim, uids)` | The share of protection left at a time `t` since delivery | Agents |
+| | A function, `fn(t)` or `fn(t, sim, uids)` | The fraction of protection left at a time `t` since delivery | Agents |
 | | A dict by effect, e.g. `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)` | Each effect its own waning | As its parts |
 | `during=` | A condition, e.g. `sis.I` | Held only while people are in these states | All |
 | A move instead of a product | A move between states as the event's first argument, e.g. `ss.Event(S >> V, ...)` | Protection as states of the disease, with any rates of their own | All |

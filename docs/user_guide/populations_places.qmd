@@ -53,13 +53,13 @@ ssd.plot('Kenya');
 
 ### Data of your own
 
-Data of your own takes the same forms. Ages are a table of counts or shares by age group, for `ss.People(n_agents, age_data=...)`, and `ss.data.age()` gives a country's in that form, to change before use:
+Data of your own takes the same forms. Ages are a table of counts or fractions by age group, for `ss.People(n_agents, age_data=...)`, and `ss.data.age()` gives a country's in that form, to change before use:
 
 ```{python}
 ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2000))
 ```
 
-`ss.data.age_split(edges, ages, counts)` gives the share of people in each of the model's age groups from data in other age groups, and `ss.data.age_labels(edges)` labels groups as Starsim does (`'0-14'`, `'15-64'`, `'65+'`). Birth and death rates are tables by year (see [Data of your own](populations_people.qmd#data-of-your-own)); a contact matrix is an array or a table by age group (see [The forms of a matrix](populations_mixing.qmd#the-forms-of-a-matrix)); and places are a table of names, populations, and positions (see [Geographies](#geographies)). Data on the disease itself (cases, deaths, prevalence) is given to the sim with `data=` (see [Fitting a model](calibration_fitting.qmd)).
+`ss.data.age_split(edges, ages, counts)` gives the fraction of people in each of the model's age groups from data in other age groups, and `ss.data.age_labels(edges)` labels groups as Starsim does (`'0-14'`, `'15-64'`, `'65+'`). Birth and death rates are tables by year (see [Data of your own](populations_people.qmd#data-of-your-own)); a contact matrix is an array or a table by age group (see [The forms of a matrix](populations_mixing.qmd#the-forms-of-a-matrix)); and places are a table of names, populations, and positions (see [Geographies](#geographies)). Data on the disease itself (cases, deaths, prevalence) is given to the sim with `data=` (see [Fitting a model](calibration_fitting.qmd)).
 
 ## Places
 
@@ -176,7 +176,7 @@ res.prevalence.map(t=['2025-05-01', '2025-07-01', '2025-09-01'], shapes=True)
 | `res.map(animate=True, filename='spread.gif')` | The same, saved to a file (a GIF, or an MP4, which needs ffmpeg) |
 | `res.map(shapes=True)` | For a country, its units' boundaries, downloaded the first time (needs geopandas); a geography read from shapes always draws them |
 | `geo.plot()` | The places of a geography, with their populations |
-| `geo.plot(values=..., label=...)` | The places colored by a value for each one, e.g. `kenya.plot(values=res.infection.by('patch').summarize()/kenya.populations, label='Share infected')` |
+| `geo.plot(values=..., label=...)` | The places colored by a value for each one, e.g. `kenya.plot(values=res.infection.by('patch').summarize()/kenya.populations, label='Fraction infected')` |
 
 Both take `cmap=`, `vmin=` and `vmax=`, and `names=` (whether to label the places, by default when there are 15 or fewer). A result of agents is mapped the same way; for the runs of a MultiSim, map one run (`res.select(run=0)`).
 
@@ -187,22 +187,22 @@ Movement between places makes a metapopulation model: each place mixes within it
 **The shape** (which places people go to):
 
 - `ss.geo.gravity(source_power=1, dest_power=1, distance_power=2)`: movement from place *i* to place *j* proportional to *pop*~i~^*s*−1^ × *pop*~j~^*d*^ / *distance*~ij~^*r*^, so people go more to bigger and nearer places.
-- `ss.geo.radiation()`: the radiation model ([Simini et al. 2012](https://doi.org/10.1038/nature10856)), with no parameters to fit: the share who go to each place depends on the populations of the places nearer to it.
+- `ss.geo.radiation()`: the radiation model ([Simini et al. 2012](https://doi.org/10.1038/nature10856)), with no parameters to fit: the fraction who go to each place depends on the populations of the places nearer to it.
 - `ss.geo.Mobility(matrix=M)`: a matrix you already have, with the movement from each place (rows) to each place (columns), e.g. from commuting data; a SciPy sparse array suits many places.
 - `ss.geo.Mobility(matrix=kenya.adjacency)`: movement only between places that share a border, split evenly between each place's neighbors (`adjacency` is there for a country's units, or given to `ss.geo.geography(adjacency=...)`): the classic model of spread from district to district.
 
-**The amount** is `away=`, the share of their time that people spend away from home, split between the other places by the shape (10% if not given, which `describe()` marks as guessed). `scale=` instead gives the amount as a constant in the gravity formula, for an amount fitted to data; with it, movement from a small place to a large one can exceed all of people's time, which Starsim caps with a warning. The amount can be fitted like any other parameter: `ss.geo.gravity(away=ss.par(0.01, bounds=[0.001, 0.1]))` (see [Fitting a model](calibration_fitting.qmd)).
+**The amount** is `away=`, the fraction of their time that people spend away from home, split between the other places by the shape (10% if not given, which `describe()` marks as guessed). `scale=` instead gives the amount as a constant in the gravity formula, for an amount fitted to data; with it, movement from a small place to a large one can exceed all of people's time, which Starsim caps with a warning. The amount can be fitted like any other parameter: `ss.geo.gravity(away=ss.par(0.01, bounds=[0.001, 0.1]))` (see [Fitting a model](calibration_fitting.qmd)).
 
 **The kind** is `kind=`, on the movement model or the matrix; by default it is commuting. The numbers of a matrix mean different things under each kind:
 
 | Kind | What it means | Used for |
 |---|---|---|
-| `'commute'` (default) | People keep their home, and spend a share of their time in other places, where they can be infected and infect others | Daily travel to work, school, and markets |
+| `'commute'` (default) | People keep their home, and spend a fraction of their time in other places, where they can be infected and infect others | Daily travel to work, school, and markets |
 | `'visit'` | As for commuting, but visitors can only be infected away from home, and infect nobody there | Short trips; flepiMoP's form |
 | `'migrate'` | People move home, at the rates the movement gives (per person per unit time) | Migration and relocation; needs `scale=` as the rate |
-| `'force'` | Nobody moves; a share of each place's force of infection goes to the others | LASER's form |
+| `'force'` | Nobody moves; a fraction of each place's force of infection goes to the others | LASER's form |
 
-Under commuting, with *T*~ik~ the share of their time that people from place *i* spend in place *k* (each row of *T* sums to 1), the force of infection on people from place *i* is the standard time-share form:
+Under commuting, with *T*~ik~ the fraction of their time that people from place *i* spend in place *k* (each row of *T* sums to 1), the force of infection on people from place *i* takes the standard form for time spent between places:
 
 $$\lambda_i = \sum_k T_{ik} \, \beta \, \frac{\sum_j T_{jk} I_j}{\sum_j T_{jk} N_j}$$
 

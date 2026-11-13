@@ -229,7 +229,7 @@ def test_agents_match_ode():
 @pytest.mark.parametrize('solver', ['ode', 'binomial', 'gillespie', 'tau', 'abm'])
 def test_exit_order(solver):
     sc.heading(f'Testing that the order of competing exits does not matter under {solver}')
-    shares = []
+    fracs = []
     for order in [('a', 'b', 'c'), ('c', 'a', 'b')]:
         I = ss.State(name='I')
         dests = {key:ss.State(name=key.upper()) for key in 'abc'}
@@ -240,10 +240,10 @@ def test_exit_order(solver):
         assert str(sim.solver) == solver
         res = sim.results.exits
         left = np.array([res[f'{k.upper()}'][-1] for k in 'abc'])
-        shares.append(left/left.sum())
-    for share in shares:
-        assert np.allclose(share, 1/3, atol=0.02), f'Expected a third by each exit, not {share}'
-    return shares
+        fracs.append(left/left.sum())
+    for frac in fracs:
+        assert np.allclose(frac, 1/3, atol=0.02), f'Expected a third by each exit, not {frac}'
+    return fracs
 
 
 def test_dwell_forms():
@@ -378,9 +378,9 @@ def test_identities():
         branch = ss.Disease(course=ss.Transition(I, {R: None, D: 0.2}, dur=5), default_state='I', name='branch')
         agents = dict(n_agents=50_000) if solver == 'abm' else {}
         res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
-        share = res.D[-1]/(res.R[-1] + res.D[-1])
+        frac = res.D[-1]/(res.R[-1] + res.D[-1])
         atol = 1e-9 if solver == 'ode' else 0.01 # Exact for the ODE; for a stochastic run, many standard errors of the share
-        assert np.isclose(share, 0.2, atol=atol), f'{solver}: a share of {share:n} left by D, not 0.2'
+        assert np.isclose(frac, 0.2, atol=atol), f'{solver}: a share of {frac:n} left by D, not 0.2'
 
     # A fixed delay is a conveyor: everyone who starts in E leaves exactly 10 days later, under every solver and as agents
     E, I = ss.states(2)
@@ -444,7 +444,7 @@ def behavior(solver, seed=1, n=2000):
     return sim
 
 
-def behavior_shares(sim):
+def behavior_fracs(sim):
     """ The share of people in each state (none, pill, iud, P) by age group, over the last year """
     res = sim.results.contra
     n = np.array([res[s].by('age').values[-12:].mean(axis=0) for s in ['none', 'pill', 'iud', 'P']])
@@ -454,13 +454,13 @@ def behavior_shares(sim):
 @sc.timer()
 def test_behavior_solvers():
     sc.heading('Testing that a module of behavior (a regression, a counter, and a switching row by age) has the same shares by method and age under every solver')
-    ode = behavior_shares(behavior('ode').run())
+    ode = behavior_fracs(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
     sim.pars.solver = ss.solvers.binomial(substeps=10) # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
-    binomial = behavior_shares(sim.run())
+    binomial = behavior_fracs(sim.run())
     assert np.allclose(binomial, ode, rtol=0.01), f'Expected the binomial solver to match the ODE: {binomial} against {ode}'
     for solver in ['gillespie', 'abm']: # 20 runs each, within 3 standard errors
-        runs = np.array([behavior_shares(behavior(solver, seed=seed).run()) for seed in range(20)])
+        runs = np.array([behavior_fracs(behavior(solver, seed=seed).run()) for seed in range(20)])
         mean, se = runs.mean(axis=0), runs.std(axis=0, ddof=1)/np.sqrt(len(runs))
         assert np.all(np.abs(mean - ode) < 3*se), f'Expected {solver} to match the ODE within 3 standard errors: {mean} against {ode}, z = {(mean - ode)/se}'
     return ode

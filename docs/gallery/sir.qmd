@@ -7,13 +7,13 @@ authorship:
   note: Written by AI
 ---
 
-The SIR model is the starting point of most epidemic modeling: people are susceptible (S), infectious (I), or recovered and immune (R), infection is frequency-dependent (each susceptible person is infected at a rate of β times the share of people who are infectious), and people stay infectious for an exponentially distributed time. This page writes it in each of the ways Starsim accepts, checks that they are the same model, and runs it as a deterministic ODE, as two kinds of stochastic compartmental model, and as agents.
+The SIR model is the starting point of most epidemic modeling: people are susceptible (S), infectious (I), or recovered and immune (R), infection is frequency-dependent (each susceptible person is infected at a rate of β times the fraction of people who are infectious), and people stay infectious for an exponentially distributed time. This page writes it in each of the ways Starsim accepts, checks that they are the same model, and runs it as a deterministic ODE, as two kinds of stochastic compartmental model, and as agents.
 
 ## The model
 
 | Parameter | Value | Meaning |
 |---|---|---|
-| β | 0.3 per day | Rate of infection per susceptible person, per unit of the share infectious |
+| β | 0.3 per day | Rate of infection per susceptible person, per unit of the fraction infectious |
 | Infectious period | 10 days | Mean time in I (exponential) |
 | R0 | 3 | β × the infectious period |
 | Population | 10,000 | |
@@ -48,7 +48,7 @@ class SIR(ss.Disease):
     recovery  = I >> R @ ss.days(10)
 spellings['Class'] = SIR(init_prev=0.001, name='sir')
 
-# The whole flow, β S I / N, as most other frameworks write it: read as written, the share infectious, 0.3*I.frac, which is 0.3*I when everyone mixes
+# The whole flow, β S I / N, as most other frameworks write it: read as written, the fraction infectious, 0.3*I.frac, which is 0.3*I when everyone mixes
 S, I, R = ss.states('S I R')
 N = S + I + R
 infection = S >> I @ 0.3*S*I/N

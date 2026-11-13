@@ -7,7 +7,7 @@ authorship:
   note: Written by AI
 ---
 
-Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a share of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a share, a delay, and (for a stay in hospital) a stay, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
+Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a fraction of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a fraction, a delay, and (for a stay in hospital) a stay, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
 
 ## The model
 

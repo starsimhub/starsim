@@ -79,7 +79,7 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                     if op == FRAC && n < 0.0 {
                         n = place_people(ys, p, a, b);
                     }
-                    stack.set(top as usize, 0, leaf_share(op, v, n));
+                    stack.set(top as usize, 0, leaf_frac(op, v, n));
                 } else if op == GROUP {
                     top += 1;
                     let mut v = 0.0;
@@ -148,7 +148,7 @@ fn finish_event(y: A2<f64>, p: &Program, which: usize, place: usize, flows: A2<f
     for k in ka..kb {
         tot += p.tgt_w.at(k, place);
     }
-    let whole = !(0.0 < tot && tot < 1.0 - 1e-9); // Shares that sum below 1 leave the rest nowhere, as in the ODE
+    let whole = !(0.0 < tot && tot < 1.0 - 1e-9); // Fractions that sum below 1 leave the rest nowhere, as in the ODE
     let tot = if whole { tot } else { 1.0 };
     let mut cum = 0.0;
     for k in ka..kb {
@@ -497,7 +497,7 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
                             stack.set(top as usize, 0, v);
                         } else if op == COUNT || op == FRAC {
                             top += 1;
-                            stack.set(top as usize, 0, leaf_share(op, counts[arg], n));
+                            stack.set(top as usize, 0, leaf_frac(op, counts[arg], n));
                         } else if op == GROUP {
                             top += 1;
                             let mut v = 0.0;

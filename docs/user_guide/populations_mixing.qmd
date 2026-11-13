@@ -13,7 +13,7 @@ A disease model says how infectious people are; the mixing says who meets whom, 
 
 The disease and the mixing are separate: changing from homogeneous mixing to a network does not change the disease. Each way of mixing is a **route** (a path by which infection can pass), given to the sim with `networks=`, which takes networks and mixing pools alike, singly or as a list:
 
-- **No route given**: homogeneous mixing, the assumption of the standard ODE models. The transmission rate β (`beta`) is a rate per unit time: in `S >> I @ beta*I`, each susceptible person is infected at a rate of β times the share of people who are infectious.
+- **No route given**: homogeneous mixing, the assumption of the standard ODE models. The transmission rate β (`beta`) is a rate per unit time: in `S >> I @ beta*I`, each susceptible person is infected at a rate of β times the fraction of people who are infectious.
 - **A mixing pool**, `ss.MixingPool(n_contacts=10)`: homogeneous mixing with 10 contacts per unit time. β is then per contact, so β × the number of contacts is the transmission rate.
 - **A contact matrix**, `ss.contacts(...)`: mixing between groups, such as age groups, with a number of contacts for each pair of groups (see [below](#a-contact-matrix-by-age)).
 - **A network**, such as `ss.RandomNet(n_contacts=10)` or `ss.SexualNet()`: contacts between particular people, with β per contact (or per sex act, on a network with acts).
@@ -66,7 +66,7 @@ msim$plot("sir.I")
 ```
 :::
 
-Transmission along every route is frequency-dependent: what matters is the share of a person's contacts who are infectious (a density-dependent rate is written with the count, `ss.perday(3e-5)*I.n`; see [Diseases](building_diseases.qmd)). β belongs to the disease, not to the route, and a disease transmits over every route unless given a β of 0 for it (see [Transmission that differs by route](#transmission-that-differs-by-route)).
+Transmission along every route is frequency-dependent: what matters is the fraction of a person's contacts who are infectious (a density-dependent rate is written with the count, `ss.perday(3e-5)*I.n`; see [Diseases](building_diseases.qmd)). β belongs to the disease, not to the route, and a disease transmits over every route unless given a β of 0 for it (see [Transmission that differs by route](#transmission-that-differs-by-route)).
 
 ### Which solver runs it
 
@@ -116,7 +116,7 @@ sim.results.flu.infection.by('age').plot()
 
 ### A contact matrix by age
 
-A contact matrix needs groups to act between, so the model is stratified by age first (see [Stratification](building_stratification.qmd)), here with the share of the population in each group. `ss.contacts()` takes the matrix and the lower edge of each of its age groups, and β is per contact:
+A contact matrix needs groups to act between, so the model is stratified by age first (see [Stratification](building_stratification.qmd)), here with the fraction of the population in each group. `ss.contacts()` takes the matrix and the lower edge of each of its age groups, and β is per contact:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -128,7 +128,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.03*I       # β = 0.03 per contact
 recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
 flu = ss.Disease(infection, recovery, init_prev=0.001)
-flu.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+flu.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 0.5], [2, 8, 0.5], [1.5, 3, 2]]) # Contacts a day
 sim = ss.Sim(flu, networks=contacts, total_pop=100_000, stop=ss.days(150))
@@ -147,7 +147,7 @@ flu <- Disease(
   recovery  = Transition(I, R, dur = days(5)),   # Infectious for 5 days on average
   init_prev = 0.001
 )
-flu$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share of people in each
+flu$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
 
 age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 4, 0.5), c(2, 8, 0.5), c(1.5, 3, 2))) # Contacts a day
 sim <- Sim(flu, networks = age_contacts, total_pop = 100000, stop = days(150))
@@ -158,7 +158,7 @@ sim$results$flu$I$by("age")$plot()
 
 With a contact matrix, the R0 that the sim prints is β × the infectious period × the largest eigenvalue of the matrix (about 12.2 here, so R0 ≈ 1.8).
 
-**Reciprocity.** Each contact between two groups is counted from both sides, so *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when it is not reciprocal for the model's shares.
+**Reciprocity.** Each contact between two groups is counted from both sides, so *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when it is not reciprocal for the sizes of the model's groups.
 
 ### The forms of a matrix
 
@@ -192,15 +192,15 @@ The entries of a matrix are contacts per unit time, in the sim's unit unless `un
 
 ### What a matrix acts on
 
-The rate of the infection says what the matrix multiplies: the share of each group who are infectious, their number, or their number as a share of everyone. With *C* the matrix, *I*~j~ and *N*~j~ the number infectious and the number of people in group *j*, and *N* everyone:
+The rate of the infection says what the matrix multiplies: the fraction of each group who are infectious, their number, or their number as a fraction of everyone. With *C* the matrix, *I*~j~ and *N*~j~ the number infectious and the number of people in group *j*, and *N* everyone:
 
 | The rate | The force of infection on group *i* | The matrix is | As in |
 |---|---|---|---|
 | `beta*I` | β Σ~j~ *C*~ij~ *I*~j~ / *N*~j~ | Contacts per person with each group, and β is per contact | Contact surveys and the matrices of countries; frequency-dependent models |
 | `beta*I.n` | β Σ~j~ *C*~ij~ *I*~j~ | A rate for each pair of people (density-dependent) | Lloyd & Jansen (2004), and metapopulation models in densities |
-| `beta*I.frac`, or `beta*I.n/N` | β Σ~j~ *C*~ij~ *I*~j~ / *N* | A rate on the share of everyone who are infectious in each group | Keeling & Rohani (2008), chapter 3; the WAIFW (who acquires infection from whom) matrices of Bjørnstad (2018) |
+| `beta*I.frac`, or `beta*I.n/N` | β Σ~j~ *C*~ij~ *I*~j~ / *N* | A rate on the fraction of everyone who are infectious in each group | Keeling & Rohani (2008), chapter 3; the WAIFW (who acquires infection from whom) matrices of Bjørnstad (2018) |
 
-So a matrix from a textbook goes in as given, with the rate written as the textbook writes it. Keeling & Rohani's Program 3.1, an SIS in a high- and a low-risk group whose β acts on shares of the whole population, is:
+So a matrix from a textbook goes in as given, with the rate written as the textbook writes it. Keeling & Rohani's Program 3.1, an SIS in a high- and a low-risk group whose β acts on fractions of the whole population, is:
 
 ```{python}
 import numpy as np
@@ -210,7 +210,7 @@ sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init=dict(I=ss.by(risk
 sis.stratify(risk={'high': 0.2, 'low': 0.8})
 sim = ss.Sim(sis, networks=ss.contacts(risk=beta), total_pop=1, stop=15, unit='year')
 sim.run()
-print('Infectious at year 15, as shares of everyone:', sim.results.sis.I.by('risk').values[-1].round(6)) # The book's 0.100132 and 0.026810
+print('Infectious at year 15, as fractions of everyone:', sim.results.sis.I.by('risk').values[-1].round(6)) # The book's 0.100132 and 0.026810
 ```
 
 `equations()` says what a matrix acts on in each rate. In a model with places, *N* is everyone in the same place. A weighted count works the same way: `beta*I.n_infectious` weights each group by its infectiousness (`rel_trans`).
@@ -224,7 +224,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.03*I
 recovery  = I >> R @ ss.days(5)
 flu = ss.Disease(infection, recovery, init_prev=0.001)
-flu.stratify(age=[0, 5, 15, 65]) # The shares in each come from the population
+flu.stratify(age=[0, 5, 15, 65]) # The fractions in each come from the population
 
 layers = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
 home, school, work, community = layers
@@ -286,7 +286,7 @@ The same β applies on every layer unless it is given by route. `ssl.HybridNet` 
 
 `ss.SexualNet` is a network of partnerships between two groups of people: by default a man and a woman, or two men (`between='mm'`), or any two groups by name, such as female sex workers and their clients (`between=('fsw', 'client')`). A partnership lasts `dur` (a duration is a mean; a distribution gives any other spread), and has `acts` sex acts per unit time, for a probability of transmission per act.
 
-By default, people with no partner are paired on every step, so nobody has more than one partner at a time. With `n_contacts=`, the mean number of partners at a time is a target instead, and so are `concurrency=` (the share with two or more), `max_contacts=`, and `match=` (the share of partnerships within the same level of a property, e.g. `match=dict(risk=0.8)`). `net.check()` runs the sim again and compares the network it makes with each target:
+By default, people with no partner are paired on every step, so nobody has more than one partner at a time. With `n_contacts=`, the mean number of partners at a time is a target instead, and so are `concurrency=` (the fraction with two or more), `max_contacts=`, and `match=` (the fraction of partnerships within the same level of a property, e.g. `match=dict(risk=0.8)`). `net.check()` runs the sim again and compares the network it makes with each target:
 
 ```{python}
 net = ss.SexualNet(n_contacts=1.2, concurrency=0.1, dur=ss.years(2))
@@ -374,7 +374,7 @@ print(log.network.value_counts()) # The seeds at the start have no route
 
 - **β changes meaning when a route is added.** With no route, β is a rate per unit time; with a mixing pool, contact matrix, or network, it is a rate per contact, so a contact with an infectious person infects with probability 1 − e^−β·dt over a step (give `ss.probperweek()` and the like for a chance per contact over a time; `ss.peract()` for one per act). Adding `networks=ss.RandomNet(n_contacts=10)` to a model fitted with homogeneous mixing multiplies its R0 by 10. Check the R0 that the sim prints.
 - **A probability per act needs acts.** `ss.peract()` on a route without acts (a random network, a mixing pool, a mother-to-child network) raises an error; give a rate per contact instead.
-- **A contact matrix needs groups.** A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups with the shares of the world's population, a guess that `describe()` marks; give the shares (or a named population) if they matter.
+- **A contact matrix needs groups.** A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups, with the fraction in each from the world's population, a guess that `describe()` marks; give the fractions (or a named population) if they matter.
 
 ## Further reading
 

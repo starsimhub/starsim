@@ -3,8 +3,8 @@ Not for the user: deliveries in a compartmental run
 
 `ss.Event` (and its subclass `ss.Delivery`) is the one class for events and deliveries, and its methods are how it runs as agents. In a compartmental
 run, a delivery also makes a `CompartmentalDelivery` (`delivery.in_compartments`), which holds what only that
-needs: a selection is the share of the people in each state and group, so who is reached, served, moved,
-cured, or tested is a share of each, and moving them moves shares of the engine's compartments between
+needs: a selection is the fraction of the people in each state and group, so who is reached, served, moved,
+cured, or tested is a fraction of each, and moving them moves fractions of the engine's compartments between
 groups, carrying the events of the step along. The schedule, coverage, capacity, conditions, products,
 and results stay the delivery's.
 
@@ -36,7 +36,7 @@ def memory_layout(sim, key):
 
 
 def remember_levels(owner, outcome, sel, before, eng):
-    """ In a compartmental run: move the people an event happened to (a share of the people in each state and group of `eng` as they were in `before`) to the level of its memory that says it happened """
+    """ In a compartmental run: move the people an event happened to (a fraction of the people in each state and group of `eng` as they were in `before`) to the level of its memory that says it happened """
     sim = owner.sim
     strat = memory_layout(sim, (owner.name, outcome))
     if strat is None:
@@ -49,7 +49,7 @@ def remember_levels(owner, outcome, sel, before, eng):
 
 
 def current_groups(owner, outcome, entries, selector):
-    """ In a compartmental run: the people an event happened to on this step (`entries`, see `ss.products.EventSource.fire()`), as a share of each state and group of a module's selector """
+    """ In a compartmental run: the people an event happened to on this step (`entries`, see `ss.products.EventSource.fire()`), as a fraction of each state and group of a module's selector """
     sim = owner.sim
     out = None
     for _,sel,before,eng in entries: # Parts of the people one delivery reached (e.g. those cured, and the rest), which are disjoint; a product delivered by several steps is agents only (see ss.solvers.init_capabilities())
@@ -64,12 +64,12 @@ def current_groups(owner, outcome, entries, selector):
 
 
 def trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before):
-    """ In a compartmental run: the transition `tr` of `mod`, triggered by an event of a delivery or product, moves the share of the people it happened to who are in its sources (see `ss.interventions.trigger_moves()`) """
+    """ In a compartmental run: the transition `tr` of `mod`, triggered by an event of a delivery or product, moves the fraction of the people it happened to who are in its sources (see `ss.interventions.trigger_moves()`) """
     sim = owner.sim
     tgt = mod.engine
     srcs = [s for s in tr.source if s.people]
     after = eng.state_counts()
-    now = sel if before is None else np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, as a share of those now in each state and group
+    now = sel if before is None else np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, as a fraction of those now in each state and group
     if tgt is not eng:
         if not np.allclose(now, now[0]):
             raise ss.CapabilityError(f'"{tr.name}" of "{mod.name}" is triggered by {event}, whose people are chosen by their state in "{eng.mod.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
@@ -78,7 +78,7 @@ def trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before):
     if cond is not None:
         frac = frac*tgt.selector.select(cond)
     counts = tgt.state_counts()
-    tgt.move_share(tr, frac, srcs)
+    tgt.move_frac(tr, frac, srcs)
     if tgt is eng: # The event's people who moved are found where they are now, by steps that read it later in the step
         carry_moved(owner, outcome, eng, counts)
     return
@@ -89,12 +89,12 @@ def carry_moved(owner, outcome, eng, before):
     In a compartmental run: carry the events of this step along a move of the people of one of them (by a transition that
     event triggered: see `trigger_groups()`), from the people it took out of each state and group to those it put in, so a step
     that reads them later in the step finds them where they are now. An event with the same people (e.g. a delivery's
-    outcome, and its product's) moves as they did; any other, the same share as of everyone in their state and group
+    outcome, and its product's) moves as they did; any other, the same fraction as of everyone in their state and group
     """
     sim = owner.sim
     after = eng.state_counts()
     left, came = np.maximum(before - after, 0), np.maximum(after - before, 0)
-    share = np.divide(left, before, out=np.zeros_like(before), where=before>0)
+    frac = np.divide(left, before, out=np.zeros_like(before), where=before>0)
     entries = [e for e in owner.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti and e[3] is eng]
     if not entries:
         return
@@ -109,7 +109,7 @@ def carry_moved(owner, outcome, eng, before):
                 if np.allclose(people, mine):
                     new = np.maximum(people - left, 0) + came
                 else:
-                    moved = people*share
+                    moved = people*frac
                     new = people - moved
                     total = moved.sum()
                     if total > 0 and came.sum() > 0:
@@ -144,7 +144,7 @@ def water_fill(amount, n, keys):
 
 class CompartmentalDelivery(sc.prettyobj):
     """
-    A delivery in a compartmental run (`delivery.in_compartments`): what differs from agents, where a selection is the share of the people in each state and group
+    A delivery in a compartmental run (`delivery.in_compartments`): what differs from agents, where a selection is the fraction of the people in each state and group
 
     Made by `ss.Event.init_pre()` when the sim is compartmental; the delivery's own methods call it where they differ.
 
@@ -212,7 +212,7 @@ class CompartmentalDelivery(sc.prettyobj):
         Carry the events of this step (see `ss.Event.fire()`) along a move the delivery has just made, between groups (to
         `target`) or into a state (`dst`), so that the steps that read them later in the step find their people where they now
         are. Of the people of an event, those moved are: all the movers, if the movers are within the event (e.g. a step it
-        triggered, `mover`); none, if they are disjoint from it; and otherwise the same share as of everyone in their state and group.
+        triggered, `mover`); none, if they are disjoint from it; and otherwise the same fraction as of everyone in their state and group.
         """
         sim = self.sim
         eng = self.eng
@@ -284,7 +284,7 @@ class CompartmentalDelivery(sc.prettyobj):
         return np.clip(np.divide(A, N, out=np.zeros_like(N), where=N>0), 0, 1)
 
     def arrived(self, dst, total):
-        """ The people who have just moved into a state (a number per group), as a share of those in it """
+        """ The people who have just moved into a state (a number per group), as a fraction of those in it """
         eng = self.eng
         out = self.selector.nobody()
         n = eng.count([dst], total=False)
@@ -323,8 +323,8 @@ class CompartmentalDelivery(sc.prettyobj):
         if product is None: # A transfer, or a step with neither (a visit)
             d.fire(None, self.follow(chosen, chosen, d.changes, d.event) if d.changes else chosen)
             return
-        parts = [] # Those reached, as they now are, with the people in each state and group they are a share of
-        if getattr(product, 'take', None) is not None: # All or nothing: a share of those reached are protected, and the rest are not (they have still received it)
+        parts = [] # Those reached, as they now are, with the people in each state and group they are a fraction of
+        if getattr(product, 'take', None) is not None: # All or nothing: a fraction of those reached are protected, and the rest are not (they have still received it)
             parts.append((chosen*(1 - product.take), eng.state_counts()))
             chosen = chosen*product.take
         if product.holds:
@@ -391,9 +391,9 @@ class CompartmentalDelivery(sc.prettyobj):
     def cure_joint(self, chosen, diseases):
         """
         The treatment of several diseases: the people chosen in each compartment and group are moved as a population of their
-        own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have failed. Diseases
+        own (with `force()`), so the fraction forced is chosen × probability in each, and the rest of them have failed. Diseases
         tracked jointly (see `ss.solvers.JointStates`) pass the same people on, by way of the joint array, so each sees those the
-        others treated. Its outcomes are events as shares of this disease's states and groups; someone cured of one disease and
+        others treated. Its outcomes are events as fractions of this disease's states and groups; someone cured of one disease and
         failed for another counts in both, and anyone in both outcomes for two diseases counts twice (clipped at all)
         """
         d = self.delivery
@@ -418,15 +418,15 @@ class CompartmentalDelivery(sc.prettyobj):
             C, cured, failed = self.force_part(eng, C, edges)
             parts.append((eng, cured, failed))
             cur = eng
-        def home_share(*pairs): # People by compartment of their engines, as a share of each state and group of this disease now
+        def home_frac(*pairs): # People by compartment of their engines, as a fraction of each state and group of this disease now
             X = sum(X if eng is home else joint.local(joint.joint(eng, X), home) for eng,X in pairs)
             counts = np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
             n = home.state_counts()
             return np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1)
-        d.fire('cured', home_share(*[(eng, c) for eng,c,_ in parts]))
-        d.fire('failed', home_share(*[(eng, f) for eng,_,f in parts]))
-        d.fire('unneeded', home_share((cur, U)))
-        return [(home_share((cur, C)), None)] # Where the people treated are now
+        d.fire('cured', home_frac(*[(eng, c) for eng,c,_ in parts]))
+        d.fire('failed', home_frac(*[(eng, f) for eng,_,f in parts]))
+        d.fire('unneeded', home_frac((cur, U)))
+        return [(home_frac((cur, C)), None)] # Where the people treated are now
 
     def force_part(self, eng, C, edges):
         """ Move some of the people of an engine (`C`, by compartment and group) along transitions, with their probability; returns them after, and of them, the cured (where they are now) and those who failed """
@@ -460,7 +460,7 @@ class CompartmentalDelivery(sc.prettyobj):
         return after, cured, failed
 
     def test(self, chosen, tails):
-        """ The results of a test, every one now (a delay is agents only): the share of those tested with each, from the probability of each result or a more severe one (`tails`) """
+        """ The results of a test, every one now (a delay is agents only): the fraction of those tested with each, from the probability of each result or a more severe one (`tails`) """
         probs = [1 - tails[0]] + [tails[k] - tails[k+1] for k in range(len(tails) - 1)] + [tails[-1]]
         self.delivery.report([chosen*np.clip(p, 0, 1) for p in probs])
         return
@@ -477,7 +477,7 @@ class CompartmentalDelivery(sc.prettyobj):
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.trigger is None)
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
-        typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
+        typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same fraction at each step
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by) or typed)
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Event.skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
@@ -493,9 +493,9 @@ class CompartmentalDelivery(sc.prettyobj):
 
     def shifts(self):
         """
-        The delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the share of the people in each state and group
+        The delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the fraction of the people in each state and group
         who are eligible, and of those, who are reached; the group that each group's people move to if reached, and if not; and for a move
-        between states, the share of those reached who land in each compartment (by compartment and group; otherwise all zero)
+        between states, the fraction of those reached who land in each compartment (by compartment and group; otherwise all zero)
         """
         d = self.delivery
         sim = self.sim
@@ -519,7 +519,7 @@ class CompartmentalDelivery(sc.prettyobj):
 
     def respell(self):
         """
-        For routine delivery that records who has been offered it: the share of the people in each state and group who start a new
+        For routine delivery that records who has been offered it: the fraction of the people in each state and group who start a new
         spell of being eligible (offered it, and no longer eligible), and the group they go back to (see `ss.Event.new_spells()`);
         None for any other. The kernels take it as a delivery of its own that reaches nobody, with everyone eligible going to `rest`.
         """

@@ -744,15 +744,15 @@ def test_branch_modifiers():
         if where is not None:
             sim.stratify(age=[0, 50])
         return sim.run().results.dis
-    share = lambda res: res.severe.sum()/(res.severe.sum() + res.mild.sum())
+    frac = lambda res: res.severe.sum()/(res.severe.sum() + res.mild.sum())
     halve = lambda dis: ss.modify(dis.severe, multiply=0.5, name='halve')
     vaccine = lambda dis: ss.vaccinate(ss.Vaccine(efficacy=dict(severe=0.75)), when=0, name='vx')
     for solver in solvers:
         base, halved, vx = make(solver), make(solver, halve), make(solver, vaccine)
-        print(f'{solver}: severe share {share(base):.3f}, {share(halved):.3f} halved, {share(vx):.3f} vaccinated')
-        assert np.isclose(share(base), 0.2, rtol=0.05)
-        assert np.isclose(share(halved), 0.1, rtol=0.05)
-        assert np.isclose(share(vx), 0.05, rtol=0.1)
+        print(f'{solver}: severe share {frac(base):.3f}, {frac(halved):.3f} halved, {frac(vx):.3f} vaccinated')
+        assert np.isclose(frac(base), 0.2, rtol=0.05)
+        assert np.isclose(frac(halved), 0.1, rtol=0.05)
+        assert np.isclose(frac(vx), 0.05, rtol=0.1)
 
     # A parameter in a branch probability changed by ss.modify(), under every solver: 0.8 go to B after the change (not 0.2 as compartments)
     for multi in [True, False]:
@@ -779,8 +779,8 @@ def test_branch_modifiers():
     ppl = ss.People(1)
     for solver in ['ode', 'abm']:
         res = make(solver, where=ppl.age >= 50)
-        print(f'{solver}: severe share {share(res):.3f} with where=')
-        assert 0 < share(res) < 0.15
+        print(f'{solver}: severe share {frac(res):.3f} with where=')
+        assert 0 < frac(res) < 0.15
     return res
 
 
@@ -1069,7 +1069,7 @@ def test_weighted_counts():
         Sv, Iv = ss.states('Sv Iv', people=False)
         N = (S + I).n
         itn = ss.Vaccine(efficacy=dict(bite=0.5), waning=ss.boxcar(plateau=ss.days(200)), name='itn')
-        c = 0 if cov is None else itn.held_share if kill is None else itn.held_share(kill)
+        c = 0 if cov is None else itn.held_frac if kill is None else itn.held_frac(kill)
         d = ss.Disease(bite=S >> I @ ss.perday(0.3)*ss.by(biting=w)*Iv.n/N, recovery=I >> S @ ss.days(30), emerge=ss.unborn >> Sv @ ss.perday(0.1)*N,
                        feeding=Sv >> Iv @ ss.perday(0.3)*((ss.by(biting=w)*I).n if weighted else I.n)/N, death=Sv + Iv >> ss.dead @ ss.perday(0.1) + ss.perday(0.2)*c,
                        init=dict(I=0.05, Sv=1.0), name='mal')

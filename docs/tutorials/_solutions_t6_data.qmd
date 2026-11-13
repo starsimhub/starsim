@@ -6,7 +6,7 @@
 import starsim as ss
 
 def make_measles(immune=ss.by(age=[0.8, 0.92, 0.98])):
-    """ The measles model, by age, with the share immune in each age group given """
+    """ The measles model, by age, with the fraction immune in each age group given """
     S, E, I, R = ss.states('S E I R')
     beta = ss.par(0.14, bounds=[0.05, 0.5])
     infection   = S >> E @ beta*I
@@ -52,7 +52,7 @@ Exercises 3 to 5 start from the model fitted in the tutorial:
 import pandas as pd
 
 def make_measles(prior=True):
-    """ The model of the tutorial, with or without the prior on the share reported """
+    """ The model of the tutorial, with or without the prior on the fraction reported """
     S, E, I, R = ss.states('S E I R')
     beta = ss.par(0.14, bounds=[0.05, 0.5])
     reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1) if prior else None)
@@ -82,7 +82,7 @@ for guess in [dict(beta=0.14, reported=0.5), dict(beta=0.3, reported=0.2)]:
     print('Starting from', guess, '- beta:', round(fit.pars.beta, 3), '- reported:', round(fit.pars.reported, 3), '- objective:', round(fit.objective, 4))
 ```
 
-From either starting point, the fit finds the same values (β ≈ 0.169, 26% reported): it first scans the whole range within the bounds, then searches from the best few points, so the starting guesses matter little. Agreement shows that the search found the best fit, not that the data pin the values down: as the posterior shows, a range of shares reported fits the rise nearly as well.
+From either starting point, the fit finds the same values (β ≈ 0.169, 26% reported): it first scans the whole range within the bounds, then searches from the best few points, so the starting guesses matter little. Agreement shows that the search found the best fit, not that the data pin the values down: as the posterior shows, a range of fractions reported fits the rise nearly as well.
 
 **4. Without the prior.**
 
@@ -98,7 +98,7 @@ for label, prior in [('With the prior', True), ('Without it', False)]:
           '- projected cases:', proj.summarize().loc['measles_cases'].round().to_dict())
 ```
 
-Without the prior, the interval for the share reported is a little wider (16% to 52%, rather than 18% to 46%), and the range of the projected outbreak much wider (about 1,500 to 5,100 reported cases, rather than 1,800 to 4,100), since a lower share reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.
+Without the prior, the interval for the fraction reported is a little wider (16% to 52%, rather than 18% to 46%), and the range of the projected outbreak much wider (about 1,500 to 5,100 reported cases, rather than 1,800 to 4,100), since a lower fraction reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.
 
 **5. A later or smaller campaign.**
 

@@ -67,7 +67,7 @@ msim = ss.parallel(scenarios, workers=1)
 msim.plot(['cholera.infected', 'cholera.infection.cum', 'cholera.env_conc'])
 ```
 
-The results `W` (the bacteria in the water) and `env_conc` (their concentration, as a share of the maximum rate of infection from the water) track the reservoir.
+The results `W` (the bacteria in the water) and `env_conc` (their concentration, as a fraction of the maximum rate of infection from the water) track the reservoir.
 
 ## HIV, treatment, and CD4 counts
 

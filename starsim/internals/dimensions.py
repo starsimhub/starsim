@@ -11,7 +11,7 @@ import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
 from ..geo import geography, gravity, radiation, Mobility
-from ..transitions import level_pair, parse_increment
+from .transitions import level_pair, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'levels', 'Groups']
 
@@ -34,8 +34,8 @@ class Strat:
 
     Args:
         name (str): the dimension, e.g. 'age'
-        levels (list/dict): bin edges (for a continuous property such as age) or labels; or a dict of the share of the population in each, e.g. `{0: 0.3, 15: 0.6, 65: 0.1}`
-        fractions (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
+        levels (list/dict): bin edges (for a continuous property such as age) or labels; or a dict of the fraction of the population in each, e.g. `{0: 0.3, 15: 0.6, 65: 0.1}`
+        fractions (list): the fraction of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
         kind (str): 'age', 'space', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
@@ -60,9 +60,9 @@ class Strat:
             levels = self.geo.names
             if fractions is None and self.geo.populations is not None:
                 fractions = self.geo.populations/self.geo.populations.sum()
-        if isinstance(levels, dict): # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
+        if isinstance(levels, dict): # Each level with its fraction, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
             if fractions is not None:
-                errormsg = f'"{name}" was given the share in each level twice, as a dict and as fractions=; give one'
+                errormsg = f'"{name}" was given the fraction in each level twice, as a dict and as fractions=; give one'
                 raise ValueError(errormsg)
             levels, fractions = list(levels.keys()), list(levels.values())
         if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
@@ -113,7 +113,7 @@ class Strat:
                 raise ValueError(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
         self.joint = None # Fractions over several dimensions at once, as an ss.by; resolved by the sim
-        self.cond = None # For a dimension of some states only, fractions given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
+        self.cond = None # For a dimension of some states only, fractions given the levels of other dimensions: their positions, and the fraction in each level of this one (summing to 1 over it)
         if isinstance(fractions, by):
             self.joint = fractions
             fractions = None
@@ -121,7 +121,7 @@ class Strat:
         if fractions is not None:
             fractions = np.array(fractions, dtype=float)
             if len(fractions) != self.n:
-                raise ValueError(f'the shares of "{name}" have {len(fractions)} entries, but it has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ValueError(f'the fractions of "{name}" have {len(fractions)} entries, but it has {self.n} levels ({sc.strjoin(self.labels)}).')
             if not np.isclose(fractions.sum(), 1):
                 self.guessed['fractions'] = f'normalized, since it summed to {fractions.sum():n}'
                 fractions = fractions/fractions.sum()
@@ -174,16 +174,16 @@ class Strat:
         if getattr(self, 'cond', None) is None:
             return np.minimum(np.searchsorted(np.cumsum(self.fractions), rvs, side='right'), self.n - 1)
         coords = sim.groups.group_coords[sim.groups.group_raw()[uids]]
-        cdf = np.cumsum(np.stack([self.shares(coords, np.full(len(uids), level)) for level in range(self.n)], axis=1), axis=1)
+        cdf = np.cumsum(np.stack([self.fracs(coords, np.full(len(uids), level)) for level in range(self.n)], axis=1), axis=1)
         return np.minimum((cdf <= rvs[:, None]).sum(axis=1), self.n - 1)
 
-    def shares(self, coords, levels=None):
+    def fracs(self, coords, levels=None):
         """
-        The share of each group in its level of this dimension (or in `levels`, if given): from the split, or, for a split given the levels of other dimensions, from the row of that split for the group
+        The fraction of each group in its level of this dimension (or in `levels`, if given): from the split, or, for a split given the levels of other dimensions, from the row of that split for the group
 
         Args:
             coords (array): the level of each group in every dimension of the sim, by row
-            levels (array): the levels of this dimension to give the share of (by default, each group's own)
+            levels (array): the levels of this dimension to give the fraction of (by default, each group's own)
         """
         d = self.dim
         levels = coords[:, d] if levels is None else levels
@@ -398,15 +398,15 @@ class levels(sc.prettyobj):
     The levels of a stratification, with the options that are needed less often; for `stratify()`
 
     A dimension is usually given by its levels alone, e.g. `sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=['low', 'high'])`
-    (a dict gives the share of the population in each level; a list, levels whose shares are guessed). `ss.levels()` adds the rest.
+    (a dict gives the fraction of the population in each level; a list, levels whose fractions are guessed). `ss.levels()` adds the rest.
 
     Args:
-        levels (list/dict/geography): bin edges (for a continuous property such as age) or labels, a dict of the share of the population in each, or an `ss.geo.geography`
+        levels (list/dict/geography): bin edges (for a continuous property such as age) or labels, a dict of the fraction of the population in each, or an `ss.geo.geography`
         states (list): the states the dimension applies to (default: every state that is people)
         who (Cond): the groups the dimension applies to, as a condition on other dimensions, e.g. `ss.person.female`, `ss.person.age >= 15`, `ss.person.risk == 'high'`, `ss.person.region.isin(['north', 'east'])`, or several joined with `&`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
         kind (str): 'age', 'space', or 'plain'; if not given, from the levels: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
         mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
-        fractions (`ss.by`): for shares that depend on other dimensions, the share of people at each combination of their levels and this dimension's, as a table over all of them, e.g. `risk=ss.levels(['low', 'high'], fractions=ss.by(np.array([[0.45, 0.05], [0.2, 0.3]]), dims=['age', 'risk']))`, a row for each level of age and a column for each level of risk (the shares in each level, if they do not depend on anything else, are the levels as a dict)
+        fractions (`ss.by`): for fractions that depend on other dimensions, the fraction of people at each combination of their levels and this dimension's, as a table over all of them, e.g. `risk=ss.levels(['low', 'high'], fractions=ss.by(np.array([[0.45, 0.05], [0.2, 0.3]]), dims=['age', 'risk']))`, a row for each level of age and a column for each level of risk (the fractions in each level, if they do not depend on anything else, are the levels as a dict)
 
     Examples:
         ```python
@@ -417,10 +417,10 @@ class levels(sc.prettyobj):
     """
     def __init__(self, levels, states=None, who=None, kind=None, mobility=None, fractions=None):
         if isinstance(levels, globals()['levels']):
-            errormsg = 'ss.levels() takes the levels themselves (a list, a dict of shares, or a geography), not another ss.levels()'
+            errormsg = 'ss.levels() takes the levels themselves (a list, a dict of fractions, or a geography), not another ss.levels()'
             raise TypeError(errormsg)
         if fractions is not None and not isinstance(fractions, by):
-            errormsg = f'ss.levels(fractions=) is for shares that depend on other dimensions, as an ss.by(); shares of their own are the levels as a dict, e.g. ss.levels({{"low": 0.8, "high": 0.2}}), not fractions={fractions!r}'
+            errormsg = f'ss.levels(fractions=) is for fractions that depend on other dimensions, as an ss.by(); fractions of their own are the levels as a dict, e.g. ss.levels({{"low": 0.8, "high": 0.2}}), not fractions={fractions!r}'
             raise TypeError(errormsg)
         check_kind(kind)
         if isinstance(who, dict):
@@ -520,7 +520,7 @@ def who_levels(strat, spec, owner):
 
 
 replaced_options = dict( # The options that stratify() took beside the dimensions, now in ss.levels() (or replaced), and how to tell the old use from a dimension of that name
-    fractions = lambda v, n: isinstance(v, by) or (n > 0 and isinstance(v, (list, tuple, np.ndarray)) and all(sc.isnumber(x) for x in v)), # Numbers beside another dimension, shares or counts, are the old fractions=, not a dimension of their own
+    fractions = lambda v, n: isinstance(v, by) or (n > 0 and isinstance(v, (list, tuple, np.ndarray)) and all(sc.isnumber(x) for x in v)), # Numbers beside another dimension, fractions or counts, are the old fractions=, not a dimension of their own
     adjust = lambda v, n: isinstance(v, dict) and any(isinstance(x, (list, tuple, np.ndarray)) for x in v.values()),
     kind = lambda v, n: isinstance(v, str),
     where = lambda v, n: isinstance(v, dict) and not all(sc.isnumber(x) for x in v.values()),
@@ -537,7 +537,7 @@ def check_replaced(kwargs):
             if key == 'adjust':
                 fix = f'a value by level, ss.by({dim}=[...]), in the rate (S >> I @ beta*ss.by({dim}=[1, 3])*I), or ss.modify(sir.infection, multiply=ss.by({dim}=[1, 3])) for a disease already written'
             elif key == 'fractions':
-                fix = f'the levels as a dict of their shares, e.g. {dim}={{"low": 0.8, "high": 0.2}}' + (f', or ss.levels([...], fractions=ss.by(table, dims=[..., {dim!r}])) for shares that depend on other dimensions (the share of people at each combination of their levels)' if isinstance(kwargs[key], by) else '')
+                fix = f'the levels as a dict of their fractions, e.g. {dim}={{"low": 0.8, "high": 0.2}}' + (f', or ss.levels([...], fractions=ss.by(table, dims=[..., {dim!r}])) for fractions that depend on other dimensions (the fraction of people at each combination of their levels)' if isinstance(kwargs[key], by) else '')
             elif key == 'where':
                 fix = f'{dim}=ss.levels([...], who=<a condition on other dimensions>), e.g. who=ss.person.female'
             else:
@@ -728,21 +728,21 @@ class Groups(sc.prettyobj):
         births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
-        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
+        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the fraction entering each level: see below
         if len(joints) > 1:
             errormsg = 'Only one ss.levels(fractions=) can cover several dimensions at once'
             raise ValueError(errormsg)
-        self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
+        self.joint = None # For a split over several dimensions at once: their positions, and the fraction of people at each combination of their levels
         for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. fractions=ss.by(sex=dict(female=[...], male=[...]))
             others = sc.strjoin(strat.joint.dims)
             errormsg = (f'The split of "{strat.name}" is given by {others} only; a split over several dimensions is over all of them, including "{strat.name}" itself: '
                         f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
-                        f'and is the share of people at each combination (e.g. the share in each level of "{strat.name}" within each row, times the share of the row)')
+                        f'and is the fraction of people at each combination (e.g. the fraction in each level of "{strat.name}" within each row, times the fraction of the row)')
             raise ValueError(errormsg)
         if joints:
             ds, grid = joints[0].joint.grid(sim)
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
-            within = [] # A split over age and other dimensions whose rows each sum to 1 is the share at each level of the others within each age group, so people keep their ages (otherwise it is the share at each combination, and sets the ages)
+            within = [] # A split over age and other dimensions whose rows each sum to 1 is the fraction at each level of the others within each age group, so people keep their ages (otherwise it is the fraction at each combination, and sets the ages)
             if ages:
                 a = ages[0]
                 totals = grid.sum(axis=tuple(j for j in range(len(ds)) if j != a), keepdims=True)
@@ -756,25 +756,25 @@ class Groups(sc.prettyobj):
                     if strat.joint is None and strat.fractions_given and 'fractions' not in strat.guessed and not np.allclose(strat.fractions, total, atol=1e-6): # The given split would otherwise be replaced
                         others = [self.strats[dd].name for dd in ds if dd != d]
                         raise ValueError(f'"{strat.name}" is given the split {np.round(strat.fractions, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
-                                                       f'a split over several dimensions is the share at each combination of their levels. For rows that are the shares of {sc.strjoin(others)} given "{strat.name}", '
-                                                       f'multiply them by the share at each level of "{strat.name}" ({np.round(strat.fractions, 4).tolist()}) first, or leave out one of the two splits.')
+                                                       f'a split over several dimensions is the fraction at each combination of their levels. For rows that are the fractions of {sc.strjoin(others)} given "{strat.name}", '
+                                                       f'multiply them by the fraction at each level of "{strat.name}" ({np.round(strat.fractions, 4).tolist()}) first, or leave out one of the two splits.')
                     strat.fractions = total
                     self.strats[d].guessed.pop('fractions', None)
                     if within:
                         self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
             self.joint = (ds, grid)
             split *= grid[tuple(self.group_coords[:, d] for d in ds)]
-            born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its share of the others (or everyone's, if it has nobody)
+            born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its fraction of the others (or everyone's, if it has nobody)
             born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
             births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
-            share = strat.fractions[self.group_coords[:, d]]
+            frac = strat.fractions[self.group_coords[:, d]]
             if self.joint is None or d not in self.joint[0]:
-                split *= share
+                split *= frac
             if strat.kind == 'age':
                 births *= self.group_coords[:, d] == 0 # People are born into the youngest group
             elif self.joint is None or d not in self.joint[0]:
-                births *= share
+                births *= frac
         for d,strat in enumerate(self.strats): # A split of a dimension of some states only, given the levels of others (e.g. clinical severity by age): normalized over this dimension
             if strat.joint is not None and strat.states is not None:
                 ds, grid = strat.joint.grid(sim)
@@ -786,7 +786,7 @@ class Groups(sc.prettyobj):
                 grid = np.divide(grid, totals, out=np.full(grid.shape, 1/strat.n), where=totals>0)
                 strat.cond = (ds, grid)
                 weights = np.prod([self.strats[dd].fractions[self.group_coords[:, dd]] for dd in ds if dd != d], axis=0) # The split overall, for anything that has no group to go by
-                split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.shares(self.group_coords), minlength=strat.n)
+                split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.fracs(self.group_coords), minlength=strat.n)
                 strat.fractions = split_all/split_all.sum()
                 strat.guessed.pop('fractions', None)
         self.init_ragged()
@@ -1169,7 +1169,7 @@ class Groups(sc.prettyobj):
         for d,strat in enumerate(self.strats):
             if strat.name in own:
                 continue
-            if strat.female is not None and d not in joint and strat.cond is None: # A sex dimension is people.female, whose share is the split: see init_people()
+            if strat.female is not None and d not in joint and strat.cond is None: # A sex dimension is people.female, whose fraction is the split: see init_people()
                 self.set_sex(uids)
             elif strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
                 order = np.argsort(getattr(sim, f'rng_strat_{strat.name}').rvs(uids), kind='stable')

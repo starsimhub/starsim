@@ -99,9 +99,9 @@ class Layout:
         for f_out,slots in self.conveyors:
             ex = [f for f in range(nf) if p.src[f] == slots[-1] and (p.tgt_starts[f+1] == p.tgt_starts[f] or not is_last[p.tgt_comp[p.tgt_starts[f]:p.tgt_starts[f+1]]].all())]
             self.exits.append(np.array(ex, dtype=int))
-        # The time share between places, as a matrix
-        self.share = np.zeros((max(p.n_places, 1),)*2)
-        np.add.at(self.share, (p.sh_pair[0], p.sh_pair[1]), p.sh_val)
+        # The time fraction between places, as a matrix
+        self.frac = np.zeros((max(p.n_places, 1),)*2)
+        np.add.at(self.frac, (p.sh_pair[0], p.sh_pair[1]), p.sh_val)
         return
 
     def tape(self, p):
@@ -210,13 +210,13 @@ def rates_of(ys, p, L):
             num = np.bincount(lev, infectious, minlength=size)[:size]
             den = np.bincount(lev, n, minlength=size)[:size]
             if p.use[0, t]: # Move people to where they spend their time
-                num = (L.share.T @ num.reshape(-1, block)).ravel()
-                den = (L.share.T @ den.reshape(-1, block)).ravel()
+                num = (L.frac.T @ num.reshape(-1, block)).ravel()
+                den = (L.frac.T @ den.reshape(-1, block)).ravel()
             prev = num if p.exp_n[e] else np.divide(num, den, out=np.zeros(size), where=den > 0)
             if p.use[1, t]: # Mix between the levels in each place
                 prev = p.mat[t][:size, :size] @ prev if block == size else (prev.reshape(-1, block) @ p.mat[t][:block, :block].T).ravel()
             if p.use[2, t]: # Mix between places
-                prev = (L.share @ prev.reshape(-1, block)).ravel()
+                prev = (L.frac @ prev.reshape(-1, block)).ravel()
             c = p.contacts[e, t] if p.contacts.shape[0] > 1 else p.contacts[0, t]
             expo[e] += c*prev[lev]
     if L.counts:
@@ -274,7 +274,7 @@ def derivs(ys, p, L, rates, h, euler):
     df += L.named @ amount
     for f,i,m in L.recorded:
         df[i] += amount[f] @ p.maps[m]
-    each = amount[L.tf]*p.tgt_w # Each target's share
+    each = amount[L.tf]*p.tgt_w # Each target's fraction
     dy += L.arrive @ each
     for m,ks,M in L.mapped:
         dy += M @ (each[ks] @ p.maps[m])

@@ -14,7 +14,7 @@ authorship:
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the share infectious
+infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
@@ -31,7 +31,7 @@ library(starsim)
 
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the share infectious
+  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the fraction infectious
   recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
   init_prev = 0.001
 )
@@ -48,7 +48,7 @@ sim$measles$plot()
 import starsim as ss
 
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the share infectious
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
 measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
 
@@ -89,12 +89,12 @@ Run `pip install starsim` in a terminal (or `%pip install starsim` in a notebook
 
 In an SIR model, each person is susceptible (S), infectious (I), or recovered and immune (R), and moves along two transitions:
 
-- **Infection**, from S to I, at a rate of β times the share of people infectious: β S I / N new infections a day, for a population of N.
+- **Infection**, from S to I, at a rate of β times the fraction of people infectious: β S I / N new infections a day, for a population of N.
 - **Recovery**, from I to R, after about 8 days infectious.
 
 For measles, β is about 1.9 per day: in a fully susceptible town, an infectious person infects about 1.9 people a day, or 1.9 × 8 ≈ 15 over 8 days. This is the basic reproduction number, R0, and 15 is typical of measles.
 
-In Starsim, compartments are states, and each transition gives where people move from and to, and the rate (after `@`). Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". This shorthand builds an [`ss.Transition`](../api/transitions.qmd), which you can also write out in full:
+In Starsim, compartments are states, and each transition gives where people move from and to, and the rate (after `@`). Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". This shorthand builds an [`ss.Transition`](../api/internals.transitions.qmd), which you can also write out in full:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -125,7 +125,7 @@ measles = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='m
 ```
 :::
 
-A state in a rate, like `I` in `1.9*I`, is the share of people in it. A duration, like `ss.days(8)`, is the average time in a state. A plain number takes the unit of the duration, so 1.9 is per day (`ss.perday(1.9)`). [`ss.Disease`](../api/diseases.qmd) puts the transitions into a disease, named `measles` after its variable; `init_prev=0.001` starts with 0.1% of people (100) infectious.
+A state in a rate, like `I` in `1.9*I`, is the fraction of people in it. A duration, like `ss.days(8)`, is the average time in a state. A plain number takes the unit of the duration, so 1.9 is per day (`ss.perday(1.9)`). [`ss.Disease`](../api/diseases.qmd) puts the transitions into a disease, named `measles` after its variable; `init_prev=0.001` starts with 0.1% of people (100) infectious.
 
 `equations()` gives the standard SIR equations:
 

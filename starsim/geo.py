@@ -31,7 +31,7 @@ class geography:
         year (int): for a country, the year of the populations (default: those bundled, for 2020; another year is fetched)
         places (list): for a country, only these units, by name, `dot_name` ('Kenya:Nairobi'), or p-code
         names (list): the name of each place (instead of `data`)
-        populations (list): the number of people in each place; sets the share of people who start in each (for a country, in place of the bundled ones), and the sizes of the places for movement between them (`ss.geo.gravity`, `ss.geo.radiation`)
+        populations (list): the number of people in each place; sets the fraction of people who start in each (for a country, in place of the bundled ones), and the sizes of the places for movement between them (`ss.geo.gravity`, `ss.geo.radiation`)
         x (list): a position for each place, in any unit of distance
         y (list): the other coordinate
         lat (list): latitudes in degrees (instead of `x` and `y`); distances are then great-circle distances in km
@@ -315,18 +315,18 @@ def draw_map(res, t=None, animate=False, shapes=None, names=None, cmap='Reds', v
 
 class gravity:
     """
-    The gravity model of movement: the share of their time that a person from place `i` spends in place `j` (or, for migration,
+    The gravity model of movement: the fraction of their time that a person from place `i` spends in place `j` (or, for migration,
     the rate at which they move there) is `scale × pop[i]^(source_power−1) × pop[j]^dest_power / distance[i,j]^distance_power`
 
     Populations and distances come from the geography of the dimension it is used on (`ss.geo.geography`).
-    The model gives the shape of the movement, and `away=` its amount: the share of their time
+    The model gives the shape of the movement, and `away=` its amount: the fraction of their time
     that people spend away from home, split between the other places by gravity. `scale` has units
     of distance^distance_power / pop^(source_power+dest_power−1), so no default fits both three towns
     and a country; give it only if it has been calibrated. With neither, people spend 10% of their time away.
     `kind=` says how people move (see `ss.geo.Mobility`).
 
     Args:
-        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
+        away (float): for commuting and visiting, the fraction of their time people spend away from home (for 'force', the fraction of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
         scale (float): the overall amount of movement, instead of `away`; for migration, the scale of the rates (required)
         kind (str): 'commute' (the default), 'visit', 'migrate', or 'force' (see `ss.geo.Mobility`)
         source_power (float): the exponent of the population of the place people come from
@@ -342,7 +342,7 @@ class gravity:
     """
     def __init__(self, away=None, scale=None, kind=None, source_power=1.0, dest_power=1.0, distance_power=2.0):
         if away is not None and scale is not None:
-            errormsg = 'ss.geo.gravity() takes away= (the share of time spent away) or scale= (a calibrated amount of movement), not both'
+            errormsg = 'ss.geo.gravity() takes away= (the fraction of time spent away) or scale= (a calibrated amount of movement), not both'
             raise ValueError(errormsg)
         self.away = away
         self.scale = scale
@@ -370,7 +370,7 @@ class gravity:
         pop, dist = place.populations, place.distances
         scale, a, b, c = [float(v) for v in [sc.ifelse(self.scale, 1.0), self.source_power, self.dest_power, self.distance_power]] # Any can be a fitted ss.par
         with np.errstate(divide='ignore'):
-            out = scale*pop[:, None]**(a - 1)*pop[None, :]**b/dist**c # Without a scale, only the shape matters: see Mobility.time_share()
+            out = scale*pop[:, None]**(a - 1)*pop[None, :]**b/dist**c # Without a scale, only the shape matters: see Mobility.time_frac()
         np.fill_diagonal(out, 0)
         return out
 
@@ -378,17 +378,17 @@ class gravity:
 class radiation:
     """
     The radiation model of movement (Simini et al. 2012), which has no parameters to fit: of the people from place `i` who travel,
-    the share who go to place `j` is `pop[i] × pop[j] / ((pop[i] + s) × (pop[i] + pop[j] + s))`, where `s` is the population of the
+    the fraction who go to place `j` is `pop[i] × pop[j] / ((pop[i] + s) × (pop[i] + pop[j] + s))`, where `s` is the population of the
     other places nearer to `i` than `j` is
 
     It is used as `ss.geo.gravity` is, with the populations and distances of the geography of the dimension it is used on
     (`ss.geo.geography`): the model gives where people go, and `away=` how much they travel. With neither `away` nor `scale`,
-    people spend 10% of their time away. The shares are normalized to sum to 1 for each place, so for migration `scale` is the
+    people spend 10% of their time away. The fractions are normalized to sum to 1 for each place, so for migration `scale` is the
     rate at which each person moves. `kind=` says how people move (see `ss.geo.Mobility`).
 
     Args:
-        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
-        scale (float): the overall amount of movement, instead of `away`: the share of their time away, or for migration the rate of moving (required)
+        away (float): for commuting and visiting, the fraction of their time people spend away from home (for 'force', the fraction of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
+        scale (float): the overall amount of movement, instead of `away`: the fraction of their time away, or for migration the rate of moving (required)
         kind (str): 'commute' (the default), 'visit', 'migrate', or 'force' (see `ss.geo.Mobility`)
 
     Examples:
@@ -399,7 +399,7 @@ class radiation:
     """
     def __init__(self, away=None, scale=None, kind=None):
         if away is not None and scale is not None:
-            errormsg = 'ss.geo.radiation() takes away= (the share of time spent away) or scale= (the amount of movement), not both'
+            errormsg = 'ss.geo.radiation() takes away= (the fraction of time spent away) or scale= (the amount of movement), not both'
             raise ValueError(errormsg)
         self.away = away
         self.scale = scale
@@ -439,7 +439,7 @@ class Mobility:
     """
     Movement between the levels of a spatial stratification, given as a matrix
 
-    People either commute (they keep their home, and spend a share of their time in
+    People either commute (they keep their home, and spend a fraction of their time in
     other places, where they are exposed and expose others), visit (the same, but
     they are exposed to the residents of the places they go to and do not expose
     anyone there, as flepiMoP has it), or migrate (they relocate). Or, with `kind='force'`,
@@ -457,15 +457,15 @@ class Mobility:
     Note: CRN safe as agents.
 
     Args:
-        matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)
+        matrix (array): the movement from each place (rows) to each place: for commuting the fraction of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)
         kind (str): 'commute', 'visit', 'migrate', or 'force' (default 'commute')
-        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others); the movement is rescaled to give every place that share (to keep the differences between places, scale the matrix by hand and give no `away=`)
+        away (float): for commuting and visiting, the fraction of their time people spend away from home (for 'force', the fraction of each place's force of infection that goes to the others); the movement is rescaled to give every place that fraction (to keep the differences between places, scale the matrix by hand and give no `away=`)
 
     Examples:
         ```python
         sir.stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.Mobility([[0, 0.1], [0.2, 0]])))
 
-        # LASER's coupling, with the force of infection moving: M[i,k] is the share of i's force that goes to k
+        # LASER's coupling, with the force of infection moving: M[i,k] is the fraction of i's force that goes to k
         sir.stratify(patch=ss.levels(places, mobility=ss.geo.Mobility(M, kind='force')))
         ```
     """
@@ -498,7 +498,7 @@ class Mobility:
         self.guessed = None
         if model is not None: # The amount of movement: away=, or the model's scale
             if kind == 'migrate' and model.scale is None:
-                errormsg = f'ss.geo.{type(model).__name__}() for migration needs scale=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
+                errormsg = f'ss.geo.{type(model).__name__}() for migration needs scale=, the scale of the rates of moving; the fraction of time away (away=) is for commuting and visiting'
                 raise ValueError(errormsg)
             if away is None and model.scale is None:
                 away = 0.1
@@ -640,17 +640,17 @@ class Mobility:
         return out
 
     def coupling(self, strat):
-        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives, as a sparse array
+        """ For a moving force of infection: the fraction of the force of infection of each level (columns) that each level (rows) receives, as a sparse array
 
         Args:
             strat (Strat): the stratification
         """
-        out = spsp.csr_array(self.time_share(strat).T) # Each place keeps its own share, and receives what each other place's force sends it
+        out = spsp.csr_array(self.time_frac(strat).T) # Each place keeps its own fraction, and receives what each other place's force sends it
         out.sort_indices()
         return out
 
-    def time_share(self, strat):
-        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one
+    def time_frac(self, strat):
+        """ For commuting: the fraction of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one
 
         Args:
             strat (Strat): the stratification
@@ -663,7 +663,7 @@ class Mobility:
         else: # Nobody can spend more than all their time away
             capped = (total > 1).sum()
             if capped:
-                ss.warn(f'The movement for "{strat.name}" would have the people of {capped:n} of its {strat.n:n} places spend more than all their time away, so it was capped at all of it (nobody is ever at home there). Give the share of time away with away= instead.')
+                ss.warn(f'The movement for "{strat.name}" would have the people of {capped:n} of its {strat.n:n} places spend more than all their time away, so it was capped at all of it (nobody is ever at home there). Give the fraction of time away with away= instead.')
             scale = 1/np.maximum(total, 1)
         if spsp.issparse(out):
             out = spsp.csr_array(out.multiply(scale[:, None]))

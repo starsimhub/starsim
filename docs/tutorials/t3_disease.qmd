@@ -7,7 +7,7 @@ authorship:
   note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI
 ---
 
-The SIR model of [Tutorial 1](t1_intro.qmd) and [Tutorial 2](t2_model.qmd) is over within weeks, far faster than real measles. [Tutorial 2](t2_model.qmd) found that R0 and prior immunity decide how *many* people are infected. This tutorial asks: **what decides how *fast* an outbreak spreads?** It adds, one at a time, structure that most disease models need: a latent period, the distribution of a duration, waning immunity, and a branch (here, a small share die). It then names the parameters, checks the finished disease, and runs it as agents. By the end of this tutorial, you will be able to:
+The SIR model of [Tutorial 1](t1_intro.qmd) and [Tutorial 2](t2_model.qmd) is over within weeks, far faster than real measles. [Tutorial 2](t2_model.qmd) found that R0 and prior immunity decide how *many* people are infected. This tutorial asks: **what decides how *fast* an outbreak spreads?** It adds, one at a time, structure that most disease models need: a latent period, the distribution of a duration, waning immunity, and a branch (here, a small fraction die). It then names the parameters, checks the finished disease, and runs it as agents. By the end of this tutorial, you will be able to:
 
 - turn an SIR model into an SEIR model, and say why it changes the course of the epidemic but not R0;
 - choose the distribution of a duration, and add waning immunity and deaths;
@@ -110,7 +110,7 @@ msim.plot('measles.I')
 
 ## Deaths: a branch
 
-A small share of people with measles die: from 1 in 1,000 cases or fewer in high-income countries to several in 100 in some low-income settings. Suppose it is 2 in 1,000. People leaving `I` then branch: 99.8% recover and 0.2% die. A branch is a transition with `p=`, the share that take it:
+A small fraction of people with measles die: from 1 in 1,000 cases or fewer in high-income countries to several in 100 in some low-income settings. Suppose it is 2 in 1,000. People leaving `I` then branch: 0.2% die and the rest recover. A branch is a transition with `p=`, the fraction that take it, and `p=None` marks the one that takes the rest. After `@`, a dict gives the transition's keywords:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -119,8 +119,8 @@ A small share of people with measles die: from 1 in 1,000 cases or fewer in high
 S, E, I, R = ss.states('S E I R')
 infection   = S >> E @ 1.9*I
 progression = E >> I @ ss.days(10)
-recovery    = ss.Transition(I, R, dur=ss.days(8), p=0.998)        # 99.8% recover...
-death       = ss.Transition(I, ss.dead, dur=ss.days(8), p=0.002)  # ...and 0.2% die
+recovery    = I >> R       @ dict(dur=ss.days(8), p=None)   # The rest recover...
+death       = I >> ss.dead @ dict(dur=ss.days(8), p=0.002)  # ...and 0.2% die
 measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
@@ -158,7 +158,7 @@ measles_explicit = ss.Disease(
         ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), p=0.998, name='recovery'),    # 99.8% recover...
         ss.Transition(source=I, dest=ss.dead, dur=ss.expon(mean=ss.days(8)), p=0.002, name='death'), # ...and 0.2% die
     ],
-    init = dict(S=0.999, I=0.001), # The share of people in each state at the start
+    init = dict(S=0.999, I=0.001), # The fraction of people in each state at the start
     name = 'measles',
 )
 
@@ -174,7 +174,7 @@ print('Deaths:', round(sim_explicit.results.measles.death.sum()))
 measles.equations()
 ```
 
-Two transitions out of a state with rates and no `p=` are instead competing risks: whichever happens first moves each person. A branch gives the share directly, which is how the case fatality ratio is usually known.
+The same outcome can be written as one transition with several destinations, `outcome = I >> {ss.dead: 0.002, R: None} @ ss.days(8)`, decided as people leave `I`; its results are then `outcome.dead` and `outcome.R` (see [Building diseases](../user_guide/building_diseases.qmd#branching)). Two transitions out of a state with rates and no `p=` are instead competing risks: whichever happens first moves each person. A branch gives the fraction directly, which is how the case fatality ratio is usually known.
 
 ## Naming the parameters
 
@@ -188,8 +188,8 @@ dur_infectious = ss.par(ss.days(8), doc='Average infectious period')
 
 infection   = S >> E @ beta*I
 progression = E >> I @ dur_latent
-recovery    = ss.Transition(I, R, dur=dur_infectious, p=0.998)
-death       = ss.Transition(I, ss.dead, dur=dur_infectious, p=0.002)
+recovery    = I >> R       @ dict(dur=dur_infectious, p=None)
+death       = I >> ss.dead @ dict(dur=dur_infectious, p=0.002)
 measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
@@ -250,7 +250,7 @@ The ODE always gives the same outbreak. As agents, some runs give one about as l
 
 ```{python}
 total = msim.results.measles.infection.values.sum(axis=1) # Total infections in each run
-print('Share of introductions that die out:', np.mean(total < 20))
+print('Fraction of introductions that die out:', np.mean(total < 20))
 ```
 
 Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to the runs. This matters for questions about introductions: how likely an imported case is to start an outbreak.
@@ -277,7 +277,7 @@ def make_sim(k=None):
 for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2}.items():
     msim = ss.parallel(make_sim(k), n_runs=40)
     total = msim.results.measles.infection.values.sum(axis=1)
-    print(label, '- share that die out:', np.mean(total < 20), '- median size of the outbreaks that take off:', np.median(total[total >= 20]))
+    print(label, '- fraction that die out:', np.mean(total < 20), '- median size of the outbreaks that take off:', np.median(total[total >= 20]))
 ```
 
 Each case infects about 1.5 others on average in all three, but the more concentrated transmission is, the more often an introduction dies out: with k = 0.2, about 3 in 4 do, since the first case is most likely one who infects nobody. `ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `when=infection`); see [Diseases](../user_guide/building_diseases.qmd). Susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
@@ -348,7 +348,7 @@ Most people are infected 3 to 5 times. A model can use a person's history: e.g. 
 2. Give the infectious period an Erlang distribution too, with `k=4`. Using `R0()` and a plot of `I`, check whether R0 or the course of the epidemic changes.
 3. About 1 in 10 people with measles in this town are admitted to hospital, after 4 days of being infectious on average, and stay for 7 days. Add a state for people in hospital (assume they don't transmit), and find the largest number of people in hospital at once.
 4. Try different durations of immunity in the SIRS model of the respiratory infection (e.g. 1, 6, and 24 months). How do they affect the epidemic curve, and the number of times people are infected?
-5. In the town with 90% immune, increase the share susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What share of introductions die out now, with and without superspreading (k = 0.2)?
+5. In the town with 90% immune, increase the fraction susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What fraction of introductions die out now, with and without superspreading (k = 0.2)?
 
 [Solutions](solutions.qmd#t3-building-a-disease) · Next: [T4 – Mixing](t4_mixing.qmd)
 

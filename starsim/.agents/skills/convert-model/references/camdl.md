@@ -18,7 +18,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 | A birth or death (`--> S`, `S -->`) | An inflow or an outflow against `ss.dead` | yes |
 | `let N = S + I + R` | A named expression, written out where it is used | yes |
 | Parameters with bounds, priors (`log_normal`, `normal`, `beta`, `gamma`, `exponential`, `uniform`, `truncated_normal`, `half_normal`; a flat prior is the bounds), and docs | `ss.par(value, bounds=[...], prior=ss.lognormal(log_mean=mu, log_std=sigma), doc=...)` | yes |
-| Observations of a flow (`incidence(...)`) with a share (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, likelihood=ss.nbinom(n=k))` (weekly data is compared with the total over each week) | yes |
+| Observations of a flow (`incidence(...)`) with a fraction (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, likelihood=ss.nbinom(n=k))` (weekly data is compared with the total over each week) | yes |
 | `time_unit`, `simulate { from, to }`, `dt` | `unit=`, `start=`, `stop=`, `dt=` | yes |
 | `init`, including expressions of parameters and other compartments | `init_n=dict(...)` (worked out to numbers of people) | yes |
 | A guard, `N > 0 ? I/N : 0` | `(N > 0) * (I / maximum(N, 1e-300))`, which is 0 for an empty group rather than 0/0 | yes |
@@ -37,10 +37,10 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 ## What needs care
 
 - **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=ss.levels(dict(zip([...], pop)), kind='space', mobility=ss.geo.Mobility(matrix=..., kind='migrate')))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import as `validate.md` says before replacing one with the other.
-- **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Event(S >> R, when=[20], p=0.6)`, which moves that share of `S` at that time, under every solver.
+- **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Event(S >> R, when=[20], p=0.6)`, which moves that fraction of `S` at that time, under every solver.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
-- **An initial number below 1** (a fraction of a person) can't be a number of people in `init_n=`, so the import writes it in `init=` as the share of everyone it is.
+- **An initial number below 1** (a fraction of a person) can't be a number of people in `init_n=`, so the import writes it in `init=` as the fraction of everyone it is.
 - A model that divides by an empty group without a guard gives NaN in Starsim, as camdl stops with `DivByZero`.
 
 ## Worked example

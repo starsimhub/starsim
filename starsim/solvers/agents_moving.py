@@ -244,7 +244,7 @@ class Moving:
         return arrived
 
     def destinations(self, tr, srcs, uidlist, uids, frm, entering):
-        """ The destination of each agent who leaves by a transition with several (in its shares, with one draw), as (state, uids, came from); those who take ss.dead die, and those who take ss.stay are put back """
+        """ The destination of each agent who leaves by a transition with several (in its fractions, with one draw), as (state, uids, came from); those who take ss.dead die, and those who take ss.stay are put back """
         edges = self.dest_edges(tr, uids, frm)
         rvs = self.draw(f'dst_{tr.name}', uids)
         masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(edges) - 1)]
@@ -268,7 +268,7 @@ class Moving:
         key = ('dest', tr.name)
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
-            dies = not tr.may_die or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.dead') and self.unmodified('branch', f'{tr.name}.stay')) # The share of ss.dead, from those of the others, and of ss.stay (see die_share())
+            dies = not tr.may_die or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.dead') and self.unmodified('branch', f'{tr.name}.stay')) # The fraction of ss.dead, from those of the others, and of ss.stay (see die_frac())
             fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dest)
         return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
 
@@ -278,7 +278,7 @@ class Moving:
         with self.evaluating(leaving=(uids, frm)): # Decided as they leave: the time in a clock is the time they spent there (see clock_values())
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
             if tr.may_die:
-                ps.append(np.broadcast_to(self.die_share(tr, ps, lambda p: self.eval_for(p, uids), uids), len(uids)))
+                ps.append(np.broadcast_to(self.die_frac(tr, ps, lambda p: self.eval_for(p, uids), uids), len(uids)))
         return np.cumsum([np.zeros(len(uids))] + ps, axis=0)
 
     def arrive(self, arrived, ti):
@@ -689,16 +689,16 @@ class Moving:
         return
 
     def branch_probs_for(self, tr, uids):
-        self._memo = {} # A part that several entries share (e.g. p_use in 1 - p_use and p_use*share) is evaluated once for all of them (see memoized())
+        self._memo = {} # A part that several entries frac (e.g. p_use in 1 - p_use and p_use*frac) is evaluated once for all of them (see memoized())
         try:
             ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
         finally:
             self._memo = None
-        if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of shares for each person (a switching matrix): not supported yet
+        if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of fractions for each person (a switching matrix): not supported yet
             raise ss.CapabilityError(f'the destinations of "{tr.name}" gave a row of probabilities for each person, but each is one destination\'s probability (one value per person); '
                                      f'give one per destination, e.g. {{{tr.dest[0].name}: f_{tr.dest[0].name}, ...: None}}, where each function returns one value per person')
 
-        return self.dest_shares(tr, ps, uids, ev=lambda p: self.eval_for(p, uids)) # With ss.stay or ss.dead, what the states leave over stays or dies
+        return self.dest_fracs(tr, ps, uids, ev=lambda p: self.eval_for(p, uids)) # With ss.stay or ss.dead, what the states leave over stays or dies
 
     def whole_steps(self, uids, dur, dt=None):
         """
@@ -884,9 +884,9 @@ class Moving:
         Put agents in a state, and schedule their exit from it, at the moment they enter (so `p=` is read then, and code after the step sees the exit)
 
         An agent who enters during a step after the state's competing rates were drawn is marked
-        `late_<state>` with the share of a step of them it missed: half, for a move in the
+        `late_<state>` with the fraction of a step of them it missed: half, for a move in the
         state-change row (which draws the other half then: see `finish_moves()`), and all of it for
-        a move by an intervention. The step their scheduled exit is due in draws that share for them
+        a move by an intervention. The step their scheduled exit is due in draws that fraction for them
         (see `step_state()`), which gives a rate competing with a dwell time the exposure the dwell
         time says.
 
@@ -1067,7 +1067,7 @@ class Moving:
         branches = self.branches_of(state.name)
         ps = [None if tr.p is None or tr._split else np.broadcast_to(self.eval_for(tr.p[0], uids), len(uids)) for tr in branches] # A split between several destinations takes what the branches leave over
         mults = self.where_mults(branches, state, [self.branch_mult(tr, uids) for tr in branches], uids)
-        ps = [np.broadcast_to(p, len(uids)) for p in self.branch_shares(branches, ps, mults)]
+        ps = [np.broadcast_to(p, len(uids)) for p in self.branch_fracs(branches, ps, mults)]
         return np.cumsum([np.zeros(len(uids))] + ps, axis=0)
 
     def rescaled_of(self, name):
@@ -1205,7 +1205,7 @@ class Moving:
             return np.asarray(rvs, dtype=float)/adjust # An adjustment multiplies the rate, so divides the duration
 
     def branches_of(self, name):
-        """ The branches out of a state, chosen on entry: those with a share, and the one that takes the rest """
+        """ The branches out of a state, chosen on entry: those with a fraction, and the one that takes the rest """
         exits = self.graph.exits[name]
         return exits.branches + sc.tolist(exits.remainder)
 
@@ -1214,7 +1214,7 @@ class Moving:
     def backfill_burnin(self, sp):
         """
         A module's people who start part way through (`ss.Pregnancy(burnin=True)`: see its `burnin_plan()`): each agent of
-        the first state with their own chance of having entered (`sp.share()`), at a step uniform over the `sp.steps` before
+        the first state with their own chance of having entered (`sp.frac()`), at a step uniform over the `sp.steps` before
         the start, is run forward to the start by the module's own spontaneous transitions (see `backfill()`); those no
         longer in the target at the start are put back, as if never there, and those who died are removed. One draw for
         each agent, from the module's own common random numbers, says both whether and when
@@ -1222,9 +1222,9 @@ class Moving:
         mod = self.mod
         sim = self.sim
         people = sim.people
-        share = np.asarray(sp.share(), dtype=float)
+        frac = np.asarray(sp.frac(), dtype=float)
         pool = self.members(self.graph.default_state)
-        p = share[pool] if share.ndim else np.full(len(pool), share)
+        p = frac[pool] if frac.ndim else np.full(len(pool), frac)
         u = self.draw('burnin', pool)
         yes = u < p
         chosen = pool[yes]

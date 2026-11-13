@@ -218,18 +218,18 @@ def load_summer2(source, pars=None, verbose=None):
                     adjust[tname] = mults
                 continue
 
-            # Into the stratified states: the shares of the flow are a split by level, and their sum multiplies the flow
+            # Into the stratified states: the fractions of the flow are a split by level, and their sum multiplies the flow
             dims = sorted({k for it in items for k in it['source_strata']})
             bad = [it for it in items if it['dest_strata']] or len(dims) > 1
             if bad:
                 src.skip(f'adjustment of {fname} by {sname}', 'it depends on the destination\'s other strata, or on more than one of the source\'s')
                 continue
-            if not dims: # The same shares for everyone
+            if not dims: # The same fractions for everyone
                 mults = np.array([multiplier(items[-1]['adjustments'][s], base[fname]) for s in strata], dtype=float)
                 kw.fractions = list(mults/mults.sum())
                 if not np.isclose(mults.sum(), 1):
                     nflows[fname].rate = f'({nflows[fname].rate}) * {mults.sum():n}'
-            else: # Shares by the level of an earlier stratification
+            else: # Fractions by the level of an earlier stratification
                 dim = dims[0]
                 prev = next(s for s in d['stratifications'] if s['name'] == dim)
                 table = np.ones((len(prev['strata']), n))/n # Where no adjustment matches, summer2 splits the flow equally

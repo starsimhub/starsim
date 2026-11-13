@@ -145,14 +145,14 @@ def test_partner_targets():
     S, I = ss.states('S I')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), name='sir')
     sir.stratify(risk={'low': 0.8, 'high': 0.2})
-    for share in [None, 0.9]:
-        net = ss.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
+    for frac in [None, 0.9]:
+        net = ss.DegreeNet(n_contacts=0.7, dur=50, match=None if frac is None else dict(risk=frac), name='net')
         sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
         net = sim.networks.net
         level = sim.groups.level_raw(sim.groups.dim_index('risk'))
         within = np.mean(level[net.edges.p1] == level[net.edges.p2])
         assert np.isclose(net.results.mean_degree[150:].mean(), 0.7, rtol=0.05)
-        assert np.isclose(within, 0.68, atol=0.03) if share is None else np.isclose(within, share, atol=0.02) # By chance, 0.8² + 0.2²
+        assert np.isclose(within, 0.68, atol=0.03) if frac is None else np.isclose(within, frac, atol=0.02) # By chance, 0.8² + 0.2²
     assert 'match' in net.check(n_runs=2, output=True).index
 
     # Within the levels of several properties at once, each with its own target (EpiModel's nodematch on each)
@@ -258,10 +258,10 @@ def test_route_modifiers():
 
     # A condom of efficacy 0.9 in half the acts multiplies the hazard by 1 - 0.5*0.9: p=0.1, 10 acts gives 1 - exp(-10*0.1054*0.55) = 0.440 (STIsim's split of the acts gives 0.438)
     condoms = lambda **kw: [ss.modify('si.infection', network='sexualnet', **kw)]
-    p = chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.peryear(10)), connectors=condoms(efficacy=0.9, share=0.5), n=100_000)
+    p = chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.peryear(10)), connectors=condoms(efficacy=0.9, frac=0.5), n=100_000)
     assert np.isclose(p, 1 - np.exp(10*np.log(0.9)*0.55), atol=0.01), p
-    assert p == chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.peryear(10)), connectors=condoms(multiply=0.1, share=0.5), n=100_000) # efficacy= is multiply=1 - efficacy
-    assert chance(ss.peract(m2f=0.1, f2m=0), connectors=condoms(multiply=0, share=1)) == 0 # Nothing on that route
+    assert p == chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.peryear(10)), connectors=condoms(multiply=0.1, frac=0.5), n=100_000) # efficacy= is multiply=1 - efficacy
+    assert chance(ss.peract(m2f=0.1, f2m=0), connectors=condoms(multiply=0, frac=1)) == 0 # Nothing on that route
     with pytest.raises(ValueError, match='efficacy'):
         ss.modify('si.infection', efficacy=0.9, multiply=0.1)
 
@@ -270,9 +270,9 @@ def test_route_modifiers():
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(0.05), randomnet=beta) * I), init_prev=0.05, name='si')
         return ss.Sim(si, networks=[ss.SexualNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.I[-1]
-    assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
+    assert run(condoms(multiply=0, frac=1)) > run(condoms(multiply=0, frac=1), beta=0) > 0 # Infections only over the random network
     with pytest.raises(ValueError):
-        run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, network='needles')])
+        run(condoms(multiply=0, frac=1) + [ss.modify('si.infection', multiply=0.5, network='needles')])
     with pytest.raises(ValueError, match='transmission'):
         run([ss.modify('si.rel_sus', multiply=0.5, network='sexualnet')])
 
@@ -283,10 +283,10 @@ def test_route_modifiers():
         nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
         sim = ss.Sim(sir, networks=nets, interventions=mods, stratify=dict(risk={'low': 0.7, 'high': 0.3}), total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=seed, verbose=0)
         return sim.run().results.sir.R.values
-    share = lambda: [ss.modify('sir.infection', multiply=0.2, share=ss.by(risk=[0.3, 0.9]), network='pool')]
-    ode = pool('ode', share())
-    assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), network='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
-    ratio = lambda solver, seeds: np.mean([pool(solver, share(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
+    frac = lambda: [ss.modify('sir.infection', multiply=0.2, frac=ss.by(risk=[0.3, 0.9]), network='pool')]
+    ode = pool('ode', frac())
+    assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), network='pool')])) # The same as its multiplier, 1 - frac*(1 - multiply)
+    ratio = lambda solver, seeds: np.mean([pool(solver, frac(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
     ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(12)) # 12 seeds, since near its threshold one run's epidemic varies a lot (seeds 0-3 alone gave 0.22 here); each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
     assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.1), (abm_ratio, ode_ratio)
     return
@@ -299,7 +299,7 @@ def test_needles():
         needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
         S, I = ss.states('S I')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=mf_beta, needles=needles_beta) * I), init_prev=0.05, name='hiv')
-        intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, network='needles', when=ss.schedule(start=2005)) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
+        intv = ss.modify(hiv.infection, multiply=0.2, frac=0.5, network='needles', when=ss.schedule(start=2005)) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
         sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles], interventions=intv, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
         sim.stratify(pwid={False: 0.9, True: 0.1}).init()
         sim.before = sim.diseases.hiv.I.raw.copy()

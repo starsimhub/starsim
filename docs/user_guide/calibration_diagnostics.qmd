@@ -52,7 +52,7 @@ sir_fit = ss.Sim(make_sir(), data=data, **pars).fit()
 sir_fit.plot(residuals=True)
 ```
 
-The residuals have a pattern, and the share reported is pushed to its bound of 1: the model is wrong. For the right model, they wander above and below zero at random:
+The residuals have a pattern, and the fraction reported is pushed to its bound of 1: the model is wrong. For the right model, they wander above and below zero at random:
 
 ```{python}
 seir_fit = ss.Sim(make_seir(), data=data, **pars).fit(verbose=False)
@@ -64,7 +64,7 @@ A pattern in the residuals points to the structure of the model, or to how the d
 | Pattern | Things to examine |
 |---|---|
 | The peak consistently too early or too late | The initial infections and when they are introduced; the latent period; reporting delays |
-| The right shape but the wrong size | The population size; the share reported; whether the data count events (a flow) or people at a time (a stock) |
+| The right shape but the wrong size | The population size; the fraction reported; whether the data count events (a flow) or people at a time (a stock) |
 | A best value at a bound | The bounds; a missing process that the parameter is making up for; weak identification |
 | Different starts giving different answers | Several optima, too short a search, a noisy objective |
 | A good fit but an unstable projection | Parameters the data can't tell apart; a change in the epidemic the model doesn't have |
@@ -84,7 +84,7 @@ What "converged" means depends on the method (see the [appendix](#when-each-meth
 
 ### A best value at a bound
 
-A best value at the edge of its bounds gives an `AtBound` warning, as for the SIR model above. It means one of three things: the true value is beyond the bound (widen it, if such values are plausible); the data don't determine the parameter (see [below](#can-the-data-tell-the-parameters-apart)); or the model is missing something, and the parameter is making up for it, as the reporting share was above.
+A best value at the edge of its bounds gives an `AtBound` warning, as for the SIR model above. It means one of three things: the true value is beyond the bound (widen it, if such values are plausible); the data don't determine the parameter (see [below](#can-the-data-tell-the-parameters-apart)); or the model is missing something, and the parameter is making up for it, as the reporting fraction was above.
 
 ### The same answer again
 
@@ -144,7 +144,7 @@ The SEIR model, now with three unknowns, `beta`, the infectious period `dur_inf`
 S, E, I, R = ss.states('S E I R')
 beta    = ss.par(1.5, bounds=[0.5, 4])             # Transmission rate per day
 dur_inf = ss.par(ss.days(6), bounds=[3, 15])       # Infectious period, in days
-report  = ss.par(0.3, bounds=[0.05, 1])            # Share of cases reported
+report  = ss.par(0.3, bounds=[0.05, 1])            # Fraction of cases reported
 
 infection = S >> E @ beta*I
 onset     = E >> I @ ss.days(10)
@@ -255,7 +255,7 @@ A stochastic model is scored over many runs at its best values (`n_runs=`, 100 b
 | The parameters are identifiable | Recover known values; the notes that parameters appear only together or are correlated | Values far from the truth; a ridge | Fix one parameter from other evidence, or get more data, or data of another kind |
 | The posterior is reliable | `rhat`, `ess`, divergences | R-hat above 1.01, few effective draws, any divergences | More warm-up and draws; check identifiability |
 | The model predicts | `ss.fitting.compare_models()` | A model that fits well but predicts badly | A simpler model, or more data |
-| The fit is plausible | Compare with what is known from elsewhere | A reporting share above 1, an infectious period of months | Rethink the model |
+| The fit is plausible | Compare with what is known from elsewhere | A reporting fraction above 1, an infectious period of months | Rethink the model |
 
 The last check matters most, and no software can make it: whether the values, and the model, make sense for the disease and the setting is a judgment for the modeler.
 

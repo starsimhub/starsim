@@ -191,8 +191,8 @@ def test_counts():
     assert np.abs(make(lambda S, I: (ss.by(risk=[2, 1])*I).n/pop) - solve(np.array([2, 1]))).max() < 1e-4 # A weighted count, also acted on by the matrix (it was an error)
     for rate in [lambda S, I: I.n/pop, lambda S, I: I.n/(S + I).total]: # The same, as counts over the population
         assert np.allclose(make(rate), frac, rtol=1e-9)
-    shares = make(lambda S, I: I) # On the share of each group, which is more
-    assert shares[:, -1].sum() > 2*frac[:, -1].sum()
+    fracs = make(lambda S, I: I) # On the share of each group, which is more
+    assert fracs[:, -1].sum() > 2*frac[:, -1].sum()
     agents = make(lambda S, I: I.n/pop, solver='abm', n_agents=pop)
     assert np.allclose(agents[:, -1], frac[:, -1], rtol=0.1)
 

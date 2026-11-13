@@ -50,7 +50,7 @@ To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or 
 
 ## Neonatal deaths
 
-`NeonatalSepsis` infects a share of newborns at birth (`p_at_birth`, by default 30%), and kills half of them (`p_death`) within about a week. It shows that neonatal deaths need no special handling: `ss.Pregnancy` counts any death of a baby aged 0 to 28 days, from any cause, as a neonatal death. The results are therefore in the pregnancy module, not the disease, and comparing with a sim without sepsis gives the deaths it causes:
+`NeonatalSepsis` infects a fraction of newborns at birth (`p_at_birth`, by default 30%), and kills half of them (`p_death`) within about a week. It shows that neonatal deaths need no special handling: `ss.Pregnancy` counts any death of a baby aged 0 to 28 days, from any cause, as a neonatal death. The results are therefore in the pregnancy module, not the disease, and comparing with a sim without sepsis gives the deaths it causes:
 
 ```{python}
 scenarios = {

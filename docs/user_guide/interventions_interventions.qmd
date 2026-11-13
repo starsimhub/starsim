@@ -107,7 +107,7 @@ A delivery says who receives the product, when, and how many. There is one for e
 | `who=` | Who can receive it: a condition (`ss.person.age < 15`), people as they reach an age (`ss.at_age(ss.months(9))`), or a function of the sim |
 | `when=` | When: at times (`'2025-05-01'`), this far apart (`ss.schedule(every=ss.years(1))`), or on an event (`screening.positive`); with none, routinely |
 | `start=`, `stop=` | A window it is delivered in, with any `when=` |
-| `coverage=` | The share of eligible people reached |
+| `coverage=` | The fraction of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate), or `ss.capacity(n, priority=..., queue=...)` to say who is served first and whether the rest wait |
 | `skip_reached_within=` | Skip those this delivery reached less than this long ago, e.g. `ss.years(1)` (agents only) |
 | `trace=` | Deliver to the contacts of those selected, on a network (agents only) |
@@ -193,7 +193,7 @@ As compartments, `ss.at_age()` needs age groups with an edge at that age (e.g. `
 
 ### Coverage and capacity
 
-`coverage=0.7` is a share of the eligible people. A typed rate, such as `coverage=ss.perday(0.1)`, is the chance of being reached over the step, which routine delivery offers at every step to those eligible (a rate of seeking care, for example). `capacity=` is the number available: a bare number is per round (or per step, for delivery on events), and a rate, such as `ss.peryear(500)`, is per unit time, which routine delivery needs. Coverage is applied first, and capacity caps the result (an example is [below](#delivery-when-something-happens)). When there is too little capacity, those served are chosen at random, unless `ss.capacity(n, priority=...)` says who comes first: a condition, or a list of them served in order (`[sis.I, ss.person.age >= 65]`), or a score, highest first (`-hiv.cd4`). With `ss.capacity(n, queue=True)`, those not served wait, longest first; a duration (`queue=ss.months(6)`) limits the wait, and those still waiting at its end are the delivery's outcome `never_ran`.
+`coverage=0.7` is a fraction of the eligible people. A typed rate, such as `coverage=ss.perday(0.1)`, is the chance of being reached over the step, which routine delivery offers at every step to those eligible (a rate of seeking care, for example). `capacity=` is the number available: a bare number is per round (or per step, for delivery on events), and a rate, such as `ss.peryear(500)`, is per unit time, which routine delivery needs. Coverage is applied first, and capacity caps the result (an example is [below](#delivery-when-something-happens)). When there is too little capacity, those served are chosen at random, unless `ss.capacity(n, priority=...)` says who comes first: a condition, or a list of them served in order (`[sis.I, ss.person.age >= 65]`), or a score, highest first (`-hiv.cd4`). With `ss.capacity(n, queue=True)`, those not served wait, longest first; a duration (`queue=ss.months(6)`) limits the wait, and those still waiting at its end are the delivery's outcome `never_ran`.
 
 ### Who is eligible
 
@@ -316,7 +316,7 @@ msim.plot('flu.I')
 | Keyword | What it does |
 |---|---|
 | `multiply=` | Multiplies the quantity |
-| `efficacy=` | Removes a share of the risk: the same as `multiply=1 - efficacy`, for protection such as condoms |
+| `efficacy=` | Removes a fraction of the risk: the same as `multiply=1 - efficacy`, for protection such as condoms |
 | `add=` | Adds to the quantity (parameters only), or to an inflow from outside the model (`ss.modify(typhoid.shedding, add=ss.perday(4e6))`) |
 | `set=` | Replaces the quantity (parameters only) |
 
@@ -328,7 +328,7 @@ and any of:
 | `start=`, `stop=` | When it starts and stops applying (by default, always): dates, years, or durations after the start |
 | `when=` | When it applies, on time alone (by default, always): a schedule of times or how often, or a function of the date that returns `True` on the steps it applies (`lambda now: now.month in [6, 7, 8]`) |
 | `until=` | Once `who=` (or `when=`) selects someone, it stays on for them: for at least this long (a duration), or until this condition holds |
-| `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts; with `network=`, as agents, a function of the network giving a share for each partnership, e.g. `share=lambda net: net.edges.condoms` |
+| `frac=` | With `multiply=` or `efficacy=`, the fraction of acts (or contacts) it applies to, e.g. condom use in 30% of acts; with `network=`, as agents, a function of the network giving a fraction for each partnership, e.g. `frac=lambda net: net.edges.condoms` |
 | `network=` | For a change to transmission, the network or networks it applies on, by name (by default, all) |
 
 The amount can itself vary: `multiply=` takes anything a parameter takes, such as `ss.seasonal()` or `ss.timeseries()` (see [Parameters](building_parameters.qmd)). `multiply=ss.timeseries({t1: x1, t2: x2})` multiplies the quantity by each value from its time until the next, each relative to the quantity's own value, not to the one before; `set=` gives values instead. The times are dates or years in a sim with a calendar, numbers in the sim's unit in one without, and in either a duration is that long after the start (`ss.days(20)`).
@@ -408,7 +408,7 @@ An intervention that acts on people can be given `who=`, as a delivery is (inclu
 
 ```{python}
 class Isolate(ss.Intervention):
-    """ Each day, a share of the people eligible are isolated, which ends their infectiousness """
+    """ Each day, a fraction of the people eligible are isolated, which ends their infectiousness """
     def __init__(self, p=0.2, **kwargs):
         super().__init__(**kwargs) # Including who=
         self.define_pars(p=p)
@@ -416,7 +416,7 @@ class Isolate(ss.Intervention):
 
     def step(self):
         uids = self.check_eligibility()
-        self.sim.diseases.flu.move(uids, 'R', p=self.pars.p) # A share of those eligible (here the infectious)
+        self.sim.diseases.flu.move(uids, 'R', p=self.pars.p) # A fraction of those eligible (here the infectious)
         return
 
 isolate = Isolate(who='flu.I')
@@ -427,7 +427,7 @@ print('Peak infectious:', sim.results.flu.I.max())
 ## Pitfalls
 
 - **Infections only delayed.** A change that ends, such as distancing, delays infections rather than averting them: run long enough to count them (see [Scenarios](running_scenarios.qmd)).
-- **Routine is once per person.** For a share of people reached every year, use yearly rounds, or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
+- **Routine is once per person.** For a fraction of people reached every year, use yearly rounds, or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
 - **A function made in a loop sees the loop's last value.** Every `who=lambda sim: sim.people.age >= lower` made in `for lower in [0, 15]:` uses 15. Use a condition (`who=ss.person.age >= lower`), which keeps the value it was written with.
 
 The API reference for this page: [Interventions](../api/interventions.qmd), [Connectors](../api/connectors.qmd) (for `ss.modify()`).
@@ -470,7 +470,7 @@ What `when=` and `who=` (and a capacity's `priority=`) can be:
 | A property of people | `ss.person.age < 15`, `ss.person.female`, any stratification, e.g. `measles.age < 15` | The people with it |
 | A product held | `vaccine.held`, `ss.Vaccine.held` | The people who hold it (or any vaccine) now |
 | Someone's mother | `ss.mother(anc.positive.ever, include_born=True)` | The people whose mother meets the condition (agents only) |
-| A count, or a share | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds |
+| A count, or a fraction | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds |
 | Recent incidence | `flu.infection.incidence(over=ss.days(7), by='patch') > 200e-5` | Everyone in the groups where it holds, on the steps when it does |
 | A function of the sim | `lambda sim: sim.people.age >= 15` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
 | A function of the date (`when=`) | `lambda now: now.month == 1` | Everyone, on the steps when it returns `True` |

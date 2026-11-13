@@ -18,9 +18,9 @@ By the end of this tutorial, you will be able to:
 
 ## Age groups, each with its own immunity
 
-This starts from the SEIR measles model of [T3 – Building a disease](t3_disease.qmd), in a town of 100,000 people (R0 = 1.9 × 8 ≈ 15). `stratify()` splits each state into groups: here by age, into 0–14, 15–64, and 65 and over, each given by its lower edge with its share of the population (30%, 60%, and 10%).
+This starts from the SEIR measles model of [T3 – Building a disease](t3_disease.qmd), in a town of 100,000 people (R0 = 1.9 × 8 ≈ 15). `stratify()` splits each state into groups: here by age, into 0–14, 15–64, and 65 and over, each given by its lower edge with its fraction of the population (30%, 60%, and 10%).
 
-Age groups matter when something differs between them, such as immunity. Suppose 92% of adults under 65 and 98% of older adults are immune, but only 80% of children, since vaccine coverage has slipped. [`ss.by()`](../api/internals.parameters.qmd) gives a value for each age group, and `init` the share of each group that starts in a state; `init_n` starts 10 people infectious, as if brought in by travelers:
+Age groups matter when something differs between them, such as immunity. Suppose 92% of adults under 65 and 98% of older adults are immune, but only 80% of children, since vaccine coverage has slipped. [`ss.by()`](../api/internals.parameters.qmd) gives a value for each age group, and `init` the fraction of each group that starts in a state; `init_n` starts 10 people infectious, as if brought in by travelers:
 
 ```{python}
 import starsim as ss
@@ -30,10 +30,10 @@ infection   = S >> E @ 1.9*I        # β = 1.9 per day
 progression = E >> I @ ss.days(10)
 recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery,
-    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                           # 10 people infectious at the start
 )
-measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
 
 settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 equal = ss.Sim(measles, label='Everyone mixes equally', **settings)
@@ -155,7 +155,7 @@ print('Peak number of children infectious:', round(children.max()))
 print('Infections in people 65 and over:', round(res.infection.select(age='65+').sum()))
 ```
 
-`summarize()` gives each group's total over the run. Dividing by each group's size gives the share infected (the attack rate), the risk:
+`summarize()` gives each group's total over the run. Dividing by each group's size gives the fraction infected (the attack rate), the risk:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -163,7 +163,7 @@ print('Infections in people 65 and over:', round(res.infection.select(age='65+')
 ```{python}
 infections = res.infection.by('age').summarize()
 print(infections.round())
-print('Share of each group infected:')
+print('Fraction of each group infected:')
 print((infections / [30_000, 60_000, 10_000]).round(3))
 ```
 
@@ -173,7 +173,7 @@ print((infections / [30_000, 60_000, 10_000]).round(3))
 res <- sim$results$measles
 infections <- res$infection$by("age")$summarize()
 print(round(infections))
-cat("Share of each group infected:\n")
+cat("Fraction of each group infected:\n")
 print(round(infections / c(30000, 60000, 10000), 3))
 ```
 
@@ -183,7 +183,7 @@ print(round(infections / c(30000, 60000, 10000), 3))
 sizes = {'0-14': 30_000, '15-64': 60_000, '65+': 10_000}
 for age, size in sizes.items():
     total = res.infection.select(age=age).sum()
-    print(age, ' infections:', round(total), ' share infected:', round(total/size, 3))
+    print(age, ' infections:', round(total), ' fraction infected:', round(total/size, 3))
 ```
 :::
 
@@ -206,7 +206,7 @@ recovery    = I >> R @ ss.days(8)
 def make_measles(init_n=10):
     """ The measles model, by age, with the number infectious at the start given """
     measles = ss.Disease(infection, progression, recovery,
-        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
         init_n = dict(I=init_n),
         name   = 'measles',
     )
@@ -225,7 +225,7 @@ recovery    <- Transition(I, R, dur = days(8))
 
 make_measles <- function(init_n = 10) {
   measles <- Disease(infection, progression, recovery,
-    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The share immune in each age group
+    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
     init_n = list(I = init_n),
     name   = "measles"
   )
@@ -249,7 +249,7 @@ towns.plot()
 
 Places are a stratification, like age groups: `stratify(patch=...)` splits each state by town (a "patch" is a place in a metapopulation model), and the contact matrix applies within each town. `ss.by(patch=[10, 0, 0, 0])` starts the outbreak in Riverton only.
 
-Movement is rarely known in detail. A **gravity model** is the usual first guess: movement grows with the destination's population and falls with the square of the distance. Its amount is the share of time people spend in other towns, `away`, here 1%. Written out, it is a matrix of the share of time each town's people spend in each other town:
+Movement is rarely known in detail. A **gravity model** is the usual first guess: movement grows with the destination's population and falls with the square of the distance. Its amount is the fraction of time people spend in other towns, `away`, here 1%. Written out, it is a matrix of the fraction of time each town's people spend in each other town:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -292,10 +292,10 @@ pop, dist = towns.populations, towns.distances
 with np.errstate(divide='ignore'):
     pull = pop[None, :]/dist**2 # Gravity: the destination's population over the squared distance
 np.fill_diagonal(pull, 0)       # Staying at home isn't movement
-share = 0.01*pull/pull.sum(axis=1, keepdims=True) # 1% of each town's time away, split by pull
+frac = 0.01*pull/pull.sum(axis=1, keepdims=True) # 1% of each town's time away, split by pull
 
 moving = make_measles(init_n=ss.by(patch=[10, 0, 0, 0]))
-moving.stratify(patch=ss.levels(towns, mobility=ss.geo.Mobility(share, kind='commute')))
+moving.stratify(patch=ss.levels(towns, mobility=ss.geo.Mobility(frac, kind='commute')))
 
 by_hand = ss.Sim(moving, **settings)
 by_hand.run()
@@ -303,7 +303,7 @@ by_hand.results.measles.I.by('patch').plot()
 ```
 :::
 
-This is commuting: people keep their home town, but spend a share of their time in the others. (Migration, in which people move home, is `kind='migrate'`.) When movement is known, from a survey or mobile phone data, give it as a matrix, as in the explicit tab. The outbreak peaks first in Riverton, then in each other town in turn, last in Fairfield, the smallest and farthest. `select(patch='Fairfield')` picks one place's result, as it does an age group's.
+This is commuting: people keep their home town, but spend a fraction of their time in the others. (Migration, in which people move home, is `kind='migrate'`.) When movement is known, from a survey or mobile phone data, give it as a matrix, as in the explicit tab. The outbreak peaks first in Riverton, then in each other town in turn, last in Fairfield, the smallest and farthest. `select(patch='Fairfield')` picks one place's result, as it does an age group's.
 
 `map()` draws a result on a map of the places; prevalence suits it better than counts, since the towns differ in size. `animate=True` makes an animation (press play); [Places](../user_guide/populations_places.qmd#maps) has the other options, and [Mixing](../user_guide/populations_mixing.qmd) the radiation model and other ways to couple places:
 
@@ -476,7 +476,7 @@ Networks and mixing pools can be used together, as a list, with a different β o
 Exercises 1 and 2 use the town with age groups, and 3 to 5 networks.
 
 1. Closing schools roughly halves the contacts between children. Change the matrix so that children have 5 contacts a day with other children instead of 10. How do the reproduction number at the start and the number infected in each age group change, and why?
-2. Give every age group the same immunity, 90% (about the same overall share as above), keeping the contact matrix. How large is the outbreak now? What does this say about where gaps in immunity matter most?
+2. Give every age group the same immunity, 90% (about the same overall fraction as above), keeping the contact matrix. How large is the outbreak now? What does this say about where gaps in immunity matter most?
 3. Repeat the comparison of contacts per person with a rate of infection of 0.083 per contact per day (so R0 is about 2 with random mixing). How much does it matter now that people meet the same contacts every day, and why?
 4. In the sexual network with partnerships that last a year, the infection dies out. Give the network `n_contacts=1` and `concurrency=0.2`, so that 20% of people have more than one partner at a time. Does the infection persist?
 5. Add households of about 4 people (`ssl.ClusterNet(cluster_size=ss.poisson(4))`, after `import starsim.library as ssl`) to measles with a community mixing pool of 2 contacts a day. How much of the epidemic do households add?

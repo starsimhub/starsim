@@ -43,8 +43,8 @@ class Mixing(Telling):
             errormsg = f'The model has more than one spatial dimension ({sc.strjoin(sim.groups.strats[d].name for d in spaces)}); a person is in one place at a time, so combine them into one'
             raise ValueError(errormsg)
         self.space = spaces[0] if spaces else None # The position of the spatial dimension
-        self.time_share = None # For commuting and visiting: the share of their time that people from each place spend in each place (a sparse array)
-        self.present = False # Whether the time share also changes who is present in each place (for commuting)
+        self.time_frac = None # For commuting and visiting: the fraction of their time that people from each place spend in each place (a sparse array)
+        self.present = False # Whether the time fraction also changes who is present in each place (for commuting)
         self.migration = None # For migration: the rate of moving from each place to each place
         self.register = None # For a movement register: the mobility that holds it; its events are worked out once the sim has a timeline
         self._events = None
@@ -62,23 +62,23 @@ class Mixing(Telling):
             strat = self.sim.groups.strats[self.space]
             mobility = strat.mobility
             if mobility is not None and mobility.kind in ['commute', 'visit']:
-                self.time_share = mobility.time_share(strat)
+                self.time_frac = mobility.time_frac(strat)
                 self.present = mobility.kind == 'commute' # Visitors are exposed to the residents of a place, and do not expose anyone there
             elif mobility is not None and mobility.kind == 'force':
-                self.time_share = mobility.coupling(strat)
+                self.time_frac = mobility.coupling(strat)
             elif mobility is not None and mobility.data is not None:
                 self.register = mobility
             elif mobility is not None:
                 self.migration = mobility.matrix(strat)
                 if sps.issparse(self.migration):
                     self.migration = self.migration.toarray()
-        self.share = self.time_share # Sparse, since most pairs of places share no one
+        self.frac = self.time_frac # Sparse, since most pairs of places share no one
         return
 
     def spread(self, v, block=1, by_columns=False):
-        """ The product of the time share between places with values by place, or by place and level (`block` levels in each place): `v @ share` if `by_columns`, else `share @ v` """
+        """ The product of the time fraction between places with values by place, or by place and level (`block` levels in each place): `v @ frac` if `by_columns`, else `frac @ v` """
         v = np.reshape(v, (-1, block))
-        out = self.share.T @ v if by_columns else self.share @ v
+        out = self.frac.T @ v if by_columns else self.frac @ v
         return out.ravel()
 
     def events(self):
@@ -102,10 +102,10 @@ class Mixing(Telling):
         """
         num = np.bincount(places, weights=infectious, minlength=n_places)
         den = np.bincount(places, weights=n, minlength=n_places)
-        if self.share is not None and self.present: # Who is present in each place
+        if self.frac is not None and self.present: # Who is present in each place
             num, den = self.spread(num, by_columns=True), self.spread(den, by_columns=True)
         prev = np.divide(num, den, out=np.zeros(n_places), where=den>0)
-        return prev if self.share is None else self.spread(prev)
+        return prev if self.frac is None else self.spread(prev)
 
     @staticmethod
     def carries(beta, unit):
@@ -209,7 +209,7 @@ class Mixing(Telling):
 
         The sides of the network and the property of people it matches or counts partners by must be dimensions of the
         model. Partners are drawn from the population at random, in proportion to the partners each person has, within
-        the other side for a network between men and women, and with `match=`, the share at the same level that it gives.
+        the other side for a network between men and women, and with `match=`, the fraction at the same level that it gives.
         """
         sim = self.sim
         p = net.pars
@@ -256,7 +256,7 @@ class Mixing(Telling):
         size = n_sides*n_lev
         inside = side >= 0
         cells = np.where(inside, side*n_lev + lev, size) # People on neither side are in a cell of their own, which has no partners
-        n = np.bincount(cells[inside], weights=sim.groups.group_split[inside], minlength=size) # The share of the population in each cell
+        n = np.bincount(cells[inside], weights=sim.groups.group_split[inside], minlength=size) # The fraction of the population in each cell
         cell_side = np.repeat(np.arange(n_sides), n_lev)
         cell_lev = np.tile(np.arange(n_lev), n_sides)
         mean = lambda v: float(sc.dcp(v).init(force=True).rvs(100_000).mean()) if isinstance(v, ss.Dist) and not any(k in v.pars for k in ['value', 'mean']) else self.mean(v, unit)
@@ -274,7 +274,7 @@ class Mixing(Telling):
             k = np.full(size, mean(p.n_contacts))
         stubs = n*k # Partners at a time in each cell, per person in the population
 
-        # Who partners whom: the share of the partners of each cell in each other cell
+        # Who partners whom: the fraction of the partners of each cell in each other cell
         if two_sided: # One of each side; the side with fewer partners in all sets how many partnerships there are
             per_side = np.bincount(cell_side, weights=stubs, minlength=2)
             total = per_side.min()
@@ -284,13 +284,13 @@ class Mixing(Telling):
         else:
             mix = np.broadcast_to(stubs[None, :], (size, size)).copy()
         mix = np.divide(mix, mix.sum(axis=1, keepdims=True), out=np.zeros((size, size)), where=mix.sum(axis=1, keepdims=True)>0)
-        if p.get('match'): # A share at the same level, as ss.DegreeNet pairs them (see its match_pairs())
-            share = list(p.match.values())[0]
+        if p.get('match'): # A fraction at the same level, as ss.DegreeNet pairs them (see its match_pairs())
+            frac = list(p.match.values())[0]
             same = cell_lev[:, None] == cell_lev[None, :]
-            shares = [np.bincount(cell_lev[cell_side == s], weights=stubs[cell_side == s], minlength=n_lev) for s in range(n_sides)]
-            shares = [v/max(v.sum(), 1e-300) for v in shares]
-            by_chance = shares[0] @ shares[-1] # Between the two sides, or within one
-            within = np.clip((share - by_chance)/(1 - by_chance), 0, 1) if by_chance < 1 else 1.0
+            fracs = [np.bincount(cell_lev[cell_side == s], weights=stubs[cell_side == s], minlength=n_lev) for s in range(n_sides)]
+            fracs = [v/max(v.sum(), 1e-300) for v in fracs]
+            by_chance = fracs[0] @ fracs[-1] # Between the two sides, or within one
+            within = np.clip((frac - by_chance)/(1 - by_chance), 0, 1) if by_chance < 1 else 1.0
             local = same*mix
             local = np.divide(local, local.sum(axis=1, keepdims=True), out=np.zeros((size, size)), where=local.sum(axis=1, keepdims=True)>0)
             mix = within*local + (1 - within)*mix
@@ -324,8 +324,8 @@ class Mixing(Telling):
         present where they are. A matrix that is given over the places themselves already says who
         meets whom across them, so it is used as it is.
 
-        The mixing is the product of the time share between places and the matrix between levels
-        (`np.kron(share, matrix)`), but is kept as the two factors, which is much smaller and faster
+        The mixing is the product of the time fraction between places and the matrix between levels
+        (`np.kron(frac, matrix)`), but is kept as the two factors, which is much smaller and faster
         with many places: see `term_exposure()`.
         """
         if self.space in term.get('dims', []):
@@ -335,8 +335,8 @@ class Mixing(Telling):
         size = term.matrix.shape[0]
         term.cells = self.places*size + levels
         term.size = n_places*size
-        term.pre = self.share is not None and self.present # Who is present in each place
-        term.post = self.share is not None # Mixing between places
+        term.pre = self.frac is not None and self.present # Who is present in each place
+        term.post = self.frac is not None # Mixing between places
         return
 
     def age_matrix(self, net):
@@ -377,16 +377,16 @@ class Mixing(Telling):
         cdf = self.age_cdf(strat)
 
         def overlap(a, b):
-            """ The share of the population in the overlap between each pair of age ranges """
+            """ The fraction of the population in the overlap between each pair of age ranges """
             return np.clip(cdf(np.minimum(a[:, None, 1], b[None, :, 1])) - cdf(np.maximum(a[:, None, 0], b[None, :, 0])), 0, None)
 
-        def share(a, b):
-            """ The share of the people in each range of `a` who are in each range of `b` """
+        def frac(a, b):
+            """ The fraction of the people in each range of `a` who are in each range of `b` """
             size = (cdf(a[:, 1]) - cdf(a[:, 0]))[:, None]
             return np.divide(overlap(a, b), size, out=np.zeros((len(a), len(b))), where=size>0)
 
-        to_target = share(levels, target_bands) # The share of each model group that is in each band
-        from_source = share(bands, levels) # The share of each band that is in each model group
+        to_target = frac(levels, target_bands) # The fraction of each model group that is in each band
+        from_source = frac(bands, levels) # The fraction of each band that is in each model group
         matrix = to_target @ contacts @ from_source # Contacts per unit time of one person in model group i with people in model group j
         if len(bands) != len(levels) or not np.allclose(bands, levels):
             how = 'aggregated from {} age groups to' if len(bands) > strat.n else 'split from {} age groups into' if len(bands) < strat.n else 'regrouped from {} age groups into'
@@ -396,7 +396,7 @@ class Mixing(Telling):
         return d, matrix
 
     def check_bands(self, net, bands, contacts, cdf):
-        """ `check_reciprocal()` for a contact matrix over age bands of its own (`contacts`, rows as the contacts of a person in each band), with the share of people in each from `cdf` (see `age_cdf()`) """
+        """ `check_reciprocal()` for a contact matrix over age bands of its own (`contacts`, rows as the contacts of a person in each band), with the fraction of people in each from `cdf` (see `age_cdf()`) """
         whole = lambda x: x == int(x)
         labels = [f'{lo:g}+' if hi == np.inf else f'{lo:g}-{hi-1:g}' if whole(lo) and whole(hi) else f'{lo:g}-{hi:g}' for lo,hi in bands] # As the model's age groups are labeled
         own = sc.obj(name='age', labels=labels, fractions=cdf(bands[:, 1]) - cdf(bands[:, 0]))
@@ -413,7 +413,7 @@ class Mixing(Telling):
         return
 
     def age_cdf(self, strat):
-        """ The share of people younger than each age: from a named population (or, for a guessed age split, the world's), or from the age split, with ages uniform within each 5-year group or age group """
+        """ The fraction of people younger than each age: from a named population (or, for a guessed age split, the world's), or from the age split, with ages uniform within each 5-year group or age group """
         pyramid = ss.data.age_pyramid(self.sim, strat)
         if pyramid is not None:
             ages, counts = pyramid
@@ -504,7 +504,7 @@ class Mixing(Telling):
 
     @staticmethod
     def counts(term):
-        """ Whether a term of the mixing acts on counts as well as shares: a contact matrix, not homogeneous mixing or partnerships (see `count_terms()`) """
+        """ Whether a term of the mixing acts on counts as well as fractions: a contact matrix, not homogeneous mixing or partnerships (see `count_terms()`) """
         return term.kind == 'matrix' and 'partnership' not in term
 
     def count_terms(self, terms=None):
@@ -512,7 +512,7 @@ class Mixing(Telling):
         The contact matrices that act on a count in a rate (`I.n`, `I.frac`: see `ss.graph.Graph.met_counts`), of the terms given or the
         sim's; with none, a count is the number in the same place
 
-        A matrix acts on what the rate says: `beta*I` is exposure to the share of each group (`beta·Σ_j C_ij·I_j/N_j`), `beta*I.n` to the
+        A matrix acts on what the rate says: `beta*I` is exposure to the fraction of each group (`beta·Σ_j C_ij·I_j/N_j`), `beta*I.n` to the
         number in each (`beta·Σ_j C_ij·I_j`), and `beta*I.frac` to that number over everyone in the same place (`beta·Σ_j C_ij·I_j/N`).
         Other networks do not act on a count, as without a matrix.
         """
@@ -532,7 +532,7 @@ class Mixing(Telling):
             infectious (array): the (infectiousness-weighted) number in the state, in each group
             n (array): the number of people in each group
             mults (list): a multiplier on the contacts of each term (a number, or one for each group), from the modifiers of its network
-            counts (bool): whether the matrices act on the number in the state rather than its share
+            counts (bool): whether the matrices act on the number in the state rather than its fraction
         """
         out = 0.0
         for t,term in enumerate(self.terms):
@@ -568,7 +568,7 @@ class Mixing(Telling):
         As agents: the contact matrices of mixing pools from counts in each group, in a model with places (within each
         place), and for a matrix over the model's own dimensions (`ss.contacts()`), which is then exact
 
-        A mixing pool's hazard is worked out from the share of each group that is infectious,
+        A mixing pool's hazard is worked out from the fraction of each group that is infectious,
         so the contact matrix is used as in a compartmental run, from the agents' counts in
         each group (see `ss.solvers.Agents.transmit()`), with any movement between places. Over the
         model's dimensions, everyone in a group has the same contacts, so this is what a pool for

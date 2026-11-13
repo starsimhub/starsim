@@ -395,12 +395,12 @@ def replaced_dist(key, old, new):
 
 
 def check_verbose(verbose):
-    """ Check that `verbose` is 0 (print nothing), a fraction (as 1, with progress every that share of the run, e.g. 0.1 for every 10%), 1 (the solver, notes, and progress), or 2 or more (everything), and return it as an integer or the fraction """
+    """ Check that `verbose` is 0 (print nothing), a fraction (as 1, with progress each time that fraction of the run is done, e.g. 0.1 for every 10%), 1 (the solver, notes, and progress), or 2 or more (everything), and return it as an integer or the fraction """
     if sc.isnumber(verbose) and verbose >= 0 and verbose == int(verbose): # Includes True and False
         return int(verbose)
     elif sc.isnumber(verbose) and 0 < verbose < 1:
         return verbose
-    errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
+    errormsg = f'verbose must be 0 (print nothing), a fraction (progress each time that fraction of the run is done), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     raise ValueError(errormsg)
 
 
@@ -625,7 +625,7 @@ class by:
                 errormsg = f'Cannot combine an ss.by() of {len(a)} levels of "{self.dim}" with one of {len(b)}'
                 raise ValueError(errormsg)
             return by(**{self.dim:[func(x, y) for x,y in zip(a, b)]})
-        elif not isinstance(other, (by, Expr, ss.TimePar, TimeValue)) and not sc.isnumber(other): # E.g. a flow, whose share it is (an outcome), or a condition
+        elif not isinstance(other, (by, Expr, ss.TimePar, TimeValue)) and not sc.isnumber(other): # E.g. a flow, whose fraction it is (an outcome), or a condition
             return NotImplemented
         return ss.expressions.BinOp(op, other, self) if reflected else ss.expressions.BinOp(op, self, other)
 

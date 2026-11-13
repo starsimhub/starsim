@@ -58,8 +58,8 @@ class Wealth(ss.Module):
         self.wealth[:] = self.wealth + np.bincount(recipients, minlength=len(self.wealth)) # Each recipient gets 1 unit for each giver who chose them
         return
 
-    def record_stocks(self): # The state at the start of each step
-        super().record_stocks()
+    def record_states(self): # The state at the start of each step
+        super().record_states()
         w = np.sort(self.wealth.values)
         n = len(w)
         self.results.gini[self.ti] = np.sum((2*np.arange(1, n+1) - n - 1)*w)/(n*w.sum())
@@ -162,8 +162,8 @@ class Boids(ss.Module):
         self.y[:] = (self.y + self.vy) % 1
         return
 
-    def record_stocks(self): # The state at the start of each step
-        super().record_stocks()
+    def record_states(self): # The state at the start of each step
+        super().record_states()
         speed = np.hypot(self.vx.values, self.vy.values)
         hx, hy = self.vx.values/speed, self.vy.values/speed # Each boid's heading
         _, _, dist = self.offsets()

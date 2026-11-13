@@ -11,7 +11,7 @@ A Starsim model is a sim (`ss.Sim`) that holds a population and a set of modules
 
 ## A model and its parts
 
-Here is a simplified measles outbreak in a town of 100,000 people: an SIR model, in which people are susceptible (S), infectious (I), or recovered and immune (R). Each susceptible person is infected at a rate of β = 1.9 per day times the share of people who are infectious, and people are infectious for 8 days on average:
+Here is a simplified measles outbreak in a town of 100,000 people: an SIR model, in which people are susceptible (S), infectious (I), or recovered and immune (R). Each susceptible person is infected at a rate of β = 1.9 per day times the fraction of people who are infectious, and people are infectious for 8 days on average:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -20,7 +20,7 @@ Here is a simplified measles outbreak in a town of 100,000 people: an SIR model,
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the share infectious
+infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
@@ -36,7 +36,7 @@ library(starsim)
 
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the share infectious
+  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the fraction infectious
   recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
   init_prev = 0.001
 )
@@ -50,7 +50,7 @@ sim$plot()
 
 ```{python}
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the share infectious
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
 measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
 
@@ -125,7 +125,7 @@ measles.equations()
 measles.diagram()
 ```
 
-A dashed arrow is a transmission, and a solid one any other transition; a transition with `p=` also gives the share that takes it. `measles.diagram('text')` gives it as a [Mermaid](https://mermaid.js.org) flowchart instead, for GitHub, wikis, and anything else that draws Mermaid. For every disease of a sim, and how they act on each other, use `sim.diagram()` and `sim.equations()`.
+A dashed arrow is a transmission, and a solid one any other transition; a transition with `p=` also gives the fraction that takes it. `measles.diagram('text')` gives it as a [Mermaid](https://mermaid.js.org) flowchart instead, for GitHub, wikis, and anything else that draws Mermaid. For every disease of a sim, and how they act on each other, use `sim.diagram()` and `sim.equations()`.
 
 `transitions` is a table of the transitions, with what drives each (a rate or a duration) and its kind: a transition is a **transmission** if people catch it from people in another state (here, "transmission, from I"), and **spontaneous** otherwise. Printing it also shows which state leads to which:
 
@@ -215,9 +215,9 @@ From some names and forms, Starsim works out what the model didn't say. Each val
 | A non-Erlang duration run as compartments | As many Erlang stages as match its mean and standard deviation | `stages=` on the transition |
 | How the epidemic starts | A disease with transmission and no starting values starts with 1% of people infected, in the states a transmission (or else an acquisition) leads to: `E` in an SEIR | `init_prev=`, `init=`, or `init_n=` |
 | Where people start, and births with no state go | The state named `S` or `susceptible` (in any case), else the one state transmission infects people from, else the first state made; and the only state with no starting value, if the first has one | `default_state=` on the disease, or `init=` |
-| The share of the last branch | 1 minus the others, when one `p=` is `None` or left out | `p=` on every branch |
+| The fraction of the last branch | 1 minus the others, when one `p=` is `None` or left out | `p=` on every branch |
 | A parameter given only bounds | The middle of its bounds | A value |
-| The shares and kind of a dimension | From the population, the world's ages, or equal shares; age for ages, a place for a geography, else plain groups ([Stratification](building_stratification.qmd#levels-and-shares)) | Shares, and `kind=`, on `stratify()` |
+| The fractions and kind of a dimension | From the population, the world's ages, or equal fractions; age for ages, a place for a geography, else plain groups ([Stratification](building_stratification.qmd#levels-and-fractions)) | Fractions, and `kind=`, on `stratify()` |
 | Aging | People age only if anyone is born or dies | `aging=True` or `False` |
 | A named population's ages | The year the sim starts | `ss.population('Kenya', year=...)` |
 | Results by group | Every step, or every few steps if every step would take more than about 100 MB | `results=` on the sim |
@@ -246,15 +246,15 @@ From some names and forms, Starsim works out what the model didn't say. Each val
 | A duration, the only way out of its state | `dur_<state>` (e.g. `dur_I`) |
 | A duration of a transition out of a state with several ways out | `dur_<transition>` (e.g. `dur_death`) |
 | Any other rate (`ss.perday(0.001)`, `ss.prob(0.01, 'week')`) | `rate_<transition>` |
-| The share of a separate transition, `p=` | `p_<transition>` |
+| The fraction of a separate transition, `p=` | `p_<transition>` |
 | `init_prev=` | `init_prev` |
-| Anything else: a factor such as the 0.5 in `0.5*A`, the shares of one transition's destinations, starting values, an outcome's share or delay | Not a parameter; wrap it in `ss.par()` to make it one |
+| Anything else: a factor such as the 0.5 in `0.5*A`, the fractions of one transition's destinations, starting values, an outcome's fraction or delay | Not a parameter; wrap it in `ss.par()` to make it one |
 
 ```{python}
 S, E, I, A, R = ss.states('S E I A R')
 example = ss.Disease(
     infection = S >> E @ 0.5*(I + 0.5*A),                    # beta (the 0.5 on A is not a parameter)
-    onset     = ss.Transition(E, {I: 0.6, A: 0.4}, dur=ss.days(5)), # dur_E (the shares are not parameters)
+    onset     = ss.Transition(E, {I: 0.6, A: 0.4}, dur=ss.days(5)), # dur_E (the fractions are not parameters)
     recovery  = ss.Transition(I, R, dur=ss.days(7), p=0.99), # dur_recovery and p_recovery, since I has two ways out
     death     = ss.Transition(I, ss.dead, dur=ss.days(9), p=0.01),
     clear     = A >> R @ ss.days(5),                         # dur_A

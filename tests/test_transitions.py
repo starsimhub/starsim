@@ -191,10 +191,10 @@ def test_names():
     # A set of states is their sum in arithmetic, and a sum of states can be the sources of a transition
     S, Ia, Is, Ih, R = ss.states(5)
     clinical = ss.Disease(S, Ia, Is, Ih, R, infection=S >> Ia @ 0.3*(Ia + Is + Ih), worse=Ia >> Is @ ss.perday(0.2), admitted=Is >> Ih @ ss.perday(0.1),
-                          recovery=(Ia + Is + Ih) >> R @ ss.perday(0.05), share=Ih/(Ia + Is + Ih), init_prev=0.01, name='clinical')
+                          recovery=(Ia + Is + Ih) >> R @ ss.perday(0.05), frac=Ih/(Ia + Is + Ih), init_prev=0.01, name='clinical')
     assert [s.name for s in clinical.recovery.source] == ['Ia', 'Is', 'Ih']
     res = ss.Sim(clinical, unit='day', stop=50, **kw).run().results.clinical
-    assert np.allclose(res.share[1:], (res.Ih/(res.Ia + res.Is + res.Ih))[1:])
+    assert np.allclose(res.frac[1:], (res.Ih/(res.Ia + res.Is + res.Ih))[1:])
 
     # One parameter shared by models built more than once, as for scenarios: registered with each, and set by name in each sim
     R0 = ss.par(2.0, bounds=[1, 5])
@@ -299,7 +299,7 @@ def test_names():
     with pytest.raises(ValueError): # Stages split a dwell time
         ss.Transition(I, R, rate=0.1, stages=3)
     S, I, H, R = ss.states('S I H R')
-    branches = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), severe=ss.Transition(I, H, p=0.1, dur=5), mild=ss.Transition(I, R, dur=10), name='b')
+    branches = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), severe=ss.Transition(I, H, p=0.1, dur=5), mild=ss.Transition(I, R, dur=10, p=None), name='b')
     assert 'p = 0.9' in branches.describe() # The branch that takes the rest says so
     base = S >> I
     fast, slow = base @ 0.2, base @ 0.1
@@ -563,8 +563,8 @@ def test_describe():
     assert 'mixing' not in density.describe() # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
     assert 'infected: I ' in density.describe() # Density-dependent transmission is a transmission: I is its source, and R is not infected (it counted R)
     assert np.isclose(density.diseases[0].R0(), 3e-5*(10_000 - 10)*10) # beta × the susceptible × the time infectious (it failed, "Singular matrix"; then counted the 10 infected as susceptible)
-    share = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.frac, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init() # A share of everyone (as with a contact matrix): I is the source here too
-    assert 'infected: I ' in share.describe() and np.isclose(share.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
+    frac = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.frac, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init() # A share of everyone (as with a contact matrix): I is the source here too
+    assert 'infected: I ' in frac.describe() and np.isclose(frac.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
     S, I, R = ss.states('S I R')
     aged = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15])
     births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts([[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe()
@@ -1111,7 +1111,7 @@ def test_compiled_draws():
         d = ss.Disease(S, E, I, H, R, F, infection=infection,
             onset   = ss.Transition(E, {I: 0.8, R: None}, dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
             severe  = ss.Transition(I, H, p=0.2, dur=ss.weibull(shape=2, scale=ss.days(4))), # Branches chosen on entry
-            mild    = ss.Transition(I, {R: 0.9, ss.stay: None}, dur=ss.uniform(ss.days(3), ss.days(9))),
+            mild    = ss.Transition(I, {R: 0.9, ss.stay: None}, dur=ss.uniform(ss.days(3), ss.days(9)), p=None),
             flag    = ss.Transition(E, F, when=ss.on(infection, delay=ss.days(2))), # A time after an event
             unflag  = ss.Transition(F, {I: 0.5, R: None}, dur=0), # Taken on in the same step
             release = ss.Transition(H, R, when=H.time_in > ss.days(5)), # A condition
@@ -1137,13 +1137,13 @@ def test_lifelong():
     """ A function marked with ss.lifelong() is worked out once for each person, and gives the same run as unmarked """
     sc.heading('Testing values fixed for life')
     female = lambda sim: np.asarray(sim.people.female.raw, dtype=bool)
-    share = lambda sim, uids: np.where(sim.people.female[uids], 0.8, 0.2)
+    frac = lambda sim, uids: np.where(sim.people.female[uids], 0.8, 0.2)
     def make(mark):
         f = ss.lifelong if mark else (lambda func: func)
         S, I, H, R = ss.states('S I H R')
         return ss.Disease(S, I, H, R,
             infection = ss.Transition(S, I, rate=0.3*I),
-            course    = ss.Transition(I, {H: f(share), R: None}, dur=ss.days(8)),
+            course    = ss.Transition(I, {H: f(frac), R: None}, dur=ss.days(8)),
             recover   = ss.Transition(H, R, dur=ss.days(10), who=f(female)), # Men stay in H
             init_prev = 0.02, name='d')
     sims = [ss.Sim(make(mark), n_agents=5000, unit='day', stop=60, demographics=[ss.Births(birth_rate=ss.peryear(0.03))], rand_seed=3, verbose=0) for mark in [False, True]]
@@ -1155,8 +1155,8 @@ def test_lifelong():
     key = ('dest', 'course')
     table, done = eng.lifelong[key], eng.lifelong_used[key] # Worked out again for those born into the room the arrays had for them, once read for them
     assert done > 5000 and np.array_equal(table[:done, 1], np.where(sims[1].people.female.raw[:done], 0.8, 0.2)) # The cumulative shares: 0, H's, 1
-    m = ss.lifelong(share)
-    assert m is not share and m(sims[1], ss.uids([0, 1])).shape == (2,) and not hasattr(share, 'lifelong') # A marked copy
+    m = ss.lifelong(frac)
+    assert m is not frac and m(sims[1], ss.uids([0, 1])).shape == (2,) and not hasattr(frac, 'lifelong') # A marked copy
     return sims
 
 
@@ -1259,8 +1259,8 @@ def test_cascade():
     S, A, B, C = ss.states('S A B C')
     d = ss.Disease(S, A, B, C, sa=S >> A @ ss.peryear(0.2), ab=ss.Transition(A, B, dur=ss.months(3)), ac=A >> C @ ss.permonth(0.04), name='d')
     res = ss.Sim(d, n_agents=50_000, start=2000, stop=2010, dt=ss.months(1), unit='year', aging=False, **kw).run().results.d
-    share = res.ac.sum()/(res.ac.sum() + res.ab.sum())
-    assert np.isclose(share, 0.1075, atol=0.005), f'{share:.3f} went to C; with whole steps of a month, 0.1075 should' # The mean over seeds (sd 0.002); 0.107 in continuous time
+    frac = res.ac.sum()/(res.ac.sum() + res.ab.sum())
+    assert np.isclose(frac, 0.1075, atol=0.005), f'{frac:.3f} went to C; with whole steps of a month, 0.1075 should' # The mean over seeds (sd 0.002); 0.107 in continuous time
 
     # A loop of moves with no wait never settles
     for solver in ['ode', 'abm']:
@@ -1366,8 +1366,8 @@ def test_given_dwell():
         return ss.Sim(ss.Disease(P, C, R, **exits, default_state='P', name='d'), n_agents=n, total_pop=n, dur=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
 
     # A known answer: with an exponential dwell of mean 1, P(C) = 1 - exp(-dwell) sends half to C
-    share = make('abm', p=lambda P: 1 - np.exp(-P.time_in)).run().results.d.C[-1]/n
-    assert np.isclose(share, 0.5, atol=3*np.sqrt(0.25/n)), share
+    frac = make('abm', p=lambda P: 1 - np.exp(-P.time_in)).run().results.d.C[-1]/n
+    assert np.isclose(frac, 0.5, atol=3*np.sqrt(0.25/n)), frac
     for solver in ['ode', 'binomial']: # A compartmental solver refuses, and auto runs agents
         with pytest.raises(ss.CapabilityError, match='P.time_in'):
             make(solver, p=lambda P: 1 - np.exp(-P.time_in)).init()
@@ -1549,17 +1549,17 @@ def test_branch_ends():
             dis.stratify(age={0: 0.25, 18: 0.6, 65: 0.15})
         return dis
     run = lambda dis, **kw: ss.Sim(dis, total_pop=10_000, dur=ss.days(200), verbose=0, solver='ode', **kw).run().results
-    share = lambda r: r.died.sum()/(r.died.sum() + r.sir.H[-1] + r.sir.R[-1])
+    frac = lambda r: r.died.sum()/(r.died.sum() + r.sir.H[-1] + r.sir.R[-1])
     base = run(make())
-    assert np.isclose(share(base), 0.02)
+    assert np.isclose(frac(base), 0.02)
     byage = run(make(dead=ss.by(age=[0.001, 0.01, 0.1]), by_age=True)) # A branch probability by group (once a crash)
-    assert np.isclose(share(byage), 0.25*0.001 + 0.6*0.01 + 0.15*0.1)
+    assert np.isclose(frac(byage), 0.25*0.001 + 0.6*0.01 + 0.15*0.1)
     adj = run(make(by_age=True), connectors=ss.modify('sir.outcome.dead', multiply=ss.by(age=[0.1, 1, 5]))) # One destination modified by group
-    assert np.isclose(share(adj), 0.02*(0.25*0.1 + 0.6 + 0.15*5))
+    assert np.isclose(frac(adj), 0.02*(0.25*0.1 + 0.6 + 0.15*5))
     dead = run(make(), connectors=ss.modify('sir.outcome.dead', multiply=3))
-    assert np.isclose(share(dead), 0.06)
+    assert np.isclose(frac(dead), 0.06)
     hosp = run(make(), connectors=ss.modify('sir.outcome.H', multiply=3)) # The others (R and ss.dead) share what is left, so deaths do not vanish
-    assert np.isclose(share(hosp), 0.02*0.7/0.9)
+    assert np.isclose(frac(hosp), 0.02*0.7/0.9)
     return
 
 

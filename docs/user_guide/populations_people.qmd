@@ -45,9 +45,9 @@ Without either, a model has 10,000 people. Fewer agents than people make a model
 
 ### Ages and sex
 
-As agents, each person has an age and a sex. By default, agents have the ages of the world's population in 2024, and an even chance of being female (`ss.People(n_agents, p_female=0.49)` for another share). A compartmental model split into age groups without a share for each takes the shares from the same ages, and `describe()` marks them as guessed.
+As agents, each person has an age and a sex. By default, agents have the ages of the world's population in 2024, and an even chance of being female (`ss.People(n_agents, p_female=0.49)` for another fraction). A compartmental model split into age groups without a fraction for each takes the fractions from the same ages, and `describe()` marks them as guessed.
 
-The population of a country is `ss.population()`: its size, its ages, and its share of women, from the UN World Population Prospects (see [Places and data](populations_places.qmd)). The sim takes its size from it, under any solver:
+The population of a country is `ss.population()`: its size, its ages, and the fraction of women, from the UN World Population Prospects (see [Places and data](populations_places.qmd)). The sim takes its size from it, under any solver:
 
 ```{python}
 kenya = ss.population('Kenya', year=2024)
@@ -58,9 +58,9 @@ sim.init()
 sim.people.plot_ages();
 ```
 
-In a compartmental model, ages matter only once the model is split into age groups (`measles.stratify(age=[0, 15, 65])`; see [Stratification](building_stratification.qmd)), which then take their shares from the named population.
+In a compartmental model, ages matter only once the model is split into age groups (`measles.stratify(age=[0, 15, 65])`; see [Stratification](building_stratification.qmd)), which then take their fractions from the named population.
 
-Ages can also come from data of your own, with `ss.People(n_agents, age_data=...)`: a table (or CSV file) with a column `age` (the lower edge of each age group) and a column `value` (the number or share of people in it):
+Ages can also come from data of your own, with `ss.People(n_agents, age_data=...)`: a table (or CSV file) with a column `age` (the lower edge of each age group) and a column `value` (the number or fraction of people in it):
 
 ```{python}
 ppl = ss.People(5000, age_data='test_data/nigeria_age.csv')
@@ -341,7 +341,7 @@ As agents, `sim.people` holds every agent: its properties, and the states of eve
 | `people.died_of(module)` | The agents who died of a module in the step just finished, for code in a module |
 | `people.keys()`, `people.brief()` | The names of the states, and a one-line summary |
 | `people.to_df()`, `people.get_person(uid)` | A table with a row for each agent and a column for each state; everything about one agent |
-| `people.plot()`, `people.plot_ages()` | A histogram of each state (`key=` for some of them); the age pyramid (`absolute=True` for numbers rather than shares) |
+| `people.plot()`, `people.plot_ages()` | A histogram of each state (`key=` for some of them); the age pyramid (`absolute=True` for numbers rather than fractions) |
 
 Each module adds its own states, under its name, when the sim is initialized: a declared disease adds each of its states (`sim.people.measles.I`), and each person's relative susceptibility and transmissibility (`rel_sus` and `rel_trans`). A property that belongs to one module is best defined in that module, with `define_states()` (see [Custom modules](building_modules.qmd)); one that several modules use (such as `urban`) is best given to `ss.People` with `extra_states=`.
 
@@ -418,7 +418,7 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 | `rate_per` | How many women the rates are per: 1000 or 1 | None: from their size |
 | `rel_fertility` | A multiplier on the fertility rates | 1 |
 | `min_age`, `max_age` | The ages at which women can conceive | 15 and 50 |
-| `p_infertile` | The share of women with primary infertility | 0 |
+| `p_infertile` | The fraction of women with primary infertility | 0 |
 | `dur_pregnancy` | The duration of pregnancy (a number is in weeks) | 32 to 42 weeks, mostly 39 to 42 |
 | `p_abortion` | The chance a pregnancy ends in an abortion, at conception | 0 |
 | `loss_rate` | The hazard of a spontaneous loss | 0 |
@@ -445,7 +445,7 @@ Its events, for `when=`, `ss.modify()`, and `add_callback()`:
 | `infant_mortality` | A child who dies before the age of 1 |
 | `live_birth`, `infant_death`, `loss` | A mother: at least one child born alive; a child of hers who died before the age of 1; an abortion, miscarriage, stillbirth, or infant death |
 
-Its results include a count for each event and state, the crude birth rate (`cbr`), the total fertility rate (`tfr`), the maternal mortality ratio (`mmr`), and the share of births that are preterm (`preterm_rate`):
+Its results include a count for each event and state, the crude birth rate (`cbr`), the total fertility rate (`tfr`), the maternal mortality ratio (`mmr`), and the fraction of births that are preterm (`preterm_rate`):
 
 ```{python}
 print(list(scenarios['Contraception'].results.pregnancy.keys())[1:])

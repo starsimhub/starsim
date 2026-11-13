@@ -100,7 +100,7 @@ class Stepping:
         (one draw per agent); `missed` are those who have a draw of the competing rates to catch up on (see `schedule()`). With no `uids`,
         the state has only scheduled exits, all scheduled already (see `step_state()`), so who is due is found in one pass over the agents
 
-        An agent marked `late_<state>` (see `enter()`) entered after the draws of the step it entered in: the share of a step it missed
+        An agent marked `late_<state>` (see `enter()`) entered after the draws of the step it entered in: the fraction of a step it missed
         is drawn in the step its exit is due, so it faces the competing rates for as long as the dwell time says; one marked as infected
         in the last step (less than 0) has half a step at this draw, and the other half in the step its exit is due.
         """
@@ -124,9 +124,9 @@ class Stepping:
         flagged = None
         early = None
         if name in self.late:
-            share = mod[f'late_{name}'].raw[uids]
-            flagged = share > 0
-            early = share < 0 # Infected last step: half a step at this draw, as for an arrival in this row (who, if they leave, have the next state's half step on arriving there)
+            frac = mod[f'late_{name}'].raw[uids]
+            flagged = frac > 0
+            early = frac < 0 # Infected last step: half a step at this draw, as for an arrival in this row (who, if they leave, have the next state's half step on arriving there)
             early = early if early.any() else None
         if candidates: # Scheduled exits that are due
             self.rescale_exits(state, uids)
@@ -139,7 +139,7 @@ class Stepping:
                 drawn = ~due | late
                 left = np.zeros(len(uids), dtype=bool)
                 double = late & ~due if flagged is None else late & ~due & ~flagged
-                span = np.where(double, 2.0, 1.0) if flagged is None else np.where(double, 2.0, np.where(flagged & due, share, 1.0))
+                span = np.where(double, 2.0, 1.0) if flagged is None else np.where(double, 2.0, np.where(flagged & due, frac, 1.0))
                 if early is not None:
                     span[early] = 0.5
                 left[np.flatnonzero(drawn)] = self.draw_competing(state, uids[drawn], span[drawn]*dt)
@@ -213,7 +213,7 @@ class Stepping:
                 hazards = np.where(certain, np.isinf(hazards), hazards)
                 total = hazards.sum(axis=0)
                 p_exit = np.where(certain, 1.0, p_exit)
-            share = np.divide(p_exit, total, out=np.zeros(n), where=total>0)
+            frac = np.divide(p_exit, total, out=np.zeros(n), where=total>0)
             edges = None # Worked out in the compiled pass below, unless it can't be taken
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
@@ -229,7 +229,7 @@ class Stepping:
                 if same:
                     pos, which = ss.solvers.backends.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
                 else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
-                    pos, which = ss.solvers.backends.passes.competing_agent_exits(u, self.sim.people.slot_raw(), *crn, p_exit[part], share[part], hazards[:, part])
+                    pos, which = ss.solvers.backends.passes.competing_agent_exits(u, self.sim.people.slot_raw(), *crn, p_exit[part], frac[part], hazards[:, part])
                 leaving = np.zeros(m, dtype=bool)
                 leaving[pos] = True
                 for i,tr in enumerate(competing):
@@ -237,7 +237,7 @@ class Stepping:
                 out.append(leaving)
                 continue
             if edges is None:
-                part_edges = np.cumsum([np.zeros(m)] + list(hazards[:, part]), axis=0)*share[part]
+                part_edges = np.cumsum([np.zeros(m)] + list(hazards[:, part]), axis=0)*frac[part]
             else:
                 part_edges = edges
             pe = p_exit if np.ndim(p_exit) == 0 else p_exit[part]
@@ -354,9 +354,9 @@ class Stepping:
                             self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
         return
 
-    def record_flows(self):
+    def record_events(self):
         self.uncount_deaths()
-        return super().record_flows()
+        return super().record_events()
 
     def die(self, uids):
         """ People who died this step (of anything, in any module) leave every state, and are taken out of the counts recorded for it """
@@ -394,10 +394,10 @@ class Stepping:
             cells, cell = np.unique(sim.groups.group_coords[:, dims], axis=0, return_inverse=True) if dims else (np.zeros((1, 0), dtype=int), np.zeros(sim.groups.n_groups, dtype=int))
             expected = np.bincount(cell.ravel(), weights=amount, minlength=len(cells))
             born = self.rng.poisson(expected) # By place and level; the other levels are drawn as people are born into them
-            shares = [np.bincount(cell.ravel(), weights=amount*p, minlength=len(cells)) for p in ps] if len(ps) > 1 else None
+            fracs = [np.bincount(cell.ravel(), weights=amount*p, minlength=len(cells)) for p in ps] if len(ps) > 1 else None
             enter, of = [], []
             for c,k in enumerate(born):
-                for dst,n in zip(tr.dest, self.rng.multinomial(k, [share[c]/expected[c] for share in shares]) if len(ps) > 1 else [k]) if k else []:
+                for dst,n in zip(tr.dest, self.rng.multinomial(k, [frac[c]/expected[c] for frac in fracs]) if len(ps) > 1 else [k]) if k else []:
                     if n:
                         enter.append((cells[c, 0] if d is not None else 0, ((self.mod.name, dst.name),), n)) # This module's state, not another's of the same name
                         of.append(np.full(n, c))
@@ -477,7 +477,7 @@ class Stepping:
                 elif tf.p is None:
                     arr[moving] = strat.value(strat.index(tf.dst))
                 elif len(moving): # One of several levels, chosen as they move
-                    ps = self.branch_shares([f'{name}.{dst}' for dst in tf.dsts], [None if p is None else self.eval_for(p, moving) for p in tf.p], [None]*len(tf.p))
+                    ps = self.branch_fracs([f'{name}.{dst}' for dst in tf.dsts], [None if p is None else self.eval_for(p, moving) for p in tf.p], [None]*len(tf.p))
                     edges = np.cumsum([np.broadcast_to(p, len(moving)) for p in ps[:-1]], axis=0)
                     which = (self.draw(f'transfer_to_{name}', moving) >= edges).sum(axis=0)
                     arr[moving] = np.array([strat.value(strat.index(dst)) for dst in tf.dsts])[which]
@@ -496,8 +496,8 @@ class Stepping:
             p = -np.expm1(-rates.sum(axis=1)*dt)[places]
             rvs = self.draw('migrate', uids)
             moving = rvs < p
-            share = np.cumsum(rates, axis=1)/np.maximum(rates.sum(axis=1), 1e-300)[:, None] # The same draw chooses where they go
-            where = (rvs[moving]/p[moving] >= share[places[moving]].T).sum(axis=0)
+            frac = np.cumsum(rates, axis=1)/np.maximum(rates.sum(axis=1), 1e-300)[:, None] # The same draw chooses where they go
+            where = (rvs[moving]/p[moving] >= frac[places[moving]].T).sum(axis=0)
             arr[uids[moving]] = np.minimum(where, rates.shape[0] - 1)
             sim.groups.groups_changed(uids[moving])
         return

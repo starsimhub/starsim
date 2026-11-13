@@ -618,9 +618,9 @@ class Network(Route):
         self.validate_uids()
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ Store the number of edges in the network of the step (made in its step, so recorded after it) """
-        super().record_flows()
+        super().record_events()
         self.results['n_edges'][self.ti] = len(self)
         return
 
@@ -1045,19 +1045,19 @@ class RandomNet(DynamicNetwork):
         return agent[1:-1].view(ss.uids), np.where(use_prev, agent[:-2], agent[2:]).view(ss.uids)
 
     @staticmethod
-    def draw_places(share, home, u):
-        """ The place of each contact, from the time share between places (a sparse array, by rows) of the home of each, and a uniform number for each: the first place where the cumulative share reaches it """
-        out = np.full(len(home), share.shape[1] - 1)
+    def draw_places(frac, home, u):
+        """ The place of each contact, from the fraction of time spent in each place (a sparse array, by rows) by the home of each, and a uniform number for each: the first place where the cumulative fraction reaches it """
+        out = np.full(len(home), frac.shape[1] - 1)
         order = np.argsort(home, kind='stable')
-        counts = np.bincount(home, minlength=share.shape[0])
+        counts = np.bincount(home, minlength=frac.shape[0])
         ends = np.cumsum(counts)
         for r in np.flatnonzero(counts):
             these = order[ends[r]-counts[r]:ends[r]]
-            cols, cum = share.indices[share.indptr[r]:share.indptr[r+1]], np.cumsum(share.data[share.indptr[r]:share.indptr[r+1]])
+            cols, cum = frac.indices[frac.indptr[r]:frac.indptr[r+1]], np.cumsum(frac.data[frac.indptr[r]:frac.indptr[r+1]])
             k = np.searchsorted(cum, u[these], side='left')
             found = k < len(cols)
             out[these[found]] = cols[k[found]]
-        out[u <= 0] = 0 # As the cumulative share of the first place, which can be 0
+        out[u <= 0] = 0 # As the cumulative fraction of the first place, which can be 0
         return out
 
     def pair(self, inds, n_contacts):
@@ -1065,7 +1065,7 @@ class RandomNet(DynamicNetwork):
         Find edges (see `get_edges()`); in a model with places, within each place, as a compartmental run takes it to be
 
         With commuting or visiting between places, each of a person's contacts is in a
-        place drawn from the share of their time they spend in each.
+        place drawn from the fraction of their time they spend in each.
         """
         mixing = getattr(self.sim, 'mixing', None)
         if mixing is None or mixing.space is None:
@@ -1077,7 +1077,7 @@ class RandomNet(DynamicNetwork):
         place = self.sim.groups.level_raw(mixing.space)[stubs]
         mobility = self.sim.groups.strats[mixing.space].mobility
         if mobility is not None and mobility.kind in ['commute', 'visit']:
-            place = self.draw_places(mixing.time_share, place, self.dist.rng.random(len(stubs)))
+            place = self.draw_places(mixing.time_frac, place, self.dist.rng.random(len(stubs)))
             self.dist.jump()
         return self.pair_within(stubs, place, self.sim.groups.strats[mixing.space].n, inds, n_contacts)
 
@@ -1220,9 +1220,9 @@ class DegreeNet(DynamicNetwork):
         acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a frequency such as `ss.freqperweek(2)` (or a rate, `ss.perweek(2)`), or a distribution of them drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
         who (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.person.pwid`), as for `ss.Event()`; nobody else is in the network
         between (str/tuple): if given, who partnerships are between: `'mf'`, a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men, with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
-        concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
+        concurrency (float): if given, the fraction of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
         max_contacts (int): if given, nobody has more partners than this at once
-        match (dict): if given, the share of partnerships between people at the same level of a property of people (a stratification, or an attribute such as `'female'`), e.g. `dict(risk=0.8)`, as EpiModel's nodematch; or of each of several, e.g. `dict(risk=0.8, region=0.6)`
+        match (dict): if given, the fraction of partnerships between people at the same level of a property of people (a stratification, or an attribute such as `'female'`), e.g. `dict(risk=0.8)`, as EpiModel's nodematch; or of each of several, e.g. `dict(risk=0.8, region=0.6)`
         memory (dur): how long it remembers partnerships that have ended, for contact tracing (see `ss.DynamicNetwork`)
         pars (dict): the same parameters, as a dict
 
@@ -1271,7 +1271,7 @@ class DegreeNet(DynamicNetwork):
         self.rng_end    = ss.random() # When each partnership ends, if it ends at a constant rate
         self.rng_stubs  = ss.random() # For shuffling the partners people start with
         self.rng_match  = ss.random() # Whether each person looks for a partner at their own level, with match=
-        self.departures = 0.0 # The share of partnerships ended each step by a partner leaving (dying), estimated as the run goes
+        self.departures = 0.0 # The fraction of partnerships ended each step by a partner leaving (dying), estimated as the run goes
         self.lost = 0 # Partnerships ended that way on this step
         self.waiting = ss.uids() # People who looked for a partner and were left over, who look again
         return
@@ -1335,12 +1335,12 @@ class DegreeNet(DynamicNetwork):
         """
         match = self.pars.get('match')
         if match is not None and (not isinstance(match, dict) or not match or not all(sc.isnumber(v) and 0 <= v <= 1 for v in match.values())):
-            errormsg = f'match= of "{self.name}" takes properties of people and the share of partnerships at the same level of each, e.g. dict(risk=0.8), not {match}'
+            errormsg = f'match= of "{self.name}" takes properties of people and the fraction of partnerships at the same level of each, e.g. dict(risk=0.8), not {match}'
             raise ValueError(errormsg)
         for key in list(match or {})[1:]: # Whether each person looks within their own level of each other property, with several
             setattr(self, f'rng_match_{key}', ss.random())
         self.match_extra = np.zeros(len(match or {})) # For each property, how many more look within their level than by the target alone: see match_pairs()
-        self.match_results = {key:'match' if len(match) == 1 else f'match_{key}' for key in match or {}} # The result of the share at the same level of each property
+        self.match_results = {key:'match' if len(match) == 1 else f'match_{key}' for key in match or {}} # The result of the fraction at the same level of each property
         super().init_pre(sim)
         if self.forms_own:
             return
@@ -1390,7 +1390,7 @@ class DegreeNet(DynamicNetwork):
 
     @staticmethod
     def degree_dist(n_contacts, concurrency=None, max_contacts=None):
-        """ The target share of people with 0, 1, 2, ... partners at a time """
+        """ The target fraction of people with 0, 1, 2, ... partners at a time """
         if sc.isnumber(n_contacts):
             n_contacts = ss.poisson(n_contacts)
         pars = {k:v for k,v in n_contacts.pars.items()}
@@ -1465,22 +1465,22 @@ class DegreeNet(DynamicNetwork):
         return np.asarray(sim.people[name].raw)
 
     def init_results(self):
-        """ With a target, the partnerships formed and the realized number of partners; with match=, the share at the same level """
+        """ With a target, the partnerships formed and the realized number of partners; with match=, the fraction at the same level """
         super().init_results()
         if self.targeted:
             self.define_results(
                 ss.Result('formed', label='Partnerships formed', kind='flow', auto_plot=False),
                 ss.Result('mean_degree', label='Mean number of partners', kind='ratio', scale=False, auto_plot=False), # Per person, so not scaled by the population
-                ss.Result('concurrency', label='Share with two or more partners', kind='ratio', scale=False, auto_plot=False),
+                ss.Result('concurrency', label='Fraction with two or more partners', kind='ratio', scale=False, auto_plot=False),
             )
         for key,name in getattr(self, 'match_results', {}).items():
-            self.define_results(ss.Result(name, label=f'Share of partnerships at the same level{"" if name == "match" else f" of {key}"}', kind='ratio', scale=False, auto_plot=False))
+            self.define_results(ss.Result(name, label=f'Fraction of partnerships at the same level{"" if name == "match" else f" of {key}"}', kind='ratio', scale=False, auto_plot=False))
         return
 
     def match_pairs(self, people, rvs=None):
         """
         Pair people who are looking for partners, who are in a random order: in turn, one of each group of `between`
-        (or two of one), or, with `match=`, some within their own level, so that the share of partnerships at the
+        (or two of one), or, with `match=`, some within their own level, so that the fraction of partnerships at the
         same level is the target
 
         With several properties, each person looks within their own level of each with its own chance, as with one,
@@ -1510,11 +1510,11 @@ class DegreeNet(DynamicNetwork):
             rvs = [self.rng_match.rvs(people)] + [getattr(self, f'rng_match_{key}').rvs(people) for key in list(self.pars.match)[1:]]
         codes, sizes, levels = [], [], [] # The level each person looks within for each property (0 for none), how many there can be, and each person's level
         s = side if side is not None else np.zeros(len(people), dtype=np.int8)
-        for (key,share),u,extra in zip(self.pars.match.items(), np.reshape(rvs, (len(self.pars.match), -1)), self.match_extra):
+        for (key,target),u,extra in zip(self.pars.match.items(), np.reshape(rvs, (len(self.pars.match), -1)), self.match_extra):
             level = np.unique(self.levels(key)[people], return_inverse=True)[1]
             frac = [np.bincount(level[s == g], minlength=level.max(initial=0) + 1)/max(np.sum(s == g), 1) for g in [0, 1 if side is not None else 0]]
-            by_chance = frac[0] @ frac[1] # The share at the same level if they were paired at random
-            within = np.clip((share - by_chance)/(1 - by_chance) + extra, 0, 1) if by_chance < 1 else 1.0
+            by_chance = frac[0] @ frac[1] # The fraction at the same level if they were paired at random
+            within = np.clip((target - by_chance)/(1 - by_chance) + extra, 0, 1) if by_chance < 1 else 1.0
             codes.append(np.where(u < within, level + 1, 0))
             levels.append(level)
             sizes.append(len(frac[0]) + 1)
@@ -1534,9 +1534,9 @@ class DegreeNet(DynamicNetwork):
             left = np.concatenate(rest)
         a, b, left = split(left) # The rest at random
         p1, p2 = np.concatenate(p1 + [a]), np.concatenate(p2 + [b])
-        if len(p1): # People left over without a partner at their level make the share at the same level fall short, so more look within it, smoothed over about 20 steps (as for departures: see end_times())
-            for k,(share,level) in enumerate(zip(self.pars.match.values(), levels)):
-                self.match_extra[k] = np.clip(self.match_extra[k] + 0.05*(share - np.mean(level[p1] == level[p2])), -1, 1)
+        if len(p1): # People left over without a partner at their level make the fraction at the same level fall short, so more look within it, smoothed over about 20 steps (as for departures: see end_times())
+            for k,(target,level) in enumerate(zip(self.pars.match.values(), levels)):
+                self.match_extra[k] = np.clip(self.match_extra[k] + 0.05*(target - np.mean(level[p1] == level[p2])), -1, 1)
         return people[p1], people[p2], people[left]
 
     def end_times(self, p1, start=False):
@@ -1548,7 +1548,7 @@ class DegreeNet(DynamicNetwork):
                 return np.ones_like(u)
             return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-p_end)), 1)
         n = len(p1)
-        if start: # One picked in proportion to how long it lasts, and a uniform share of it
+        if start: # One picked in proportion to how long it lasts, and a uniform fraction of it
             rng = self.rng_stubs.rng
             dur = self.pars.dur.rvs(3*n)
             return dur[rng.choice(len(dur), size=n, p=dur/dur.sum())]*rng.random(n) if n else dur[:0]
@@ -1621,7 +1621,7 @@ class DegreeNet(DynamicNetwork):
 
     def add_pairs(self):
         """ Pair the people looking for a partner: those who look on this step, given how many partners they have and the target, or with no target, everyone who has none """
-        if len(self) or self.lost: # The share of partnerships ended by a partner leaving, smoothed over about 20 steps
+        if len(self) or self.lost: # The fraction of partnerships ended by a partner leaving, smoothed over about 20 steps
             self.departures += 0.05*(self.lost/max(len(self) + self.lost, 1) - self.departures)
             self.lost = 0
         uids = self.active(self.sim.people).uids
@@ -1662,9 +1662,9 @@ class DegreeNet(DynamicNetwork):
         self.add_pairs()
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ The partnerships formed in the step, and the network of the step (made in its step, so recorded after it) """
-        super().record_flows()
+        super().record_events()
         if self.targeted:
             self.results.formed[self.ti] = getattr(self, 'formed', 0)
             degree = self.degrees(self.active(self.sim.people).uids)
@@ -1680,8 +1680,8 @@ class DegreeNet(DynamicNetwork):
         """
         Run the sim again, and compare the network it makes with the network's targets
 
-        Reports, for each target (the mean number of partners, the share with two or
-        more, the maximum, and with `match=`, the share of partnerships at the same
+        Reports, for each target (the mean number of partners, the fraction with two or
+        more, the maximum, and with `match=`, the fraction of partnerships at the same
         level), the target, the mean over the second half of each run, and the spread
         across runs; a target that is missed by more than the spread is a warning.
         With a number of partners for each level (`n_contacts=ss.by(...)`), each level has
@@ -1697,7 +1697,7 @@ class DegreeNet(DynamicNetwork):
             The table, as a dataframe
         """
         rows = []
-        mixes = [] # With a number of partners for each level, the share of people at each level at the end of each run
+        mixes = [] # With a number of partners for each level, the fraction of people at each level at the end of each run
         for i in range(n_runs):
             run = self.sim.new(rand_seed=i + 1, verbose=0).run()
             net = run.networks[self.name]
@@ -1760,14 +1760,14 @@ class SexualNet(DegreeNet):
 
     Each partnership is between one person of each of two groups (`between`): a man and a
     woman, two men, or e.g. a female sex worker and a client, and each group can have its own
-    number of partners (`n_contacts` as a dict). With `match=`, a share of partnerships is
+    number of partners (`n_contacts` as a dict). With `match=`, a fraction of partnerships is
     between people at the same level of a property of people, such as a risk group.
 
     Each partnership has a number of acts per unit time (`acts`), so a disease's beta on it is
-    a probability per act (see `ss.peract`), and the share of them in which a condom is used
+    a probability per act (see `ss.peract`), and the fraction of them in which a condom is used
     (`condoms`, 0 unless set, e.g. by a subclass in `add_pairs()`), which a modifier of the
     transmission on the network reads, e.g.
-    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, network='sexualnet')`.
+    `ss.modify(hiv.infection, efficacy=0.8, frac=lambda net: net.edges.condoms, network='sexualnet')`.
 
     A subclass that overrides `step()` forms its own partnerships: the base starts none for
     it, and has none of the parameters for forming them, only `between`.
@@ -1784,9 +1784,9 @@ class SexualNet(DegreeNet):
         acts (`ss.freq`/`ss.Dist`): the number of acts per unit time in each partnership: a frequency (e.g. `ss.freqperweek(2)`, or `ss.freqperyear(80)`; a rate, `ss.peryear(80)`, is the same), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
         participation (`ss.Dist`): whether each person takes part, drawn at their debut (default: 90% do); its parameters can be functions, e.g. to vary it by age or sex
         n_contacts (float/`ss.Dist`/dict): if given, a target for the number of partners people have at a time: a number, which is the mean of a Poisson, or a distribution over whole numbers; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all)
-        concurrency (float): with `n_contacts`, the share of people with two or more partners at once
+        concurrency (float): with `n_contacts`, the fraction of people with two or more partners at once
         max_contacts (int): with `n_contacts`, the most partners anyone has at once
-        match (dict): if given, the share of partnerships between people at the same level of a property of people (a stratification, or an attribute), e.g. `dict(risk=0.8)`
+        match (dict): if given, the fraction of partnerships between people at the same level of a property of people (a stratification, or an attribute), e.g. `dict(risk=0.8)`
         kwargs (dict): the other parameters of `ss.DegreeNet` (e.g. `who`, `memory`)
         pars (dict): the same parameters, as a dict
 
@@ -1820,7 +1820,7 @@ class SexualNet(DegreeNet):
             self.pars['dur'] = given
         self.set_between()
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
-        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, network=)
+        self.meta.condoms = ss_float # The fraction of acts with a condom, e.g. for ss.modify(..., frac=lambda net: net.edges.condoms, network=)
         self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
         self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
@@ -2030,7 +2030,7 @@ class MixingPools(Route):
     Transmission to a susceptible person `s` is `1 − (1 − p)^(rel_sus_s · Σ_j c_sj · trans_j)`, for the disease's chance `p` over the step, `s`'s contacts `c_sj`
     with source group `j`, and that group's mean infectiousness `trans_j`. This is exact for a force of infection proportional to the contacts and the
     mean infectiousness. For discrete contacts with random members of a group, it is a mean-field approximation: it uses the group's mean
-    infectiousness rather than that of the people met, which slightly overstates infection (by a relative `p(1 − f)/2` when a share `f` of the
+    infectiousness rather than that of the people met, which slightly overstates infection (by a relative `p(1 − f)/2` when a fraction `f` of the
     group is infectious). It is exact when everyone in the group is equally infectious, and close when `p` is small.
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
@@ -2191,7 +2191,7 @@ class MixingPools(Route):
     def band_exposure(self, weights):
         """
         As agents, for a matrix with its own age bands (`ss.contacts('Kenya')`), with no pool for each pair of bands: the
-        UIDs of the people alive, and the exposure of each, from the infectiousness-weighted share of each band (`weights`,
+        UIDs of the people alive, and the exposure of each, from the infectiousness-weighted fraction of each band (`weights`,
         one for each agent) and the contacts between bands, as those pools would give, since everyone in a band has the
         same contacts. People younger than the first band (e.g. not yet born) have none
         """
@@ -2209,15 +2209,15 @@ class MixingPools(Route):
     def group_exposure(self, weights):
         """
         As agents, for a matrix of numbers: the UIDs of the people alive, and the exposure of each, as the pools for each pair of
-        groups would give, from the infectiousness-weighted share of each source group (`weights`, one for each agent)
+        groups would give, from the infectiousness-weighted fraction of each source group (`weights`, one for each agent)
         """
-        share = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.source_uids])
+        frac = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.source_uids])
         auids = self.sim.people.auids
         if self.contact_dist is not None: # Each person's own contacts with each source group
-            expo = sum(self.state_dict[f'contacts_{j}'].raw[auids]*s for j,s in enumerate(share))
+            expo = sum(self.state_dict[f'contacts_{j}'].raw[auids]*s for j,s in enumerate(frac))
             return auids, expo
         expo = np.zeros(len(weights))
-        for uids,value in zip(self.target_uids, self.matrix @ share): # A person in several target groups has the exposure of each
+        for uids,value in zip(self.target_uids, self.matrix @ frac): # A person in several target groups has the exposure of each
             expo[uids] += value
         return auids, expo[auids]
 
@@ -2227,7 +2227,7 @@ class MixingPools(Route):
 
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
         """
-        Calculate transmission, for a disease written as code: through each pool, or for a matrix, from the share of each group or band
+        Calculate transmission, for a disease written as code: through each pool, or for a matrix, from the fraction of each group or band
         that is infectious, as a declared disease's is (see `ss.solvers.Agents.transmit()`), since everyone in a group has the same contacts
 
         Args:
@@ -2511,7 +2511,7 @@ class MixingPool(Route):
         if disease_beta == 0 or disease not in self.diseases or len(self.source_uids) == 0 or len(self.target_uids) == 0:
             return []
 
-        # Calculate transmission: the hazard of the step, from the disease's beta, is multiplied by the infectious share and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
+        # Calculate transmission: the hazard of the step, from the disease's beta, is multiplied by the infectious fraction and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
         trans = np.mean(rel_trans[self.source_uids])
         acq = self.eff_contacts[self.target_uids] * rel_sus[self.target_uids]
         p = 1 - (1 - disease_beta)**(trans*acq) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
@@ -2560,7 +2560,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
 
     What the matrix multiplies is said by the rate of the infection, with I_j and N_j the number infectious and the number of people in group j, and N everyone:
 
-    - `beta*I`: the share of each group who are infectious, β·Σ_j C_ij·I_j/N_j, with C the contacts of a person and β per contact (as for contact surveys);
+    - `beta*I`: the fraction of each group who are infectious, β·Σ_j C_ij·I_j/N_j, with C the contacts of a person and β per contact (as for contact surveys);
     - `beta*I.n`: their number, β·Σ_j C_ij·I_j, density-dependent (as in Lloyd & Jansen's metapopulation);
     - `beta*I.frac` (or `beta*I.n/N`): their number over everyone, β·Σ_j C_ij·I_j/N (as in Keeling & Rohani's matrices, and WAIFW matrices).
     - a weighted count, `beta*(ss.by(w)*I).n` or `beta*I.n_infectious`: their number, each counted by its weight, β·Σ_j C_ij·w_j·I_j (for `n_infectious`, w_j is each group's infectiousness).
@@ -2594,7 +2594,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
         # A product: by age, then 90% of contacts within one's own area
         mixing = ss.contacts(age=[[10, 3], [3, 5]], area=[[0.9, 0.1], [0.1, 0.9]], ages=[0, 18])
 
-        # Keeling & Rohani's Program 3.1: a matrix of rates per year on shares of everyone, so the rate is I.frac
+        # Keeling & Rohani's Program 3.1: a matrix of rates per year on fractions of everyone, so the rate is I.frac
         S, I = ss.states('S I')
         sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init_prev=0.001).stratify(risk={'high': 0.2, 'low': 0.8})
         sim = ss.Sim(sis, networks=ss.contacts(risk=[[10, 0.1], [0.1, 1]]), unit='year', stop=15).run()

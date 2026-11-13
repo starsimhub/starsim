@@ -31,7 +31,7 @@ progression = E >> I @ ss.days(10)   # Latent for 10 days on average
 recovery    = I >> R @ ss.days(8)    # Infectious for 8 days on average
 cases       = ss.outcome(0.4*infection) # Reported cases: 40% of infections
 measles = ss.Disease(infection, progression, recovery, cases,
-    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                          # 10 people infectious at the start
     name = 'measles',
 )
@@ -57,8 +57,8 @@ def vaccine_demand(sim):
     """ The unvaccinated seek vaccination at a rate that rises with the cases reported in the last week """
     measles = sim.diseases.measles
     last_week = sim.results.measles.cases[max(sim.ti-7, 0):sim.ti].sum()      # Cases reported in the last 7 days
-    share = last_week/(last_week + 300)                                       # From 0 to 1, a half at 300 cases a week
-    seeking = (ss.perweek(0.1)*share).to_prob(sim.t.dt)                       # The chance of seeking vaccination in this step
+    frac = last_week/(last_week + 300)                                        # From 0 to 1, a half at 300 cases a week
+    seeking = (ss.perweek(0.1)*frac).to_prob(sim.t.dt)                        # The chance of seeking vaccination in this step
     ss.move(measles.S, measles.R, p=seeking*0.93)                             # Those vaccinated and protected become immune
     return
 ```
@@ -72,8 +72,8 @@ def vaccine_demand(sim):
     """ The unvaccinated seek vaccination at a rate that rises with the cases reported in the last week """
     measles = sim.diseases.measles
     last_week = sim.results.measles.cases[max(sim.ti-7, 0):sim.ti].sum()      # Cases reported in the last 7 days
-    share = last_week/(last_week + 300)                                       # From 0 to 1, a half at 300 cases a week
-    rate = 0.1/7*share                                                        # The rate of seeking vaccination, per day
+    frac = last_week/(last_week + 300)                                        # From 0 to 1, a half at 300 cases a week
+    rate = 0.1/7*frac                                                         # The rate of seeking vaccination, per day
     seeking = 1 - np.exp(-rate*sim.t.dt.days)                                 # The chance of seeking vaccination in this step
     ss.move(measles.S, measles.R, p=seeking*0.93)                             # Those vaccinated and protected become immune
     return
@@ -109,7 +109,7 @@ A module written as a class fixes all three. It inherits from one of Starsim's m
 The module has:
 
 - **Parameters**, with defaults in `__init__()` via `define_pars()`, changed by name when the module is made. Rates and durations are [time parameters](../user_guide/building_time.qmd), so they mean the same whatever the step length.
-- **A state of its own**: here, one number, the cases people remember. Each step adds the new reported cases and forgets a share of what is remembered, so a case is remembered for `memory` (30 days) on average: a small ODE of its own, dM/dt = cases − M/memory.
+- **A state of its own**: here, one number, the cases people remember. Each step adds the new reported cases and forgets a fraction of what is remembered, so a case is remembered for `memory` (30 days) on average: a small ODE of its own, dM/dt = cases − M/memory.
 - **Results of its own**, defined in `init_results()` and filled in each step at `self.ti`. Doses are a flow (events in each step), and the cases remembered a stock (a quantity at each time point).
 - **A `step()` method**, which does the work. In it, `self.sim` is the sim, `self.t.dt` the step length, and `self.pars` the parameters.
 - **A limit**: clinics can give at most `capacity` doses a day (no limit by default); people who can't be served try again the next day.
@@ -125,7 +125,7 @@ class VaccineDemand(ss.Intervention):
             half     = half,     # The number of cases remembered at which demand is half its highest
             max_rate = max_rate, # The highest rate at which unvaccinated people seek vaccination
             capacity = capacity, # The most doses the clinics can give, as a rate (None for no limit)
-            efficacy = efficacy, # The share of those vaccinated who are protected
+            efficacy = efficacy, # The fraction of those vaccinated who are protected
         )
         self.update_pars(**kwargs)
         self.remembered = 0.0 # The cases that people remember, for the whole population
@@ -143,13 +143,13 @@ class VaccineDemand(ss.Intervention):
         measles = self.sim.diseases.measles
         dt = self.t.dt
 
-        # Remember the cases reported in the last step, and forget a share of those remembered
+        # Remember the cases reported in the last step, and forget a fraction of those remembered
         new_cases = self.sim.results.measles.cases[self.ti-1]
         self.remembered += new_cases - self.remembered*(dt/self.pars.memory)
 
         # The doses sought, limited by what the clinics can give
-        share = self.remembered/(self.remembered + self.pars.half)
-        seeking = (self.pars.max_rate*share).to_prob(dt)
+        frac = self.remembered/(self.remembered + self.pars.half)
+        seeking = (self.pars.max_rate*frac).to_prob(dt)
         doses = seeking*measles.S.n
         if self.pars.capacity is not None:
             doses = min(doses, self.pars.capacity.to_events(dt))
@@ -161,7 +161,7 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.S.n` is the number of people in `S` now, under every solver, and `ss.move(..., n=...)` moves a number of people rather than a share. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module's results are under its class name in lower case, `sim.results.vaccinedemand`.
+`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module's results are under its class name in lower case, `sim.results.vaccinedemand`.
 
 With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day:
 
@@ -254,7 +254,7 @@ The two give the same epidemic up to chance. What differs is what Starsim knows 
 Besides parameters, results, and `step()`, a module for agents uses:
 
 - **States**: per-agent arrays declared with `self.define_states()`: `ss.BoolState` for true or false, `ss.FloatArr` for a number, and `ss.TimeArr` for a time (`due()` gives those whose time has come). Each becomes an attribute that grows as agents are born. Keep per-agent data this way, never in a plain Python attribute or array.
-- **Recording**: besides in `step()`, a stock (the state at the start of the step) can be recorded in `record_stocks()`, and a flow (what happened in the step) in `record_flows()`.
+- **Recording**: besides in `step()`, a stock (the state at the start of the step) can be recorded in `record_states()`, and a flow (what happened in the step) in `record_events()`.
 - **Randomness**: a Starsim distribution (e.g. `ss.expon`, `ss.bernoulli`), not `np.random`, so results stay reproducible; see [Random numbers](../user_guide/mechanics_random.qmd).
 
 ## A quantity for each person
@@ -284,14 +284,14 @@ class Antibodies(ss.Module):
         return
 
     def step(self):
-        decay = 0.5**(self.t.dt/self.pars.half_life) # The share left after one step
+        decay = 0.5**(self.t.dt/self.pars.half_life) # The fraction left after one step
         self.level[:] = self.level*decay
         recovered = self.sim.diseases.cold.recovery.uids # Those who recovered in the last step
         self.level[recovered] = 1.0
         return
 
-    def record_stocks(self): # At the start of each step, so each value is the level at its time point
-        super().record_stocks()
+    def record_states(self): # At the start of each step, so each value is the level at its time point
+        super().record_states()
         self.results.mean_level[self.ti] = self.level.mean()
         return
 ```
@@ -459,10 +459,10 @@ Start declared, and move down the table only for the part that needs it. When co
 ## Exercises
 
 1. How much does it matter how long people remember cases? Run `VaccineDemand()` with a memory of 10 days and of 90 days, and compare the infections and doses with 30 days. Does each extra dose prevent as many infections as the ones before? Why not?
-2. People who hear about an outbreak may also avoid others. Add a modifier, `ss.modify(measles.rel_sus, multiply=...)`, whose `multiply=` is a function of the sim returning 1 − 0.3 × the share used for demand (so contacts fall by up to 30%), reading the cases remembered as `sim.interventions.vaccinedemand.remembered`. How much smaller is the outbreak?
+2. People who hear about an outbreak may also avoid others. Add a modifier, `ss.modify(measles.rel_sus, multiply=...)`, whose `multiply=` is a function of the sim returning 1 − 0.3 × the fraction used for demand (so contacts fall by up to 30%), reading the cases remembered as `sim.interventions.vaccinedemand.remembered`. How much smaller is the outbreak?
 3. Run the model with demand met in full as agents, one for each person (`n_agents=100_000`), and compare the infections and doses with those of the ODE. Does the module need any change? Why not?
 4. Change the half-life of the antibodies to 30 days and to 365 days. How does each change the endemic level of infection, compared with no immunity and with the all-or-nothing SIRS?
-5. Give `AgeNet` a parameter `p_random`, the share of each person's contacts that are with anyone at random rather than with people close in age (hint: shuffle a share of the order before pairing, or add a second, random network). How large does it have to be before the epidemic looks like the one with random contacts?
+5. Give `AgeNet` a parameter `p_random`, the fraction of each person's contacts that are with anyone at random rather than with people close in age (hint: shuffle a fraction of the order before pairing, or add a second, random network). How large does it have to be before the epidemic looks like the one with random contacts?
 6. The `SIRS` class schedules each person's loss of immunity at recovery. Write an `SIRS` in which immunity is lost instead with a constant chance each step (an exponential duration, drawn step by step), using an `ss.bernoulli` distribution in `step_state()`. Does it give the same epidemic?
 
 [Solutions](solutions.qmd#t8-custom-modules)

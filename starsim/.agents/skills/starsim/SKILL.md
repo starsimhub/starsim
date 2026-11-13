@@ -15,7 +15,7 @@ Starsim 4 differs a lot from Starsim 3, and from what you may remember. Check na
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 0.3*I      # From S to I, at a rate of 0.3 per day times the share infectious
+infection = S >> I @ 0.3*I      # From S to I, at a rate of 0.3 per day times the fraction infectious
 recovery = I >> R @ ss.days(10) # From I to R, after 10 days on average
 sir = ss.Disease(infection, recovery, init=dict(I=0.01), name='sir')
 sim = ss.Sim(sir, total_pop=10_000, dur=ss.days(100))

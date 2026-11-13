@@ -74,12 +74,12 @@ def test_geo():
     sir = make_sir()
     sir.stratify(patch=ss.levels(kenya, mobility=ss.geo.gravity(away=0.1)))
     sim = ss.Sim(sir, total_pop=50e6, unit='day', stop=60, **kw).run()
-    shares = sim.results.sir.S.strata[0]/sim.results.sir.S.strata[0].sum()
-    assert np.allclose(shares, kenya.populations/kenya.populations.sum()) # People start in each county in proportion to its population
+    fracs = sim.results.sir.S.strata[0]/sim.results.sir.S.strata[0].sum()
+    assert np.allclose(fracs, kenya.populations/kenya.populations.sum()) # People start in each county in proportion to its population
     assert 'starsim_data' in sim.describe()
 
     # Gravity gives the shape of the movement and away= its amount (10% if not given); a k that sends people away more than all their time warns
-    home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().mixing.time_share.diagonal()
+    home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().mixing.time_frac.diagonal()
     assert np.allclose(home(ss.geo.gravity()), 0.9) and np.allclose(home(ss.geo.gravity(away=0.2)), 0.8)
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.populations.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
@@ -99,7 +99,7 @@ def test_geo():
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     infections = sim.results.sir.infection.by('patch').summarize()
-    assert kenya.plot(values=infections/kenya.populations, label='Share infected', do_show=False) is not None
+    assert kenya.plot(values=infections/kenya.populations, label='Fraction infected', do_show=False) is not None
     with pytest.raises(ValueError, match='none for'):
         kenya.plot(values=dict(Nairobi=1), do_show=False)
     assert len(sim.results.sir.prevalence.map(n=4, do_show=False).axes) == 5 # Four maps and a color bar
@@ -135,8 +135,8 @@ def test_people():
     # As agents, the same ages and the share who are female
     abm = ss.Sim(make_sir(), people=ss.population('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
     assert isinstance(abm.solver, ss.solvers.abm) and abm.pop_scale == total/20_000
-    share = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
-    assert np.allclose(share, abm.groups.strats[0].fractions, atol=0.01)
+    frac = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
+    assert np.allclose(frac, abm.groups.strats[0].fractions, atol=0.01)
     assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01
 
     # In a compartmental run, people age out of each age group as the population's own pyramid has them do, as agents do

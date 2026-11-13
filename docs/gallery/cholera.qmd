@@ -37,7 +37,7 @@ decay     = W >> ss.dead @ ss.days(30)          # Bacteria survive 30 days on av
 cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001), name='cholera')
 ```
 
-`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the share of people infectious. `ss.dead` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
+`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the fraction of people infectious (`I.frac`). `ss.dead` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
 
 ```{python}
 cholera.diagram()

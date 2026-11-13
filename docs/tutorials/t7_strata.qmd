@@ -13,7 +13,7 @@ authorship:
 
 The first half of this tutorial stratifies the model by vaccination status and by membership of a close-knit community with low coverage. The second runs measles with a second disease that it interacts with. By the end, you will be able to:
 
-- stratify a model by several dimensions, and give shares that differ by another dimension;
+- stratify a model by several dimensions, and give fractions that differ by another dimension;
 - stratify only part of a model, and say why that is worth doing;
 - give the contacts between groups of two dimensions at once;
 - move people between groups at a rate, with `ss.transfer()`;
@@ -44,7 +44,7 @@ settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 Two doses of measles vaccine protect about 97% of people. To model this, stratify by vaccination status, with the vaccinated 97% less susceptible. Unlike an intervention on a date ([T5](t5_interventions.qmd)), a dimension gives the immunity a population already has, and splits results by vaccination status.
 
-Coverage often differs by age: here 85% of children, 92% of adults aged 15 to 64, and 95% of people 65 and over. A share that differs by another dimension is an `ss.by()` over both: a row for each age group and a column for each level of vaccination, each row adding up to 1, so each age group keeps its size. Written out, it is a table with a row for each combination:
+Coverage often differs by age: here 85% of children, 92% of adults aged 15 to 64, and 95% of people 65 and over. A fraction that differs by another dimension is an `ss.by()` over both: a row for each age group and a column for each level of vaccination, each row adding up to 1, so each age group keeps its size. Written out, it is a table with a row for each combination:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -90,7 +90,7 @@ sim.run()
 sim.results.measles.infection.by('vaccinated').plot()
 ```
 
-`ss.levels()` gives the levels with their options: the shares, which depend on age, and the states the dimension applies to (see below). `ss.modify()` changes a quantity of a disease, here by level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints an R0 of about 2.3, not 16: the vaccinated are part of the population this R0 is worked out for, and most are protected. The outbreak is much smaller than with nobody immune:
+`ss.levels()` gives the levels with their options: the fractions, which depend on age, and the states the dimension applies to (see below). `ss.modify()` changes a quantity of a disease, here by level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints an R0 of about 2.3, not 16: the vaccinated are part of the population this R0 is worked out for, and most are protected. The outbreak is much smaller than with nobody immune:
 
 ```{python}
 res = sim.results.measles
@@ -200,7 +200,7 @@ progression = E >> I @ ss.days(10)
 recovery    = I >> A @ ss.days(8)   # Recovered, with immune amnesia
 restored    = A >> R @ ss.years(2)  # Immune memory of other infections restored after 2 years on average
 measles = ss.Disease(infection, progression, recovery, restored,
-    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),
     name = 'measles',
 )
@@ -210,7 +210,7 @@ S, C = ss.states('S C')
 acquisition = S >> C @ 0.003*C     # Acquired through contact with carriers
 clearance   = C >> S @ ss.days(30) # Carried for a month on average
 pneumococcus = ss.Disease(acquisition, clearance,
-    init = dict(C=ss.by(age=[0.25, 0.17, 0.17])), # The share carrying it in each age group
+    init = dict(C=ss.by(age=[0.25, 0.17, 0.17])), # The fraction carrying it in each age group
     name = 'pneumococcus',
 )
 pneumococcus.stratify(age=ages)
@@ -251,7 +251,7 @@ sim = msim.sims['Interacting']
 sim.describe()
 ```
 
-Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10 joint states in each age group, and why: the modifier acts on pneumococcus by a state of measles. It also says what is assumed at the start: that the two infections are independent, so the share carrying pneumococcus is the same in every measles state. Joint states multiply, so Starsim tracks diseases jointly only up to a limit (`ss.options.max_joint`, 10,000 compartments by default); above it, the default solver runs the model as agents, each with a state in each disease. Diseases that don't refer to each other's states are not tracked jointly, so link only those that interact. [Connectors](../user_guide/interventions_connectors.qmd) covers modifiers in full, including interactions that change transmission or the course of a disease, and connectors written as code.
+Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10 joint states in each age group, and why: the modifier acts on pneumococcus by a state of measles. It also says what is assumed at the start: that the two infections are independent, so the fraction carrying pneumococcus is the same in every measles state. Joint states multiply, so Starsim tracks diseases jointly only up to a limit (`ss.options.max_joint`, 10,000 compartments by default); above it, the default solver runs the model as agents, each with a state in each disease. Diseases that don't refer to each other's states are not tracked jointly, so link only those that interact. [Connectors](../user_guide/interventions_connectors.qmd) covers modifiers in full, including interactions that change transmission or the course of a disease, and connectors written as code.
 
 ## Exercises
 

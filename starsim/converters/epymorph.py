@@ -16,8 +16,8 @@ that stratum's people, does not move between places here.
 
 Movement in epymorph is code, so its clauses are run, not read: over the first four
 weeks, the people each clause moves from each node to each other node are averaged, as a
-share of the node's people, and multiplied by the time they are away. This gives commuting
-(`ss.geo.Mobility(kind='commute')`), the share of their time that people spend in each
+fraction of the node's people, and multiplied by the time they are away. This gives commuting
+(`ss.geo.Mobility(kind='commute')`), the fraction of their time that people spend in each
 other place, with the time of day and the day of the week averaged out. Two things are
 listed as not translated: a clause that never returns people, and compartments tagged
 `immobile`, which commute here like the others.
@@ -310,7 +310,7 @@ def parameter(vals):
 
 
 def movement(rume, data, rng, people, skip):
-    """ The share of their time that the people of each place (rows) spend in each other place: the clauses run for the first weeks, and averaged """
+    """ The fraction of their time that the people of each place (rows) spend in each other place: the clauses run for the first weeks, and averaged """
     from epymorph.attribute import ModuleNamespace
     from epymorph.simulation import NEVER, Context, resolve_tick_delta, simulation_clock
     from epymorph.strata import gpm_strata
@@ -319,7 +319,7 @@ def movement(rume, data, rng, people, skip):
     steps = np.tile(rume.tau_step_lengths, rume.time_frame.days + days) # Long enough for trips that outlast the days sampled
     away = np.zeros((rume.scope.nodes, rume.scope.nodes))
     with np.errstate(divide='ignore', invalid='ignore'):
-        share = np.nan_to_num(1/people, posinf=0.0)
+        frac = np.nan_to_num(1/people, posinf=0.0)
     for strata,model in rume.mms.items():
         namespace = ModuleNamespace(gpm_strata(strata), 'mm')
         for clause in model.clauses:
@@ -333,7 +333,7 @@ def movement(rume, data, rng, people, skip):
                     back = resolve_tick_delta(rume.num_tau_steps, tick, c.returns)
                     movers = np.array(c.evaluate(tick), dtype=float)
                     np.fill_diagonal(movers, 0)
-                    away += (movers.T*share).T * steps[tick.sim_index:back].sum()
+                    away += (movers.T*frac).T * steps[tick.sim_index:back].sum()
     return away/days
 
 

@@ -15,7 +15,7 @@ class Cholera(ss.Disease):
     """
     Cholera, with both direct and environmental (waterborne) transmission
 
-    People infected are latent (`E`) for `dur_exp`, then a share `p_symp` become symptomatic (`Is`), and the rest are
+    People infected are latent (`E`) for `dur_exp`, then a fraction `p_symp` become symptomatic (`Is`), and the rest are
     asymptomatic (`Ia`), shedding far less (`asymp_trans`). Asymptomatic people recover; symptomatic people recover,
     or die (with probability `p_death`, sooner). Besides transmission from person to person (`beta`), infectious
     people shed bacteria into a well-mixed reservoir of water (`W`, a count of bacteria, not people) at
@@ -82,7 +82,7 @@ class Cholera(ss.Disease):
     R  = ss.State()
     W  = ss.State('Bacteria in the water', people=False) # A count, not people
 
-    env_conc = W.n/(W.n + half_sat_rate) # The concentration of bacteria, as the share of the maximum rate of infection from the water
+    env_conc = W.n/(W.n + half_sat_rate) # The concentration of bacteria, as the fraction of the maximum rate of infection from the water
 
     infection     = S >> E @ beta*(Is + asymp_trans*Ia) + beta_env*env_conc
     onset         = E >> {Is: p_symp, Ia: None} @ dur_exp

@@ -21,7 +21,7 @@ Run the original in its own framework and the port in Starsim, write both as the
    ```
    The mode is chosen from what the two files hold:
    - **exact**: one run on each side (both deterministic). Passes if the largest difference is within `--rtol` (default 1e-3) of the largest value. Use a tighter tolerance when both use the same integrator and step; ODE solvers that differ (RK4 against LSODA, a fixed step against an adaptive one) agree only to their error.
-   - **statistical**: runs on both sides. At each time, the difference of the means in standard errors (`frac_z3` is the share of times where it exceeds 3; passes at 5% or less), and two-sample Kolmogorov-Smirnov tests of each run's peak, time of the peak, and final value (pass at `--alpha`, default 0.01).
+   - **statistical**: runs on both sides. At each time, the difference of the means in standard errors (`frac_z3` is the fraction of times where it exceeds 3; passes at 5% or less), and two-sample Kolmogorov-Smirnov tests of each run's peak, time of the peak, and final value (pass at `--alpha`, default 0.01).
    - **band**: the original is a summary (mean, low, high). The port's mean and the same quantiles of its runs are compared with them, within `--rtol` (default 0.1) of the largest value. This is weaker than the statistical mode: prefer raw runs.
 5. **Explain what differs.** Go through the usual causes below before concluding anything, and say which applied.
 6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference.
@@ -40,7 +40,7 @@ Make a table with one row for each facet of the model (assumption, state, parame
 - **The step.** Agents and a compartmental run of the same model differ by an amount of order `dt` (5 to 10% at a weekly step in some models); a discrete-time stochastic model differs from the ODE by the same. Compare like with like (the same kind of run), or at a finer step, before calling it a disagreement.
 - **Order within a step.** Frameworks that apply processes one after another in a step (EMULSION's `processes:`, Atomica's order of transitions) differ from Starsim's simultaneous competing hazards, by order `dt`.
 - **Initial conditions.** Counts against fractions, the remainder placed in the first state, initial numbers drawn rather than fixed, and a source that starts people "before" the first step.
-- **Extinction.** In small populations many runs die out; means are pulled down and peaks are bimodal. Compare the share of runs that die out, and the distributions of the others.
+- **Extinction.** In small populations many runs die out; means are pulled down and peaks are bimodal. Compare the fraction of runs that die out, and the distributions of the others.
 - **Random numbers.** A stochastic port never matches run for run; only distributions can agree. Two deterministic runs that should match exactly but do not point to a real difference in the model.
 - **What was not translated.** Everything in `sim.imported.incomplete` (or the import's `ImportIncomplete` warning) that was left out changes the results; say which differences it explains.
 

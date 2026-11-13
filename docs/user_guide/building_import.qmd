@@ -52,7 +52,7 @@ The importer prints how it read each rate, which is the first thing to check. Ea
 | A flow written as | Is read as |
 |---|---|
 | `gamma * I` | A rate `gamma` per person in `I`, whatever anyone else is doing |
-| `beta * S * I / N` | Frequency-dependent transmission: `beta * I`, exposure to the share infectious |
+| `beta * S * I / N` | Frequency-dependent transmission: `beta * I`, exposure to the fraction infectious |
 | `beta * S * I` | Density-dependent transmission: `beta * I.n`, exposure to the number infectious |
 | Anything else | The expression itself, as a rate of counts, which is exact under every solver |
 

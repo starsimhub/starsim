@@ -223,7 +223,7 @@ Some things matter more on a cluster than on a laptop:
 
 ## Interactive dashboards
 
-A model can be put behind a web page, so that others can change its inputs and see the results, with tools such as [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), [Panel](https://panel.holoviz.org/), or [Streamlit](https://streamlit.io/). This Streamlit app has sliders for the share of the town that is immune and the coverage of a vaccination campaign:
+A model can be put behind a web page, so that others can change its inputs and see the results, with tools such as [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), [Panel](https://panel.holoviz.org/), or [Streamlit](https://streamlit.io/). This Streamlit app has sliders for the fraction of the town that is immune and the coverage of a vaccination campaign:
 
 ```python
 import streamlit as st
@@ -240,7 +240,7 @@ def run_sim(immune, coverage):
     return sim
 
 st.title('Measles in a town of 20,000')
-immune = st.slider('Share immune at the start', 0.5, 0.99, 0.9)
+immune = st.slider('Fraction immune at the start', 0.5, 0.99, 0.9)
 coverage = st.slider('Coverage of the campaign on day 30', 0.0, 1.0, 0.5)
 
 sim = run_sim(immune, coverage)

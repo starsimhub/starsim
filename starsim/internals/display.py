@@ -40,7 +40,7 @@ def style(text, *names, color=True):
 class Progress:
     """
     The progress of a run as it goes: a bar redrawn in place in a terminal or a notebook, or otherwise (e.g. to a
-    file) a line every tenth of the run, or every `verbose` share of it for a fraction (e.g. `verbose=0.05`)
+    file) a line every tenth of the run, or, if `verbose` is a fraction (e.g. `verbose=0.05`), each time that fraction of it is done
 
     It exists to give one progress display for a sim, in any environment.
     """
@@ -56,22 +56,22 @@ class Progress:
         self.last = 0 # When it was last drawn
         return
 
-    def bar(self, share):
-        done = int(round(share*self.width))
+    def bar(self, frac):
+        done = int(round(frac*self.width))
         return style('━'*done, 'cyan', color=self.color) + style('─'*(self.width - done), 'dim', color=self.color)
 
     def line(self):
         t = self.sim.t
-        share = (t.ti + 1)/max(1, t.npts) # Of the run, once the step being run is done
+        frac = (t.ti + 1)/max(1, t.npts) # Of the run, once the step being run is done
         now = ss.utils.time_str(t.tvec[t.ti], self.sim) # The time point the step being run starts at: a date, or e.g. day 27
-        return f'  {self.bar(share)} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
+        return f'  {self.bar(frac)} {frac:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):
         """ Show the progress at this step: drawn at most ten times a second, or as a line every so often """
         t = self.sim.t
         if self.mode == 'lines':
             verbose = self.sim.verbose
-            mark = verbose if verbose < 1 else 0.1 # A line each time the share done passes another of these
+            mark = verbose if verbose < 1 else 0.1 # A line each time the fraction done passes another of these
             if int((t.ti + 1)/t.npts/mark + 1e-9) > int(t.ti/t.npts/mark + 1e-9):
                 print(self.line())
             return
@@ -141,15 +141,15 @@ def start_lines(sim, notes=()):
                 if ngm is not None:
                     R0, R = [float(np.max(np.abs(np.linalg.eigvals(m)))) for m in [ngm, ngm_start]]
                     count = float(dis.engine.count(sources))
-                    shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
+                    shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A fraction, with total_pop=1, is not 0
                     at_start = ''
                     if abs(R - R0) > 0.01*R0: # Some start immune
                         graph = dis.graph
                         sources = {id(s):s for tr in graph.acquisitions for s in tr.source or [] if s.people}.values() # Every state infected from, as susceptible as its rel_sus, up to fully
                         susceptible = sum(float(dis.engine.count([s]))*(min(s.rel_sus, 1) if sc.isnumber(s.rel_sus) else 1) for s in sources)
                         infected = {id(s) for s in graph.infected}
-                        share = susceptible/float(dis.engine.count([s for s in graph.people_states if id(s) not in infected]))
-                        at_start = f' (R = {R:.3g} at the start, with {share:.0%} susceptible)'
+                        frac = susceptible/float(dis.engine.count([s for s in graph.people_states if id(s) not in infected]))
+                        at_start = f' (R = {R:.3g} at the start, with {frac:.0%} susceptible)'
                     timed = [name for name,p in dis.graph.pars.items() if isinstance(p.raw, ss.parameters.TimeValue)] # So R0 is at the start time
                     when = f' at the start ({sc.strjoin(timed)} {"varies" if len(timed) == 1 else "vary"} in time)' if timed else ''
                     lines.append(f'  {dis.name}: R0 = {R0:.3g}{when}{at_start}, with {shown} infectious at the start')
@@ -170,7 +170,7 @@ def end_line(sim):
                 peak = int(np.argmax(infectious))
                 tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else sim.t.tvec # On the disease's own timeline, if it has one
                 when = ss.utils.time_str(tvec[peak], sim) # A date, or e.g. day 27, as in the first line
-                fmt = '.3g' if ss.solvers.in_proportions(sim) else ',.0f' # In proportions, shares rather than counts
+                fmt = '.3g' if ss.solvers.in_proportions(sim) else ',.0f' # In proportions, fractions rather than counts
                 parts.append(f'{dis.name}: {total:{fmt}} infections; at most {infectious[peak]:{fmt}} infectious, on {when}')
     took = f'{sim.elapsed:.2g}' if sim.elapsed < 1 else f'{sim.elapsed:.1f}'
     return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
@@ -178,7 +178,7 @@ def end_line(sim):
 
 class RunsProgress(Progress):
     """
-    The progress of the runs of a MultiSim (see `ss.run.run_each()`), from how far each has got (`store`, which each run's `Share` sets)
+    The progress of the runs of a MultiSim (see `ss.run.run_each()`), from how far each has got (`store`, which each run's `Frac` sets)
 
     Nothing is shown for the first `wait` seconds, so runs that are done by then print only the MultiSim's closing line. Then,
     if there are at most `max_bars` runs and each is predicted to take more than `slow` seconds (from how far the furthest has
@@ -206,28 +206,28 @@ class RunsProgress(Progress):
         self.last = now
         n = len(self.labels)
         store = dict(self.store) # One call, if it is shared between processes
-        shares = [min(1.0, store.get(i, 0.0)) for i in range(n)]
-        done = sum(share == 1 for share in shares)
-        total = sum(shares)/n
+        fracs = [min(1.0, store.get(i, 0.0)) for i in range(n)]
+        done = sum(frac == 1 for frac in fracs)
+        total = sum(fracs)/n
         runs = f'{done} of {n} runs  {elapsed:.1f} s'
         if self.mode == 'lines':
             if int(total*10) > self.tenth:
                 self.tenth = int(total*10)
                 print(f'  {total:4.0%}  {runs}', flush=True)
             return
-        running = [share for share in shares if 0 < share < 1]
+        running = [frac for frac in fracs if 0 < frac < 1]
         if self.each is None and (running or done):
             self.each = n <= self.max_bars and bool(running) and elapsed/max(running) > self.slow
         if self.each:
             w = max(len(label) for label in self.labels)
-            text = '\n'.join(f'  {label:<{w}}  {self.bar(share)} {share:4.0%}' for label,share in zip(self.labels, shares)) + f'\n  {runs}'
+            text = '\n'.join(f'  {label:<{w}}  {self.bar(frac)} {frac:4.0%}' for label,frac in zip(self.labels, fracs)) + f'\n  {runs}'
         else:
             text = f'  {self.bar(total)} {total:4.0%}  {runs}'
         self.draw(text)
         return
 
 
-class Share:
+class Frac:
     """
     How far one of a MultiSim's runs has got, as the run's `sim.progress`: put in `store` (see `RunsProgress`) at most ten times a second, and shown with `show()` if given (when run in this process)
 
@@ -417,7 +417,7 @@ def describe_graph(graph, sim=None, out=None):
     for state in graph.infectious:
         add('', f'{state.name} infectious' + (f', rel_trans = {value_str(state.rel_trans)}' if rel_str(state.rel_trans) else ''))
     for name,state in {id(s):(graph.dependence(tr), s) for tr in graph.transitions.values() for s in graph.counted(tr) if not s.infectious}.values():
-        add('', f'{state.name} infectious, by its {"number" if name == "density" else "share"} ({name}-dependent)')
+        add('', f'{state.name} infectious, by its {"number" if name == "density" else "fraction"} ({name}-dependent)')
     for state in {id(s):s for tr in graph.acquisitions for s in tr.source or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
         add('', f'{state.name} susceptible, rel_sus = {value_str(state.rel_sus)}')
     infected = [s.name for s in graph.infected if s.people]
@@ -470,7 +470,7 @@ def describe_graph(graph, sim=None, out=None):
             guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
             counted = graph.counted(tr) # The states a density- or frequency-dependent transmission is from, e.g. I in beta*I.n or beta*I.frac
             dep = graph.dependence(tr)
-            kind = f'{dep}-dependent' if dep else 'spontaneous' # A rate per person that grows with a number or share of people, e.g. beta*I.n
+            kind = f'{dep}-dependent' if dep else 'spontaneous' # A rate per person that grows with a number or fraction of people, e.g. beta*I.n
             if tr._inflow:
                 kind = f'inflow, in total per {unit or "step"}'
             elif counted:
@@ -521,8 +521,8 @@ def describe_graph(graph, sim=None, out=None):
             at_exit = f'decided as people leave, from their time in {tr.source[0].name}' if name in graph.dwell_trs else None
             stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('dead', tr.p_die, tr.may_die), ('stay', tr.p_stay, tr.stays)] if given]
             add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}', at_exit)
-        elif 'p' in tr.guessed:
-            add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
+        elif tr.rest:
+            add('', f'p = {tr.p_rest or "the rest"}', 'what the other branches leave')
         if tr._ends: # A result for each destination, e.g. res.cin.X
             add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr._ends]))
         if getattr(tr, 'min_stay', None) is not None: # A minimum stay
@@ -547,7 +547,7 @@ def describe_graph(graph, sim=None, out=None):
     if graph.transmissions and isinstance(getattr(sim, 'solver', None) or ss.solvers.abm(), (ss.solvers.abm, ss.solvers.binomial)): # How infections are dated and states counted, for the solvers that take whole steps
         add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
         add('', 'a state\'s count (the result X) includes the step people enter it; they stay for the whole time drawn for them')
-    fitted = [p for p in graph.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a share of an outcome
+    fitted = [p for p in graph.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a fraction of an outcome
     for i,p in enumerate(fitted):
         add('' if i else 'fitted', par_str(p, p.slot if p.slot in ['rate', 'dur'] else None, unit), midpoint_guess(p))
         provenance(p)
@@ -558,7 +558,7 @@ def graph_edges(graph):
     """
     Each transition as (source, destination, name, kind, p), with None for `ss.dead`; a transition to every state (`ss.death()`) is one edge from each
 
-    `p` is the share that takes this destination, for a transition with `p=` (None for the one that takes the rest), and False for one without.
+    `p` is the fraction that takes this destination, for a transition with `p=` (None for the one that takes the rest), and False for one without.
     """
     out = []
     for name,tr in graph.transitions.items():
@@ -936,7 +936,7 @@ def flow_terms(graph, engine=None, contacts=None):
 
     Returns the name of each compartment (a state, or its stages as `I_1`, `I_2`, ...),
     and for each flow its transition, the compartment it leaves (or None), the flow
-    out of it, and the compartments it enters, each with its share of the flow (none for an outflow).
+    out of it, and the compartments it enters, each with its fraction of the flow (none for an outflow).
     If `contacts` is given, it is the name to multiply each transmission by (an export has no mixing to carry them).
     """
     mod = graph.module
@@ -957,8 +957,8 @@ def flow_terms(graph, engine=None, contacts=None):
         for track in engine.tracks[name]:
             w = weight if track.p is None else f'{weight}{factor_str(track.p)} * '
             if track.immediate:
-                for dst,share in zip(track.tr.dest, branch_shares(track.tr)[0]):
-                    out += entry(dst.name, f'{w}{share}')
+                for dst,frac in zip(track.tr.dest, branch_fracs(track.tr)[0]):
+                    out += entry(dst.name, f'{w}{frac}')
             else:
                 out.append((track.first, w))
         return out
@@ -1002,8 +1002,8 @@ def flow_terms(graph, engine=None, contacts=None):
         if flow.to is not None:
             dsts.append((flow.to, term))
         else:
-            shares, leaving = branch_shares(tr)
-            for dst,w in zip(tr.dest, shares):
+            fracs, leaving = branch_fracs(tr)
+            for dst,w in zip(tr.dest, fracs):
                 for ind,weight in entry(dst.name, w):
                     dsts.append((ind, f'{weight}{term}'))
             term = f'{leaving}{term}' # With ss.stay, only those who do not stay leave
@@ -1046,7 +1046,7 @@ def check_dt(sim, factor=2):
         text = (f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
                 f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give solver=ss.solvers.binomial(substeps=1) to take whole steps, as most chain-binomial models do, and see how much they matter')
         return Text(text, table=df)
-    lines = [f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):']
+    lines = [f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a fraction of the largest value):']
     for row in df.itertuples():
         lines.append(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
     return Text('\n'.join(lines), table=df)
@@ -1266,14 +1266,14 @@ def describe_steps(sim, desc):
 #%% Helpers for the text
 
 def strat_rows(strat, most=6):
-    """ For describe(): the share of people in each level of a dimension (up to `most` levels) """
+    """ For describe(): the fraction of people in each level of a dimension (up to `most` levels) """
     def short(items):
         return ', '.join(items) if len(items) <= most else ', '.join(items[:most-1]) + f', and {len(items) - most + 1} more'
     rows = []
     if strat.joint is not None:
         rows.append(f'fractions: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
     elif strat.fractions is not None:
-        rows.append('fractions: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.fractions)]))
+        rows.append('fractions: ' + short([f'{label} {frac:.3g}' for label,frac in zip(strat.labels, strat.fractions)]))
     return rows
 
 
@@ -1288,19 +1288,19 @@ def factor_str(expr):
     return f'({text})' if isinstance(expr, BinOp) and expr.op in '+-' else text
 
 
-def branch_shares(tr):
-    """ The share of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the share that leaves its source ("" unless ss.stay is one of its destinations); what ss.dead takes goes nowhere """
+def branch_fracs(tr):
+    """ The fraction of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the fraction that leaves its source ("" unless ss.stay is one of its destinations); what ss.dead takes goes nowhere """
     if not tr._split:
         return ['']*len(tr.dest), ''
     ps = list(tr.p or [None]*len(tr.dest))
     ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.may_die # One entry for each destination, with ss.stay and ss.dead
     given = [factor_str(p) for p in ends if p is not None]
-    shares = [f'{factor_str(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ' for p in ends] # The destination with p=None takes the rest
+    fracs = [f'{factor_str(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ' for p in ends] # The destination with p=None takes the rest
     leaving = ''
     if tr.stays:
-        stay = shares[len(ps)][:-3]
+        stay = fracs[len(ps)][:-3]
         leaving = f'(1 - {stay}) * ' if tr.p_stay is not None else f'({" + ".join(given)}) * '
-    return shares[:len(ps)], leaving
+    return fracs[:len(ps)], leaving
 
 
 def edge_label(tr, p, unit):
@@ -1316,8 +1316,8 @@ def edge_label(tr, p, unit):
     else:
         text = format_expr(val, values='number', unit=unit, mul='×')
     if p is not False:
-        share = 'p = the rest' if p is None else f'p = {format_expr(p, values=True)}'
-        text = f'{text}, {share}' if text else share
+        frac = 'p = the rest' if p is None else f'p = {format_expr(p, values=True)}'
+        text = f'{text}, {frac}' if text else frac
     return f'{tr.name}: {text}' if text else tr.name
 
 
@@ -1429,8 +1429,8 @@ def route_lines(mod, tr, sim):
         else:
             lines.append(f'beta on {name}: {quantity_str(val, "rate", unit) if not isinstance(val, ss.peract) else val} per contact')
         for m in sim.modifiers.get((mod.name, 'route', f'{tr.name}@{name}'), []) if hasattr(sim, 'modifiers') else []:
-            share = value_str(m.share) if m.share is not None else None
-            factor = f'× (1 − {share} × efficacy {value_str(m.amount)})' if (m.efficacy is not None and share is not None) else f'× (1 − efficacy {value_str(m.amount)})' if m.efficacy is not None else f'× (1 − {share} × (1 − {value_str(m.amount)}))' if share is not None else f'× {value_str(m.amount)}'
+            frac = value_str(m.frac) if m.frac is not None else None
+            factor = f'× (1 − {frac} × efficacy {value_str(m.amount)})' if (m.efficacy is not None and frac is not None) else f'× (1 − efficacy {value_str(m.amount)})' if m.efficacy is not None else f'× (1 − {frac} × (1 − {value_str(m.amount)}))' if frac is not None else f'× {value_str(m.amount)}'
             lines.append(f'    {factor}, "{m.name}"')
     return lines
 

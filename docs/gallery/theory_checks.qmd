@@ -7,7 +7,7 @@ authorship:
   note: Merged from the gallery pages "Final size" and "The chance of a major outbreak" on Nov 11 by AI; both written by AI
 ---
 
-Two classic results of epidemic theory hold for the simplest SIR model, and are good checks of any way of running it. The first is deterministic: the share of people ever infected, the final size, depends only on R0. The second is stochastic: an epidemic with R0 above 1 doesn't always take off, and the chance that it does also depends only on R0. This page sweeps R0 and checks Starsim against each: the final size with the ODE, and the chance of a major outbreak with many stochastic runs.
+Two classic results of epidemic theory hold for the simplest SIR model, and are good checks of any way of running it. The first is deterministic: the fraction of people ever infected, the final size, depends only on R0. The second is stochastic: an epidemic with R0 above 1 doesn't always take off, and the chance that it does also depends only on R0. This page sweeps R0 and checks Starsim against each: the final size with the ODE, and the chance of a major outbreak with many stochastic runs.
 
 ## The model
 
@@ -39,11 +39,11 @@ make_sir(2).diagram()
 
 ## Final size
 
-In a closed SIR epidemic that starts with almost everyone susceptible, the share of people who are ever infected, *z*, depends only on R0. Kermack and McKendrick (1927) showed that it solves the final-size equation
+In a closed SIR epidemic that starts with almost everyone susceptible, the fraction of people who are ever infected, *z*, depends only on R0. Kermack and McKendrick (1927) showed that it solves the final-size equation
 
 $$z = 1 - e^{-R_0 z},$$
 
-whatever the infectious period or how fast the epidemic runs. Here the model is run as an ODE for R0 from just above 1 to 4, in a population of a million that starts with one person in a million infectious, so that almost everyone starts susceptible, as the equation assumes. Each run lasts long enough (2,000 days) for even the slowest epidemic, with R0 just above 1, to end. For each R0, the final size from the model is the share of people recovered at the end:
+whatever the infectious period or how fast the epidemic runs. Here the model is run as an ODE for R0 from just above 1 to 4, in a population of a million that starts with one person in a million infectious, so that almost everyone starts susceptible, as the equation assumes. Each run lasts long enough (2,000 days) for even the slowest epidemic, with R0 just above 1, to end. For each R0, the final size from the model is the fraction of people recovered at the end:
 
 ```{python}
 R0s = np.arange(1.1, 4.01, 0.3)
@@ -65,12 +65,12 @@ for i in range(500):
 plt.plot(R0_curve, z, label='Final-size equation')
 plt.plot(R0s, model, 'o', label='Starsim (ODE)')
 plt.xlabel('R0')
-plt.ylabel('Share of people ever infected')
+plt.ylabel('Fraction of people ever infected')
 plt.legend()
 plt.show()
 ```
 
-The model agrees with the equation to within a few parts in a million, for every R0: about the share of people infectious at the start, which the equation leaves out. Run as agents or stochastically in a large population, the model gives close to the same final size in the runs in which a major outbreak occurs, the subject of the next check.
+The model agrees with the equation to within a few parts in a million, for every R0: about the fraction of people infectious at the start, which the equation leaves out. Run as agents or stochastically in a large population, the model gives close to the same final size in the runs in which a major outbreak occurs, the subject of the next check.
 
 ## The chance of a major outbreak
 
@@ -91,14 +91,14 @@ R0_curve = np.linspace(1, 4.2, 100)
 plt.plot(R0_curve, 1 - 1/R0_curve, label='Theory: 1 − 1/R0')
 plt.plot(R0s, major, 'o', label='Starsim (300 Gillespie runs each)')
 plt.xlabel('R0')
-plt.ylabel('Share of runs with a major outbreak')
+plt.ylabel('Fraction of runs with a major outbreak')
 plt.legend()
 plt.show()
 ```
 
-Each point is a share of 300 runs, so it is uncertain by about ±0.05 (two standard errors), and within that the runs agree with the theory.
+Each point is the fraction of 300 runs with a major outbreak, so it is uncertain by about ±0.05 (two standard errors), and within that the runs agree with the theory.
 
-The theory is for continuous time. A chain binomial model (`solver='binomial'`) moves people between states in steps of time, here a day, and gives higher shares for this model (about 0.6 for R0 = 2, against 0.5): in steps of a day, the chance that a person recovers before infecting anyone is lower than in continuous time. With a smaller step (`dt=ss.days(0.1)`), it agrees with the theory. Agents also take steps of a day, but draw each person's infectious period from the exponential distribution itself, and agree with the theory at steps of a day.
+The theory is for continuous time. A chain binomial model (`solver='binomial'`) moves people between states in steps of time, here a day, and gives higher fractions for this model (about 0.6 for R0 = 2, against 0.5): in steps of a day, the chance that a person recovers before infecting anyone is lower than in continuous time. With a smaller step (`dt=ss.days(0.1)`), it agrees with the theory. Agents also take steps of a day, but draw each person's infectious period from the exponential distribution itself, and agree with the theory at steps of a day.
 
 ## Going further
 

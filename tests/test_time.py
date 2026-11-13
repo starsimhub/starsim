@@ -523,11 +523,12 @@ def test_bare_units():
             ss.connectors.to_ti(sim, 30)
         assert ss.connectors.to_ti(sim, ss.days(30)) == ss.connectors.to_ti(sim, sim.pars.start + ss.days(30)) == ss.connectors.to_ti(sim, '2020-01-31')
 
-    # With no calendar, a duration as a time is a point counted from 0, as tvec is; in another unit, a warning
+    # With no calendar, a duration as a time is a point counted from 0, as tvec is; another unit is converted, with no warning
     sim = ss.Sim(sir, start=0, stop=ss.days(60), n_agents=100, verbose=0).init()
     assert ss.connectors.to_ti(sim, ss.days(30)) == ss.connectors.to_ti(sim, 30) == 30 and ss.connectors.to_time(sim, sim.t.tvec[5]) == sim.t.tvec[5]
-    with pytest.warns(RuntimeWarning, match='counts in days'):
-        ss.connectors.to_ti(sim, ss.weeks(2))
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        assert ss.connectors.to_ti(sim, ss.weeks(2)) == 14
     with pytest.warns(RuntimeWarning, match='ambiguous'): # Neither clearly a year nor clearly not
         ss.Sim(sir, start=1500, stop=1520, n_agents=100, verbose=0).init()
     with warnings.catch_warnings(): # With no start and a unit other than years, a bare stop is never a year, so it isn't ambiguous

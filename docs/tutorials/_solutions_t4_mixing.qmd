@@ -6,7 +6,7 @@ Exercises 1 and 2 start from the model of the tutorial: measles in a town of 100
 import starsim as ss
 
 def make_measles(immune=ss.by(age=[0.8, 0.92, 0.98])):
-    """ The measles model of T4, by age, with the share immune in each age group given """
+    """ The measles model of T4, by age, with the fraction immune in each age group given """
     S, E, I, R = ss.states('S E I R')
     beta = ss.par(0.14, bounds=[0.05, 0.5])
     infection   = S >> E @ beta*I

@@ -19,8 +19,8 @@ class Analyzer(ss.Module):
     example, a state of the people on each step, read before the next step changes it.
 
     An analyzer records results as any module does: those about the state at the start
-    of each step (stocks) in `record_stocks()`, and those about what happened in it
-    (flows) in `record_flows()` (both with `self.ti` the step's, as in every module).
+    of each step (stocks) in `record_states()`, and those about what happened in it
+    (flows) in `record_events()` (both with `self.ti` the step's, as in every module).
     Its `step()`, if it has one, is called at the end of each step, after the flows are
     recorded, when the people are as they are at the next time point.
 
@@ -31,7 +31,7 @@ class Analyzer(ss.Module):
                 super().init_results()
                 self.define_results(ss.Result('infected', columns=['female', 'male'], kind='stock'))
 
-            def record_stocks(self):
+            def record_states(self):
                 infected, female = self.sim.diseases.sis.I, self.sim.people.female
                 self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
         ```
@@ -42,7 +42,7 @@ class Analyzer(ss.Module):
     needs_infection_log = False # Whether the diseases keep their infection logs for it (see ss.diseases.InfectionLog)
 
     def step(self):
-        """ Nothing by default: an analyzer usually only records results (see `record_stocks()` and `record_flows()`) """
+        """ Nothing by default: an analyzer usually only records results (see `record_states()` and `record_events()`) """
         pass
 
 
@@ -58,7 +58,7 @@ class infection_log(Analyzer):
     over a network, where each infection is drawn along an edge: seeds have a source
     of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
     mixing with everyone (no network) have a source and network of NaN, since they
-    come from the share infectious in a group rather than from a particular person
+    come from the fraction infectious in a group rather than from a particular person
     (by events, `solver=ss.solvers.abm(step='events')`, each contact is with a particular person, so
     these have a source and route too). For a disease with strains (`ss.Strains`),
     each entry also has the strain transmitted (`strain`; for seeds, the strains

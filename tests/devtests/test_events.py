@@ -69,7 +69,7 @@ def test_events_infection_log():
     base = ss.Sim(sir, networks=[ssl.StaticNet(n_contacts=6), ss.MixingPool(n_contacts=3)], n_agents=2000, unit='day', stop=60, analyzers='infection_log', **kw)
     ev = ss.parallel(base.new(solver=ss.solvers.abm(step='events'), dt=1), n_runs=40, workers=2)
     ab = ss.parallel(base.new(solver='abm', dt=0.1), n_runs=40, workers=2)
-    def shares(msim):
+    def fracs(msim):
         """ The share of the infections (not seeds) over the network, and the number logged against the flow """
         out = []
         for sim in msim.sims:
@@ -85,8 +85,8 @@ def test_events_infection_log():
         assert inf.network.isin(['staticnet', 'mixingpool']).all()
         first = df.groupby('target').t.min()
         assert np.all(first[inf.source.astype(int)].values <= inf.t.values)
-    e, a = shares(ev), shares(ab)
-    print(f'Share of infections over the network: {e[0]:.3f} by events, {a[0]:.3f} by steps')
+    e, a = fracs(ev), fracs(ab)
+    print(f'Fraction of infections over the network: {e[0]:.3f} by events, {a[0]:.3f} by steps')
     agree(a, e, 0.03, 'share over the network')
     return
 

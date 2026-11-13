@@ -785,7 +785,7 @@ def test_define_transitions():
     extra = Extra()
     assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
     with pytest.raises(ss.CapabilityError): # Declared after the disease was made
-        extra.define_results(share_I=extra.I.frac)
+        extra.define_results(frac_I=extra.I.frac)
     with pytest.raises(ss.CapabilityError, match='subclass'): # Likewise a transition assigned to it, which would not be part of it
         extra.waning = extra.R >> extra.S @ ss.days(10)
 
@@ -918,11 +918,11 @@ def test_derived_results():
 
     # Nothing marked: the states of the force of infection are infected (E and I in S >> E @ beta*I), and each state says so; | on states is + in a result too
     S, E, I, R = ss.states(4)
-    dis = ss.Disease(S >> E @ 0.1*I, E >> I @ 0.2, I >> R @ 0.05, init=dict(I=0.01), ever=I | R, share=(I | R).frac, name='d')
+    dis = ss.Disease(S >> E @ 0.1*I, E >> I @ 0.2, I >> R @ 0.05, init=dict(I=0.01), ever=I | R, frac=(I | R).frac, name='d')
     res = ss.Sim(dis, n_agents=200, verbose=0).run().results.d
     assert [s.name for s in dis.graph.states.values() if s.infected] == ['E', 'I']
     assert np.array_equal(res.infected, res.E + res.I) and np.allclose(res.prevalence, res.infected/(res.S + res.E + res.I + res.R))
-    assert np.array_equal(res.ever, res.I + res.R) and np.allclose(res.share, res.ever/(res.S + res.E + res.ever))
+    assert np.array_equal(res.ever, res.I + res.R) and np.allclose(res.frac, res.ever/(res.S + res.E + res.ever))
 
     # Declared, as a result given positionally (infected = E | I, the same as E + I), or by name or position in ss.states(); none for a staged condition
     S, E, I, H, R = ss.states(5)

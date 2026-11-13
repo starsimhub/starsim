@@ -135,12 +135,12 @@ def test_weighted_count():
 
 @sc.timer()
 def test_factored_mixing():
-    sc.heading('Testing that a contact matrix within places, with commuting, mixes as the product of the time share and the matrix')
+    sc.heading('Testing that a contact matrix within places, with commuting, mixes as the product of the time fractions and the matrix')
     make, pars = models.commute
     sim = ss.Sim(make(), **pars, **kw).init()
     mixing = sim.mixing
     term = mixing.terms[0]
-    pre, post = np.kron(mixing.time_share.toarray(), np.eye(3)), np.kron(mixing.time_share.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
+    pre, post = np.kron(mixing.time_frac.toarray(), np.eye(3)), np.kron(mixing.time_frac.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
     rng = np.random.default_rng(1)
     infectious, n = rng.random(sim.groups.n_groups), 1 + rng.random(sim.groups.n_groups)
     num, den = [np.bincount(term.cells, weights=v, minlength=9) @ pre for v in [infectious, n]]

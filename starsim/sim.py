@@ -46,7 +46,7 @@ class Sim(ss.modules.Base):
         copy_modules (bool): by default, the sim runs a copy of each module it is given, so the same modules can be given to several sims (read the ones that ran from the sim, e.g. `sim.sir`); if False, it runs the modules themselves, which saves a copy (and lets you read them directly after the run), but then the sim can't be run again or copied with `sim.new()`, and the modules can't be given to another sim
         n_agents (int/float): the number of agents, if the model runs as agents (default 10,000); more agents give less noisy results but run slower. Not for a compartmental run, which has no agents (give total_pop=)
         total_pop (int/float): the number of people (default: one per agent); as agents, each stands for `total_pop/n_agents` of them (`sim.pop_scale`), and the results that count people are scaled up by it, so a large population can be modeled with fewer agents
-        rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the share of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
+        rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the fraction of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
         start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0. A duration given as a time (when=ss.days(10), until=, the start= of a module) is that long after the start with a calendar, else a time from 0 (day 10; the same when the start is 0)
         stop (float/str/date/dur): when the sim ends, read as the start is: a date, a bare number (a year, or with no calendar a time in the sim's unit from 0), or a duration from 0 (e.g. stop=ss.days(100), with no start; ss.years(2030) in a sim of calendar years is the year 2030); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 100 days in days, else 50 of the sim's unit)
         dur (float/dur): the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`; any two of the start, stop, and length define the third (`stop=2035, dur=10` starts in 2025), and all three must agree
@@ -59,7 +59,7 @@ class Sim(ss.modules.Base):
         step_order (str): the order in which the modules step: 'type' (default) at the place of each kind of module in the loop (see `ss.Loop`), or 'given' in the order they were given (the model and `modules=` first, then the modules given by kind, e.g. `diseases=`), before the deaths and results of the step; 'given' is for when one module must act on what another did earlier in the same step. Analyzers, which read the step's results, still step last
         require_kernels (bool): raise an error (`ss.CapabilityError`) if a compartmental sim can't be run all at once in the compiled kernels, and would instead run step by step in plain Python, which can be 100 times slower; useful for making sure a fit or a large batch of runs stays fast (`sim.describe()` says why a sim can't use them)
         group_results (list): the results to keep by group (e.g. by age), by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals, which saves memory in a sim with many groups (default: all, at every few steps if every step would take more than about 100 MB)
-        verbose (int/float): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
+        verbose (int/float): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress at each such fraction of the run (e.g. 0.1 for every 10%)
         kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.SimPars`)
 
     Modules can be given by kind (`diseases=`, `networks=`, etc.), all together with `modules=`, or both: they are sorted by kind and merged.
@@ -491,7 +491,7 @@ class Sim(ss.modules.Base):
 
         The spending of each program is a parameter of the model: one per program of an imported program book
         (`sim.imported.programs`), or any parameters, given by name with `spend=`. The search (SciPy's SLSQP) is
-        over the shares of the total, and each point is a run (restarted, if the sim is nothing but compartments).
+        over the fractions of the total, and each point is a run (restarted, if the sim is nothing but compartments).
         With `target=`, the total is doubled until its best allocation reaches the target, then found by bisection
         between a total that reaches it and one that does not (to within 1%), assuming that more money never does worse.
         The sim itself is not changed. The search is in `ss.fitting`, which is imported when it is first used.
@@ -827,7 +827,7 @@ class Sim(ss.modules.Base):
                     if strat.kind == 'age' and strat.edges is not None and 'age_data' not in kwargs and (ss.data.age_pyramid(self, strat) is None or strat.edges[0] > 0): # (Nobody is younger than the first group)
                         top = max(100, strat.edges[-1] + 10)
                         kwargs['age_data'] = np.column_stack([np.append(strat.edges, top), np.append(strat.fractions, 0)])
-                    elif strat.female is not None and 'p_female' not in kwargs: # A sex dimension is people.female, so its split is the share of women
+                    elif strat.female is not None and 'p_female' not in kwargs: # A sex dimension is people.female, so its split is the fraction of women
                         kwargs['p_female'] = strat.fractions[strat.female]
             if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
                 kwargs['age_data'] = ss.data.to_age_data(*ss.data.age_pyramid(self))
@@ -836,7 +836,7 @@ class Sim(ss.modules.Base):
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.fractions_given:
-                    raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; shares given for its levels would overwrite them. Give the levels as a list (e.g. {strat.name}={list(strat.labels)!r}), or set people.{strat.attr} instead.')
+                    raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; fractions given for its levels would overwrite them. Give the levels as a list (e.g. {strat.name}={list(strat.labels)!r}), or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:
                     strat.guessed.pop('fractions', None) # Not "everyone at the first level": the people's own values are used
                 if strat.attr not in people.states:
@@ -1474,7 +1474,7 @@ class Sim(ss.modules.Base):
                 if res is not None and not np.all(np.isfinite(res.values)):
                     ti = int(np.flatnonzero(~np.isfinite(res.values))[0])
                     errormsg = (f'The number of people in "{name}" of "{mod.name}" is not a number from time point {ti} on. A rate too fast for the step can do this, '
-                                f'e.g. a count of people where a share was meant (I.n rather than I.frac); see sim.notes, or use a smaller dt')
+                                f'e.g. a count of people where a fraction was meant (I.n rather than I.frac); see sim.notes, or use a smaller dt')
                     raise ValueError(errormsg)
         return
 

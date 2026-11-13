@@ -31,8 +31,8 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Counts that are not people** (mosquitoes, bacteria in water) | `ss.State(people=False)` | `W = ss.State(people=False)`, with `ss.outside >> W @ xi*I.n` for shedding into it | A hydrological model of the river the bacteria are carried in |
 | **Flows at a rate** | `>>` and `@`, and `ss.dead` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.dead @ 0.01` | A rate worked out each step by another program |
 | **Time in a state** | A duration, or a distribution of durations | `I >> R @ ss.days(8)`, `E >> I @ ss.erlang(k=4, mean=ss.days(10))` | A recovery time from a model of each person's viral load within the host |
-| **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, {R: 0.98, D: None}, dur=ss.days(8))` | |
-| **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_mixing.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
+| **Branching** (a fraction goes one way, the rest another) | `p=` | `ss.Transition(I, {R: 0.98, D: None}, dur=ss.days(8))` | |
+| **Transmission**, frequency- or density-dependent | A bare state (a fraction), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_mixing.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
 | **Several sources of infection** | A sum | `S >> E @ beta*(I + 0.5*A)` | |
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |
@@ -51,7 +51,7 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Diseases that interact** | `ss.modify()` between them | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` | |
 | **Strains, and immunity between them** | `ss.Strains()`, `ss.immunity()` | `ss.Strains(['DENV1', 'DENV2'])`, with `ss.immunity()` for the protection between them | Protection worked out from each person's antibody levels against each strain |
 | **Stocks, flows, and ratios** | Results of every state and transition, and expressions of them | `prevalence=(E + I)/N` on the disease, with `N = S + E + I + R` | The mean age at first infection of those who later died (an [analyzer](interventions_analyzers.qmd)) |
-| **What surveillance sees** (reported cases, admissions) | `ss.outcome()`, with shares, delays, and durations | `ss.outcome(0.5*onset, delay=ss.days(4))` | |
+| **What surveillance sees** (reported cases, admissions) | `ss.outcome()`, with fractions, delays, and durations | `ss.outcome(0.5*onset, delay=ss.days(4))` | |
 | **Parameters to fit** | `ss.par()` with bounds and priors | `ss.par(1.9, bounds=[1, 3])` | |
 
 An empty cell is not a promise that everything nearby can be declared, only that no common need was found there. The full list of names is in the [API reference](../api/index.qmd).
@@ -63,7 +63,7 @@ A condition says who something applies to: `who=` on `ss.modify()`, transitions,
 | A condition on | Example | Runs as compartments? |
 |---|---|---|
 | A state | `who=hiv.I` | Yes |
-| The number in a state, or the share | `who=sir.I.n >= 20_000`, `who=sir.I.frac >= 0.02` | Yes, in compiled code |
+| The number in a state, or the fraction | `who=sir.I.n >= 20_000`, `who=sir.I.frac >= 0.02` | Yes, in compiled code |
 | The incidence over a period | `who=infection.incidence(over=ss.days(7)) > 0.01` | Yes, a step at a time |
 | How incidence is changing | `who=weekly > infection.incidence(over=ss.days(14)) - weekly` (this week more than last) | Yes, a step at a time |
 | Dates | `start=`, `stop=`, `when=` | Yes, in compiled code |
@@ -84,7 +84,7 @@ recovery  = I >> R @ ss.days(10)
 waning    = R >> S @ ss.days(180)
 flu = ss.Disease(infection, recovery, waning, init_n=dict(I=100), name='flu')
 
-weekly = infection.incidence(over=ss.days(7)) # The share of people infected in the last 7 days
+weekly = infection.incidence(over=ss.days(7)) # The fraction of people infected in the last 7 days
 last_week = infection.incidence(over=ss.days(14)) - weekly
 measures = {
     'No measures':                    None,

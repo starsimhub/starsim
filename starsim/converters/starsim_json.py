@@ -133,7 +133,7 @@ class Writer:
         elif dur is not None:
             out.dur = self.expr(dur, pars)
         p = tr.p
-        if p is not None: # A split, or a share of the people leaving by a transition with one destination (e.g. recovery with p=1 - p_death beside death with p=p_death)
+        if p is not None: # A split, or a fraction of the people leaving by a transition with one destination (e.g. recovery with p=1 - p_death beside death with p=p_death)
             p = sc.tolist(p) + [tr.p_stay]*bool(tr.stays) + [tr.p_die]*bool(tr.may_die)
             out.p = [None if x is None else self.expr(x, pars) for x in p]
         for key in ['min_stay', 'noise', 'label', 'stages']:
@@ -150,13 +150,13 @@ class Writer:
         return {k:v for k,v in out.items() if v is not None}
 
     def strat(self, s):
-        """ A stratification, as its argument of `stratify()`: its levels (a dict of their shares, if given), or `levels(...)` with its options """
+        """ A stratification, as its argument of `stratify()`: its levels (a dict of their fractions, if given), or `levels(...)` with its options """
         if s.geo is not None or s.mobility is not None:
             self.lost.append(f'changed: the places of "{s.name}" are written as names, without their geography or movement')
         if s.who is not None:
             self.lost.append(f'not exported: the who= of the stratification "{s.name}"')
         if s.joint is not None:
-            self.lost.append(f'not exported: the shares of "{s.name}" by the levels of other dimensions')
+            self.lost.append(f'not exported: the fractions of "{s.name}" by the levels of other dimensions')
         levels = list(s.edges) if s.edges is not None else list(s.labels)
         value = dict(zip(levels, s.fractions)) if s.fractions_given and s.joint is None else levels
         default = 'age' if s.name == 'age' else 'plain'

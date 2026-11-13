@@ -606,17 +606,17 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
             if np.any(x < -1e-3):
                 src.skip(f'initial numbers ({pop})', f'the databook gives negative initial numbers ({sc.strjoin(f"{s}={v:g}" for s,v in zip(free, x) if v < -1e-3)}), which Atomica refuses (BadInitialization)')
 
-    # Junctions: people pass through one within a step, so a transition into it branches to where its outflows lead, each with the share Atomica gives it
+    # Junctions: people pass through one within a step, so a transition into it branches to where its outflows lead, each with the fraction Atomica gives it
     # (its proportion over all of them; for a junction with a residual outflow ">", over at least 1, with the rest to the residual)
     outs = {j:[(to, p) for frm,to,p in links if frm == j] for j in junctions}
     def leaves(j, seen=()):
-        """ The states people entering a junction end up in, through any junctions after it, and the share of them that goes to each, as an expression """
+        """ The states people entering a junction end up in, through any junctions after it, and the fraction of them that goes to each, as an expression """
         props = [p for to,p in outs[j] if p != '>']
         total = ' + '.join(props)
         residual = len(props) < len(outs[j])
         found = {}
         for to,p in outs[j]:
-            share = f'1 - min({total}, 1)' if p == '>' and props else '1' if p == '>' or len(outs[j]) == 1 else f'{p} / max({total}, 1)' if residual else f'{p} / ({total})'
+            frac = f'1 - min({total}, 1)' if p == '>' and props else '1' if p == '>' or len(outs[j]) == 1 else f'{p} / max({total}, 1)' if residual else f'{p} / ({total})'
             if to in junctions:
                 if to in seen:
                     errormsg = f'The junctions {sc.strjoin(seen + (j, to))} lead back to each other, which Atomica does not allow'
@@ -625,8 +625,8 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
             else:
                 parts = [(to, '1')]
             for leaf,s in parts:
-                found.setdefault(leaf, []).append(share if s == '1' else s if share == '1' else f'({share}) * ({s})')
-        return {leaf:shares[0] if len(shares) == 1 else ' + '.join(f'({s})' for s in shares) for leaf,shares in found.items()}
+                found.setdefault(leaf, []).append(frac if s == '1' else s if frac == '1' else f'({frac}) * ({s})')
+        return {leaf:fracs[0] if len(fracs) == 1 else ' + '.join(f'({s})' for s in fracs) for leaf,fracs in found.items()}
 
     # Transitions
     def fixed(text):
@@ -643,11 +643,11 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
         if f == 'proportion':
             src.skip(f'transition {tname}', f'"{p}" is a proportion, which only a junction uses')
             continue
-        dst, shares = to, None
+        dst, fracs = to, None
         if to in junctions:
             ends = leaves(to)
             dst = list(ends) if len(ends) > 1 else list(ends)[0]
-            shares = list(ends.values())[:-1] + [None] if len(ends) > 1 else None
+            fracs = list(ends.values())[:-1] + [None] if len(ends) > 1 else None
         if f == 'duration' and yes(get(pars, p, 'Timed')): # A timed duration: everyone leaves after it, a fixed dwell time
             vals = used.get(p, [])
             if vals and all(sc.isnumber(v) and v == vals[0] for v in vals) and to not in junctions:
@@ -660,11 +660,11 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
         froms = [a for a,b,q in links if q == p]
         if f == 'number' and frm not in sources and len(froms) > 1: # A number shared over every compartment it moves people out of (counted once for each of its transitions), as Atomica shares it
             rate, per = f'{p} / ({" + ".join(froms)})', 'person'
-        if shares is not None and not all(fixed(share) for share in ends.values()): # Shares that change (with the numbers in states, or in time) are factors of the rates of a transition to each destination, which is the same flow, since people pass through a junction at once
-            for leaf,share in ends.items():
-                src.add_flow(None if frm in sources else frm, leaf, f'({rate}) * ({share})', per=per, name=f'{tname}_{leaf}', label=get(pars, p, 'Display Name'))
+        if fracs is not None and not all(fixed(frac) for frac in ends.values()): # Fractions that change (with the numbers in states, or in time) are factors of the rates of a transition to each destination, which is the same flow, since people pass through a junction at once
+            for leaf,frac in ends.items():
+                src.add_flow(None if frm in sources else frm, leaf, f'({rate}) * ({frac})', per=per, name=f'{tname}_{leaf}', label=get(pars, p, 'Display Name'))
             continue
-        src.add_flow(None if frm in sources else frm, dst, rate, per=per, name=tname, label=get(pars, p, 'Display Name'), p=shares)
+        src.add_flow(None if frm in sources else frm, dst, rate, per=per, name=tname, label=get(pars, p, 'Display Name'), p=fracs)
 
     # The parameters that are used, by population
     for p,q in floors.items():

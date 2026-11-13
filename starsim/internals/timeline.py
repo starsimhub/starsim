@@ -426,10 +426,6 @@ class Timeline:
             return start + val # That long after the start, following the calendar for whole months and years
         if isinstance(val, ss.dates.datedur):
             val = val.to_dur()
-        own = {self.unit, type(self.dt)} - {None}
-        if own and type(val) not in own and not self.unitless:
-            units = sc.strjoin(sorted({u.__name__ for u in own}))
-            ss.warn(f'{name} ss.{val!r} is a time counted from 0, in {type(val).__name__}, but the sim counts in {units}; give it in {units} (e.g. ss.{self.unit.__name__}(...)) to be clear')
         return self.unit(val) if self.unit is not None else val
 
     def reconcile_args(self, sim=None):
@@ -599,7 +595,7 @@ class Timeline:
             if sim.t.initialized: # It's initialized
                 if all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in tvkeys]): # Types match
                     if all([getattr(self, key) == getattr(sim.t, key) for key in tvkeys]): # Values match
-                        self._share_from(sim.t)
+                        self._frac_from(sim.t)
                         self.initialized = True
                         return self
 
@@ -671,7 +667,7 @@ class Timeline:
         self.initialized = True
         return self
 
-    def _share_from(self, source):
+    def _frac_from(self, source):
         """
         Copy the time vectors from a matching (sim) timeline
 

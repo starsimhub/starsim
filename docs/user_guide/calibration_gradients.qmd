@@ -13,7 +13,7 @@ This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Grad
 
 ## The gradient of a result
 
-The model is a measles outbreak in a town of 100,000, 90% of whom are immune, with two unknowns, the transmission rate `beta` and the share of cases reported `report`, and a Poisson likelihood. The data are a year of weekly cases from a run with `beta = 1.9` and `report = 0.5`:
+The model is a measles outbreak in a town of 100,000, 90% of whom are immune, with two unknowns, the transmission rate `beta` and the fraction of cases reported `report`, and a Poisson likelihood. The data are a year of weekly cases from a run with `beta = 1.9` and `report = 0.5`:
 
 ```{python}
 import numpy as np
@@ -22,7 +22,7 @@ import starsim as ss
 
 S, E, I, R = ss.states('S E I R')
 beta   = ss.par(1.5, bounds=[0.5, 4])  # Transmission rate per day
-report = ss.par(0.3, bounds=[0.05, 1]) # Share of cases reported
+report = ss.par(0.3, bounds=[0.05, 1]) # Fraction of cases reported
 
 infection = S >> E @ beta*I
 onset     = E >> I @ ss.days(10)
@@ -70,7 +70,7 @@ beta = ss.par(ss.timeseries(dates, [1.5]*len(dates), 'linear'), bounds=[0.5, 4])
 
 S, E, I, R = ss.states('S E I R')
 onset = E >> I @ ss.days(10)
-cases = ss.outcome(0.5*onset, likelihood=ss.poisson()) # The share reported, taken as known here
+cases = ss.outcome(0.5*onset, likelihood=ss.poisson()) # The fraction reported, taken as known here
 measles_t = ss.Disease(S >> E @ beta*I, onset, I >> R @ ss.days(8), cases, init=dict(I=0.0001, R=0.9))
 truth_t = ss.Sim(measles_t, pars=dict(beta=true_beta), rand_seed=2, verbose=0, **pars).run()
 data_t = truth_t.to_synthetic_data('cases', resample='week')
@@ -104,7 +104,7 @@ print('Log-density:', density(density.x0))
 print('Its gradient:', density.grad(density.x0))
 ```
 
-The same log-density is what L-BFGS-B and NUTS use in a fit with a likelihood. Initial numbers, branching shares, and inflows that depend on fitted parameters need to be linear in them; if not, building the log-density is an error that names them, and `require_jax=False` takes the gradients with Python in the loop instead.
+The same log-density is what L-BFGS-B and NUTS use in a fit with a likelihood. Initial numbers, branching fractions, and inflows that depend on fitted parameters need to be linear in them; if not, building the log-density is an error that names them, and `require_jax=False` takes the gradients with Python in the loop instead.
 
 ## Fitting with gradients
 

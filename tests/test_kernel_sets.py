@@ -125,9 +125,9 @@ def moves_inputs():
         A, B = ss.states('A B')
         X, Y, Z = ss.states('X Y Z')
         clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.days(5)), default_state='A', name='clock')
-        share = lambda sim, uids: np.full(len(uids), 0.3)
+        frac = lambda sim, uids: np.full(len(uids), 0.3)
         dec = ss.Disease(X, Y, Z, to_y=ss.Transition(X, Y, p=0.5, rate=ss.perday(2), who=clock.B), to_z=ss.Transition(X, Z, p=0.5, rate=ss.perday(2), who=clock.B),
-                         onward=ss.Transition(Y, {Z: share, ss.stay: None}, dur=ss.days(2)), back=ss.Transition(Z, X, dur=0, who=ss.person.female), default_state='X', name='dec')
+                         onward=ss.Transition(Y, {Z: frac, ss.stay: None}, dur=ss.days(2)), back=ss.Transition(Z, X, dur=0, who=ss.person.female), default_state='X', name='dec')
         sim2 = ss.Sim([clock, dec], n_agents=1000, unit='day', stop=20, **kw)
         with mock.patch.object(M, 'due_agents', keeper('due_agents')), mock.patch.object(M, 'step_moves', keeper('step_moves')):
             sim.run()
@@ -361,8 +361,8 @@ def test_noise():
 
 
 @sc.timer()
-def test_full_share():
-    sc.heading('Testing a time share with an entry for every pair of places: by BLAS, against each set of kernels and the entries one at a time')
+def test_full_frac():
+    sc.heading('Testing time fractions with an entry for every pair of places: by BLAS, against each set of kernels and the entries one at a time')
     rng = np.random.default_rng(1)
     n, levels = 20, 2
     pop, lat, lon = rng.lognormal(10, 0.5, n), rng.uniform(5, 11, n), rng.uniform(-3, 1, n)
@@ -376,7 +376,7 @@ def test_full_share():
     vals, v, out = rng.random(n*n), rng.random(n*levels), np.empty(n*levels)
     matrix = vals.reshape(n, n)
     for by_columns in [True, False]:
-        ss.kernels.share(pairs, vals, v, n*levels, levels, out, by_columns)
+        ss.kernels.frac(pairs, vals, v, n*levels, levels, out, by_columns)
         ref = (v.reshape(n, levels).T @ matrix).T if by_columns else matrix @ v.reshape(n, levels)
         assert np.allclose(out, ref.ravel(), rtol=1e-12)
     return

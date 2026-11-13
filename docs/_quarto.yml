@@ -214,7 +214,6 @@ website:
             - api/settings.qmd
             - api/sim.qmd
             - api/strains.qmd
-            - api/transitions.qmd
             - api/utils.qmd
         - section: "**Converters**"
           contents:
@@ -255,6 +254,8 @@ website:
               text: time
             - href: api/internals.timeline.qmd
               text: timeline
+            - href: api/internals.transitions.qmd
+              text: transitions
         - section: "**Library**"
           contents:
             - href: api/library.diseases.qmd
@@ -330,7 +331,6 @@ quartodoc:
         - settings
         - sim
         - strains
-        - transitions
         - utils
     - title: Converters
       desc: Importing models from other frameworks, and exporting sims to them.
@@ -363,6 +363,7 @@ quartodoc:
         - internals.parameters
         - internals.time
         - internals.timeline
+        - internals.transitions
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
@@ -424,6 +425,8 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
+    grid:
+      body-width: 1000px # Wider than Quarto's 800px, for code and figures; narrower screens collapse the sidebars first
     include-after-body: [./assets/collapse_sections.html, ./assets/tabset_fallback.html]
     toc: true
     toc-expand: true

@@ -463,7 +463,7 @@ def test_crn_one_agent():
             infection = S >> E @ ss.perday(0.1)*(I + H),
             onset     = ss.Transition(E, {I: 0.8, R: None}, dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
             severe    = ss.Transition(I, H, p=0.2, dur=ss.weibull(shape=2, scale=ss.days(4))), # Branches chosen on entry
-            mild      = ss.Transition(I, {R: 0.9, ss.stay: None}, dur=ss.uniform(ss.days(3), ss.days(9))),
+            mild      = ss.Transition(I, {R: 0.9, ss.stay: None}, dur=ss.uniform(ss.days(3), ss.days(9)), p=None),
             leave     = ss.Transition(H, R, dur=ss.normal(ss.by(sex=dict(female=ss.days(5), male=ss.days(8))), ss.days(1))),
             die       = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
             init_prev=0.02, name='d')

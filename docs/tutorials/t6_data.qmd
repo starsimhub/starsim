@@ -37,7 +37,7 @@ contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3
 def make_measles(init_n=10):
     """ The measles model, by age, with the number infectious at the start given """
     measles = ss.Disease(infection, progression, recovery,
-        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
         init_n = dict(I=init_n),
         name   = 'measles',
     )
@@ -64,7 +64,7 @@ age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8
 
 make_measles <- function(init_n = 10) {
   measles <- Disease(infection, progression, recovery,
-    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The share immune in each age group
+    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
     init_n = list(I = init_n),
     name   = "measles"
   )
@@ -116,7 +116,7 @@ sim_explicit.plot('measles.I')
 ```
 :::
 
-For a real place, the age groups and contacts can come from data. [`ss.population('Kenya')`](../api/people.qmd) is Kenya's population by age and sex (UN World Population Prospects), and `ss.contacts('Kenya')` a contact matrix by 5-year age group (Prem et al., 2021). `stratify()` then needs only the age groups, taking their shares from the population, and Starsim adds up the matrix into them. `total_pop` keeps the model to a town of 100,000:
+For a real place, the age groups and contacts can come from data. [`ss.population('Kenya')`](../api/people.qmd) is Kenya's population by age and sex (UN World Population Prospects), and `ss.contacts('Kenya')` a contact matrix by 5-year age group (Prem et al., 2021). `stratify()` then needs only the age groups, taking their fractions from the population, and Starsim adds up the matrix into them. `total_pop` keeps the model to a town of 100,000:
 
 ```{python}
 measles = ss.Disease(infection, progression, recovery,
@@ -124,7 +124,7 @@ measles = ss.Disease(infection, progression, recovery,
     init_n = dict(I=10),
     name   = 'measles',
 )
-measles.stratify(age=[0, 15, 65]) # The share in each group comes from the population
+measles.stratify(age=[0, 15, 65]) # The fraction in each group comes from the population
 
 town = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 kenya = ss.Sim(measles, people=ss.population('Kenya'), networks=ss.contacts('Kenya'), **town)
@@ -136,7 +136,7 @@ Kenya's population is young, about 37% under 15, and has more contacts than the 
 
 ## Births and deaths
 
-Over decades, children are born susceptible, which is what makes measles come back. Births and deaths go to the sim as `demographics`: [`ss.birth()`](../api/transitions.qmd) takes a crude birth rate, here 30 a year per 1,000 people, and `ss.death()` a death rate, here 20 a year per 1,000 at every age. People are born into each disease's first state (`S`), die from every state at the same rate, and move up the age groups as they age. Here is the model over 20 years, with and without them:
+Over decades, children are born susceptible, which is what makes measles come back. Births and deaths go to the sim as `demographics`: [`ss.birth()`](../api/internals.transitions.qmd) takes a crude birth rate, here 30 a year per 1,000 people, and `ss.death()` a death rate, here 20 a year per 1,000 at every age. People are born into each disease's first state (`S`), die from every state at the same rate, and move up the age groups as they age. Here is the model over 20 years, with and without them:
 
 ```{python}
 demographics = [
@@ -184,7 +184,7 @@ sim.people.plot_ages()
 
 ## The model and what the data measure
 
-It is late March, back in the town of 100,000 people. Measles cases have been reported weekly since January, and are still rising. The health office asks how many cases a vaccination campaign for children would prevent, and how much it matters how soon it starts. Some parameters, like the rate of infection per contact or the share of cases reported, can't be measured directly; calibration fits them to data, and the calibrated model then projects what happens next. Here is the model, with two additions explained below:
+It is late March, back in the town of 100,000 people. Measles cases have been reported weekly since January, and are still rising. The health office asks how many cases a vaccination campaign for children would prevent, and how much it matters how soon it starts. Some parameters, like the rate of infection per contact or the fraction of cases reported, can't be measured directly; calibration fits them to data, and the calibrated model then projects what happens next. Here is the model, with two additions explained below:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -194,14 +194,14 @@ import pandas as pd
 
 S, E, I, R = ss.states('S E I R')
 beta = ss.par(0.14, bounds=[0.05, 0.5])  # The rate of infection per contact with an infectious person, per day
-reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1)) # The share of infections that are reported: about a third, from earlier outbreaks
+reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1)) # The fraction of infections that are reported: about a third, from earlier outbreaks
 
 infection   = S >> E @ beta*I         # Infection, at a rate of β times the contacts with infectious people
 progression = E >> I @ ss.days(10)   # Latent for 10 days on average
 recovery    = I >> R @ ss.days(8)    # Infectious for 8 days on average
-cases       = ss.outcome(reported*infection) # Reported cases: a share of new infections
+cases       = ss.outcome(reported*infection) # Reported cases: a fraction of new infections
 measles = ss.Disease(infection, progression, recovery, cases,
-    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                          # 10 people infectious at the start
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
@@ -217,15 +217,15 @@ library(starsim)
 
 states("S E I R")
 beta     <- par(0.14, bounds = c(0.05, 0.5)) # The rate of infection per contact with an infectious person, per day
-reported <- par(0.5, bounds = c(0.05, 1), prior = ss$beta_dist(mean = 0.35, std = 0.1)) # The share of infections that are reported
+reported <- par(0.5, bounds = c(0.05, 1), prior = ss$beta_dist(mean = 0.35, std = 0.1)) # The fraction of infections that are reported
 
 infection <- Transition(S, E, rate = beta * I)
 measles <- Disease(
   infection   = infection,
   progression = Transition(E, I, dur = days(10)), # Latent for 10 days on average
   recovery    = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  cases       = outcome(reported * infection),    # Reported cases: a share of new infections
-  init        = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The share immune in each age group
+  cases       = outcome(reported * infection),    # Reported cases: a fraction of new infections
+  init        = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n      = list(I = 10)
 )
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+
@@ -264,7 +264,7 @@ settings_explicit = dict(networks=contacts_explicit, total_pop=100_000, start='2
 
 First, data rarely measure a model's states directly: a health office counts only reported cases. An **outcome** is a result computed from the model's states and transitions, to compare with what was observed (see [Outcomes](../user_guide/building_outcomes.qmd)). Here, `cases` is `reported` times the new infections each day.
 
-Second, neither β nor the share reported is known, so each is a parameter with bounds (`ss.par(..., bounds=...)`): the values a fit may try, starting from the values given.
+Second, neither β nor the fraction reported is known, so each is a parameter with bounds (`ss.par(..., bounds=...)`): the values a fit may try, starting from the values given.
 
 ### The data
 
@@ -338,14 +338,14 @@ Look for systematic departures, such as residuals on one side for weeks at a tim
 
 Other values may fit almost as well: in the report above, one search ended at β ≈ 0.145 with about half of infections reported. The data cover only the rise of the outbreak, and while it grows, a smaller outbreak with more reported looks like a larger one with less reported. When data can't tell two parameters apart like this, they are not *identifiable* from it (see [Fit diagnostics](../user_guide/calibration_diagnostics.qmd)).
 
-The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known before seeing the data: the share reported has one (`prior=` above), about a third, from earlier outbreaks; β's is uniform over its bounds. The sampler, NUTS, then draws values in proportion to how probable they are, given both:
+The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known before seeing the data: the fraction reported has one (`prior=` above), about a third, from earlier outbreaks; β's is uniform over its bounds. The sampler, NUTS, then draws values in proportion to how probable they are, given both:
 
 ```{python}
 post = sim.fit(method=ss.fitting.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
 post.summarize()
 ```
 
-The table gives each parameter's posterior median and 95% interval, with checks that the sampler's chains agree (`rhat` at most 1.01). The interval for the share reported is wide: the data say little more about it than the prior did.
+The table gives each parameter's posterior median and 95% interval, with checks that the sampler's chains agree (`rhat` at most 1.01). The interval for the fraction reported is wide: the data say little more about it than the prior did.
 
 ### Projecting from the fit
 
@@ -381,14 +381,14 @@ proj = post.project({'No campaign': None}, n_runs=100, data=everything)
 proj.plot('measles.cases')
 ```
 
-The outbreak was within the projection's range, near its top: about 40% of infections were in fact reported, which the March data couldn't tell from a smaller share. Early data say how fast an outbreak grows, but not how big it will get, so a decision should rest on the projection's range, not its median. [Fitting a model](../user_guide/calibration_fitting.qmd) covers fitting stochastic and agent-based models, other measures of mismatch, and the choice of method; [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) covers what else to check.
+The outbreak was within the projection's range, near its top: about 40% of infections were in fact reported, which the March data couldn't tell from a smaller fraction. Early data say how fast an outbreak grows, but not how big it will get, so a decision should rest on the projection's range, not its median. [Fitting a model](../user_guide/calibration_fitting.qmd) covers fitting stochastic and agent-based models, other measures of mismatch, and the choice of method; [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) covers what else to check.
 
 ## Exercises
 
 1. In the model with births and deaths, raise the birth rate to 45 a year per 1,000 people, as in some countries with young populations. How does the time between outbreaks change, and why?
 2. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020 (`ss.population('Niger', n_agents=5000)`), how many people will there be in 2040? (You do not need to include any diseases in your model.) Compare this with its UN birth and death rates.
 3. Start the fit from other guesses, e.g. β = 0.3 and 20% reported (`ss.Sim(measles, pars=dict(beta=0.3, reported=0.2), data=data, **settings)`). Does it find the same values?
-4. Find the posterior without the prior on the share reported (remake `reported` with no `prior=`, and the disease from it). How do the interval for the share reported, and the range of the projection, change? Where did the narrower range come from?
+4. Find the posterior without the prior on the fraction reported (remake `reported` with no `prior=`, and the disease from it). How do the interval for the fraction reported, and the range of the projection, change? Where did the narrower range come from?
 5. How many reported cases would a campaign on 15 April prevent? And one on 1 April reaching only 50% of children?
 
 [Solutions](solutions.qmd#t6-data-and-calibration) · Next: [T7 – Stratification and co-transmission](t7_strata.qmd)

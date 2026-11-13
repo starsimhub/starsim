@@ -170,7 +170,7 @@ def load_memilio(source, verbose=None, **kwargs):
     else:
         contacts = factor(src, c, n, t0)
         if contacts is not None:
-            src.add_par('contacts', contacts, doc='The contacts a day (with one age group), or their share of those at the start, with MEmilio\'s dampings')
+            src.add_par('contacts', contacts, doc='The contacts a day (with one age group), or their fraction of those at the start, with MEmilio\'s dampings')
         force = ['contacts'] if contacts is not None else []
 
     # Seasonality: MEmilio's 1 + k*sin(pi*((StartDay + t)/182.5 + 0.5)) is a cosine that peaks on day 0 of its year
@@ -229,7 +229,7 @@ def standard(src, name, vals, dists, doc):
     draw = [(v - a)/b if b else 0.0 for v,a,b in zip(vals, shift, scale)] # So a run with no draws has the values given
     src.add_par(f'{name}_shift', ss.by(shift, dims=['age']), doc=f'{doc}: the {"lower bound" if uniform else "mean"} of its distribution in each age group')
     src.add_par(f'{name}_scale', ss.by(scale, dims=['age']), doc=f'{doc}: the {"width" if uniform else "standard deviation"} of its distribution in each age group')
-    src.add_par(f'{name}_draw', ss.by(draw, dims=['age']), doc=f'{doc}: its draw in each age group, as a share of the width of its distribution' if uniform else f'{doc}: its draw in each age group, in standard deviations', prior=ss.uniform(0, 1) if uniform else ss.normal(0, 1))
+    src.add_par(f'{name}_draw', ss.by(draw, dims=['age']), doc=f'{doc}: its draw in each age group, as a fraction of the width of its distribution' if uniform else f'{doc}: its draw in each age group, in standard deviations', prior=ss.uniform(0, 1) if uniform else ss.normal(0, 1))
     src.exprs[name] = f'({name}_shift + {name}_scale*{name}_draw)'
     src.notes.append(f'{name:13s} drawn from a different {"uniform" if uniform else "normal"} distribution in each age group: {name}_shift + {name}_scale*{name}_draw, with {name}_draw drawn from the standard one')
     return
@@ -252,7 +252,7 @@ def nodes_of(src, d, places, totals):
     if any(m != matrices[0] for m in matrices):
         src.skip('contacts by node', 'the contact matrices or their dampings differ between nodes, which is not translated; the first node\'s are used')
 
-    # Edges: each moves a share of a node's people to another for every other step, so they are away half the time (MobilityEdge::apply_mobility())
+    # Edges: each moves a fraction of a node's people to another for every other step, so they are away half the time (MobilityEdge::apply_mobility())
     states = d['states']
     alive = [i for i,s in enumerate(states) if s != 'Dead']
     M = np.zeros((len(nodes), len(nodes)))
@@ -264,17 +264,17 @@ def nodes_of(src, d, places, totals):
         uneven += bool(np.ptp(coeffs) > 1e-12*max(coeffs.max(), 1e-300))
         damped += edge.get('dampings', 0)
     if uneven:
-        src.skip('commuting by group', f'on {uneven} of the {len(edges)} edges, the share who commute differs between age groups or states, which is not translated; the mean share is used')
+        src.skip('commuting by group', f'on {uneven} of the {len(edges)} edges, the fraction who commute differs between age groups or states, which is not translated; the mean fraction is used')
     if damped:
         src.skip('commuting dampings', f'{damped} dampings of the commuting, which are not translated')
     if not M.any():
         src.stratify(patch=places, fractions=ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist())
         src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", with no commuting')
         return
-    away = 0.5*M # The share of their time that people spend in each other place
+    away = 0.5*M # The fraction of their time that people spend in each other place
     split = ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist()
     src.stratify(patch=places, fractions=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
-    src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the share); '
+    src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s fraction of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the fraction); '
                      f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (see the convert-model skill\'s guide to MEmilio)')
     if d['model'] == 'osecir':
         src.notes.append('commuting     MEmilio\'s commuters with symptoms commute less (by RiskOfInfectionFromSymptomatic, get_mobility_factors()); here everyone commutes alike, which carries infection between places faster '
@@ -298,7 +298,7 @@ def factor(src, c, n, t0):
             ratios = m[on]/base[on]
             val = float(np.mean(ratios)) if on.any() else 1.0
             if on.any() and np.ptp(ratios) > 1e-9*max(1, abs(val)):
-                src.skip(f'the damping at day {s["time"]:g}', f'it cuts contacts between some age groups more than others (by {1 - ratios.min():.3g} to {1 - ratios.max():.3g}); the mean share, {val:.3g}, is used for all of them')
+                src.skip(f'the damping at day {s["time"]:g}', f'it cuts contacts between some age groups more than others (by {1 - ratios.min():.3g} to {1 - ratios.max():.3g}); the mean fraction, {val:.3g}, is used for all of them')
         points[s['time'] - t0] = val
     if c.get('school_holidays'):
         src.skip('contacts: school_holidays', f'{c["school_holidays"]} school holidays, which are not translated')
@@ -395,10 +395,10 @@ def secir(src, d, par, force):
     if icu < unlimited:
         src.add_par('ICUCapacity', icu, doc='MEmilio parameter ICUCapacity')
         frac = 'minimum(maximum((InfectedCritical - 0.9*ICUCapacity)/(0.1*ICUCapacity), 0), 1)' # MEmilio's smoother_cosine(), from CriticalPerSevere to 0
-        src.exprs['critical_share'] = f'{cps}*(1 + cos({pi}*{frac}))/2'
-        src.add_flow('InfectedSevere', 'InfectedCritical', f'critical_share/{tsev}', name='critical')
+        src.exprs['critical_frac'] = f'{cps}*(1 + cos({pi}*{frac}))/2'
+        src.add_flow('InfectedSevere', 'InfectedCritical', f'critical_frac/{tsev}', name='critical')
         src.add_flow('InfectedSevere', 'Recovered', f'(1 - {cps} - {dps})/{tsev}', name='severe_recovery')
-        src.add_flow('InfectedSevere', None, f'({dps} + {cps} - critical_share)/{tsev}', name='severe_death')
+        src.add_flow('InfectedSevere', None, f'({dps} + {cps} - critical_frac)/{tsev}', name='severe_death')
         src.notes.append('ICU           those who would become critical die instead as the number critical (summed over groups) goes from 90% to 100% of ICUCapacity, along half a cosine')
     elif any(np.atleast_1d(pars['DeathsPerSevere']['value'])):
         src.add_flow('InfectedSevere', ['InfectedCritical', 'Recovered'], f'(1 - {dps})/{tsev}', name='critical', p=[f'{cps}/(1 - {dps})', None])

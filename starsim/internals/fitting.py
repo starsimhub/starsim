@@ -144,7 +144,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
         n = pars['n']
         obs = np.asarray(observed) if isinstance(observed, (np.ndarray, list, tuple, int, float)) else None # Data, not a JAX value
         if obs is not None and np.any(np.isfinite(obs) & (obs % 1 != 0)):
-            errormsg = f'ss.binom(n=...) as a likelihood takes counts, the positives among n, but the data include {obs[np.isfinite(obs) & (obs % 1 != 0)][0]:n}; for shares, give the share times n'
+            errormsg = f'ss.binom(n=...) as a likelihood takes counts, the positives among n, but the data include {obs[np.isfinite(obs) & (obs % 1 != 0)][0]:n}; for fractions, give the fraction times n'
             raise ValueError(errormsg)
         p = xp.clip(model, 1e-12, 1 - 1e-12)
         out = gammaln(n + 1) - gammaln(observed + 1) - gammaln(n - observed + 1) + observed*xp.log(p) + (n - observed)*xp.log1p(-p)
@@ -177,7 +177,7 @@ def draw(dist, model, rng):
     pars = {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
     mean = np.maximum(model, 0)
     if isinstance(dist, (ss.binom, ss.bernoulli)) and np.any((np.asarray(model) < 0) | (np.asarray(model) > 1)):
-        errormsg = f'ss.{type(dist).__name__}() draws with the model\'s value as a probability, but the values go up to {np.max(model):n}: use it for a share, such as a prevalence, and ss.poisson() or ss.nbinom() for a count'
+        errormsg = f'ss.{type(dist).__name__}() draws with the model\'s value as a probability, but the values go up to {np.max(model):n}: use it for a fraction, such as a prevalence, and ss.poisson() or ss.nbinom() for a count'
         raise ValueError(errormsg)
     if isinstance(dist, ss.poisson):
         return rng.poisson(mean)
@@ -422,7 +422,7 @@ class ParticleFilter(sc.prettyobj):
         npts = runs.npts
         needed = np.append(np.minimum.accumulate(first[::-1])[::-1][1:], npts) # For each point, the earliest step of the runs that the points after it read
 
-        tables = shares = None # The engine's own, the same for every particle (unless each has its own, for IF2)
+        tables = fracs = None # The engine's own, the same for every particle (unless each has its own, for IF2)
         if swarm is not None:
             swarm.perturb(rng)
         logw = np.full(n, -np.log(n)) # The normalized log-weight of each particle
@@ -433,8 +433,8 @@ class ParticleFilter(sc.prettyobj):
                 swarm.perturb(rng)
                 row0 = runs.done
                 tables = swarm.tables(rows=slice(row0, max(last[k] + 1, runs.done)))
-                shares = swarm.shares() if swarm.moving else None
-            runs.advance(last[k] + 1, tables, shares, row0) # Through the step from the last time point the point reads, whose stock is at its start and flow over it
+                fracs = swarm.fracs() if swarm.moving else None
+            runs.advance(last[k] + 1, tables, fracs, row0) # Through the step from the last time point the point reads, whose stock is at its start and flow over it
             stocks, flows = runs.stocks, runs.flows
             obs = np.zeros(n)
             for s,i in points[row]:
@@ -549,7 +549,7 @@ class Swarm(sc.prettyobj):
         to_x (func): gives the values (an array, or particles by values) from the search scale, and their places between the bounds
         z0 (array): the values the sim is restarted with now, on the search scale
         sd (float): the first size of a step of the random walk, on the search scale
-        cooling (float): the share of the first size that a step has after 50 passes
+        cooling (float): the fraction of the first size that a step has after 50 passes
         n_points (int): the data points in a pass
     """
     def __init__(self, sim, fitted, set_pars, to_x, z0, sd=0.05, cooling=0.5, n_points=1):
@@ -584,12 +584,12 @@ class Swarm(sc.prettyobj):
             if any(id(leaf) in self.index for leaf in leaves):
                 self.flows.append((f, flow, dw, np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)))
 
-        # Each fitted value must set the rates of the run, or the time share between places, and nothing else: the rest is the same for every particle
+        # Each fitted value must set the rates of the run, or the time fraction between places, and nothing else: the rest is the same for every particle
         self.x0 = x0 = to_x(z0)[0]
         set_pars(x0)
         base = ss.gradients.capture(engine, compact=False)[2]
         self.base = [base[key] for key in ss.gradients.table_fields]
-        self.sh0 = base['sh_val'] # The time share at x0, and its change with each value (see shares())
+        self.sh0 = base['sh_val'] # The time fraction at x0, and its change with each value (see fracs())
         self.sh_slopes = np.zeros((len(self.names), len(self.sh0)))
         self.moving = False
         for i,name in enumerate(self.names):
@@ -611,14 +611,14 @@ class Swarm(sc.prettyobj):
                 self.moving = True
                 x = to_x(z0 - 0.5*np.eye(len(z0))[i])[0]
                 set_pars(x)
-                if not np.allclose(self.shares(x[None])[0], ss.gradients.capture(engine)[2]['sh_val'], rtol=1e-9, atol=1e-12):
+                if not np.allclose(self.fracs(x[None])[0], ss.gradients.capture(engine)[2]['sh_val'], rtol=1e-9, atol=1e-12):
                     errormsg = f'IF2 cannot fit "{name}" yet, since the movement between places does not change in proportion to it (as away= does); fit it with method="pmcmc", or fix it'
                     raise ValueError(errormsg)
         set_pars(x0)
         return
 
-    def shares(self, x=None):
-        """ The time share between places of every particle, as `ss.kernels.advance()` takes it (particles by entries; default, the swarm's) """
+    def fracs(self, x=None):
+        """ The time fraction between places of every particle, as `ss.kernels.advance()` takes it (particles by entries; default, the swarm's) """
         x = self.to_x(self.z)[0] if x is None else x
         return np.ascontiguousarray(self.sh0 + (x - self.x0) @ self.sh_slopes)
 
@@ -697,7 +697,7 @@ def abc_smc(distance, logprior, z0, samples=200, generations=8, quantile=0.5, to
         z0 (array): a point on the sampler's scale (only its length is used: the first generation is drawn uniformly on that scale and weighted by the prior)
         samples (int): the size of the population
         generations (int): the most generations; fewer if the tolerance or the acceptance rate says to stop
-        quantile (float): the share of the last population's distances below the next tolerance
+        quantile (float): the fraction of the last population's distances below the next tolerance
         tolerance (float): stop once the tolerance is this small
         min_acceptance (float): stop once a generation accepts fewer of its proposals than this
         rand_seed (int): the random seed
@@ -788,12 +788,12 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, rand_se
         verbose (bool): whether to say what is being done
 
     Returns:
-        The draws (chains × draws × values), the estimate of the log-density at each (chains × draws), the share of proposals accepted after the warm-up in each chain, and the number of particles that each chain used;
+        The draws (chains × draws × values), the estimate of the log-density at each (chains × draws), the fraction of proposals accepted after the warm-up in each chain, and the number of particles that each chain used;
         and if `logpost` gives something to keep, what it gave at each draw (a list for each chain, in which a draw that stayed where the chain was holds the same object as the draw before)
     """
     starts = np.broadcast_to(np.asarray(z0, dtype=float), (chains, np.shape(z0)[-1])) # Each chain's start
     d = starts.shape[1]
-    target = 0.15 if particles != 0 else 0.234 # The share of proposals to accept: with an exact log-density, about the best for a random walk (Roberts et al. 1997)
+    target = 0.15 if particles != 0 else 0.234 # The fraction of proposals to accept: with an exact log-density, about the best for a random walk (Roberts et al. 1997)
 
     def one_chain(chain_seed, z0):
         rng = np.random.default_rng(chain_seed)
@@ -1048,7 +1048,7 @@ class Fit(sc.prettyobj):
         samples (df): with `method='nuts'`, `'pmcmc'`, or `'abc-smc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
         trajectories (list): for a stochastic compartmental sim with `method='pmcmc'` or `'abc-smc'`, the run of the sim that goes with each draw of `samples` (one per row), so that each pair is a draw from the posterior of the values and the epidemic together: with `'pmcmc'`, a run drawn from the particle filter, up to the last data point (see `ss.fitting.ParticleFilter`); with `'abc-smc'`, the run that was accepted. Each is, by the module that runs the compartments, the time point it ends at (`ti`), the compartments there (`y`), and by disease how many were in each state (`stocks`) and the flow along each transition (`flows`) at each time point before it; a draw that the chain stayed at shares its run with the draw before. `fit.project()` continues them. (For a deterministic sim, the run at each draw is its trajectory, so none are kept)
         study (`optuna.Study`): with `method='optuna'`, Optuna's study, e.g. for its plots (`optuna.visualization.plot_param_importances(fit.study)`)
-        diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up; with `'abc-smc'`, that of its last generation), `tolerance` and `generations` (with `'abc-smc'`, the tolerance of its last generation, which sets how close its posterior is, and the number of generations run), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
+        diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the fraction of proposals that each chain accepted after its warm-up; with `'abc-smc'`, that of its last generation), `tolerance` and `generations` (with `'abc-smc'`, the tolerance of its last generation, which sets how close its posterior is, and the number of generations run), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
     def __init__(self, sim, before, pars, table, trials, method, objective, objective_before, measure, samples, diagnostics, converged, why, scores, study=None, trajectories=None):
         self.sim = sim
@@ -1451,7 +1451,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
     scale = max(abs(value_before), 1e-12)
 
     def allocate(total, x0):
-        """ The best allocation of a total (as amounts), its value, its run, and SciPy's result, from a starting allocation (as shares) """
+        """ The best allocation of a total (as amounts), its value, its run, and SciPy's result, from a starting allocation (as fractions) """
         lo, hi = limits(total)
         if total <= 0:
             best = run(np.zeros(len(names)))
@@ -1465,10 +1465,10 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
         return x*total, read(best), best, res
 
     T = sc.timer()
-    shares = before/before.sum() if before.sum() > 0 else np.full(len(names), 1/len(names)) # The current shares, which the search starts from
+    fracs = before/before.sum() if before.sum() > 0 else np.full(len(names), 1/len(names)) # The current fractions, which the search starts from
     if target is None:
-        alloc, value, best, res = allocate(total, shares)
-        scaled = shares*total # The current allocation, scaled to the total
+        alloc, value, best, res = allocate(total, fracs)
+        scaled = fracs*total # The current allocation, scaled to the total
         lo, hi = limits(total)
         if total > 0 and np.all((lo <= scaled) & (scaled <= hi)): # The search can end worse than it started
             start_value = value_before if np.allclose(scaled, before) else read(run(scaled))
@@ -1480,7 +1480,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
         least = limits(0)[0].sum() # And the least
         tried = lambda tot, value: print(f'  Total {tot:,.6g}: {what} {value:,.6g} at best ({"reaches" if reached(value) else "does not reach"} {target:,.6g})') if verbose else None
         high = min(max(total, least), most)
-        out = allocate(high, shares)
+        out = allocate(high, fracs)
         tried(high, out[1])
         low = least
         for i in range(10): # Double the total until it reaches the target
@@ -1489,7 +1489,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
             if high >= most:
                 break
             low, high = high, min(2*high, most)
-            out = allocate(high, out[0]/out[0].sum() if out[0].sum() > 0 else shares)
+            out = allocate(high, out[0]/out[0].sum() if out[0].sum() > 0 else fracs)
             tried(high, out[1])
         if not reached(out[1]):
             raise ValueError(f'sim.optimize() could not reach {what} = {target:,.6g}: the best allocation of {high:,.6g} gives {out[1]:,.6g}')
@@ -2256,22 +2256,22 @@ class Problem(sc.prettyobj):
 
     def to_x(self, z):
         """ Values from the scale a sampler moves on, and each one's place between its bounds """
-        share = np.clip(1/(1 + np.exp(-z)), 1e-12, 1 - 1e-12)
-        pos = self.base_lows + self.span*share
-        return np.where(self.logs, np.exp(pos), pos), share
+        frac = np.clip(1/(1 + np.exp(-z)), 1e-12, 1 - 1e-12)
+        pos = self.base_lows + self.span*frac
+        return np.where(self.logs, np.exp(pos), pos), frac
 
-    def share_of(self, x):
+    def frac_of(self, x):
         """ The place of each value between its bounds, on the scale it is searched on """
         return np.clip((np.where(self.logs, np.log(np.maximum(x, 1e-300)), x) - self.base_lows)/self.span, 1e-9, 1 - 1e-9)
 
     def to_z(self, x):
         """ Values on the scale a sampler moves on """
-        share = self.share_of(x)
-        return np.log(share/(1 - share))
+        frac = self.frac_of(x)
+        return np.log(frac/(1 - frac))
 
-    def logjac(self, x, share):
+    def logjac(self, x, frac):
         """ The log of dx/dz, which turns a density of the values into one on the scale a sampler moves on """
-        return np.log(self.span*share*(1 - share)*np.where(self.logs, x, 1.0)).sum(axis=-1)
+        return np.log(self.span*frac*(1 - frac)*np.where(self.logs, x, 1.0)).sum(axis=-1)
 
     def spread(self, n):
         """ Points spread over the bounds (by a Latin hypercube, on the scale searched on) """
@@ -2297,7 +2297,7 @@ class Problem(sc.prettyobj):
             return points[order[0]]
         chosen = []
         for i in order:
-            if all(np.abs(self.share_of(points[i]) - self.share_of(points[j])).max() >= 0.1 for j in chosen):
+            if all(np.abs(self.frac_of(points[i]) - self.frac_of(points[j])).max() >= 0.1 for j in chosen):
                 chosen.append(i)
             if len(chosen) == top:
                 break
@@ -2316,7 +2316,7 @@ class Problem(sc.prettyobj):
         names = self.names
         zs = out.zs
         xs = np.array([[self.to_x(z)[0] for z in chain] for chain in zs])
-        logjac = self.logjac(xs, self.share_of(xs))
+        logjac = self.logjac(xs, self.frac_of(xs))
         out.best = xs.reshape(-1, len(names))[np.argmax((out.logdens - logjac).reshape(-1))] # The draw with the highest posterior density (of the values themselves, not on the sampler's scale)
         n_chains, n_draws = zs.shape[:2]
         rhat, n_eff = diagnose(xs)
@@ -2584,10 +2584,10 @@ def fit_optuna(problem, n_trials=None, workers=None, storage=None, **kwargs): # 
         study.add_trial(optuna.trial.create_trial(params=dict(zip(p.names, p.x0)), distributions=dists, value=p.objective_before))
     remaining = n_trials - len(study.trials)
     if remaining > 0 and workers > 1:
-        shares = [len(part) for part in np.array_split(np.arange(remaining), workers)]
+        fracs = [len(part) for part in np.array_split(np.arange(remaining), workers)]
         method = ss.kernels.start_method()
         with ss.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
+            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(fracs)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
@@ -2635,7 +2635,7 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
         problem (Problem): the fit, as `sim.fit()` sets it up
         particles (int): the number of particles in each pass; more gives a less noisy likelihood
         iterations (int): the number of passes of the filter in each chain
-        cooling (float): the share of its first size that a step has after 50 passes, as `cooling.fraction.50` in pomp
+        cooling (float): the fraction of its first size that a step has after 50 passes, as `cooling.fraction.50` in pomp
         sd (float): the first size of a step of the random walk, on the scale searched on: the logit of each value's place between its bounds, or of its log for wide bounds
         chains (int): the number of chains, each from its own start: one of the best few of the initial values and a spread of points over the bounds
 
@@ -2727,16 +2727,16 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
     if p.stochastic:
         filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
         def logpost(z, rng, n): # The filter's estimate, and the run it draws, kept with the draw
-            x, share = p.to_x(z)
+            x, frac = p.to_x(z)
             p.runner.restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
-            return filt(n_particles=n, rand_seed=int(rng.integers(2**31))) + p.logprior(x) + p.logjac(x, share), filt.path
+            return filt(n_particles=n, rand_seed=int(rng.integers(2**31))) + p.logprior(x) + p.logjac(x, frac), filt.path
     else: # A deterministic sim: the exact log-likelihood of its run, in place of the filter's estimate
         if particles is not None:
             raise ValueError('particles= is the number of particles of the particle filter, which a deterministic sim does not use: its likelihood is exact; leave particles= out')
         particles = 0
         def logpost(z, rng, n):
-            x, share = p.to_x(z)
-            return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, share)
+            x, frac = p.to_x(z)
+            return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, frac)
 
     starts = p.scan(scan, top=chains) # The best points of a scan that are apart, a chain from each (several from one if there are fewer than chains), so that chains caught in different modes disagree
     z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)])
@@ -2751,7 +2751,7 @@ def fit_abc_smc(problem, samples=200, generations=8, quantile=0.5, tolerance=Non
     For a stochastic sim, including agents (for a deterministic one it gives no posterior, since the width of what it gives is set by the number
     of generations, not by the data: use `method='pmcmc'` or `'nuts'` with a likelihood). The distance is the loss (`loss=`), and each generation
     takes many runs of the sim. The posterior is approximate, and how close it is depends on the tolerance reached, so its convergence is not
-    assessed (`fit.converged` is None); the final tolerance, the share of proposals accepted, and the number of generations are in `fit.diagnostics`.
+    assessed (`fit.converged` is None); the final tolerance, the fraction of proposals accepted, and the number of generations are in `fit.diagnostics`.
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
@@ -2784,8 +2784,8 @@ def fit_abc_smc(problem, samples=200, generations=8, quantile=0.5, tolerance=Non
         return p.measure(p.run(p.to_x(z)[0], seed=seed if p.stochastic else None)) # A stochastic run takes a seed of its own, so the posterior includes chance
 
     def logprior_z(z):
-        x, share = p.to_x(z)
-        return p.logprior(x) + p.logjac(x, share)
+        x, frac = p.to_x(z)
+        return p.logprior(x) + p.logjac(x, frac)
 
     pop, weights, dists, tolerances, acceptance, n_abc, *runs = abc_smc(distance, logprior_z, p.to_z(p.x0), samples=samples, generations=generations, quantile=quantile, tolerance=tolerance, rand_seed=p.rand_seed, verbose=p.verbose)
     picks = np.random.default_rng(p.rand_seed).choice(len(pop), size=len(pop), p=weights) # Equal weights, as draws
@@ -2879,21 +2879,21 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
     scores = np.array([p.objective(x) - p.logprior(x) for x in optima]) # Minus the log of the posterior density at each
     starts = []
     for i in np.argsort(scores, kind='stable'): # The chains start at the best optimum, and at others only if they are nearly as good, so they cannot all sit in a mode far below the best, while chains in modes that compete disagree
-        if scores[i] - scores.min() <= 5 and all(np.abs(p.share_of(optima[i]) - p.share_of(x)).max() >= 0.01 for x in starts):
+        if scores[i] - scores.min() <= 5 and all(np.abs(p.frac_of(optima[i]) - p.frac_of(x)).max() >= 0.01 for x in starts):
             starts.append(optima[i])
 
     def logpost(z):
-        x, share = p.to_x(z)
-        dxdz = span*share*(1 - share)*np.where(logs, x, 1.0)
+        x, frac = p.to_x(z)
+        dxdz = span*frac*(1 - frac)*np.where(logs, x, 1.0)
         value, derivs = ss.gradients.gradient(p.runner, p.restart, x, p.measure)
         hs = 1e-6*np.maximum(np.abs(x), 1e-6)
         dprior = np.array([(logprior(q, val + h) - logprior(q, val - h))/(2*h) if q.prior is not None else 0.0 for q,val,h in zip(p.fitted.values(), x, hs)])
-        dlogjac = 1 - 2*share + np.where(logs, span*share*(1 - share), 0.0) # The derivative of log(dx/dz)
+        dlogjac = 1 - 2*frac + np.where(logs, span*frac*(1 - frac), 0.0) # The derivative of log(dx/dz)
         return -float(value) + p.logprior(x) + np.log(dxdz).sum(), (dprior - np.array(derivs, dtype=float))*dxdz + dlogjac
 
     def exact(z): # The log of the posterior density at a point, from a run of the sim
-        x, share = p.to_x(z)
-        return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, share)
+        x, frac = p.to_x(z)
+        return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, frac)
 
     z0 = None # Each chain's start, once the curvature can be taken
     try: # The log-density as one function in JAX, if the model allows; otherwise each gradient is worked out with Python in the loop
@@ -2907,10 +2907,10 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
         if not forward:
             density.reverse()
         def logpost_jax(z):
-            share = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
-            pos = base_lows + span*share
+            frac = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
+            pos = base_lows + span*frac
             x = jnp.where(logs, jnp.exp(pos), pos)
-            return density(x) + jnp.log(span*share*(1 - share)*jnp.where(logs, x, 1.0)).sum()
+            return density(x) + jnp.log(span*frac*(1 - frac)*jnp.where(logs, x, 1.0)).sum()
         jax = ss.gradients.jax()
         hessian = jax.jit(jax.jacfwd(jax.jacfwd(logpost_jax)) if forward else jax.hessian(logpost_jax)) # Forward over forward, as the gradient is taken (an ODE's adaptive substeps can't be differentiated in reverse mode)
         def curvature(z):
@@ -2974,7 +2974,7 @@ class method(sc.prettyobj):
             - `'optuna'`: `n_trials` (default: 50 per fitted parameter, at least 100), `particles` (for a stochastic sim that the particle filter can run, with a likelihood for every data series: the particles of the filter that scores each point, 200; see `ss.fitting.ParticleFilter`), `workers` (processes that run trials at once, sharing what they learn: 1), `storage` (a file name, a database URL, or an Optuna storage, where the trials are kept so that calling the fit again resumes it), and Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
             - `'nuts'`: `draws=500`, `warmup=500`, `chains=4`, `scan` (each chain starts from one of the best points of a scan that are apart)
             - `'pmcmc'`: `draws=1000`, `warmup=1000`, `chains=4`, `particles` (of the particle filter: by default chosen by each chain in its warm-up; see `ss.fitting.pmmh()`; none for a deterministic sim, whose likelihood is exact), `scan` (each chain starts from one of the best points of a scan that are apart), `parallel=True` (to run the chains in parallel processes)
-            - `'if2'`: `particles=1000` (of the particle filter), `iterations=50` (passes of the filter in each chain), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on), `chains=4`
+            - `'if2'`: `particles=1000` (of the particle filter), `iterations=50` (passes of the filter in each chain), `cooling=0.5` (the fraction of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on), `chains=4`
             - `'abc-smc'`: `samples=200` (the parameter values kept in each generation, which are the draws of the posterior), `generations=8`, `quantile=0.5` (of the distances, which sets the next tolerance), `tolerance` (the distance to stop at)
             - for a stochastic sim, how each point is scored (SciPy methods and Optuna; `n_runs` also for particle MCMC's start): `n_runs` (runs per point: 4 for a stochastic compartmental sim, 1 for agents and for a deterministic one; every point is scored by the mean over the same seeds of each run's score; for Optuna, giving it scores by runs in place of the particle filter), and `reseed` (whether each point takes fresh seeds: by default only for Optuna, whose search then averages over chance)
             - for the methods with gradients ('l-bfgs-b', 'slsqp', 'nuts'): `require_jax=True` (whether the gradients have to be taken with the log-likelihood as one function in JAX; with `False`, something JAX does not cover yet is taken with Python in the loop instead, which is much slower)
@@ -3052,7 +3052,7 @@ def split_data(data, holdout=0.25, folds=None):
 
     Args:
         data (dataframe): the data
-        holdout (float/date): the share of each series to hold out, or the date or time from which to hold out everything
+        holdout (float/date): the fraction of each series to hold out, or the date or time from which to hold out everything
         folds (int): the number of folds
     """
     df = data

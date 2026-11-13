@@ -266,7 +266,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
                 summed = ' + '.join(comps)
                 summed = f'({summed})' if len(comps) > 1 else summed
                 term = summed if exp == '1' else f'{summed} ** ({exp})'
-                factors.append(term if g == 0 else f'{term} / {total}') # After the source, each term is a share of the place's people
+                factors.append(term if g == 0 else f'{term} / {total}') # After the source, each term is a fraction of the place's people
             if len(groups) > 2:
                 notes.append(f'{frm} -> {to}: {len(groups) - 1} terms after the source, each divided by the population (flepiMoP also multiplies by the rate once for each)')
             rate = ' * '.join(factors) or '1'
@@ -370,7 +370,7 @@ def modifiers(scenario, mods, disease, places, methods, src, quiet=False):
 
 
 def outcome(name, o, dims, src, notes):
-    """ An outcome: a share of a flow (or of another outcome), with a delay and a stay """
+    """ An outcome: a fraction of a flow (or of another outcome), with a delay and a stay """
     source = o.get('source')
     if isinstance(source, dict) and 'incidence' in source:
         want = {d:[str(v) for v in sc.tolist(lev)] for d,lev in source['incidence'].items()}

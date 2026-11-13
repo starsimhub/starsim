@@ -85,7 +85,7 @@ class Dengue(ss.ndict):
     Args:
         n_serotypes (int): how many serotypes (up to 4)
         cross (float): the protection against the other serotypes after recovering from one (1 is complete)
-        init_prev (float): the share of people who start infected (infectious) with each serotype
+        init_prev (float): the fraction of people who start infected (infectious) with each serotype
         kwargs (dict): the parameters of each serotype (see `ssl.DengueSerotype`), e.g. `m=3`, and anything else for `ss.Disease`
 
     Examples:

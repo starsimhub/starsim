@@ -658,8 +658,8 @@ class Result(ss.arrays.BaseArr):
                 super().init_results()
                 self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
 
-            def record_stocks(self):
-                super().record_stocks()
+            def record_states(self):
+                super().record_states()
                 alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
                 self.results.n_infected.set_groups(self.ti, infected)
                 self.results.prevalence.set_groups(self.ti, infected, alive)
@@ -1156,7 +1156,7 @@ class Result(ss.arrays.BaseArr):
 
         The result needs to be stratified by place, with a geography (`sir.stratify(patch=ss.geo.geography(...))`).
         Each place is drawn as its shape, if the geography has one, or else as a point sized by its population, and colored
-        by the result there. Since places differ in size, a share (e.g. `prevalence`) usually shows the spread better than a count.
+        by the result there. Since places differ in size, a fraction (e.g. `prevalence`) usually shows the spread better than a count.
 
         Args:
             t (date/list): the time (or times) to draw, e.g. `'2025-03-01'`; by default, one map of the summary of each place over the run (the total of a flow, the mean of a ratio, the final value of a stock)

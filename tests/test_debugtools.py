@@ -85,8 +85,8 @@ def test_mock_objects():
     for i in range(5):
         o.mod.step()
         o.mod.infect(ss.uids([i])) # Manually "infect" people
-        o.mod.record_stocks()
-        o.mod.record_flows()
+        o.mod.record_states()
+        o.mod.record_events()
 
     return o
 

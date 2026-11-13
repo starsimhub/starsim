@@ -10,9 +10,9 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, as_share, BinOp, Count, count_power, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
+from .expressions import as_expr, as_frac, BinOp, Count, count_power, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
 from .parameters import by, TimeValue
-from ..transitions import FlowSum, outcome, State, Transition
+from .transitions import FlowSum, outcome, State, Transition
 
 __all__ = ['Graph']
 
@@ -102,9 +102,9 @@ class Graph:
         args (list): transitions and outcomes passed positionally
         members (dict): states, transitions, parameters, results, and functions, by name
         init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
-        init (dict): the share of people who start in each state, by name
+        init (dict): the fraction of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
-        seed_n (bool): whether `init_prev` is a number of people (given as `init_n=10`) rather than a share
+        seed_n (bool): whether `init_prev` is a number of people (given as `init_n=10`) rather than a fraction
         default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
@@ -114,13 +114,13 @@ class Graph:
         self.module = module
         self.names = names or {}
         self.default_given = default_state # The state people are in unless they are put elsewhere, if given
-        self.init_prev = init_prev # A share of people seeded through the transmission, or a number of them (init_n=10), if seed_n
+        self.init_prev = init_prev # A fraction of people seeded through the transmission, or a number of them (init_n=10), if seed_n
         self.seed_n = seed_n
         if isinstance(init_prev, par): # So it can be fitted
             init_prev.name = init_prev.name or ('init_n' if seed_n else 'init_prev')
         name = getattr(module, 'name', None) or type(module).__name__
         if init is not None and not isinstance(init, dict):
-            errormsg = f'init= of "{name}" is a dict of the starting value of each state, e.g. init=dict(I=0.01), not {init!r}; a share of people seeded through the transmission is init_prev={init!r}'
+            errormsg = f'init= of "{name}" is a dict of the starting value of each state, e.g. init=dict(I=0.01), not {init!r}; a fraction of people seeded through the transmission is init_prev={init!r}'
             raise TypeError(errormsg)
         if init_n is not None and not isinstance(init_n, dict): # A number is a seeding, turned into init_prev before here (see ss.Disease.init_graph())
             errormsg = f'init_n= of "{name}" is a number of people seeded through the transmission, or a dict of the number in each state, e.g. init_n=dict(I=10), not {init_n!r}'
@@ -167,7 +167,7 @@ class Graph:
         `ss.State(infected=True)`, or in its own result `infected = E + I`), exactly; or, if it says none are, those of a
         force of infection: the states people are infected into, and the sources (`E` and `I` in `S >> E @ beta*I`). With
         neither, as in a staged condition such as a cancer, no state is infected. Each state's `infected` is set to match,
-        and the infected states give the results `infected`, the number in them, and `prevalence`, their share of the
+        and the infected states give the results `infected`, the number in them, and `prevalence`, their fraction of the
         people in every state, unless the module defines its own of that name, or has a state called `infected` (whose
         count has the name: it can define its own prevalence)
         """
@@ -209,7 +209,7 @@ class Graph:
         unnamed = sc.autolist()
         given = {name for name,_ in named if name is not None}
         for name,obj in named:
-            if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
+            if isinstance(obj, FlowSum): # A sum or a fraction of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
             if isinstance(obj, ss.modify): # Part of the model, given to the sim with it (see ss.solvers.choose.init_where())
                 self.add(self.modifiers, name or self.names.get(id(obj)) or obj.name, obj)
@@ -360,7 +360,7 @@ class Graph:
                 self.states[name].init_from_module = True
         for state in statelist:
             if state.init is not None and state.init_n is not None:
-                raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a share of people) and init_n= (a number of people); give one or the other')
+                raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a fraction of people) and init_n= (a number of people); give one or the other')
         return
 
     def resolve_transitions(self):
@@ -388,7 +388,7 @@ class Graph:
                 rate = per_person(tr.rate, tr.source, people)
                 if rate is not tr.rate:
                     tr.flow_given, tr.rate = tr.rate, rate
-                tr.rate = as_share(tr.rate, people) # beta*I/N is beta*I
+                tr.rate = as_frac(tr.rate, people) # beta*I/N is beta*I
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
@@ -421,8 +421,8 @@ class Graph:
 
     def counted(self, tr):
         """
-        The states of people of this module whose number or share a transition reads in its rate, other than its source, if the rate grows with them:
-        `I` in `S >> I @ beta*I.n` (density-dependent transmission) or `S >> I @ beta*I.frac` (frequency-dependent, by the share of people in `I`; see
+        The states of people of this module whose number or fraction a transition reads in its rate, other than its source, if the rate grows with them:
+        `I` in `S >> I @ beta*I.n` (density-dependent transmission) or `S >> I @ beta*I.frac` (frequency-dependent, by the fraction of people in `I`; see
         `dependence()`); none for births at a rate on counts (`ss.unborn >> N @ b*N.n`)
         """
         if tr._inflow or tr.source is None or self.dependence(tr) is None: # No source is everyone (ss.death(rate=...)), so whatever it counts is its source
@@ -628,12 +628,12 @@ class Graph:
             if name not in self.pars and name.startswith(('init', 'seed')): # e.g. init_infected=100
                 state = self.infectious[0].name if self.infectious else 'I'
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}".\n'
-                                          f'     To start with people in a state, use init=dict({state}=0.01) for a share of people, or init_n=dict({state}=10) for a number; init_prev= seeds the state a new infection enters (by default 1% of people), as a share or a number of people.')
+                                          f'     To start with people in a state, use init=dict({state}=0.01) for a fraction of people, or init_n=dict({state}=10) for a number; init_prev= seeds the state a new infection enters (by default 1% of people), as a fraction or a number of people.')
             elif name not in self.pars:
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.{ss.v3_deprecations.hint(keys=name, call=f"ss.{type(self.module).__name__}")}\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
-                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, network="sexualnet").' if 'condom' in name else ''))
+                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, frac=0.3, network="sexualnet").' if 'condom' in name else ''))
             ss.parameters.replaced_dist(name, self.pars[name].value, value)
             self.pars[name].value = value
         return
@@ -643,7 +643,7 @@ class Graph:
         """
         Record the kind of value each parameter of a transition is, as `par.slot` (which describe() uses):
         'rate' or 'dur', or None for a plain number (e.g. a factor of a rate); returns the standard slots it fills, as (slot name, parameter).
-        `density` says the transition is a transmission at a rate on the number or share of people in a state (`beta*I.n`, `beta*I.frac`), whose coefficient is beta too
+        `density` says the transition is a transmission at a rate on the number or fraction of people in a state (`beta*I.n`, `beta*I.frac`), whose coefficient is beta too
         """
         slots = []
         if tr.dur is not None:
@@ -697,7 +697,7 @@ class Graph:
         timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.source or []) for tr in self.transitions.values()) # The number of timed exits from a state
         for tr,slot,p in anon:
             qual = tr.source[0].name if slot == 'dur' and len(tr.source or []) == 1 and timed(tr.source[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
-            name = f'{slot}_{qual}' if slot in ['dur', 'rate', 'noise'] or counts[slot] > 1 or taken(slot) else slot
+            name = f'{slot}_{qual}' if slot in ['dur', 'rate', 'noise', 'p'] or counts[slot] > 1 or taken(slot) else slot
             if qual != tr.name and taken(name):
                 name = f'{slot}_{tr.name}'
             if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
@@ -712,7 +712,7 @@ class Graph:
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the fractions of ss.dead and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -774,43 +774,41 @@ class Graph:
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= (or an immediate split) takes whatever the branches leave over: the only one, or the only one for the same people (the same who=) as the branches; one with no driver and no p= is undriven, not the remainder
+        # What the branches leave over goes to the transition given p=None (a timed one, or an immediate one), e.g. recovery = I >> R @ dict(dur=ss.days(8), p=None); with no branches, an immediate transition takes everyone; one with no driver and no p= is undriven, not the remainder
         for name,exits in self.exits.items():
             exits.remainder = None
             rest = exits.pop('rest')
             if len(rest) > 1:
                 raise ValueError(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
-            elif rest:
+            elif rest and (rest[0].rest or not exits.branches):
                 exits.remainder = rest[0]
-            apart = [] # Timed exits for other people (another who=), which compete as before
-            if exits.branches and len(exits.timed) > 1:
-                wheres = {id(getattr(tr, 'where', None)) for tr in exits.branches}
-                same = [tr for tr in exits.timed if len(wheres) == 1 and id(getattr(tr, 'where', None)) in wheres]
-                if len(same) == 1: # e.g. women split between CIN and clearance, and men only clear: the clearance of women is the remainder
-                    apart = [tr for tr in exits.timed if tr is not same[0]]
-                    exits.timed = same
+            elif rest:
+                tr = rest[0]
+                raise ValueError(f'"{tr.name}" out of state "{name}" has no wait (dur=0), and the other transitions out of {name} are branches with p=: for it to take what they leave over, give it p=None, e.g. ss.Transition({name}, ..., dur=0, p=None)')
+            marked = [tr for tr in exits.timed if tr.rest]
+            if exits.branches and marked:
+                if len(marked) > 1 or exits.remainder is not None:
+                    raise ValueError(f'{sc.strjoin(tr.name for tr in marked + sc.tolist(exits.remainder))} out of state "{name}" are each given p=None, but only one transition can take what the branches leave over')
+                exits.remainder = marked[0]
+                exits.timed.remove(marked[0])
             if exits.branches:
                 ps = [tr.p[0] for tr in exits.branches]
                 const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
                 total = sum(p.raw for p in ps) if const else None
-                if not const and exits.remainder is None and len(exits.timed) == 1: # A share that is worked out as the sim runs (e.g. a function): the timed exit with no p= takes the rest, then
-                    exits.remainder = exits.timed.pop()
-                    exits.remainder.guessed['p'] = f'1 - {" - ".join(tr.name for tr in exits.branches)}'
+                if exits.remainder is not None: # What the branches leave over, for describe()
+                    exits.remainder.p_rest = f'{1 - total:n}' if const else f'1 - {" - ".join(tr.name for tr in exits.branches)}'
+                if not const and exits.remainder is None and exits.timed: # A fraction that is worked out as the sim runs (e.g. a function): the rest needs a transition of its own
+                    raise ValueError(f'the branches out of state "{name}" ({sc.strjoin(tr.name for tr in exits.branches)}) have fractions worked out as the sim runs, so they may not sum to 1: give the transition that takes the rest p=None (e.g. {exits.timed[0].name}).')
                 elif const and (bad := self.bad_splits(exits)):
-                    below = all(t < 1 for _,t in bad)
-                    if below and len(exits.timed) == 1:
-                        exits.remainder = exits.timed.pop()
-                        exits.remainder.guessed['p'] = f'{1 - bad[0][1]:n}'
-                    else:
-                        group, total = bad[0]
-                        undriven = [tr.name for tr in exits.hazards if tr.undriven]
-                        driven = [tr for tr in exits.hazards if not tr.undriven]
-                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} a rate of 0 (@ 0) and no p=, so {"is" if len(undriven) == 1 else "are"} moved only by products or code, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
-                        why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
-                        why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
-                        raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
-                                                f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{why}')
-            exits.timed += apart
+                    group, total = bad[0]
+                    undriven = [tr.name for tr in exits.hazards if tr.undriven]
+                    driven = [tr for tr in exits.hazards if not tr.undriven]
+                    why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} a rate of 0 (@ 0) and no p=, so {"is" if len(undriven) == 1 else "are"} moved only by products or code, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
+                    why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=) and p=None, to take the rest.' if total < 1 and driven and not exits.timed else ''
+                    why += f' For {sc.strjoin(tr.name for tr in exits.timed)} to take the rest ({1 - total:n}), give {"it" if len(exits.timed) == 1 else "one of them"} p=None.' if total < 1 and exits.timed else ''
+                    why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
+                    raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
+                                            f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{why}')
         for name,exits in self.exits.items():
             outs = exits.branches + exits.timed + exits.hazards + exits.triggered + sc.tolist(exits.remainder)
             exits.held = any(tr.stays for tr in outs) # Whether some people stay with no exit of their own (ss.stay): see ss.solvers.Compartmental.build_layout()
@@ -818,7 +816,7 @@ class Graph:
 
     @staticmethod
     def bad_splits(exits):
-        """ The groups of branches with constant p= whose shares do not sum to 1: those that apply to the people at each level named by a move= arrow are summed within that level; returns [(branches, total)] """
+        """ The groups of branches with constant p= whose fractions do not sum to 1: those that apply to the people at each level named by a move= arrow are summed within that level; returns [(branches, total)] """
         bad = []
         dims = sorted({dim for tr in exits.branches for dim in tr.move_from})
         levels = [sorted({lev for tr in exits.branches for lev in tr.move_from.get(dim, [])}) for dim in dims]
@@ -833,7 +831,7 @@ class Graph:
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr._check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.dead is a split, though neither is a state
+            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the fraction of its people who move; a split with ss.stay or ss.dead is a split, though neither is a state
                 raise ValueError(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr._inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr._arrow} | B" with p=[...].')
             for inc in [c for c in ss.expressions.nodes([tr.rate, tr.dur] + sc.tolist(tr.p)) if isinstance(c, ss.conditions.Cond) and c.op == 'incidence']: # A flow over a window, in a rate, would be a delay equation
@@ -1040,7 +1038,7 @@ class Graph:
 
     @property
     def count_sources(self):
-        """ The states whose numbers or shares drive an acquisition at a rate on counts of them, which are the sources of infection without a transmission: `I` in `S >> I @ beta*I.n` (density-dependent), or `beta*I.frac` """
+        """ The states whose numbers or fractions drive an acquisition at a rate on counts of them, which are the sources of infection without a transmission: `I` in `S >> I @ beta*I.n` (density-dependent), or `beta*I.frac` """
         out = {}
         for tr in self.acquisitions:
             if tr.rate is not None and not tr.contact:
@@ -1052,7 +1050,7 @@ class Graph:
     def met_counts(self):
         """
         The counts in a rate that a contact matrix acts on (see `ss.solvers.Mixing.count_terms()`): in the rate of an acquisition, the number
-        (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_infectious`) or share (`I.frac`) of the people in states of this disease that it does not take
+        (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_infectious`) or fraction (`I.frac`) of the people in states of this disease that it does not take
         people from, as `I` in `S >> I @ beta*I.n`; not one inside a function of the rate (e.g. `np.clip(I.n/K, 0, 1)`), which modifies the rate by
         the total rather than being met
         """

@@ -251,7 +251,7 @@ def make_contra(n_agents=10_000):
         return [ss.by(dict(age=age_bins, value=col)) for col in (vals/vals.sum(axis=1, keepdims=True)).T]
     def branch(src, ever):
         pu = p_use(ever)
-        return [1 - pu] + [pu*share for share in mix(src)]
+        return [1 - pu] + [pu*frac for frac in mix(src)]
     def dur(i):
         scale = ss.by(dict(age=age_bins, value=np.exp(2.0 + 0.2*i + 0.1*np.arange(len(age_bins)))))
         return ss.weibull(shape=1.5, scale=scale, unit='month') if i % 2 else ss.gamma(shape=2.0, scale=scale/2, unit='month')

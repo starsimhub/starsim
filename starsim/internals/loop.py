@@ -57,8 +57,8 @@ class Loop:
         1. sim:               advance()        # Move the time to this step's time point (from the second step on)
         2. sim:               start_step()     # Initialize the sim, including plotting progress
         3. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        4. people:            record_stocks()  # Record the basic states at the start of the step
-        5. all modules:       record_stocks()  # Record each module's states at the start of the step
+        4. people:            record_states()  # Record the basic states at the start of the step
+        5. all modules:       record_states()  # Record each module's states at the start of the step
         6. sim.custom:        step()           # Run any custom modules
         7. sim.demographics:  step()           # Update the demographics, including adding new agents
         8. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
@@ -67,8 +67,8 @@ class Loop:
         11. sim.interventions: step()          # Run the interventions
         12. sim.diseases:     step()           # Run the diseases, including transmission
         13. people:           step_die()       # Figure out who died on this timestep
-        14. people:           record_flows()   # Record who died or left in the step
-        15. all modules:      record_flows()   # Record what happened in the step
+        14. people:           record_events()   # Record who died or left in the step
+        15. all modules:      record_events()   # Record what happened in the step
         16. sim.analyzers:    step()           # Run the analyzers
         17. all modules:      finish_step()    # Do any final tidying
         18. people:           finish_step()    # Clean up dead agents
@@ -84,9 +84,9 @@ class Loop:
     point k to k+1 is step k, and throughout it `sim.ti == k` and `sim.now` is time point k,
     which is when the step happens, what it reads time-varying inputs and dates at, and where
     its results go. A step is taken from every time point, the last included, so each time
-    point is a period: its stocks are the state at its start (recorded by `record_stocks()`,
+    point is a period: its stocks are the state at its start (recorded by `record_states()`,
     before any module's step), and its flows the totals over the step (recorded by
-    `record_flows()`, after them). The state after the last step is not recorded.
+    `record_events()`, after them). The state after the last step is not recorded.
 
     Args:
         sim (Sim): the sim to run (usually made by the sim itself)
@@ -192,13 +192,13 @@ class Loop:
             if self._keep(mod.start_step):
                 self += mod.start_step
 
-        # Record the state at the start of the step. A module's record_stocks() is skipped only when it is the inherited
+        # Record the state at the start of the step. A module's record_states() is skipped only when it is the inherited
         # base method and the module has no auto-generated boolean-state results to count (see _null_record())
         if sim.pars.get('record_people', True): # People results can be opted out for lightweight sims
-            self += sim.people.record_stocks
+            self += sim.people.record_states
         for mod in sim.modules:
-            if self._keep(mod.record_stocks):
-                self += mod.record_stocks
+            if self._keep(mod.record_states):
+                self += mod.record_states
 
         # Rescale the population if needed
         if sim.pars.rescale:
@@ -215,10 +215,10 @@ class Loop:
 
         # Record what happened in the step
         if sim.pars.get('record_people', True):
-            self += sim.people.record_flows
+            self += sim.people.record_events
         for mod in sim.modules:
-            if self._keep(mod.record_flows):
-                self += mod.record_flows
+            if self._keep(mod.record_events):
+                self += mod.record_events
 
         # Apply analyzers
         for ana in sim.analyzers():
@@ -304,7 +304,7 @@ class Loop:
 
         This is so only for Starsim's own methods, when nothing has been changed that they
         would act on, and for a `step()` with nothing in it: a module's `start_step()` with no random numbers to move on, its
-        `finish_step()`, `record_stocks()` and `record_flows()` (see `_null_record()`) when inherited
+        `finish_step()`, `record_states()` and `record_events()` (see `_null_record()`) when inherited
         unchanged, and the people's deaths and removals in a run without agents (in which nobody
         dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
         module overrides is always kept, so a module written as code costs the loop only the
@@ -315,16 +315,16 @@ class Loop:
         if isinstance(obj, ss.Module):
             if name == 'step':
                 return empty_function(func) # E.g. an analyzer that only has finalize(), which needs one
-            elif name not in ['start_step', 'finish_step', 'record_stocks', 'record_flows']: # An intervention given as a function
+            elif name not in ['start_step', 'finish_step', 'record_states', 'record_events']: # An intervention given as a function
                 return False
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
             if name == 'start_step':
                 return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
             elif name == 'finish_step':
                 return inherited
-            elif name == 'record_stocks':
+            elif name == 'record_states':
                 return self._null_record(obj)
-            elif name == 'record_flows':
+            elif name == 'record_events':
                 return inherited
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
@@ -335,15 +335,15 @@ class Loop:
     @staticmethod
     def _null_record(mod):
         """
-        Return True if a module's `record_stocks()` is a guaranteed no-op and can be skipped
+        Return True if a module's `record_states()` is a guaranteed no-op and can be skipped
 
-        This holds only when the module uses the inherited base `Module.record_stocks`
+        This holds only when the module uses the inherited base `Module.record_states`
         (not overridden anywhere below `ss.Module` in the class hierarchy, so no `super()`
         call or mixin behavior is missed) and has no auto-generated boolean-state or
         derived-state results for the base method to count. Such a call would iterate an empty list and change
         nothing, so omitting it from the plan is result-identical.
         """
-        not_overridden = type(mod).record_stocks is ss.Module.record_stocks
+        not_overridden = type(mod).record_states is ss.Module.record_states
         return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
 
     def collect_abs_tvecs(self):
@@ -728,7 +728,7 @@ class Loop:
         Plot a diagram of all the events
 
         Args:
-            simplify (bool): if True, skip advance, record_stocks, record_flows, and finish_step events, which are automatically applied
+            simplify (bool): if True, skip advance, record_states, record_events, and finish_step events, which are automatically applied
             max_len (int): maximum number of entries to plot
             fig_kw (dict): passed to `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
@@ -740,7 +740,7 @@ class Loop:
         if df is None:
             df = self.to_df()
         if simplify:
-            filter_out = ['advance', 'record_stocks', 'record_flows', 'finish_step']
+            filter_out = ['advance', 'record_states', 'record_events', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         if max_len:
             df = df[:max_len]

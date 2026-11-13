@@ -370,7 +370,7 @@ class treat_pregnant(ss.Delivery):
 
     A delivery, as `ss.treat()` is: by default each pregnant woman infected with the
     target disease is offered treatment once, with the probability `coverage`. Treatment
-    cures the infection, and reverses a share of the fetal damage accumulated so far
+    cures the infection, and reverses a fraction of the fetal damage accumulated so far
     (growth restriction and timing shift). `who=` restricts who among them is offered it,
     and `when=` when, as for any delivery (e.g. `when=ss.schedule(start=2025)`).
 
@@ -381,8 +381,8 @@ class treat_pregnant(ss.Delivery):
         coverage (float):        the probability that each woman eligible is treated
         who (Cond/func):         who among the infected pregnant women is offered it
         when (various):          when it is offered, as for any delivery (default: on every step, once to each woman when she becomes eligible)
-        growth_reversal (float): the share of the growth restriction reversed (0-1)
-        timing_reversal (float): the share of the timing shift reversed (0-1)
+        growth_reversal (float): the fraction of the growth restriction reversed (0-1)
+        timing_reversal (float): the fraction of the timing shift reversed (0-1)
         kwargs (dict):           passed to `ss.Delivery` (e.g. `capacity=`, `name=`)
 
     Attributes:

@@ -459,11 +459,11 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.Duration):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__add__)(other))
-            elif other.base in ['days', 'weeks'] and np.isclose(other.days, round(other.days)): # A whole number of days is added as days, not as a share of a year (which is a day off after a leap day)
+            elif other.base in ['days', 'weeks'] and np.isclose(other.days, round(other.days)): # A whole number of days is added as days, not as a fraction of a year (which is a day off after a leap day)
                 return self._timestamp_add(pd.Timedelta(days=round(other.days)))
             elif other.base in ['months', 'years'] and np.isclose(other.value, round(other.value)): # Likewise whole months and years, e.g. a month after 2020-01-01 is 2020-02-01, as with ss.date.arange()
                 return self._timestamp_add(pd.DateOffset(**{other.base:round(other.value)}))
-            else: # Otherwise (e.g. ss.years(0.5)), as a share of a year
+            else: # Otherwise (e.g. ss.years(0.5)), as a fraction of a year
                 return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)

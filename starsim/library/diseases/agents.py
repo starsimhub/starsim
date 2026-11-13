@@ -312,9 +312,9 @@ class AgentSIS(ss.AgentDisease):
         self.ti_recovered[uids] = self.ti_infected[uids] + 1 + dur_inf
         return
 
-    def record_stocks(self):
+    def record_states(self):
         """ As for `ss.AgentDisease`, and the population immunity (susceptibility), at the start of the step """
-        super().record_stocks()
+        super().record_states()
         res = self.results
         res.rel_sus[self.ti] = self.rel_sus.mean()
         return

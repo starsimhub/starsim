@@ -163,7 +163,7 @@ class SimPars(ss.Pars):
             raise TypeError(f'rescale= has no option {sc.strjoin(unknown)}; its options are {sc.strjoin(rescale_options)}')
         threshold, factor = val.get('threshold', rescale_options['threshold']), val.get('factor', rescale_options['factor'])
         if not (0 < threshold < 1):
-            raise ValueError(f'rescale=dict(threshold={threshold}) is a share of the agents, between 0 and 1')
+            raise ValueError(f'rescale=dict(threshold={threshold}) is a fraction of the agents, between 0 and 1')
         if not factor > 1:
             raise ValueError(f'rescale=dict(factor={factor}) is the least factor the scale grows by, more than 1')
         return

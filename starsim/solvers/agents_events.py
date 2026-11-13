@@ -45,7 +45,7 @@ class Events(Agents):
         if self.strain is not None:
             no('it has strains')
         groups, mixing = sim.groups, sim.mixing
-        if mixing.share is not None or mixing.migration is not None or mixing.register is not None:
+        if mixing.frac is not None or mixing.migration is not None or mixing.register is not None:
             no('people move between places (by commuting, visiting, a force between places, migration, or a movement register)', 'which changes who meets whom, or the place people are in, in ways the events do not take yet: they take places whose people stay in them')
         if groups.group_fold is not None:
             no('a stratification applies to only some people (who=)', 'whose counts the agent engine takes again from the agents at each step, which the events do not do yet')
@@ -108,10 +108,10 @@ class Events(Agents):
         self.haz_ptr, self.haz_tr = ptr(haz), ints([tid[tr.name] for tr in self.haz])
         auids = self.sim.people.auids
         def same(edges, what):
-            """ Shares that are the same for everyone, as the events take them yet: the cumulative shares (one row per branch, and its end) of the first agent """
+            """ Fractions that are the same for everyone, as the events take them yet: the cumulative fractions (one row per branch, and its end) of the first agent """
             edges = np.asarray(edges, dtype=float).reshape(len(edges), -1)
             if edges.shape[1] > 1 and np.ptp(edges, axis=1).max() > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the shares of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
+                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the fractions of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
             return edges[:, 0]
         brs, cums = [], []
         for state in graph.people_states:
@@ -139,7 +139,7 @@ class Events(Agents):
                 self.dw_kind[i], self.dw_row[i] = 2, len(self.drawn)
                 self.drawn.append(tr)
 
-        # Each transition's destinations, with their shares; -1 for a death
+        # Each transition's destinations, with their fractions; -1 for a death
         dsts, cums = [], []
         for tr in self.trs:
             dst = [index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.may_die)
@@ -184,25 +184,25 @@ class Events(Agents):
         """
         On a network with acts: the acts of each edge in the step, taken as spread evenly through it, so each edge's hazard over the step is
         held for it, as `transmit_acts()` has it (the edge's weight, times its acts, times the hazard per act in its direction for the source's
-        state). Returns each source state's share of the largest hazard per act, and the hazard rate of each edge from p1 to p2 and from p2 to p1
+        state). Returns each source state's fraction of the largest hazard per act, and the hazard rate of each edge from p1 to p2 and from p2 to p1
         """
         hazards = {state: np.asarray(h, dtype=float) for state,h in hazards.items()} # By direction
         if any(h.ndim > 1 for h in hazards.values()):
             raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
         top = np.max(list(hazards.values()), axis=0)
         on = top > 0
-        shares = {}
+        fracs = {}
         for state,h in hazards.items():
             ratio = h[on]/top[on]
             if len(ratio) and np.ptp(ratio) > 1e-12:
                 raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
-            shares[state] = float(ratio[0]) if len(ratio) else 0.0
+            fracs[state] = float(ratio[0]) if len(ratio) else 0.0
         edges = route.edges
         p1, p2 = np.asarray(edges.p1), np.asarray(edges.p2)
         rate = np.asarray(edges.weight, dtype=float)*np.asarray(edges.acts, dtype=float)/self.dt # The acts of the step, spread through it
         w1 = rate*top[route.edge_directions(p1, p2)]
         w2 = w1 if route.one_way or not route.sides else rate*top[route.edge_directions(p2, p1)]
-        return shares, w1, w2
+        return fracs, w1, w2
 
     def is_matrix(self, route):
         """ Whether a route mixes by a contact matrix between cells everyone in which has the same contacts: within each place or over the model's dimensions (`sim.mixing.pool_terms`), or by age bands of its own (`ss.contacts(ages=...)`) """
@@ -238,7 +238,7 @@ class Events(Agents):
         mod = self.mod
         tr = self.graph.transmissions[0] if self.graph.transmissions else None
         ns = len(self.graph.people_states)
-        out = sc.objdict(kind=[], x_off=[], r_n=[], deg=[], scale=[], bound=[], share=[], lists=[], w1=[], w2=[], beta_off=[], members=[], mem_eff=[], mem_off=[], mem_n=[], ctc=[],
+        out = sc.objdict(kind=[], x_off=[], r_n=[], deg=[], scale=[], bound=[], frac=[], lists=[], w1=[], w2=[], beta_off=[], members=[], mem_eff=[], mem_off=[], mem_n=[], ctc=[],
                          a_cell=[], c_ptr=[], c_first=[], c_row=[], c_cum=[])
         n_x = n_beta = n_mem = n_cell = n_row = n_ac = 0
         blks = {} # The number of cells a contact on each contact matrix can reach
@@ -261,9 +261,9 @@ class Events(Agents):
                     continue
                 elif not np.isfinite(ref):
                     raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
-                share = np.zeros(ns)
+                frac = np.zeros(ns)
                 for state,c in coefs.items():
-                    share[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)
+                    frac[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)
                 ctc = np.zeros(n) # Each agent's contacts on a pool or contact matrix (0 if not a source there)
                 if is_net:
                     if not acts:
@@ -287,7 +287,7 @@ class Events(Agents):
                     nb = count.reshape(-1, blk).astype(float) # By the cells a contact can reach: each place's (or one set), and the level in it
                     cum = np.cumsum(mat.T[None, :, :]*nb[:, None, :], axis=2) # [set, level of the source, level reached]: the contacts with each level, by its number
                     with np.errstate(invalid='ignore', divide='ignore'):
-                        rate = np.where(nb > 0, cum[:, :, -1]/nb, 0.0).ravel() # As the hazard of a group in a compartmental run: the matrix times the share infectious of each level, over their number
+                        rate = np.where(nb > 0, cum[:, :, -1]/nb, 0.0).ravel() # As the hazard of a group in a compartmental run: the matrix times the fraction infectious of each level, over their number
                     out.a_cell.append(np.where(cell >= 0, cell + n_cell, -1)); out.c_ptr.append(n_mem + np.append(0, np.cumsum(count))[:-1])
                     ctc[inside] = rate[cell[inside]]
                     out.c_first.append(n_cell + np.arange(size)//blk*blk); out.c_row.append(n_row + np.arange(size)*blk); out.c_cum.append(cum.ravel())
@@ -310,7 +310,7 @@ class Events(Agents):
                 self.route_nets.append(i)
                 out.scale.append(scale)
                 out.bound.append(bound)
-                out.share.append(share)
+                out.frac.append(frac)
                 out.ctc.append(ctc)
         finally:
             self._route_memo = None
@@ -320,7 +320,7 @@ class Events(Agents):
         w1 = cat(out.w1, float)
         w2 = w1 if all(a is b for a,b in zip(out.w1, out.w2)) else cat(out.w2, float) # The same weight both ways, unless a network has acts
         return (np.array(out.kind, np.int64), np.array(out.x_off, np.int64), np.array(out.r_n, np.int64), np.array(out.scale, float), np.array(out.bound, float),
-                np.array(out.share, float).reshape(nr, ns), *index, cat(out.deg, np.int64), w1, w2,
+                np.array(out.frac, float).reshape(nr, ns), *index, cat(out.deg, np.int64), w1, w2,
                 np.array(out.beta_off, np.int64), cat(out.members, np.int64), cat(out.mem_eff, float), np.array(out.mem_off, np.int64), np.array(out.mem_n, np.int64),
                 np.array(out.ctc, dtype=float).reshape(nr, n),
                 np.array([blks.get(r, 0) for r in range(nr)], np.int64), cat(out.a_cell, np.int64), np.append(cat(out.c_ptr, np.int64)[:n_cell], n_mem).astype(np.int64),

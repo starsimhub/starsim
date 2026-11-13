@@ -221,9 +221,9 @@ pub fn member(ys: A2<f64>, p: &Program, i: usize, g: usize) -> f64 {
     if p.set_w.at(i) < 0 { v } else { v*p.consts.at(p.set_w.u(i), g) }
 }
 
-/// A count on the stack of a rate: the number v (COUNT), or its share of the n people there (FRAC), 0 where there is no one (`leaf_share()`)
+/// A count on the stack of a rate: the number v (COUNT), or its fraction of the n people there (FRAC), 0 where there is no one (`leaf_frac()`)
 #[inline(always)]
-pub fn leaf_share(op: i64, v: f64, n: f64) -> f64 {
+pub fn leaf_frac(op: i64, v: f64, n: f64) -> f64 {
     if op == FRAC { if n > 0.0 { v/n } else { 0.0 } } else { v }
 }
 
@@ -282,7 +282,7 @@ pub fn evaluate(y: A2<f64>, t: &Tape, consts: A2<f64>, out: A2<f64>, grouped: A1
             grouped.set(i, (t.local && op != TOTAL) as u8);
             for g in 0..ng {
                 let pl = if op == TOTAL { 0 } else { t.places.u(g) };
-                out.set(i, g, leaf_share(op, num.at(pl), people.at(pl)));
+                out.set(i, g, leaf_frac(op, num.at(pl), people.at(pl)));
             }
         } else if op >= EXP {
             grouped.set(i, grouped.at(arg));
@@ -348,8 +348,8 @@ pub fn by_block(matrix: A2<f64>, v: A1<f64>, size: usize, block: usize, out: A1<
     }
 }
 
-/// The product of the time share between places with a vector of places by levels, into out: `v @ share` if `by_columns`, else `share @ v` (`share()`)
-pub fn share(pair: A2<i64>, vals: A1<f64>, v: A1<f64>, size: usize, block: usize, out: A1<f64>, by_columns: bool) {
+/// The product of the time fraction between places with a vector of places by levels, into out: `v @ frac` if `by_columns`, else `frac @ v` (`frac()`)
+pub fn frac(pair: A2<i64>, vals: A1<f64>, v: A1<f64>, size: usize, block: usize, out: A1<f64>, by_columns: bool) {
     let places = size/block;
     if vals.len() == places*places && places > 16 {
         let f: Dgemv = unsafe { std::mem::transmute::<usize, Dgemv>(*DGEMV.get().expect("BLAS not found")) };
@@ -609,8 +609,8 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                         }
                         let block = p.block.u(t);
                         if p.use_.b(0, t) { // Move people to where they spend their time
-                            share(p.sh_pair, p.sh_val, num, size, block, num2, true);
-                            share(p.sh_pair, p.sh_val, den, size, block, den2, true);
+                            frac(p.sh_pair, p.sh_val, num, size, block, num2, true);
+                            frac(p.sh_pair, p.sh_val, den, size, block, den2, true);
                             for i in 0..size {
                                 num.set(i, num2.at(i));
                                 den.set(i, den2.at(i));
@@ -630,7 +630,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             }
                         }
                         if p.use_.b(2, t) { // Mix between places
-                            share(p.sh_pair, p.sh_val, prev, size, block, num, false);
+                            frac(p.sh_pair, p.sh_val, prev, size, block, num, false);
                             for i in 0..size {
                                 prev.set(i, num.at(i));
                             }
@@ -689,7 +689,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                                 num.add(p.places.u(g), v);
                             }
                             for g in 0..ng {
-                                stack.set(top as usize, g, leaf_share(op, num.at(p.places.u(g)), local_n.at(g)));
+                                stack.set(top as usize, g, leaf_frac(op, num.at(p.places.u(g)), local_n.at(g)));
                             }
                         } else if op == GROUP { // The number in some compartments, in the same group
                             top += 1;
