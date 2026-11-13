@@ -8,6 +8,7 @@ Used with: agents and compartments; declared and coded modules
 # Authorship: written by humans, lightly edited by AI
 
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
@@ -119,7 +120,9 @@ class infection_log(Analyzer):
                 ax = axs[i]
                 plt.sca(ax)
                 df = log.to_df()
-                ax.scatter(df.t, df.target, **kw.plot) # NB, not all plot keywords are valid for scatter
+                t = ss.DateArray(df.t) if pd.api.types.is_datetime64_any_dtype(df.t) else df.t # Dates on Starsim's date axis
+                ax.scatter(t, df.target, **kw.plot) # NB, not all plot keywords are valid for scatter
+                sc.commaticks(ax)
                 ax.set_xlabel('Time')
                 ax.set_ylabel('Agent')
                 ax.set_title(f'Infection log for "{key}"')

@@ -1370,6 +1370,7 @@ class Fit(sc.prettyobj):
                     ax.axhline(0, color='k', lw=0.5)
                     ax.sharex(main[cols.index(col)])
                     ax.set_title(f'{col}: data minus model')
+                    sc.commaticks(ax)
             for ax,col in zip(main, cols):
                 for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
                     res = match_column(sim, col)
@@ -1381,6 +1382,7 @@ class Fit(sc.prettyobj):
                 ax.scatter(times, self.sim.data[col], s=15, label='Data', zorder=10, **kw.data)
                 ax.set_title(col + (f' ({ss.results.period_totals(times)})' if summed is not None else ''))
                 ax.legend(frameon=False)
+                sc.commaticks(ax)
             sc.figlayout(fig=fig)
         return ss.return_fig(fig, **kw.return_fig)
 
@@ -3328,6 +3330,7 @@ class ModelComparison(sc.prettyobj):
                 ax.scatter(plot_times(test), test[col], facecolors='none', edgecolors='k', s=15, label='Held out', zorder=10)
                 ax.set_title(col)
                 ax.legend(frameon=False)
+                sc.commaticks(ax)
             sc.figlayout(fig=fig)
         return ss.return_fig(fig, **kw.return_fig)
 

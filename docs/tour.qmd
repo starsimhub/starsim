@@ -1,11 +1,21 @@
 ---
 title: A tour of Starsim
-jupyter: python3
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .qmd
+      format_name: quarto
+      format_version: '1.0'
+      jupytext_version: 1.19.1
+  kernelspec:
+    display_name: Python 3 (ipykernel)
+    language: python
+    name: python3
 authorship:
-  human: 0
-  ai: 100
-  note: Written by AI; the intervention, fitting, and uncertainty examples made more realistic by AI
-format: # Also downloadable as a Jupyter notebook (not executed: the page already is), as for the tutorials
+  human: 30
+  ai: 70
+  note: Drafted by AI; reviewed and edited by humans
+format:
   html: default
   ipynb:
     execute:
@@ -16,13 +26,13 @@ format-links:
     icon: journal-code
 ---
 
-This page is a ten-minute tour of Starsim. It builds one model step by step: a simple epidemic, then the same epidemic with age groups, an intervention, data to fit it to, and many runs to show the uncertainty. Each step is a few lines of code, and each step says what the code means in the terms of an epidemiological model. The parameters are illustrative, not estimates for any particular disease or setting.
+This page provides a (relatively) tour of Starsim. It builds up a model step by step: a simple epidemic, then with age groups, an intervention, data to fit it to, and multiple runs with uncertainty.
 
-To follow along, install Starsim with `pip install "starsim[jax]"`, then download this page as a Jupyter notebook from the "Jupyter notebook" link beside the page's contents, and run its cells in order. You can also clone the [Starsim repository](https://github.com/starsimhub/starsim) and open `docs/tour.qmd` in Jupyter (with `jupytext` installed, Jupyter opens `.qmd` files directly).
+To follow along, install Starsim with `pip install "starsim[jax]"`, then download this page as a Jupyter notebook from the "Jupyter notebook" link beside the page's contents. You can also clone the [Starsim repository](https://github.com/starsimhub/starsim) and open `docs/tour.qmd` in Jupyter (with `jupytext` installed, Jupyter opens `.qmd` files directly).
 
 ## An SIR model
 
-In an SIR model, everyone is in one of three compartments: susceptible (S), infectious (I), or recovered (R). The model is the standard set of equations:
+Let's start with the standard SIR model. Everyone is in one of three compartments: susceptible (S), infectious (I), or recovered (R). The equations are:
 
 $$
 \begin{aligned}
@@ -32,12 +42,12 @@ $$
 \end{aligned}
 $$
 
-where N = S + I + R is the population size. People move between the compartments along two transitions:
+where N = S + I + R is the population size. People change state via two *transitions*:
 
-- **Infection**, from S to I. Each susceptible person is infected at a rate of β times the fraction of people who are infectious, so the number infected per day is β S I / N (frequency-dependent transmission).
+- **Infection**, from S to I. Each susceptible person is infected at a rate of β times the fraction of people who are infectious, so the number infected per day is β S I / N. Since the "S/N" is actually an approximation for how people in the population mix, which in Starsim you often specify explicitly (e.g. via a network), you can omit it.
 - **Recovery**, from I to R. People stay infectious for 10 days on average, so they recover at a rate of γ = 1/10 per day.
 
-In Starsim, the compartments are states, and each transition says where people move from, where they move to, and at what rate (after `@`):
+In Starsim, the compartments are called *states*, and the transitions say where people move from, to, and at what rate (after `@`):
 
 ```{python}
 import starsim as ss
@@ -48,40 +58,25 @@ recovery  = I >> R @ ss.days(10)  # From I to R, after 10 days on average
 sir = ss.Disease(infection, recovery)
 ```
 
-A state in a rate, like `I` in `0.3*I`, is the fraction of people in it. A duration, like `ss.days(10)`, is the average time spent in a state before leaving it. Since the duration is in days, β = 0.3 is per day. Starsim writes out the same equations from the model:
+A state in a rate, like `I` in `0.3*I`, is the fraction of people in it. A duration, like `ss.days(10)`, is the average time spent in a state before leaving it. Since the duration is in days, β = 0.3 is per day. You can check what equations Starsim interpreted from what you gave it:
 
 ```{python}
 sir.equations()
 ```
 
-The basic reproduction number is R0 = β × the duration = 0.3 × 10 = 3. To run the model, give it to a sim with how long to run for:
+To run the model, put it in a sim and say how long to run it for:
 
 ```{python}
-sim = ss.Sim(sir, stop=ss.days(100))
+sim = ss.Sim(sir, dur=ss.days(100))
 sim.run()
-sim.plot()
+sim.sir.plot()
 ```
 
-The sim says what it ran and what happened: 10,000 people (the default population) as an ODE, R0 = 3 as expected, and the size and timing of the peak. Since nothing in this model is about individual people, Starsim runs it as a deterministic compartmental model (an ODE). The same model can also be run as a stochastic model or as agents, as [the last section](#uncertainty-and-many-runs) shows.
-
-## How the epidemic starts
-
-By default, 1% of people start infected, and everyone else starts in the first state, S. The fraction that starts infected is `init_prev`, the initial prevalence:
-
-```python
-sir = ss.Disease(infection, recovery, init_prev=0.001)  # 0.1% start infected
-```
-
-`init_prev` puts people in the state that an infection leads to: `I` here, but `E` in an SEIR model, where people are exposed before they are infectious. To start people in any state, give `init` (the fraction of people in each state) or `init_n` (the number of people in each):
-
-```python
-sir = ss.Disease(infection, recovery, init=dict(I=0.001, R=0.2))  # 0.1% infectious, 20% already immune
-sir = ss.Disease(infection, recovery, init_n=dict(I=10))         # 10 people infectious
-```
+The sim says what it ran and some key results: 10,000 people (the default population) as an ODE, R0 = 3 as expected (=0.3/0.1), and the number of infections. Since nothing in this model is about individual people, Starsim runs it as a deterministic compartmental model (an ODE). The same model can also be run as a stochastic model or as agents, as [the last section](#uncertainty-and-many-runs) shows.
 
 ## Checking the model
 
-Starsim fills in whatever the model leaves out: the population size, how long a state lasts beyond its average (here, exponentially distributed, as in an ODE), how people mix, and so on. `describe()` lists the whole model as Starsim has built it: every state, transition, and setting, with each value that Starsim chose itself marked as guessed, so that nothing is hidden:
+Starsim has defaults for pretty much everything (all of which can of course be overridden). `describe()` lists the whole model as Starsim has built it: every state and transition, plus any parameters that used Starsim defaults:
 
 ```{python}
 sim.describe()
@@ -89,7 +84,7 @@ sim.describe()
 
 ## Age groups and contacts
 
-Most respiratory infections spread differently between age groups. `stratify()` splits each state by age: here into three groups, with the fraction of the population in each. `ss.contacts()` says how much each group mixes with each other one: a contact matrix, in which row *i*, column *j* is the number of contacts a day that a person in group *i* has with people in group *j*. With contacts, β is the rate of infection per contact. The infectious period is a parameter too, `dur_inf`, so that it can be changed later. This model also has an outcome, `cases`: the infections that are reported, here one in five.
+Many diseases spread differently between age groups. `stratify()` splits each state into substates: here we split into three age groups. `ss.contacts()` says how the groups mix with each other: the entry in row *i* and column *j* is the number of contacts a day that people in *i* have with people in *j*. β is the rate of infection per contact. This model also has an outcome, `cases`, representing the infections that are reported.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -102,34 +97,40 @@ cases     = ss.outcome(0.2*infection) # One infection in five is reported
 sir = ss.Disease(infection, recovery, cases, init_prev=0.0001)
 sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+contacts = ss.contacts(
+    ages=[0, 15, 65],
+    matrix=[
+        [18, 2, 1],
+        [2, 4, 1],
+        [1, 1, 5]]
+)
 pars = dict(networks=contacts, total_pop=1e6, start='2025-01-01', stop='2025-07-01')
 sim = ss.Sim(sir, **pars)
 sim.run()
-sim.results.sir.I.by('age').plot()
+sim.results.sir.cases.by('age').plot()
 ```
 
 Every state and transition has a result of the same name (`S`, `I`, `R`, `infection`, `recovery`), and so does each outcome (`cases`). `by('age')` splits a result by age group, and `select()` picks one group, e.g. `sim.results.sir.I.select(age='65+')`.
 
 ## Interventions
 
-An intervention changes the course of the epidemic from some point on. Here are two, both starting on 1 February, as the epidemic grows towards its peak: vaccinating 80% of children under 15, who have the most contacts and so carry the most transmission, with a vaccine that cuts their chance of infection by 90%; and masks, which cut transmission by 40%:
+As was drilled into everyone's heads during the COVID pandemic, interventions can be pharmaceutical or non-pharmaceutical. Here we introduce one of each: masks, which cut everyone's transmission by 40%; and vaccinating 80% of children under 15 with a vaccine that cuts their chance of infection by 90%:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.9, who=sir.age < 15, when='2025-02-01', coverage=0.8)
-masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-02-01')
+masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-01-20')
+vaccination = ss.vaccinate(efficacy=0.9, who=sir.age < 15, when='2025-01-20', coverage=0.8)
 ```
 
-To compare them, make a sim for each scenario, and run them together with `ss.parallel()`:
+To compare them, make a sim for each scenario, and run them in parallel with `ss.parallel()`:
 
 ```{python}
-scenarios = {'No intervention': None, 'Vaccine': vaccination, 'Masks': masks}
+scenarios = {'No intervention': None, 'Masks': masks, 'Vaccine': vaccination}
 sims = {}
 for label, intervention in scenarios.items():
     sims[label] = ss.Sim(sir, interventions=intervention, **pars)
 
 msim = ss.parallel(sims)
-msim.plot(['sir.I', 'sir.cases'])
+msim.plot('sir.infection')
 ```
 
 `msim.summarize()` gives each result over the whole run (the total of a flow, such as infections, and the final value of a state) for each scenario; here, the infections:
@@ -138,23 +139,23 @@ msim.plot(['sir.I', 'sir.cases'])
 msim.summarize('sir.infection')
 ```
 
-Each prevents about a quarter of the infections, and halves the peak or more. Since R0 is about 3 without them, two thirds of people are still infected in the end with either; what they do most is flatten and delay the epidemic, which matters for the number who are ill at once.
+Masks prevents about a third of infections, while vaccination prevents more than half.
 
 ## Data and fitting
 
-A model is fitted by finding the values of its parameters that make its results match data. To try this where the right answer is known, make data from a model: run it with β = 0.025, and draw weekly counts of cases from it, with random noise as in real reporting. Real data never come from exactly the model being fitted, so here the data come from a slightly different one, in which the infectious period varies less from person to person (an Erlang distribution with 3 stages, rather than the exponential of the model). The noise is drawn with the true sim's own random seed (`rand_seed=2`), not the default seed of the sims being fitted, since the noise in real data has nothing to do with the model's.
+A model is fitted by finding the values of its parameters that make its results match data. We can use our model to create synthetic data and then fit to it. Here we set β = 0.02, and draw weekly counts of cases from it, with random noise as in real reporting. Real data never come from exactly the model being fitted, so here set  the data come from a slightly different one, in which the infectious period varies less from person to person (an Erlang distribution with 3 stages, rather than the exponential of the model). The noise is drawn with the true sim's own random seed (`rand_seed=4`), and we use a stochastic solver (tau-leaping) rather than an ODE.
 
 ```{python}
-truth = ss.Sim(sir, pars=dict(beta=0.025, dur_inf=ss.erlang(k=3, mean=ss.days(10))), rand_seed=2, **pars)
+truth = ss.Sim(sir, pars=dict(beta=0.02, dur_inf=ss.erlang(k=3, mean=ss.days(10))), rand_seed=4, solver='tau', **pars)
 truth.run()
-data = truth.to_synthetic_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week', noise=ss.nbinom(n=5))
 data.head()
 ```
 
 A forecast is made from the data so far. Here, the first four weeks of cases, up to 1 February, are the data, and the sim stops when they do. Data is matched to results by name: the column `cases` is compared with the result `cases`, and since the data is weekly, each row is compared with the total of the model's cases over its week. `sim.fit()` then fits every parameter that has bounds (here, β) to every result that has data:
 
 ```{python}
-early = data[data.date < '2025-02-01']
+early = data[data.date <= '2025-01-22']
 sim = ss.Sim(sir, data=early, **(pars | dict(stop='2025-02-01')))
 fit = sim.fit()
 fit.plot()
@@ -166,7 +167,7 @@ The plot shows the model's cases with the starting value of β (before) and the 
 fit.pars
 ```
 
-The fitted β is higher than the 0.025 the data was made with: the fitted model's exponential infectious period gives a slower growth for the same β than the data's less variable one, so it makes up for it with more transmission. A fit finds the values that make the model match the data, which are only the true values when the model is the true one.
+The fitted β is higher than the actual 0.02, since the fitted model's exponential infectious period gives a slower growth than the Erlang distribution.
 
 `fit.project()` runs the fitted model on, here to 1 July, for the forecast; given all the data, its plot shows the cases that were still to come:
 
@@ -179,23 +180,21 @@ From the first four weeks alone, the forecast gets the timing and size of the pe
 
 ## Uncertainty and many runs
 
-The ODE gives one answer: the epidemic as expected on average. A real epidemic varies by chance from one outbreak to the next, and more so in a small population or when there are few cases. To see this, run the fitted model in a town of 20,000, which starts with 2 infectious people (the same 0.01%), as a stochastic model, in which the number of people who move between states each day is random. `solver='binomial'` runs the same model this way (as a chain-binomial model), and `n_runs=20` runs it 20 times, each with its own random seed:
+The ODE gives the maximum likelihood answer, but real epidemics also include stochastic variability, especially when there are a small number of cases. To see this, we run the fitted model in a population of 20,000 as a stochastic model, in which the number of people who move between states each day is random. We do this by setting `solver='binomial'` (short for [chain binomial](https://en.wikipedia.org/wiki/Reed%E2%80%93Frost_model)), and `n_runs=40` runs it 40 times, each with its own random seed:
 
 ```{python}
-town = ss.Sim(sir, pars=fit.pars, **(pars | dict(total_pop=20_000)))
-msim = ss.parallel(town.new(solver='binomial'), n_runs=20)
-msim.plot(['sir.I', 'sir.cases'])
+sim = ss.Sim(sir, pars=fit.pars, solver='binomial', **(pars | dict(total_pop=20_000)))
+msim = ss.parallel(sim, n_runs=40)
+msim.plot(['sir.I', 'sir.cases'], lines=True)
 ```
 
-The plot shows the median of the runs, and the range that holds 95% of them. `msim.summarize()` gives the same for each result over the whole run: the median, the low and high ends of that range, the mean, and the standard deviation:
+The plot shows each of the runs (omit `lines=True` to show the median and 95% range instead). The results are available as a dataframe via `msim.summarize()`:
 
 ```{python}
 msim.summarize()
 ```
 
-In every run, nearly everyone in the town is infected, so the size of the epidemic hardly varies; what chance changes is when it happens. In these runs, the peak comes anywhere from 3 to 14 February, depending on how quickly the first few chains of transmission took off.
-
-The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [tutorials](tutorials.qmd) show how, starting with [T1](tutorials/t1_intro.qmd#the-same-model-as-agents).
+Nearly the same number of people are infected each time, but the epidemics vary considerably in terms of peak timing.
 
 ## Next steps
 
@@ -203,4 +202,3 @@ The model can also be run as agents, one for each person (`solver='abm'`), which
 - The [user guide](user_guide.qmd) covers each topic in full, including networks, demographics, custom modules, and solvers.
 - The [gallery](gallery.qmd) has complete models to start from.
 - If you have a model in another framework, the [conversion guides](user_guide/building_import.qmd) show how to bring it into Starsim.
-- Starsim can also be used from R, with [R-Starsim](https://r.starsim.org).

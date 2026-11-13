@@ -1613,10 +1613,9 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
         # Calculate approximate number of ticks that can fit
         if self.axis is not None:
-            ax_width = self.axis.axes.bbox.width  # Width in points
-            char_width = 10  # Approximate points per character
-            label_chars = 6  # Approximate characters per label
-            label_width = char_width * label_chars
+            ax_width = self.axis.axes.bbox.width*72/self.axis.figure.dpi # In points, so the number of ticks doesn't grow with the dpi (e.g. in a notebook at high resolution)
+            fontsize = matplotlib.font_manager.FontProperties(size=matplotlib.rcParams['xtick.labelsize']).get_size_in_points()
+            label_width = 4.5*fontsize # A label such as "Jan-01", with space between labels
             self._date_locator.maxticks = collections.defaultdict(lambda: max(self._date_locator.minticks, int(ax_width / label_width)))
 
         return self.tick_values(vmin, vmax)

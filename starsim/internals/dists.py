@@ -1511,19 +1511,21 @@ class Dist:
 
         Args:
             n (int): the number of values to draw
-            bins (int/array): the bins of the histogram
+            bins (int/array): the bins of the histogram (by default, chosen from the draws by NumPy)
             fig_kw (dict): passed to `plt.figure()`
             hist_kw (dict): passed to `plt.hist()`
         """
-        plt.figure(**sc.mergedicts(fig_kw))
         dist = self if self.initialized else sc.dcp(self).init(force=True) # Leave this one to be initialized by its sim
         rvs = dist.rvs(n, reset=True) # As if nothing ever happened
-        plt.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
-        plt.title(str(self))
-        unit = dist.own_unit() if dist.module is None and dist.sim is None else None # Outside a sim, drawn in it
-        if unit is None:
-            plt.xlabel('Value')
-        else:
-            plt.xlabel(f'Per {unit.base.removesuffix("s")}' if issubclass(unit, ss.Rate) else unit.base.capitalize()) # e.g. "Days", or "Per year"
-        plt.ylabel(f'Count ({n} total)')
+        with ss.style():
+            fig, ax = plt.subplots(**sc.mergedicts(fig_kw))
+            ax.hist(rvs, bins=sc.ifelse(bins, 'auto'), **sc.mergedicts(dict(alpha=0.8), hist_kw))
+            ax.set_title(str(self))
+            unit = dist.own_unit() if dist.module is None and dist.sim is None else None # Outside a sim, drawn in it
+            if unit is None:
+                ax.set_xlabel('Value')
+            else:
+                ax.set_xlabel(f'Per {unit.base.removesuffix("s")}' if issubclass(unit, ss.Rate) else unit.base.capitalize()) # e.g. "Days", or "Per year"
+            ax.set_ylabel(f'Count ({n:,} total)')
+            sc.commaticks(ax)
         return rvs

@@ -20,14 +20,14 @@ pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.da
 
 ## A compartmental run in one call
 
-A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which for a small model can be 30 to 100 times slower (the ratio depends on the model and the computer). The `plan` line of `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
+A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which for a small model can be 30 to 100 times slower (the ratio depends on the model and the computer). The `Solver` line under "Results and running" in `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
 
 ```{python}
 masks = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
 late = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000, until=sir.I.n <= 10_000) # As above, ending at a lower level
 for mod in [masks, late]:
-    plan = [line for line in ss.Sim(sir, interventions=mod, **pars).describe().splitlines() if 'plan' in line]
-    print(plan[0].strip())
+    how = [line for line in ss.Sim(sir, interventions=mod, **pars).describe().splitlines() if 'as compiled code' in line]
+    print(how[0].strip())
 ```
 
 The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_kernels=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.

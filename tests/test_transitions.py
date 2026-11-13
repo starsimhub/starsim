@@ -366,7 +366,7 @@ def test_time():
     assert sim.unit is None # Nothing has a unit, so time is in timesteps
     assert sim.t.npts == 101
     tenths = ss.Sim(make_sir(), stop=100, dt=0.1, **kw)
-    assert 'beta = 0.3 per unit' in tenths.describe() and 'every 0.1 units' in tenths.describe() # Not "per step", since a step is a tenth of a unit
+    assert 'beta = 0.3 per unit' in tenths.describe() and 'Every 0.1 units' in tenths.describe() # Not "per step", since a step is a tenth of a unit
     with pytest.raises(ValueError): # Steps have no dates (they were days underneath)
         tenths.t.datevec
     with pytest.raises(ValueError):
@@ -563,17 +563,17 @@ def test_describe():
     sim = ss.Sim(sir, stop=100, **kw)
     text = sim.describe()
     print(text)
-    for string in ['10,000 people [guessed]', 'time is in timesteps',
-                   'rate = 0.05 × I.n / N', 'exponential(mean = 10 steps)', 'homogeneous', 'every step: sir']:
+    for string in ['10,000 people [Guessed]', 'time is in timesteps',
+                   'rate = 0.05 × I.n / N', 'exponential(mean = 10 steps)', 'Homogeneous', 'Every step: sir']:
         assert string in text, f'Expected "{string}" in describe()'
     assert '= 0.0952 per step' in sim.describe() # The probability of recovering in a step, 1 - exp(-1/10)
     S, I, R = ss.states(3)
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init()
-    assert 'mixing' not in density.describe() # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
-    assert 'infected: I ' in density.describe() # Density-dependent transmission is a transmission: I is its source, and R is not infected (it counted R)
+    assert '  Mixing  ' not in density.describe() # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
+    assert 'Infected: I ' in density.describe() # Density-dependent transmission is a transmission: I is its source, and R is not infected (it counted R)
     assert np.isclose(density.diseases[0].R0(), 3e-5*(10_000 - 10)*10) # beta × the susceptible × the time infectious (it failed, "Singular matrix"; then counted the 10 infected as susceptible)
     frac = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.frac, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init() # A share of everyone (as with a contact matrix): I is the source here too
-    assert 'infected: I ' in frac.describe() and np.isclose(frac.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
+    assert 'Infected: I ' in frac.describe() and np.isclose(frac.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
     S, I, R = ss.states('S I R')
     aged = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15])
     births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts([[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe()
@@ -582,7 +582,7 @@ def test_describe():
     seasonal = ss.Sim(ss.Disease(S >> I @ ss.seasonal(mean=ss.perday(17/13), amplitude=0.1, peak=0.25) * I, I >> R @ ss.perday(1/13), init=dict(I=1e-4), name='sir'), unit='day', total_pop=1.0, **kw).init()
     assert 'beta = 1.30769 per day × (1 + 0.1 cos(2π(t − 0.25)))' in seasonal.describe() # As the book writes it (it was "seasonal(mean=1.3076923076923077, ...)")
     assert 'beta = perday(1.30769) × (1 + 0.1 cos(2π(t − 0.25))), with t in years' in seasonal.diseases.sir.equations() # What the symbol stands for
-    assert 'init' in ss.Sim(ss.SIR(), stop=50, **kw).describe() # init_prev is an ss.par
+    assert 'Init:' in ss.Sim(ss.SIR(), stop=50, **kw).describe() # init_prev is an ss.par
     S, I, R = ss.states(3)
     beta, gamma = ss.par(0.5, doc='transmission rate', source='Smith 2020, table 2'), ss.par(ss.perday(0.1), source='expert opinion')
     documented = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ gamma, name='sir'), unit='day', **kw).describe()
@@ -1399,7 +1399,7 @@ def test_given_dwell():
 
     # describe() says so, and a branch with p= (decided on entry) cannot read it
     sim = make('abm', p=lambda P: 1 - np.exp(-P.time_in), dur=ss.lognormal(ss.years(3), ss.years(9))).init()
-    assert 'decided as people leave' in sim.describe()
+    assert 'Decided as people leave' in sim.describe()
     P, C, R = ss.states('P C R')
     with pytest.raises(ss.CapabilityError):
         ss.Disease(P, C, R, a=ss.Transition(P, C, dur=ss.years(3), p=P.time_in/10), b=ss.Transition(P, R, dur=ss.years(3), p=None), init_n=dict(P=10))

@@ -204,7 +204,7 @@ for mod in [None, Alarm(), Exposure()]:
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')
 ```
 
-The SIR alone and the SIR with `Alarm` run as an ODE; `Exposure` makes the sim run as agents, and the reason names it and says how to change that. `Alarm` still costs something: a compartmental run is usually taken by the kernels in one call, but a module with a step of its own makes it go step by step (the `plan` line of `sim.describe()` says so). The same `Alarm` runs as agents unchanged, since `sir.I.n` is the number infectious either way.
+The SIR alone and the SIR with `Alarm` run as an ODE; `Exposure` makes the sim run as agents, and the reason names it and says how to change that. `Alarm` still costs something: a compartmental run is usually taken by the kernels in one call, but a module with a step of its own makes it go step by step (the `Solver` line under "Results and running" in `sim.describe()` says so). The same `Alarm` runs as agents unchanged, since `sir.I.n` is the number infectious either way.
 
 ## Reading the loop
 

@@ -21,7 +21,7 @@ A model is imported in two passes. The mechanical pass (`ss.import_from(..., for
    sc.savetext('model.py', sim.imported.code)              # the model as Starsim code, to edit (the sim is this code run)
    ```
    `ss.import_from()` writes the model as Starsim code (a declared `ss.Disease` and the `ss.Sim`) and runs it to make the sim. It prints how each rate was read and warns `ImportIncomplete` with each piece it could not translate. Both are kept in `sim.imported` (`choices`, `incomplete`) and are comments in the code: the reading at the top, the untranslated pieces at the end.
-3. **Check the guesses** in the printed reading and in `print(sim.describe())` (marked `[guessed]`):
+3. **Check the guesses** in the printed reading and in `print(sim.describe())` (marked `[Guessed]`):
    - A rate with another state divided by the total (`beta*S*I/N`) was read as exposure (`beta * I`, frequency-dependent). One without the total (`beta*S*I`) was kept as counts (`beta * I.n`, density-dependent). Make sure that is what the source meant, especially if the population changes.
    - Units: bare numbers are in the sim's unit (`unit=`). A per-step probability is not a rate: `-log(1 - p)/dt` is the rate that gives it. A probability per time unit is `ss.prob(p, "day")` and the like.
    - Initial numbers: numbers of people are in `init_n=` and fractions in `init=` (1.0 is everyone); the rest start in the first state, `default_state=` (the source's first compartment of people, or a state named `S` or `susceptible`). Check that the source's initial values were numbers where they are in `init_n=`, and that the first state is the right one.

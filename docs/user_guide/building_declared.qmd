@@ -128,7 +128,7 @@ sim = ss.Sim(flu, interventions=measure, **pars)
 sim.describe()
 ```
 
-The `plan` line of `sim.describe()` says why a run is taken a step at a time, and `require_kernels=True` on the sim makes that an error instead.
+The `Solver` line under "Results and running" in `sim.describe()` says why a run is taken a step at a time, and `require_kernels=True` on the sim makes that an error instead.
 
 ## Performance
 

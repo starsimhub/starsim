@@ -18,7 +18,7 @@ stochastic = ['binomial', 'gillespie', 'abm']
 
 def guessed(text):
     """ The lines of describe() marked as guesses """
-    return [line for line in text.splitlines() if '[guessed' in line or 'nothing in the model has a unit' in line]
+    return [line for line in text.splitlines() if '[Guessed' in line or 'Nothing in the model has a unit' in line]
 
 
 def plain_sir(**kwargs):
@@ -55,7 +55,7 @@ guesses = dict(
     dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'time in I ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
     unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
-    mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
+    mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'Mixing'),
     names      = (lambda: ss.Sim(unnamed(False)),                    lambda: ss.Sim(unnamed(True)),                        'name built from'),
     pop        = (lambda: ss.Sim(plain_sir(), stop=50),             lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'people'),
     stop       = (lambda: ss.Sim(plain_sir(), total_pop=1000),      lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'to 50'),
@@ -572,7 +572,7 @@ def test_joint_population():
     assert isinstance(ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver, ss.solvers.abm)
     text = pair().init().describe()
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe() # How it is run
+    assert 'Solver       a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe() # How it is run
     return j
 
 

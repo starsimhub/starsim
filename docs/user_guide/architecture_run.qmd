@@ -73,7 +73,7 @@ sim = ss.Sim(sir, stop=100)
 sim.describe()
 ```
 
-Every `[guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solver, homogeneous mixing, 11 Erlang stages for the lognormal dwell time, and `beta` starting at the geometric middle of its bounds. Each guess is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
+Every `[Guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solver, homogeneous mixing, 11 Erlang stages for the lognormal dwell time, and `beta` starting at the geometric middle of its bounds. Each guess is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
 
 Because the model is data, its other views (`equations()`, `diagram()`, and the table of transitions, all in `starsim/internals/display.py`; see [Writing models](building_writing.qmd#checking-a-model)) and its exports ([below](#importers-and-exporters)) are read from the same graph.
 
@@ -180,11 +180,11 @@ The plan can be printed, changed, and profiled ([Reading the loop](architecture_
 
 ### Per-module timesteps
 
-A module can have its own `dt`. The loop's plan is every (time, function) pair of every module on its own timeline, sorted by time and then by the order above, so on the days yearly demographics are due they run at their usual place in a daily sim. Rates and durations are converted with the `dt` of the module that uses them. `describe()` shows the schedule; for a daily disease with `ss.Births(dt=ss.years(1))` and `ss.Deaths(dt=ss.years(1))`:
+A module can have its own `dt`. The loop's plan is every (time, function) pair of every module on its own timeline, sorted by time and then by the order above, so on the days yearly demographics are due they run at their usual place in a daily sim. Rates and durations are converted with the `dt` of the module that uses them. `describe()` shows them in its `Timestep` lines; for a daily disease with `ss.Births(dt=ss.years(1))` and `ss.Deaths(dt=ss.years(1))`:
 
 ```text
-schedule     every day: sir
-             every 365 days: births, deaths
+Timestep     Every day: sir
+             Every 365 days: births, deaths
 ```
 
 ### How the state is updated within a step
@@ -249,7 +249,7 @@ flowchart LR
 
 The hardest part of importing is reading rates. Most frameworks write a flow as a total, such as `beta * S * I / N`; the importer turns it into a per-person rate on a transition, and says how it read each one. A rate divided by the population total is exposure through the routes (`beta * I`); one without the division is density-dependent and is kept as a count (`beta * I.n`); anything else is kept literally, as an expression of counts, which is exact under every solver.
 
-An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). Exporters write SBML and odin from the built model's compartmental form, and list what they left out or changed (`ss.errors.LossyExport`); a network, a module written as code, and a function are always left out. A sim made in Starsim is never written back out as Starsim code: its code is the script that made it.
+An importer keeps the source's names, marks what it guessed (as `[Guessed]` in `describe()`), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). Exporters write SBML and odin from the built model's compartmental form, and list what they left out or changed (`ss.errors.LossyExport`); a network, a module written as code, and a function are always left out. A sim made in Starsim is never written back out as Starsim code: its code is the script that made it.
 
 The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments, writing the model as JSON for the importer (EpiModel's equivalent is `dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`). For the modeler's view, with worked examples, see [Import and export](building_import.qmd).
 

@@ -30,6 +30,12 @@ def suggested_step(module):
     return step
 
 
+def internal(arr):
+    """ Mark an array as the engine's bookkeeping rather than a property of people (see `ss.Arr.internal`) """
+    arr.internal = True
+    return arr
+
+
 def agent_solver(module, sim, why=False):
     """
     How a declared module's agents are stepped, one of the steps of `ss.solvers.abm()` ('midstep', 'wholestep', or 'events'): its own
@@ -455,16 +461,16 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             arrs += [ss.BoolState(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
-                arrs.append(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index')) # See stamp()
+                arrs.append(internal(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index'))) # See stamp()
                 if self.state_index[name] in self.lefts:
-                    arrs.append(ss.FloatArr(f'ti_left_{name}', label=f'The engine\'s time of last leaving {name}')) # See enter()
+                    arrs.append(internal(ss.FloatArr(f'ti_left_{name}', label=f'The engine\'s time of last leaving {name}'))) # See enter()
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
                 arrs += [ss.TimeArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
-                         ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
+                         internal(ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}'))] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
-                    arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
+                    arrs.append(internal(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled')))
             if hazards[name] and (name in self.scheduled or name in self.halved) and not self.wholestep: # See enter()
-                arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The fraction of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
+                arrs.append(internal(ss.FloatArr(f'late_{name}', default=0.0, label=f'The fraction of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)')))
                 self.late.add(name)
         self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()
         self.on_event = [a for a in self.attrs.values() if a.events] # Set at events, in the order declared
@@ -472,7 +478,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.derived = graph.derived
         self._drawing = False
         if self.on_event:
-            arrs.append(ss.FloatArr('left_exit', label='The scheduled exit from the state each agent last left'))
+            arrs.append(internal(ss.FloatArr('left_exit', label='The scheduled exit from the state each agent last left')))
         for a in self.attrs.values():
             arrs.append(ss.FloatArr(a.name, default=None if a.kind == 'derived' else a.default, label=a.label or a.name))
             if a.combine == 'first':

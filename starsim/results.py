@@ -1739,11 +1739,12 @@ def split_columns(flat, sep='_'):
 
 
 def match_result_keys(results, key, show_skipped=False):
-    """ The results named by a key or list of keys (see `ss.Results.find()`), or all of a module's, or with no key, every one that is plotted by default (or every one, with `show_skipped`), by their names in `to_df()` """
+    """ The results named by a key or list of keys (see `ss.Results.find()`), or all of a module's, or with no key, every one that is plotted by default, leaving out those that are zero throughout (or every one, with `show_skipped`), by their names in `to_df()` """
     if isinstance(key, str) and isinstance(dict.get(results, key), dict): # All of a module's, e.g. sim.plot('sis')
         return results[key].flatten()
     if key is None:
-        return sc.obj({k:res for k,res in results.flatten().items() if show_skipped or res.auto_plot})
+        zero = lambda res: res.values is not None and np.size(res.values) and not np.any(res.values) # e.g. the deaths of a disease that nobody dies of
+        return sc.obj({k:res for k,res in results.flatten().items() if show_skipped or (res.auto_plot and not zero(res))})
     out = {}
     for k in sc.tolist(key):
         results.find(k)
