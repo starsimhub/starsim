@@ -677,17 +677,17 @@ def test_load():
     cholera.stratify(age=[0, 15])
     sim = ss.Sim(cholera, connectors=ss.modify(cholera.recovery, multiply=ss.by(age=[1.5, 1])), unit='day', start='2020-01-01', stop='2020-07-01', total_pop=1000, solver='gillespie', **kw)
     sim.stratify(risk={'low': 0.8, 'high': 0.2})
-    sim.save('temp.sim') # Before it has run
-    sim2 = ss.load('temp.sim').run()
+    sim.save('test_load.sim') # Before it has run
+    sim2 = ss.load('test_load.sim').run()
     assert np.array_equal(sim2.results.cholera.cases.values, sim.run().results.cholera.cases.values)
 
     # A sim that has run can be saved and loaded under every solver
     for solver in ['ode', 'binomial', 'gillespie', 'abm']:
         pars = dict(n_agents=500) if solver == 'abm' else {}
         sim = ss.Sim(make_sir(), stop=50, solver=solver, **pars, **kw).run()
-        sim.save('temp.sim')
-        assert np.array_equal(ss.load('temp.sim').results.sir.I, sim.results.sir.I), solver
-    sc.rmpath('temp.sim')
+        sim.save('test_load.sim')
+        assert np.array_equal(ss.load('test_load.sim').results.sir.I, sim.results.sir.I), solver
+    sc.rmpath('test_load.sim')
 
     # Rates are written with the parentheses they need, so they are read back the same
     S, I, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='W')

@@ -479,8 +479,8 @@ def test_save():
     """ Test save and export """
     sc.heading('Testing save and export...')
     f = sc.obj() # Filenames
-    f.sim  = 'temp.sim'
-    f.json = 'sim.json'
+    f.sim  = 'test_save.sim'
+    f.json = 'test_save.json'
     sim = ss.Sim(n_agents=n_agents, diseases=ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10))), networks='random').run()
 
     # Run the methods
