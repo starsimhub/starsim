@@ -93,6 +93,8 @@ def jax():
     if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
         jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
+        if jax.config.jax_compilation_cache_max_size == -1: # Unlimited, JAX's default: keep it to 1 GB, dropping what was used least recently
+            jax.config.update('jax_compilation_cache_max_size', 2**30)
     return jax
 
 
@@ -659,12 +661,13 @@ def checkpointed(body, init, xs, steps, checkpoint):
 def compile_run(run, kind):
     """ A run compiled for one use: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
     jx = jax()
-    ss.solvers.backends.compiling(dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5)
     if kind == 'run':
-        return jx.jit(run)
+        func = jx.jit(run)
     elif kind == 'many':
-        return jx.jit(jx.vmap(run))
-    return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
+        func = jx.jit(jx.vmap(run))
+    else:
+        func = jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
+    return ss.solvers.backends.timed_first_call(func, dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5) # Compiled at its first call
 
 
 class JointRun(sc.prettyobj):
@@ -1645,8 +1648,7 @@ class LogDensity(sc.prettyobj):
 
     def apply(self, func, x):
         """ One of the compiled functions, at some values (compiled the first time) """
-        ss.solvers.backends.compiling('the log-density', 'JAX', 0.5, 5)
-        with jax().enable_x64(True):
+        with jax().enable_x64(True), ss.solvers.backends.timed_compile('the log-density', 'JAX', 0.5, 5):
             return func(jax().numpy.asarray(x, dtype=float))
 
     def __call__(self, x):

@@ -73,7 +73,7 @@ def test_fit_keywords():
         ss.Sim(declared, data=data, **pars).fit(method=quick)
     with pytest.raises(TypeError, match='ss.fitting.method'): # A setting of a method is not a keyword of sim.fit()
         sim.fit(**dict(method='optuna', n_trials=5)) # As a dict, so the rewrite script leaves the old spelling
-    with pytest.raises(TypeError, match='takes draws=, warmup=, chains=, scan=, require_jax=, not particles='):
+    with pytest.raises(TypeError, match='takes draws=, warmup=, chains=, scan=, ess=, rhat=, max_draws=, batch=, require_jax=, not particles='):
         ss.fitting.method('nuts', particles=100)
 
     # Spending allocated to reach a goal
@@ -154,6 +154,15 @@ def test_pmcmc():
     t = fit.table
     assert abs(t.lower[0] - lo) < 0.003 and abs(t.upper[0] - hi) < 0.003, (t.lower[0], t.upper[0], lo, hi)
     assert fit.trajectories is None # An ODE's run at each draw is its trajectory
+
+    # With draws='auto' (the default), the chains are taken further in batches until they agree, with enough effective draws, and no further
+    auto = sim.fit(method=ss.fitting.method('pmcmc', warmup=300, chains=3, parallel=False, batch=100), verbose=False)
+    n = len(auto.samples)//3
+    assert n % 100 == 0 and n < 20_000, n
+    assert auto.table.rhat.max() <= 1.01 and auto.table.ess.min() >= 400, auto.table
+    draws = np.stack([auto.samples[auto.samples.chain == c][['beta']].to_numpy() for c in range(3)])
+    rhat, ess = ss.fitting.diagnose(draws[:, :n - 100]) # One batch fewer was not yet enough
+    assert not (np.all(rhat <= 1.01) and np.all(ess >= 400)), (rhat, ess)
     with pytest.raises(ValueError, match='its likelihood is exact'):
         sim.fit(method=ss.fitting.method('pmcmc', particles=100))
 

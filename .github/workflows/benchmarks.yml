@@ -31,3 +31,21 @@ jobs:
       - name: Run quick benchmark
         working-directory: ./tests
         run: ./quick_benchmark
+
+  performance_guard:
+    name: Performance guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+      - uses: actions/setup-python@master
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
+      - name: Run the performance guard # Alone, since timing in parallel with other tests is unreliable; against the baselines for ci-linux-x86_64 in tests/perf_guard.yaml, which a first run prints to add
+        working-directory: ./tests
+        run: pytest test_baselines.py::test_performance_guard -p no:xdist -s

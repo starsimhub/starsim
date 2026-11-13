@@ -3,7 +3,10 @@ Test that the current version of Starsim exactly matches
 the baseline results.
 """
 import os
+import sys
+import platform
 import numpy as np
+import yaml
 import pytest
 import sciris as sc
 import starsim as ss
@@ -146,7 +149,8 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
 #%% Performance regression guard
 
-TIGHTEN = 2 # A case that comes in at less than its baseline divided by this has its baseline lowered to the new time, so that an improvement is kept
+CI_REGRESSION_FACTOR = 2.0 # On a CI runner, which is shared and noisier, the limit is looser
+TIGHTEN = 0.7 # A case that comes in at less than this times its baseline has its baseline lowered to the new time, so that an improvement is kept: with REGRESSION_FACTOR, a slowdown of more than 1.5/0.7 (about 2x) from any case's current speed fails, while noise (a few percent, as min-of-repeats) rarely moves a baseline
 
 
 def fit_sim(prior=False):
@@ -273,8 +277,9 @@ def test_performance_guard(do_save=False, verbose=True):
     Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
     term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x).
     Baselines are the current times, so this catches only major regressions, not normal drift.
-    A case that comes in at less than half its baseline (TIGHTEN) has its baseline lowered to the
-    new time, saved to perf_guard.yaml, so that improvements are kept rather than lost to drift.
+    A case that comes in at less than 70% of its baseline (TIGHTEN) has its baseline lowered to the
+    new time, saved to perf_guard.yaml, so that improvements are kept rather than lost to drift. A case
+    over its limit is measured again before it fails, since a burst of load can slow one measurement.
     Times use min-of-repeats with CPU normalization (see test_benchmark) to cancel machine speed.
     Refresh with ./update_benchmarks.py after an intended speedup.
 
@@ -299,40 +304,75 @@ def test_performance_guard(do_save=False, verbose=True):
     ratio = (r1 + r2) / 2 / REF_MOPS
     normalized = {k: round(ratio*v, 4) for k,v in measured.items()}
 
+    # Baselines are kept for each kind of machine, since normalizing by a NumPy benchmark doesn't cancel every difference between them (e.g. x86 and Apple Silicon run Starsim's kernels faster or slower by different amounts than they run NumPy)
+    key = machine_key()
+    ci = key.startswith('ci-')
+    factor = CI_REGRESSION_FACTOR if ci else REGRESSION_FACTOR
+    saved = load_guard()
+    recorded = saved['machines'].get(key, {}).get('times', {})
+
+    # A case over its limit is measured once more, keeping the faster: a real slowdown is slow both times, while a burst of load on the machine rarely lasts
+    if not do_save:
+        for name,(fn,which,crn) in cases.items():
+            if name in recorded and normalized[name] > recorded[name]*factor:
+                again = round(sc.benchmark(which='numpy')/REF_MOPS*measure_case(fn, which, repeats[name], crn=crn), 4)
+                if verbose:
+                    print(f'  {name}: over its limit ({normalized[name]*1e3:.1f} ms), so measured again: {again*1e3:.1f} ms')
+                normalized[name] = min(normalized[name], again)
+
     if do_save:
-        sc.saveyaml(perf_guard_filename, dict(cpu_performance=ratio, times=normalized))
+        saved['machines'][key] = dict(cpu_performance=ratio, times=normalized)
+        sc.saveyaml(perf_guard_filename, saved)
         if verbose:
-            print('Saved performance-guard baselines (normalized seconds):')
+            print(f'Saved performance-guard baselines for {key} (normalized seconds):')
             sc.pp(normalized)
         return normalized
 
-    # Compare against recorded baselines and fail on a major regression
-    saved = sc.loadyaml(perf_guard_filename)
-    recorded = saved['times']
+    # Compare against this kind of machine's baselines and fail on a major regression
+    if verbose:
+        print(f'Performance guard on {key}, against its baselines in {perf_guard_filename} (limit: {factor}x)')
     failures = []
     updated = {}
     for name, new in normalized.items():
         base = recorded.get(name)
-        if base is None: # A new case: its first time is its baseline
+        if base is None: # A new case, or a new kind of machine: its first time is its baseline
             updated[name] = new
             if verbose:
                 print(f'  {name:22s}: {new*1e3:8.1f} ms (new case: recorded as its baseline)')
             continue
-        limit = base * REGRESSION_FACTOR
-        if new < base/TIGHTEN:
+        limit = base * factor
+        if new < base*TIGHTEN and not ci:
             updated[name] = new
         if verbose:
             status = 'REGRESSION' if new > limit else f'FASTER: baseline lowered to {new*1e3:.1f} ms' if name in updated else 'OK'
             print(f'  {name:22s}: {new*1e3:8.1f} ms (baseline {base*1e3:7.1f} ms, limit {limit*1e3:7.1f} ms) [{status}]')
         if new > limit:
-            failures.append(f'{name}: {new*1e3:.1f} ms > limit {limit*1e3:.1f} ms (baseline {base*1e3:.1f} ms x {REGRESSION_FACTOR})')
-    if updated: # Keep improvements, and record new cases
-        saved['times'] = dict(sorted((recorded | updated).items()))
-        sc.saveyaml(perf_guard_filename, saved)
-        if verbose:
-            print(f'Updated the baselines of {sc.strjoin(updated)} in {perf_guard_filename}')
+            failures.append(f'{name}: {new*1e3:.1f} ms > limit {limit*1e3:.1f} ms (baseline {base*1e3:.1f} ms x {factor})')
+    if updated:
+        times = dict(sorted((recorded | updated).items()))
+        if ci: # Nothing written in CI is kept, so print what to record instead
+            print(f'\nNew baselines for {key}: to keep them, add this under "machines:" in {os.path.basename(perf_guard_filename)}:\n')
+            print(yaml.safe_dump({key: dict(cpu_performance=float(ratio), times={k:float(v) for k,v in times.items()})}, sort_keys=False))
+        else: # Keep improvements, and record new cases
+            saved['machines'][key] = dict(cpu_performance=saved['machines'].get(key, {}).get('cpu_performance', ratio), times=times)
+            sc.saveyaml(perf_guard_filename, saved)
+            if verbose:
+                print(f'Updated the baselines of {sc.strjoin(updated)} for {key} in {perf_guard_filename}')
     assert not failures, 'Performance regression detected:\n' + '\n'.join(failures)
     return normalized
+
+
+def machine_key():
+    """ The kind of machine the guard's baselines are kept for: the operating system and processor (e.g. "linux-x86_64", "darwin-arm64"), with "ci-" before it on a CI runner (GitHub sets CI) """
+    return ('ci-' if os.environ.get('CI') else '') + f'{sys.platform}-{platform.machine().lower()}'
+
+
+def load_guard():
+    """ The guard's baselines, by kind of machine (an older file of one machine's is taken as this one's) """
+    saved = sc.loadyaml(perf_guard_filename) if os.path.exists(perf_guard_filename) else {}
+    if 'machines' not in saved:
+        saved = dict(machines={machine_key(): saved} if saved else {})
+    return saved
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@
 Compiling Starsim, and setting up a clone of it for development: `starsim init compile` (or building the Rust kernels in its place) and `starsim init dev`
 """
 import os
+import time
 import sys
 import shutil
 import subprocess
@@ -101,11 +102,13 @@ def build_rust(again='starsim init dev'):
     crate = rust_crate()
     if not shutil.which('bash'):
         sys.exit(f'The Rust kernels are built by a bash script: install bash (on Windows, Git Bash), then run "{again}" again')
-    print('Building the Rust kernels ...')
+    print('Building the Rust kernels (estimated time: about a minute) ...')
     cargo = install_rust(again)
     path = os.pathsep.join([str(Path(cargo).parent), os.environ['PATH']])
+    start = time.time()
     if subprocess.run(['bash', 'build'], cwd=crate, env=os.environ | dict(PATH=path)).returncode:
         sys.exit(f'The Rust kernels could not be built; if the error is about the version of Rust, run "rustup update", then run "{again}" again')
+    print(f'Built the Rust kernels in {time.time() - start:.1f} s')
     return
 
 

@@ -774,7 +774,25 @@ def abc_smc(distance, logprior, z0, samples=200, generations=8, quantile=0.5, to
     return z, w, dist, tolerances[1:], acceptances[1:], n_runs
 
 
-def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, rand_seed=None, parallel=True, verbose=True):
+RHAT_TARGET = 1.01 # A posterior's chains agree if the R-hat of every value is at most this (Vehtari et al. 2021)
+ESS_TARGET = 400 # With draws='auto', sampling stops once every value has at least this many effective draws (about 5% of a posterior standard deviation as the error of its mean) and the chains agree
+DENSE_MAX = 50 # NUTS learns a dense mass matrix (the correlations between values, too) for up to this many values, and a diagonal one for more, which needs fewer warm-up draws to estimate
+
+
+def enough_draws(draws, ess=ESS_TARGET, rhat=RHAT_TARGET):
+    """ Whether draws (chains × draws × values) are enough: the chains agree about every value, with at least `ess` effective draws of each (see `diagnose()`) """
+    r, e = diagnose(draws)
+    return bool(np.all(r <= rhat) and np.all(e >= ess))
+
+
+def sampling_note(draws, max_draws, total, verbose, method):
+    """ Say how many draws automatic stopping took, and warn if it reached the most it may take """
+    if draws == 'auto' and total >= max_draws:
+        ss.warn(f'{method}: stopped at max_draws={max_draws} draws in each chain without reaching an R-hat of at most {RHAT_TARGET} and {ESS_TARGET} effective draws of each value; see fit.table, and "Fit diagnostics" in the user guide for what to try', ss.errors.NotConverged)
+    return
+
+
+def pmmh(logpost, z0, draws='auto', warmup=1000, chains=4, particles=None, rand_seed=None, parallel=True, verbose=True, ess=ESS_TARGET, rhat=RHAT_TARGET, max_draws=20_000, batch=250):
     """
     Sample from a posterior by particle marginal Metropolis-Hastings: a random-walk Metropolis sampler on a log-density that is estimated by a particle filter (or is exact)
 
@@ -786,18 +804,23 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, rand_se
     half of the warm-up, the estimate where the chain is is made again at each step, so that
     a chain far from the posterior, where the estimate is noisiest, cannot be held by a lucky one.
     With `particles=0`, the log-density is exact (e.g. of an ODE), so it is worked out once at each point, and this is
-    an adaptive random-walk Metropolis sampler.
+    an adaptive random-walk Metropolis sampler. With `draws='auto'` (the default), the chains are taken further in rounds
+    of `batch` draws until they agree, with enough effective draws (`rhat`, `ess`; see `enough_draws()`), or reach `max_draws`.
 
     Args:
         logpost (func): called with a point (an array, on an unbounded scale), a random number generator (`np.random.Generator`) to draw any seeds from, and the number of particles; returns an estimate of the log of the posterior density there, or that and something to keep with each draw at the point (e.g. a run of the sim drawn from the filter)
         z0 (array): the point to start each chain from, or a point for each chain (chains × values)
-        draws (int): the draws to keep from each chain
+        draws (int/str): the draws to keep from each chain, or 'auto' to stop once they are enough
         warmup (int): the draws for the warm-up of each chain, which are not kept
         chains (int): the number of chains
         particles (int): the number of particles; by default, each chain uses 100 for the first half of its warm-up, and then enough that the variance of the estimate at the middle of where it has been lately is about 1 (Doucet et al. 2015); 0 for a log-density that is exact
         rand_seed (int): the random seed
         parallel (bool): whether to run the chains in parallel processes
         verbose (bool): whether to say what is being done
+        ess (float): with `draws='auto'`, the effective draws of each value to stop at
+        rhat (float): with `draws='auto'`, the R-hat to stop at
+        max_draws (int): with `draws='auto'`, the most draws to take from each chain
+        batch (int): with `draws='auto'`, the draws each chain takes between checks
 
     Returns:
         The draws (chains × draws × values), the estimate of the log-density at each (chains × draws), the fraction of proposals accepted after the warm-up in each chain, and the number of particles that each chain used;
@@ -807,52 +830,51 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, rand_se
     d = starts.shape[1]
     target = 0.15 if particles != 0 else 0.234 # The fraction of proposals to accept: with an exact log-density, about the best for a random walk (Roberts et al. 1997)
 
-    def one_chain(chain_seed, z0):
-        rng = np.random.default_rng(chain_seed)
-        n = 100 if particles is None else particles
-        out = np.zeros((draws, d))
-        logdens = np.zeros(draws)
-        extras = [None]*draws # What logpost gives to keep with each draw, if anything
-        gives = False
-        accepted = 0.0
+    def new_chain(chain_seed, z0):
+        """ A chain at its start, as a dict that `advance()` takes further (and that can go to and from another process) """
+        return dict(rng=np.random.default_rng(chain_seed), n=100 if particles is None else particles, z=z0.copy(), lp=None, extra=None, gives=False,
+                    log_scale=np.log(2.38**2/d), cov=np.eye(d)*0.01, history=[], i=0, out=[], logdens=[], extras=[], accepted=0)
 
+    def advance(chain, count):
+        """ Take a chain `count` steps further: the rest of its warm-up, then draws that are kept """
+        c = chain
+        rng = c['rng']
         def evaluate(z):
-            nonlocal gives
-            value = logpost(z, rng, n)
+            value = logpost(z, rng, c['n'])
             if isinstance(value, tuple):
-                gives = True
+                c['gives'] = True
                 return value
             return value, None
-
-        z = z0.copy()
-        lp, extra = evaluate(z)
-        log_scale = np.log(2.38**2/d)
-        cov = np.eye(d)*0.01
-        history = []
-        for i in range(warmup + draws):
-            if i < warmup//2 and n: # Early in the warm-up, the estimate where the chain is is made again each time, so a lucky one cannot hold it (the draws are not kept)
-                lp, extra = evaluate(z)
+        if c['lp'] is None:
+            c['lp'], c['extra'] = evaluate(c['z'])
+        for _ in range(count):
+            i = c['i']
+            if i < warmup//2 and c['n']: # Early in the warm-up, the estimate where the chain is is made again each time, so a lucky one cannot hold it (the draws are not kept)
+                c['lp'], c['extra'] = evaluate(c['z'])
             elif particles is None and i == warmup//2: # Near the posterior by now, so the number of particles it needs there (at the middle of where the chain has been lately) can be found
-                center = np.mean(history[len(history)//2:], axis=0)
+                center = np.mean(c['history'][len(c['history'])//2:], axis=0)
                 spread = np.var([evaluate(center)[0] for k in range(10)])
-                n = int(np.clip(np.ceil(n*spread), 50, 5000)) if np.isfinite(spread) else 5000
-                lp, extra = evaluate(z)
-            prop = rng.multivariate_normal(z, np.exp(log_scale)*cov)
+                c['n'] = int(np.clip(np.ceil(c['n']*spread), 50, 5000)) if np.isfinite(spread) else 5000
+                c['lp'], c['extra'] = evaluate(c['z'])
+            prop = rng.multivariate_normal(c['z'], np.exp(c['log_scale'])*c['cov'])
             lp_prop, extra_prop = evaluate(prop)
-            accept = np.log(rng.random()) < lp_prop - lp
+            accept = np.log(rng.random()) < lp_prop - c['lp']
             if accept:
-                z, lp, extra = prop, lp_prop, extra_prop
+                c['z'], c['lp'], c['extra'] = prop, lp_prop, extra_prop
             if i < warmup: # Learn the shape of the posterior, and tune the scale
-                history.append(z)
-                log_scale += (float(accept) - target)/np.sqrt(i + 1)
+                c['history'].append(c['z'])
+                c['log_scale'] += (float(accept) - target)/np.sqrt(i + 1)
                 if i >= 50 and i % 10 == 0:
-                    cov = np.cov(np.array(history[len(history)//2:]).T).reshape(d, d) + 1e-8*np.eye(d)
+                    c['cov'] = np.cov(np.array(c['history'][len(c['history'])//2:]).T).reshape(d, d) + 1e-8*np.eye(d)
+                if i == warmup - 1:
+                    c['history'] = [] # Not needed after the warm-up
             else:
-                out[i - warmup] = z
-                logdens[i - warmup] = lp
-                extras[i - warmup] = extra
-                accepted += accept/draws
-        return out, logdens, accepted, n, extras if gives else None
+                c['out'].append(c['z'])
+                c['logdens'].append(c['lp'])
+                c['extras'].append(c['extra'])
+                c['accepted'] += accept
+            c['i'] += 1
+        return c
 
     T = sc.timer()
     seeds = np.random.default_rng(rand_seed).integers(2**31, size=chains)
@@ -860,24 +882,41 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, rand_se
         parallel = False
         if verbose:
             print('Particle MCMC: running the chains one after another, since JAX has been started in this process')
-    if parallel and chains > 1:
-        method = ss.kernels.start_method()
-        with ss.kernels.starting_workers(method):
-            results = sc.parallelize(ss.kernels.worker(one_chain), iterarg=list(zip(seeds, starts)), start_method=method)
-    else:
-        results = [one_chain(chain_seed, z) for chain_seed,z in zip(seeds, starts)]
-    out, logdens, accepted, n = [np.array(v) for v in list(zip(*results))[:4]]
-    extras = [res[4] for res in results]
+    parallel = parallel and chains > 1
+
+    def take(chain_list, count):
+        """ Take every chain `count` steps further, in parallel processes or one after another """
+        if parallel:
+            method = ss.kernels.start_method()
+            with ss.kernels.starting_workers(method):
+                return sc.parallelize(ss.kernels.worker(advance), iterarg=[(c, count) for c in chain_list], start_method=method)
+        return [advance(c, count) for c in chain_list]
+
+    auto = draws == 'auto'
+    chain_list = take([new_chain(seed, z) for seed,z in zip(seeds, starts)], warmup + (batch if auto else draws))
+    while auto:
+        kept = len(chain_list[0]['out'])
+        if kept >= max_draws or enough_draws(np.array([c['out'] for c in chain_list]), ess=ess, rhat=rhat):
+            break
+        chain_list = take(chain_list, min(batch, max_draws - kept))
+    out = np.array([c['out'] for c in chain_list])
+    logdens = np.array([c['logdens'] for c in chain_list])
+    n_kept = out.shape[1]
+    accepted = np.array([c['accepted']/n_kept for c in chain_list])
+    n = np.array([c['n'] for c in chain_list])
+    gives = chain_list[0]['gives']
     if verbose:
         what = f'particles: {sc.strjoin(n)}' if particles != 0 else 'exact likelihood'
-        print(f'{"Particle MCMC" if particles != 0 else "MCMC (random-walk Metropolis)"}: {chains} chain{"s" if chains != 1 else ""}{" in parallel" if parallel and chains > 1 else ""}, each of {warmup} warm-up draws and then {draws} draws, '
+        how = f'then {n_kept} draws' + (' (enough: see draws=)' if auto and n_kept < max_draws else '')
+        print(f'{"Particle MCMC" if particles != 0 else "MCMC (random-walk Metropolis)"}: {chains} chain{"s" if chains != 1 else ""}{" in parallel" if parallel else ""}, each of {warmup} warm-up draws and {how}, '
               f'in {T.tt(output=True):.1f} s; {what}; proposals accepted: {sc.strjoin([f"{a:.0%}" for a in accepted])}')
-    if extras[0] is not None:
-        return out, logdens, accepted, n, extras
+    sampling_note(draws, max_draws, n_kept, verbose, 'Particle MCMC')
+    if gives:
+        return out, logdens, accepted, n, [c['extras'] for c in chain_list]
     return out, logdens, accepted, n
 
 
-def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=True, rand_seed=None, verbose=True):
+def nuts(logdensity, z0, draws='auto', warmup=300, chains=4, traced=False, forward=True, rand_seed=None, verbose=True, ess=ESS_TARGET, rhat=RHAT_TARGET, max_draws=5000, batch=100):
     """
     Sample from a posterior with the No-U-Turn sampler (NUTS, from BlackJAX), with Stan's warm-up of the step size and the mass matrix
 
@@ -888,18 +927,25 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=
     of the sampling is compiled, with the chains run together (each on cores of its own); its
     gradient is taken in forward mode (one direction per parameter), which for a few parameters
     is much cheaper than reverse mode through the steps of an ODE, or with `forward=False` in
-    reverse mode (one pass whatever their number, for many parameters).
+    reverse mode (one pass whatever their number, for many parameters). The mass matrix is dense
+    (it learns the correlations between values, which a fit's often has) for up to `DENSE_MAX` values,
+    and diagonal for more. With `draws='auto'` (the default), the chains are sampled in batches of `batch`
+    draws until they agree, with enough effective draws (`rhat`, `ess`; see `enough_draws()`), or reach `max_draws`.
 
     Args:
         logdensity (func): called with a point (an array, on an unbounded scale); returns the log of the posterior density there and its gradient (or, with `traced=True`, the log-density alone, as a JAX function)
         z0 (array): the point to start each chain near, or a point for each chain (chains × values)
-        draws (int): the draws to keep from each chain
+        draws (int/str): the draws to keep from each chain, or 'auto' to stop once they are enough
         warmup (int): the draws for the warm-up of each chain, which are not kept
         chains (int): the number of chains
         traced (bool): whether `logdensity` is a JAX function
         forward (bool): for a JAX function, whether its gradient is taken in forward mode (else reverse mode, for which it has to be differentiable)
         rand_seed (int): the random seed
         verbose (bool): whether to say what is being done
+        ess (float): with `draws='auto'`, the effective draws of each value to stop at
+        rhat (float): with `draws='auto'`, the R-hat to stop at
+        max_draws (int): with `draws='auto'`, the most draws to take from each chain
+        batch (int): with `draws='auto'`, the draws each chain takes between checks
 
     Returns:
         The draws (chains × draws × values), the log-density at each (chains × draws), and whether each followed a divergent trajectory (chains × draws)
@@ -909,56 +955,87 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=
     jnp = jax.numpy
     starts = np.broadcast_to(np.asarray(z0, dtype=float), (chains, np.shape(z0)[-1])) # Each chain's start
     d = starts.shape[1]
+    stop = dict(auto=draws == 'auto', draws=draws, ess=ess, rhat=rhat, max_draws=max_draws, batch=batch)
     x64 = jax.config.jax_enable_x64
     jax.config.update('jax_enable_x64', True) # For the whole run, since the callbacks are made from other threads, which jax.enable_x64() does not reach
     try:
         key = jax.random.key(rand_seed if rand_seed is not None else 0)
         if traced:
-            return nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, forward=forward)
-        shape = (jax.ShapeDtypeStruct((), jnp.float64), jax.ShapeDtypeStruct((d,), jnp.float64))
-
-        def host(z):
-            value, grad = logdensity(np.asarray(z, dtype=float))
-            if not np.isfinite(value):
-                return np.float64(-np.inf), np.zeros(d)
-            return np.float64(value), np.asarray(grad, dtype=np.float64)
-
-        @jax.custom_vjp
-        def logp(z):
-            return jax.pure_callback(host, shape, z)[0]
-
-        def forward(z):
-            value, grad = jax.pure_callback(host, shape, z)
-            return value, grad
-
-        def backward(grad, cotangent):
-            return (cotangent*grad,)
-
-        logp.defvjp(forward, backward)
-        out = np.zeros((chains, draws, d))
-        logdens = np.zeros((chains, draws))
-        divergent = np.zeros((chains, draws), dtype=bool)
-        for c in range(chains):
-            key, start_key, warm_key, run_key = jax.random.split(key, 4)
-            start = jnp.asarray(starts[c]) + 0.01*jax.random.normal(start_key, (d,)) # Each a little apart, even from the same point
-            if verbose:
-                print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
-            ss.solvers.backends.compiling('the NUTS sampler', 'JAX', 1, 10)
-            adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=False) # A dense mass matrix: fits have few values, often correlated
-            (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
-            step = jax.jit(blackjax.nuts(logp, **params).step)
-            for i,draw_key in enumerate(jax.random.split(run_key, draws)):
-                state, info = step(draw_key, state)
-                out[c, i] = np.asarray(state.position)
-                logdens[c, i] = float(state.logdensity)
-                divergent[c, i] = bool(info.is_divergent)
-        return out, logdens, divergent
+            out = nuts_traced(jax, blackjax, logdensity, starts, key, warmup, verbose, stop, forward=forward)
+        else:
+            out = nuts_callback(jax, blackjax, logdensity, starts, key, warmup, verbose, stop)
+        sampling_note(draws, max_draws, out[0].shape[1], verbose, 'NUTS')
+        return out
     finally:
         jax.config.update('jax_enable_x64', x64)
 
 
-def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, forward=True):
-    """ `nuts()` with `traced=True`: the whole of the sampling compiled, with the chains run together """
+def nuts_batches(sample, d, chains, stop):
+    """ Take batches of draws with `sample(n)` (which gives draws, log-densities and divergences, each chains × n) until there are enough (see `nuts()`), or one batch of `draws` """
+    if not stop['auto']:
+        return sample(stop['draws'])
+    parts = []
+    while True:
+        parts.append(sample(min(stop['batch'], stop['max_draws'] - sum(p[0].shape[1] for p in parts))))
+        out = [np.concatenate([p[k] for p in parts], axis=1) for k in range(3)]
+        if out[0].shape[1] >= stop['max_draws'] or enough_draws(out[0], ess=stop['ess'], rhat=stop['rhat']):
+            return out
+
+
+def nuts_callback(jax, blackjax, logdensity, starts, key, warmup, verbose, stop):
+    """ `nuts()` with a log-density called back from JAX: each chain's warm-up, then batches of draws from all of them """
+    jnp = jax.numpy
+    chains, d = starts.shape
+    shape = (jax.ShapeDtypeStruct((), jnp.float64), jax.ShapeDtypeStruct((d,), jnp.float64))
+
+    def host(z):
+        value, grad = logdensity(np.asarray(z, dtype=float))
+        if not np.isfinite(value):
+            return np.float64(-np.inf), np.zeros(d)
+        return np.float64(value), np.asarray(grad, dtype=np.float64)
+
+    @jax.custom_vjp
+    def logp(z):
+        return jax.pure_callback(host, shape, z)[0]
+
+    def forward(z):
+        value, grad = jax.pure_callback(host, shape, z)
+        return value, grad
+
+    def backward(grad, cotangent):
+        return (cotangent*grad,)
+
+    logp.defvjp(forward, backward)
+    T = sc.timer()
+    states, steps = [], []
+    for c in range(chains):
+        key, start_key, warm_key = jax.random.split(key, 3)
+        start = jnp.asarray(starts[c]) + 0.01*jax.random.normal(start_key, (d,)) # Each a little apart, even from the same point
+        adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=d > DENSE_MAX)
+        (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
+        states.append(state)
+        steps.append(jax.jit(blackjax.nuts(logp, **params).step))
+    keys = [key]
+
+    def sample(n):
+        out = np.zeros((chains, n, d)), np.zeros((chains, n)), np.zeros((chains, n), dtype=bool)
+        keys[0], run_key = jax.random.split(keys[0])
+        for c, chain_key in enumerate(jax.random.split(run_key, chains)):
+            for i, draw_key in enumerate(jax.random.split(chain_key, n)):
+                states[c], info = steps[c](draw_key, states[c])
+                out[0][c, i] = np.asarray(states[c].position)
+                out[1][c, i] = float(states[c].logdensity)
+                out[2][c, i] = bool(info.is_divergent)
+        return out
+
+    out = nuts_batches(sample, d, chains, stop)
+    if verbose:
+        print(f'NUTS: {chains} chains one after another (Python in the loop), each of {warmup} warm-up draws and then {out[0].shape[1]} draws, in {T.tt(output=True):.1f} s')
+    return out
+
+
+def nuts_traced(jax, blackjax, logdensity, starts, key, warmup, verbose, stop, forward=True):
+    """ `nuts()` with `traced=True`: the warm-up and each batch of draws compiled, with the chains run together """
     jnp = jax.numpy
     chains, d = starts.shape
     logdensity = jax.jit(logdensity) # Traced once, rather than wherever the sampler uses it
@@ -979,35 +1056,52 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, 
     else: # In reverse mode, as JAX takes it
         logp = logdensity
 
-    def one_chain(key, start):
-        warm_key, run_key = jax.random.split(key)
-        adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=False) # A dense mass matrix: fits have few values, often correlated
-        (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
-        step = blackjax.nuts(logp, **params).step
-        def body(state, key):
-            state, info = step(key, state)
-            return state, (state.position, state.logdensity, info.is_divergent)
-        _, out = jax.lax.scan(body, state, jax.random.split(run_key, draws))
-        return out
+    def warm(key, start):
+        adapt = blackjax.window_adaptation(blackjax.nuts, logp, is_mass_matrix_diagonal=d > DENSE_MAX)
+        (state, params), _ = adapt.run(key, start, num_steps=warmup)
+        return state, params
 
-    start_key, chain_key = jax.random.split(key)
+    def draw_n(n):
+        def sample(key, state, params):
+            step = blackjax.nuts(logp, **params).step
+            def body(state, key):
+                state, info = step(key, state)
+                return state, (state.position, state.logdensity, info.is_divergent)
+            return jax.lax.scan(body, state, jax.random.split(key, n))
+        return sample
+
+    start_key, chain_key, key = jax.random.split(key, 3)
     starts = jnp.asarray(starts) + 0.01*jax.random.normal(start_key, (chains, d)) # Each a little apart, even from the same point
-    keys = jax.random.split(chain_key, chains)
     devices = jax.devices('cpu')
     n_dev = max(k for k in range(1, min(len(devices), chains) + 1) if chains % k == 0) # Each device takes the same number of chains
-    shape = lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:])
+    split = lambda tree: jax.tree_util.tree_map(lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:]), tree) if n_dev > 1 else tree
+    join = lambda arr: np.asarray(arr).reshape((chains,) + arr.shape[2 if n_dev > 1 else 1:])
+    together = lambda fn: jax.pmap(jax.vmap(fn), devices=devices[:n_dev]) if n_dev > 1 else jax.jit(jax.vmap(fn)) # Each device's chains on cores of its own
+
     T = sc.timer()
-    ss.solvers.backends.compiling('the NUTS sampler', 'JAX', 1, 10)
-    if n_dev > 1: # Each on cores of its own
-        compiled = jax.pmap(jax.vmap(one_chain), devices=devices[:n_dev]).lower(shape(keys), shape(starts)).compile()
-        args = (shape(keys), shape(starts))
-    else:
-        compiled = jax.jit(jax.vmap(one_chain)).lower(keys, starts).compile()
-        args = (keys, starts)
+    warm_args = (split(jax.random.split(chain_key, chains)), split(starts))
+    compiled = {}
+    with ss.solvers.backends.timed_compile('the NUTS sampler', 'JAX', 1, 10):
+        lowered = together(warm).lower(*warm_args)
+        compiled['warm'] = lowered.compile()
+        n0 = stop['batch'] if stop['auto'] else stop['draws']
+        held = lowered.out_info # The chains' states and settings, as the batches take them
+        compiled[n0] = together(draw_n(n0)).lower(split(jax.random.split(jax.random.key(0), chains)), *held).compile()
     compiling = T.tt(output=True)
-    out = [np.asarray(v).reshape((chains,) + v.shape[2 if n_dev > 1 else 1:]) for v in compiled(*args)]
+    state, params = compiled['warm'](*warm_args)
+    keys = [key]
+
+    def sample(n):
+        nonlocal state
+        if n not in compiled: # A last batch cut short by max_draws
+            compiled[n] = together(draw_n(n))
+        keys[0], run_key = jax.random.split(keys[0])
+        state, (positions, logdens, divergent) = compiled[n](split(jax.random.split(run_key, chains)), state, params)
+        return join(positions), join(logdens), join(divergent)
+
+    out = nuts_batches(sample, d, chains, stop)
     if verbose:
-        print(f'NUTS: {chains} chains on {n_dev} core{"s" if n_dev != 1 else ""}, each of {warmup} warm-up draws and then {draws} draws: compiled in {compiling:.1f} s, sampled in {T.tt(output=True):.1f} s')
+        print(f'NUTS: {chains} chains on {n_dev} core{"s" if n_dev != 1 else ""}, each of {warmup} warm-up draws and then {out[0].shape[1]} draws{" (enough: see draws=)" if stop["auto"] and out[0].shape[1] < stop["max_draws"] else ""}: compiled in {compiling:.1f} s, sampled in {T.tt(output=True) - compiling:.1f} s')
     return out
 
 
@@ -2254,9 +2348,8 @@ class Problem(sc.prettyobj):
                 def call(x):
                     with jax.enable_x64(True):
                         while True:
-                            if not compiled:
-                                ss.solvers.backends.compiling('the gradient of the log-likelihood', 'JAX', 0.5, 5)
-                                compiled.append(jax.jit(lambda x: fn(x))) # A new function each time, since JAX keeps the trace of one it has seen, with the old n_max in it
+                            if not compiled: # A new function each time, since JAX keeps the trace of one it has seen, with the old n_max in it
+                                compiled.append(ss.solvers.backends.timed_first_call(jax.jit(lambda x: fn(x)), 'the gradient of the log-likelihood', 'JAX', 0.5, 5))
                             value, grad, need = compiled[0](jax.numpy.asarray(x, dtype=float))
                             if not reverse or not adaptive or need <= min(run.n_max for run in adaptive):
                                 return float(value), np.array(grad, dtype=float) # A copy, since JAX's is read-only
@@ -2758,7 +2851,7 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
     return sc.obj(best=ests[int(np.argmax(lls))], converged=converged, why=why, spread=(np.min(ests, axis=0), np.max(ests, axis=0)))
 
 
-def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chains=4, parallel=True):
+def fit_pmcmc(problem, scan=None, particles=None, draws='auto', warmup=1000, chains=4, parallel=True, ess=ESS_TARGET, rhat=RHAT_TARGET, max_draws=20_000, batch=250):
     """
     Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), each chain from one of the best points of a scan that are apart
 
@@ -2771,10 +2864,11 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
         problem (Problem): the fit, as `sim.fit()` sets it up
         scan (int): the number of points of the scan for the chains' starts (default: see `Problem.scan_size()`), each scored as a best fit scores a point (see `n_runs`)
         particles (int): the number of particles (default: chosen by each chain in its warm-up); not for a deterministic sim
-        draws (int): the number of draws in each chain, after the warmup
+        draws (int/str): the number of draws in each chain, after the warmup, or 'auto' (the default) to take them until the chains agree, with enough effective draws (see `pmmh()`)
         warmup (int): the number of draws to discard at the start of each chain
         chains (int): the number of chains
         parallel (bool): whether to run the chains in parallel
+        ess, rhat, max_draws, batch: with `draws='auto'`, when to stop (see `pmmh()`)
 
     Examples:
         ```python
@@ -2808,7 +2902,7 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
 
     starts = p.scan(scan, top=chains) # The best points of a scan that are apart, a chain from each (several from one if there are fewer than chains), so that chains caught in different modes disagree
     z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)])
-    out = pmmh(logpost, z0, draws=draws, warmup=warmup, chains=chains, particles=particles, rand_seed=p.rand_seed, parallel=parallel, verbose=p.verbose)
+    out = pmmh(logpost, z0, draws=draws, warmup=warmup, chains=chains, particles=particles, rand_seed=p.rand_seed, parallel=parallel, verbose=p.verbose, ess=ess, rhat=rhat, max_draws=max_draws, batch=batch)
     return sc.obj(zs=out[0], logdens=out[1], acceptance=out[2], paths=out[4] if len(out) > 4 else None)
 
 
@@ -2906,7 +3000,7 @@ def laplace_starts(problem, optima, chains, curvature, inflate=2.0):
     return np.array(z0)
 
 
-def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
+def fit_nuts(problem, draws='auto', warmup=300, chains=4, scan=None, ess=ESS_TARGET, rhat=RHAT_TARGET, max_draws=5000, batch=100):
     """
     The No-U-Turn sampler, each chain from a draw near an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), drawn from the Laplace approximation there, made wider (see `laplace_starts()`), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop (only with `require_jax=False`)
 
@@ -2914,10 +3008,11 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
-        draws (int): the number of draws in each chain, after the warmup
+        draws (int/str): the number of draws in each chain, after the warmup, or 'auto' (the default) to take them until the chains agree, with enough effective draws (see `nuts()`)
         warmup (int): the number of warmup steps of each chain
         chains (int): the number of chains
         scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
+        ess, rhat, max_draws, batch: with `draws='auto'`, when to stop (see `nuts()`)
 
     Examples:
         ```python
@@ -2935,7 +3030,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
         ```
     """
     p = problem
-    sampling = dict(draws=draws, warmup=warmup, chains=chains)
+    sampling = dict(draws=draws, warmup=warmup, chains=chains, ess=ess, rhat=rhat, max_draws=max_draws, batch=batch)
     logs, span, base_lows = p.logs, p.span, p.base_lows
     import scipy.optimize as spo
     bounds = list(zip(p.encode(p.lows), p.encode(p.highs)))
@@ -2980,10 +3075,23 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
             x = jnp.where(logs, jnp.exp(pos), pos)
             return density(x) + jnp.log(span*frac*(1 - frac)*jnp.where(logs, x, 1.0)).sum()
         jax = ss.gradients.jax()
-        hessian = jax.jit(jax.jacfwd(jax.jacfwd(logpost_jax)) if forward else jax.hessian(logpost_jax)) # Forward over forward, as the gradient is taken (an ODE's adaptive substeps can't be differentiated in reverse mode)
-        def curvature(z):
-            with jax.enable_x64(True):
-                return np.array(hessian(jnp.asarray(z, dtype=float)), dtype=float)
+        compiled = p.jax_density() # The log-likelihood and its gradient, compiled already for the optima
+        if compiled is not None:
+            def gradient(z): # Of the log of the posterior density, on the sampler's scale, as logpost() gives it
+                x, frac = p.to_x(z)
+                derivs = np.array(compiled(x)[1], dtype=float)
+                hs = 1e-6*np.maximum(np.abs(x), 1e-6)
+                dprior = np.array([(logprior(q, val + h, frozen=f) - logprior(q, val - h, frozen=f))/(2*h) if q.prior is not None else 0.0 for q,val,h,f in zip(p.fitted.values(), x, hs, p.frozen)])
+                dlogjac = 1 - 2*frac + np.where(logs, span*frac*(1 - frac), 0.0)
+                return (dprior - derivs)*span*frac*(1 - frac)*np.where(logs, x, 1.0) + dlogjac
+            def curvature(z): # The Hessian by central differences of that gradient: 2 gradients for each value, rather than compiling the Hessian (seconds), for starts that need only be roughly right
+                hs = 1e-4*np.maximum(np.abs(z), 1)
+                return np.array([(gradient(z + h*e) - gradient(z - h*e))/(2*h) for h,e in zip(hs, np.eye(len(z)))])
+        else:
+            hessian = jax.jit(jax.jacfwd(jax.jacfwd(logpost_jax)) if forward else jax.hessian(logpost_jax)) # Forward over forward, as the gradient is taken (an ODE's adaptive substeps can't be differentiated in reverse mode)
+            def curvature(z):
+                with jax.enable_x64(True):
+                    return np.array(hessian(jnp.asarray(z, dtype=float)), dtype=float)
         z0 = laplace_starts(p, starts, chains, curvature)
         zs, logdens, divergent = nuts(logpost_jax, z0, traced=True, forward=forward, rand_seed=p.rand_seed, verbose=p.verbose, **sampling)
         flat_z, flat_lp = zs.reshape(-1, len(p.names)), logdens.reshape(-1)
@@ -3040,8 +3148,8 @@ class method(sc.prettyobj):
 
             - SciPy methods: `scan` (the points spread over the bounds to try first: 10 per parameter, at most 100), `restarts` (the searches from the best of them that are apart: 3, or 1 for one parameter of a deterministic sim), and SciPy's own options, e.g. `maxiter=500` (see `scipy.optimize.show_options()`)
             - `'optuna'`: `n_trials` (default: 50 per fitted parameter, at least 100), `particles` (for a stochastic sim that the particle filter can run, with a likelihood for every data series: the particles of the filter that scores each point, 200; see `ss.fitting.ParticleFilter`), `workers` (processes that run trials at once, sharing what they learn: 1), `storage` (a file name, a database URL, or an Optuna storage, where the trials are kept so that calling the fit again resumes it), and Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
-            - `'nuts'`: `draws=500`, `warmup=500`, `chains=4`, `scan` (each chain starts from one of the best points of a scan that are apart)
-            - `'pmcmc'`: `draws=1000`, `warmup=1000`, `chains=4`, `particles` (of the particle filter: by default chosen by each chain in its warm-up; see `ss.fitting.pmmh()`; none for a deterministic sim, whose likelihood is exact), `scan` (each chain starts from one of the best points of a scan that are apart), `parallel=True` (to run the chains in parallel processes)
+            - `'nuts'`: `draws='auto'` (until the chains agree, with an R-hat of at most 1.01, and every value has 400 effective draws; or a number), `warmup=300`, `chains=4`, `scan` (each chain starts from one of the best points of a scan that are apart), and for `draws='auto'`: `ess=400`, `rhat=1.01`, `max_draws=5000`, `batch=100`
+            - `'pmcmc'`: `draws='auto'` (as for NUTS), `warmup=1000`, `chains=4`, `max_draws=20000`, `batch=250`, `particles` (of the particle filter: by default chosen by each chain in its warm-up; see `ss.fitting.pmmh()`; none for a deterministic sim, whose likelihood is exact), `scan` (each chain starts from one of the best points of a scan that are apart), `parallel=True` (to run the chains in parallel processes)
             - `'if2'`: `particles=1000` (of the particle filter), `iterations=50` (passes of the filter in each chain), `cooling=0.5` (the fraction of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on), `chains=4`
             - `'abc-smc'`: `samples=200` (the parameter values kept in each generation, which are the draws of the posterior), `generations=8`, `quantile=0.5` (of the distances, which sets the next tolerance), `tolerance` (the distance to stop at)
             - for a stochastic sim, how each point is scored (SciPy methods and Optuna; `n_runs` also for particle MCMC's start): `n_runs` (runs per point: 4 for a stochastic compartmental sim, 1 for agents and for a deterministic one; every point is scored by the mean over the same seeds of each run's score; for Optuna, giving it scores by runs in place of the particle filter), and `reseed` (whether each point takes fresh seeds: by default only for Optuna, whose search then averages over chance)

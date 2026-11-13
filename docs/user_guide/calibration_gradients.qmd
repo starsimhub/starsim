@@ -124,11 +124,11 @@ With a likelihood for every series, this is the maximum likelihood estimate (wit
 A posterior is the whole distribution of values consistent with the data. `method='nuts'` draws from it, given a likelihood for every data series, with each parameter's `prior=`, or a uniform prior over its bounds:
 
 ```{python}
-post = sim.fit(method=ss.fitting.method('nuts', draws=250, warmup=250))
+post = sim.fit(method='nuts')
 post.summarize();
 ```
 
-Each chain starts near one of the best points of a scan, spends `warmup=` draws tuning itself (these are discarded), and then makes `draws=` draws that are kept (fewer of each here than the defaults, which are in [Fitting methods](calibration_methods.qmd#choosing-a-method)). The table gives each parameter's median and 95% interval, with R-hat and the effective sample size; [Fit diagnostics](calibration_diagnostics.qmd#a-posterior) says how to read them.
+Each chain starts near one of the best points of a scan, spends `warmup=` draws tuning itself (these are discarded), and then draws until the chains agree, with enough effective draws of each parameter (see [Fitting methods](calibration_methods.qmd#posteriors)). The table gives each parameter's median and 95% interval, with R-hat and the effective sample size; [Fit diagnostics](calibration_diagnostics.qmd#a-posterior) says how to read them.
 
 The draws themselves are in `post.samples`, one row for each:
 

@@ -80,7 +80,7 @@ for label, prior in [('With the prior', True), ('Without it', False)]:
           '- projected cases:', proj.summarize().loc['measles_cases'].round().to_dict())
 ```
 
-Without the prior, the interval for the fraction reported is a little wider (15% to 54%, rather than 18% to 45%), and the range of the projected outbreak much wider (about 1,600 to 5,100 reported cases, rather than 1,800 to 4,100), since a lower fraction reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.
+Without the prior, the interval for the fraction reported is a little wider (15% to 56%, rather than 18% to 45%), and the range of the projected outbreak wider (about 1,700 to 4,900 reported cases, rather than 1,800 to 4,400), since a lower fraction reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.
 
 ## A real population (exercises 4–5)
 

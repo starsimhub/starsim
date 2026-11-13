@@ -75,12 +75,35 @@ def with_deps(cls):
 
 
 def compiling(what, engine, low, high):
-    """ Say that something is being compiled, and about how long it takes (in seconds), once a session for each thing; True if it was said """
+    """ Say that something is being compiled, and about how long it takes (in seconds), once a session for each thing; True if it was said (see `timed()` to say how long it took, too) """
     if what not in said and ss.options.verbose:
         said.add(what)
         print(f'  Compiling {what} with {engine}, estimated time: {low}-{high} s')
         return True
     return False
+
+
+@contextlib.contextmanager
+def timed(what, engine, low, high):
+    """ Say that something is being compiled within the block, with the estimate (see `compiling()`), and then how long it took """
+    said_now = compiling(what, engine, low, high)
+    start = time.time()
+    yield
+    if said_now:
+        print(f'  Compiled {what} with {engine} in {time.time() - start:.1f} s')
+    return
+
+
+def timed_first(func, what, engine, low, high):
+    """ `func`, whose first call (when JAX compiles it) is said with its estimate and then how long it took (see `timed()`) """
+    first = [True]
+    def call(*args, **kwargs):
+        if not first[0]:
+            return func(*args, **kwargs)
+        first[0] = False
+        with timed(what, engine, low, high):
+            return func(*args, **kwargs)
+    return call
 
 
 class Ticker:
@@ -113,7 +136,7 @@ class Ticker:
         self.stop.set()
         if self.thread is not None:
             self.thread.join()
-        self.progress.finish(f'  Compiled {self.what} with {self.engine} in {time.time() - self.start:.0f} s')
+        self.progress.finish(f'  Compiled {self.what} with {self.engine} in {time.time() - self.start:.1f} s')
         return
 
 

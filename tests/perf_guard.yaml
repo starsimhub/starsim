@@ -1,28 +1,30 @@
-cpu_performance: 0.9809147276845727
-times:
-  bare_init: 0.008
-  bare_run: 0.0821
-  bare_run_no_people: 0.0466
-  births_run: 0.0158
-  by_age_init: 0.0596
-  by_age_run: 0.6862
-  coded_init: 0.02
-  coded_run: 0.8247
-  contra_init: 0.1293
-  contra_run: 1.641
-  copy_sim: 0.0039
-  counts_init: 0.0461
-  counts_run: 0.6486
-  crn_false_run: 0.0915
-  diagnose: 0.0033
-  fit_best: 0.1908
-  fit_pmcmc: 0.4488
-  fseis10_init: 0.0301
-  fseis10_run: 0.8009
-  het_init: 0.017
-  jax_gradient: 0.0105
-  parallel_ode: 0.0148
-  strains_ode_run: 0.0035
-  tb1k_run: 0.6068
-  tb_init: 0.0411
-  tb_run: 0.9153
+machines:
+  linux-x86_64:
+    cpu_performance: 0.9809147276845727
+    times:
+      bare_init: 0.008
+      bare_run: 0.0821
+      bare_run_no_people: 0.0466
+      births_run: 0.0108
+      by_age_init: 0.0596
+      by_age_run: 0.6862
+      coded_init: 0.0139
+      coded_run: 0.5052
+      contra_init: 0.1293
+      contra_run: 1.641
+      copy_sim: 0.0039
+      counts_init: 0.0174
+      counts_run: 0.2575
+      crn_false_run: 0.0915
+      diagnose: 0.0033
+      fit_best: 0.1908
+      fit_pmcmc: 0.4488
+      fseis10_init: 0.014
+      fseis10_run: 0.4877
+      het_init: 0.017
+      jax_gradient: 0.0105
+      parallel_ode: 0.0148
+      strains_ode_run: 0.0035
+      tb1k_run: 0.6068
+      tb_init: 0.0411
+      tb_run: 0.9153

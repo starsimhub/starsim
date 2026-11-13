@@ -158,8 +158,7 @@ class Function:
     def call_jax(self, args, kwargs):
         jax = ss.gradients.jax()
         if self.jax_func is None:
-            self.jax_func = jax.jit(with_jnp(self.py_func))
-            _cache.compiling(f'{self.py_func.__qualname__}()', 'JAX', 0.2, 5)
+            self.jax_func = _cache.timed_first(jax.jit(with_jnp(self.py_func)), f'{self.py_func.__qualname__}()', 'JAX', 0.2, 5)
         try:
             return self.jax_func(*args, **kwargs)
         except (TypeError, IndexError) as e: # What JAX raises for what it can't trace (e.g. ConcretizationTypeError, NonConcreteBooleanIndexError)

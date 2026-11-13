@@ -263,19 +263,19 @@ The range of values consistent with the data is a **posterior**. Finding it take
 ## Python
 
 ```{python}
-post = sim.fit(method='pmcmc', likelihood=dict(cases=ss.nbinom(n=20))) # 4 chains, each of 1,000 warm-up draws and 1,000 draws
+post = sim.fit(method='pmcmc', likelihood=dict(cases=ss.nbinom(n=20))) # 4 chains, each sampled until they agree
 post.summarize()
 ```
 
 ## R
 
 ```r
-post <- sim$fit(method = "pmcmc", likelihood = list(cases = ss$nbinom(n = 20))) # 4 chains, each of 1,000 warm-up draws and 1,000 draws
+post <- sim$fit(method = "pmcmc", likelihood = list(cases = ss$nbinom(n = 20))) # 4 chains, each sampled until they agree
 post$summarize()
 ```
 :::
 
-The table gives each parameter's posterior median and 95% interval, and `rhat`, which checks that the sampler's chains agree: it should be at most 1.01. Here it is just above, and Starsim warns that the chains have not quite converged, since β and the fraction reported are strongly correlated, which slows a random walk. The interval is close enough for this tutorial; for a final answer, take more draws (`method=ss.fitting.method('pmcmc', draws=4000)`). The interval for the fraction reported, about 18% to 45%, is wide: the data say little more about it than the prior did.
+The table gives each parameter's posterior median and 95% interval, and `rhat`, which checks that the sampler's chains agree: it should be at most 1.01. The sampler keeps drawing until it is, and until each parameter has at least 400 effective draws (`ess`), which takes more draws here than usual, since β and the fraction reported are strongly correlated, which slows a random walk. The interval for the fraction reported, about 18% to 45%, is wide: the data say little more about it than the prior did.
 
 ### Projecting from the posterior {#projecting-from-the-fit}
 
