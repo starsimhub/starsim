@@ -50,7 +50,12 @@ A full list of diseases modeled using Starsim is available in the [documentation
 
 ## Installation
 
-If you're new to Python, check out our [getting started guide](https://starsim.org/getting-started/). You can also use our [installer](https://starsim.org/install.sh), which will install Python along with all required dependencies.
+If you're new to Python, check out our [getting started guide](https://starsim.org/getting-started/). You can also use our installer, which will install Python along with all required dependencies. On Linux and macOS, run:
+```sh
+curl -LsSf https://docs.starsim.org/install.sh | sh
+```
+
+On Windows, download [install.bat](https://docs.starsim.org/install.bat) and double-click it.
 
 ### Requirements
 
@@ -124,8 +129,11 @@ sir = ss.Disease(infection, recovery) # Create the disease from the transitions
 
 sim = ss.Sim(sir)
 sim.run()
-sim.plot()
+sim.sir.plot()
 ```
+
+![Results of the SIR model](https://raw.githubusercontent.com/starsimhub/starsim/v4/docs/images/readme_sir.png)
+<!-- V4-PREVIEW: change the v4 branch in the image URL above to main for normal publishing -->
 
 The same model, written out in full:
 
