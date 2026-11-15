@@ -34,7 +34,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.05*I
 recovery  = I >> R @ ss.days(10)
-sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
+sir = ss.Disease(infection, recovery, init=dict(I=0.001))
 sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its fraction of people
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]])

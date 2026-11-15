@@ -24,7 +24,6 @@ cases       = ss.outcome(0.4*infection)
 measles = ss.Disease(infection, progression, recovery, cases,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
     init_n = dict(I=10),
-    name = 'measles',
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
@@ -137,7 +136,7 @@ class Antibodies(ss.Module):
         return
 
 S, I = ss.states('S I')
-cold = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> S @ ss.days(7), init_prev=0.01, name='cold')
+cold = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> S @ ss.days(7), init_prev=0.01)
 pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), verbose=0)
 
 def susceptibility(sim):
@@ -211,7 +210,7 @@ class AgeNet(ss.Network):
         return
 
 S, I, R = ss.states('S I R')
-cold = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(7), init_prev=0.001, name='cold')
+cold = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(7), init_prev=0.001)
 
 pars = dict(n_agents=5000, stop=ss.days(250), verbose=0)
 sims = {

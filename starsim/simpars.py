@@ -56,7 +56,7 @@ class SimPars(ss.Pars):
         self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm() (see ss.Sim)
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
         self.approximations = 'note' # What to do when a solver approximates part of the model: 'note' prints a note; 'allow' keeps the note in sim.notes without printing it; 'error' makes it an error
-        self.require_kernels = False # Whether to raise an error if a compartmental sim can't be run all at once in the compiled kernels, and would instead run step by step in plain Python (which can be 100 times slower); useful for keeping a fit or a large batch of runs fast
+        self.require_compiled = False # Whether to raise an error if a compartmental sim can't be run whole, in one compiled call, and would instead run step by step in plain Python (which can be 100 times slower); useful for keeping a fit or a large batch of runs fast
         self.stratify   = None   # Properties of people to stratify every module by, e.g. dict(age=[0, 15, 65])
         self.group_results = None # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.solvers.group_rows())
 
@@ -90,6 +90,23 @@ class SimPars(ss.Pars):
             errormsg = f'Cannot set sim.pars.{key} once the sim is initialized, since a run (and a rerun) uses the settings it had then; make a new sim with it instead, e.g. sim.new({key}={val})'
             raise RuntimeError(errormsg)
         return super().__setitem__(key, value)
+
+    def __missing__(self, key):
+        """ A module's parameters (added by name once it is initialized) by its default name, e.g. `sim.pars.sir` for an `ss.SIR` called `measles` (see `ss.utils.find_module()`) """
+        if not isinstance(key, str) or key.startswith('_'):
+            raise KeyError(key)
+        mods = ss.utils.given_modules(self) + [val._module for val in self.values() if isinstance(val, ss.Pars) and isinstance(val._module, ss.Module)] # Before init(), the modules given; after, those whose parameters are here
+        mod = ss.utils.find_module(mods, key, own=False)
+        if mod is not None and dict.__contains__(self, mod.name):
+            return dict.__getitem__(self, mod.name)
+        raise KeyError(key)
+
+    def __getattr__(self, attr):
+        """ As `__missing__()`, for `sim.pars.sir` """
+        try:
+            return self.__missing__(attr)
+        except KeyError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'") from None
 
     def check_key_mismatch(self, pars):
         """ As for any parameters, but a setting of Starsim 3's says what replaces it """
@@ -260,9 +277,9 @@ class SimPars(ss.Pars):
         taken = [attr for attr in dir(ss.Results) if not attr.startswith('_')] # The module's results are sim.results.<name>, so a method's name is taken
         used = list(names) + taken
         if name in names or name in taken:
-            if delivery is not None and (mod._default_name or names.get(name) == 'interventions'): # A product named for its delivery
+            if delivery is not None and (mod._name_source == 'class' or names.get(name) == 'interventions'): # A product named for its delivery
                 mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', used, style='_%d')
-            elif mod._default_name: # A name the user did not give is simply numbered (e.g. a second clip_edges is clip_edges_1)
+            elif mod._name_source != 'given': # A name the user did not give (the default for its class, or its variable's) is simply numbered (e.g. a second clip_edges is clip_edges_1)
                 mod.name = sc.uniquename(name, used, style='_%d')
             elif name in taken:
                 errormsg = f'A module cannot be called "{name}", since sim.results.{name} is a method of the results; please give it another name (the names taken are {sc.strjoin(taken)})'
@@ -318,9 +335,8 @@ class SimPars(ss.Pars):
             if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
                 modlist = []
                 for name,mod in given.items():
-                    if mod._default_name:
-                        mod.name = mod.label = name
-                        mod._default_name = False
+                    if mod._name_source != 'given': # The key names it, as name= would
+                        mod._set_name(name)
                     modlist.append(mod)
             elif isinstance(self[modkey], list):
                 modlist = self[modkey]

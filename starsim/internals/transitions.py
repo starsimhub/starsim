@@ -21,6 +21,7 @@ import inspect
 import functools
 import itertools
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 from .expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
@@ -422,6 +423,7 @@ def check_who(who, what):
     if ss.conditions.has_event(ss.conditions.as_cond(who)):
         errormsg = f'who= of {what} says who it applies to, a condition (e.g. who=ss.person.age > 30); {who} is an event (or has one), which triggers it, so give the event as when=, and any condition in who= (e.g. when=preg.delivery, who=ss.person.age < 20)'
         raise TypeError(errormsg)
+    ss.conditions.check_who_people(who, what)
     return who
 
 
@@ -481,8 +483,34 @@ class on:
         x = self.x
         return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x))
 
+    def __and__(self, other):
+        """ Joined to a condition with &, the same as joining it inside: `ss.on(screening.positive, delay=ss.months(3)) & (sir.I.n > 1000)` is `ss.on(screening.positive & (sir.I.n > 1000), delay=ss.months(3))` """
+        if isinstance(other, ss.schedule):
+            return other & self # Which raises: a schedule is joined to an event with | (either), not & (an event within a window is start= and stop=)
+        if isinstance(other, on):
+            errormsg = f'{self!r} cannot be joined to {other!r}; join events and conditions inside one ss.on(), e.g. ss.on(screening.positive & (sir.I.n > 1000), delay=ss.months(3))'
+            raise TypeError(errormsg)
+        return on(ss.conditions.as_cond(self.x) & other, delay=self.delay)
+
+    __rand__ = __and__
+
+    def __or__(self, other):
+        """ Joined to another event or a condition with |, the same as joining it inside: `ss.on(screening.positive, delay=ss.months(3)) | (sir.I.n > 1000)` is `ss.on(screening.positive | (sir.I.n > 1000), delay=ss.months(3))`; as the when= of an event, the condition on the population acts at once, at each step it holds (the delay is the event's) """
+        if isinstance(other, ss.schedule):
+            return other | self
+        if isinstance(other, on):
+            errormsg = f'{self!r} cannot be joined to {other!r}; join events and conditions inside one ss.on(), e.g. ss.on(a.positive | b.positive, delay=ss.months(3))'
+            raise TypeError(errormsg)
+        if self.delay is not None and ss.conditions.has_event(ss.conditions.as_cond(other)): # Joined inside, the other event would wait for this one's delay too
+            errormsg = (f'{self!r} cannot be joined to the event {other!r} with |, since the other event would wait for the delay too; if both wait for it, put them in one ss.on() '
+                        f'(e.g. ss.on(a.positive | b.positive, delay=...)); if only one does, give each its own event or delivery')
+            raise TypeError(errormsg)
+        return on(ss.conditions.as_cond(self.x) | other, delay=self.delay)
+
+    __ror__ = __or__
+
     def __repr__(self):
-        return f'ss.on({getattr(self.x, "__name__", self.x)})'
+        return f'ss.on({getattr(self.x, "__name__", self.x)}' + (f', delay={self.delay!r}' if self.delay is not None else '') + ')'
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
@@ -502,10 +530,11 @@ class Transition(Nameable):
         dur (any): a dwell time: a duration or a distribution of durations (instead of `rate`)
         p (float/None): the probability of taking it, for those it applies to (e.g. on an event); a split gives each destination's in `dest`. With several transitions out of a state, each a branch with its own `p=`, `p=None` marks the one that takes the rest
         stages (int): the number of stages a dwell time is split into, in a row (an Erlang distribution), under every solver: more stages make the times in the state vary less around the mean
-        who (Cond/func/str): who it applies to: a condition (e.g. `ss.person.age > 30`, or a state by its path, `'sir.I'`), as for `ss.Event(who=)`; for everyone else its rate is 0
+        who (Cond/func/str): who it applies to: a condition on people (e.g. `ss.person.age > 30`, or a state by its path, `'sir.I'`), as for `ss.Event(who=)`; for everyone else its rate is 0. A condition on the population (a count, `Q.n < 20`) says when, so goes in `when=`
         when (Event/on/Cond/func/str): what triggers it, instead of a rate (the same as `@ ss.on(...)`): an event moves the people it happens to (`when=preg.delivery`),
             or `ss.on(event, delay=...)` for a time after it (drawn for each person), as agents; joined to a condition with `&`, those who meet it; a condition moves people as soon as it holds
-            (see `ss.on`); a path (`when='preg.delivery'`, as `ss.ref('preg.delivery')`) stands for whatever is there, found when the sim is initialized
+            (see `ss.on`); a path (`when='preg.delivery'`, as `ss.ref('preg.delivery')`) stands for whatever is there, found when the sim is initialized.
+            With `rate=` or `dur=`, a condition on the population (`when=Q.n < 20`) is instead when the rate applies: it is 0 while the condition does not hold
         move (dict/StrainMove): a change of level in a dimension as well as of state: the dimension, and the level people move to, or a pair of
             levels (e.g. `move=dict(risk=('low', 'high'))`, which applies only to people at the first); or a change of strains (`move=DS >> (DS, RIF)`, see `ss.strains.Strain`)
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
@@ -538,6 +567,7 @@ class Transition(Nameable):
         cure      = ss.Transition(I, S, rate=0) # A rate of 0: only treatment moves people along it
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), who=ss.person.age > 1) # Only adults
+        admission = ss.Transition(I, H, rate=ss.perday(0.1), when=H.n < 20) # Only while there are beds
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)) # At least 21 days old first, as EMULSION's duration
@@ -553,6 +583,9 @@ class Transition(Nameable):
         self._given = (source, dest) # As given, for a transition made again with the keywords after @ (I >> R @ dict(dur=ss.days(8), p=None))
         where = None if who is None else check_who(who, 'a transition')
         trigger, delay = None, None
+        if when is not None and not isinstance(when, on) and (rate is not None or dur is not None) and ss.conditions.on_population(when): # With a rate or dwell time, a condition on the population says when it applies (sir.I.n > 1000): the rate is 0 while it does not hold
+            where = ss.conditions.join('&', [where, ss.conditions.as_cond(when)])
+            when = None
         if when is not None:
             if isinstance(when, on):
                 trigger, delay = when.x, when.delay
@@ -601,7 +634,7 @@ class Transition(Nameable):
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
         self.noise = None if noise is None else as_expr(noise) # Sigma of gamma white noise on the rate, drawn each step by the chain binomial (see ss.solvers.Compartmental.flatten_rates())
-        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.kernels.NOISE)
+        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.solvers.backends.kernels.NOISE)
             errormsg = f'noise= takes sigma as a number or a parameter (e.g. noise=ss.par(0.1, bounds=[0, 0.3])), not an expression ({self.noise}); to fit a function of sigma, fit sigma itself'
             raise ValueError(errormsg)
         self.move = None # A change of level in some dimensions: {dim: level}
@@ -640,6 +673,8 @@ class Transition(Nameable):
         self.birth_on = None # For ss.birth(when=): the transition whose flow drives the inflow, and the children each time
         self.n_born = 1
         self.p_female = None # For ss.birth(): the chance a child is female
+        self.mother_ages = None # For ss.birth() at a rate: as agents, the ages of the women who are mothers, (min_age, max_age)
+        self.of_population = False # Declared for the population (ss.Sim(demographics=[...])), so its deaths are of its own cause, its name, as ss.Deaths' are of the module's (see ss.solvers.init_flows())
         self.every_state = False # For ss.death() with no state: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.state_given = True # For ss.birth() and ss.immigration(): whether the state people arrive in was given (if not, the first state)
@@ -1201,26 +1236,32 @@ class BirthOn:
         return self
 
 
-def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=None, name=None, label=None, **kwargs):
+def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=None, rel_birth=None, min_age=None, max_age=None, columns=None, name=None, label=None, **kwargs):
     """
     An inflow of people: at a crude (per-person) birth rate, e.g. `ss.birth(S, rate=ss.peryear(0.02))`; or driven by a
     flow, e.g. `ss.birth(NP, when=preg.delivery, children=2)`, `children` for each person who goes through the transition
+
+    Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
+    for every disease's people and run under every solver; births into one disease's state go in
+    the disease. As agents, each child born at a crude rate has a mother (`people.parent`), a woman
+    alive aged `min_age` to `max_age` (in the same place, if the model has places), as `ss.Births` gives.
+    However they are given, the sim's `birth` and `cbr` count the births (see `ss.solvers.population_flows()`).
 
     With `when=`, as agents the children are made by the module that owns the transition, with `parent` set to the
     person who went through it, and placed in each declared module's state given by its own `ss.birth(when=...)` of
     the same transition, or else its first state. Agents only, for now.
 
-    Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
-    for every disease's people and run under every solver; births into one disease's state go in
-    the disease.
-
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number is per year (`0.03` is `ss.peryear(0.03)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; a place by name is `ss.Births(birth_rate=place)`, its UN rates as agents (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number is per year (`0.03` is `ss.peryear(0.03)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; also a table of crude birth rates by year (a dataframe with columns `Year` and `CBR`, each rate holding until the next year), or a place by name, for its UN crude birth rates (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
         when (Transition): instead of a rate, the transition whose flow drives the births
         children (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         p_female (float/Dist): the chance a child is female (default: as for anyone added)
-        rate_per (float): for the births of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`)
+        rate_per (float): for the births of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`); not needed for a place
+        rel_birth (float): a multiplier on the birth rate (e.g. on a place's rates)
+        min_age (float): as agents, the youngest age of a mother (default 15)
+        max_age (float): as agents, the age that mothers are younger than (default 50)
+        columns (dict): for a table, its column for each standard key, where they differ from the defaults (`year='Year'`, which may also be `Time`, and `value='CBR'`)
         name (str): the name of the transition
         label (str): a human-readable name
 
@@ -1228,24 +1269,32 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
         ```python
         ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])
         ss.Sim(sir, demographics=[ss.birth(rate=20, rate_per=1000), ss.death(rate=10, rate_per=1000)]) # The same, per 1,000 people per year
-        ss.Sim(sir, demographics=[ss.birth(rate='Kenya'), ss.death(rate='Kenya')]) # Kenya's UN rates (as ss.Births and ss.Deaths, agents only)
+        ss.Sim(sir, demographics=[ss.birth(rate='Kenya'), ss.death(rate='Kenya')]) # Kenya's UN rates (deaths by age and sex, as agents)
+        ss.birth(rate=pd.read_csv('cbr.csv'), rate_per=1000) # Crude birth rates per 1,000 by year, columns Year and CBR
         ```
     """
+    names = ['rate', 'when', 'children', 'p_female', 'rate_per', 'rel_birth', 'min_age', 'max_age', 'columns', 'name', 'label']
     if 'n' in kwargs:
         errormsg = f'ss.birth() takes children= for the number of children each time (e.g. children=2 for twins), not n=; n= is a number of people'
         raise TypeError(errormsg)
+    elif 'birth_rate' in kwargs:
+        errormsg = 'ss.birth() takes rate=, not birth_rate= (which is the keyword of the class ss.Births)'
+        raise TypeError(errormsg)
     elif kwargs:
         key = list(kwargs)[0]
-        errormsg = f'ss.birth() takes a state, rate=, when=, children=, p_female=, rate_per=, name=, and label=, not {key}={did_you_mean(key, ["rate", "when", "children", "p_female", "rate_per", "name", "label"])}'
+        errormsg = f'ss.birth() takes a state, {sc.strjoin([f"{k}=" for k in names])}, not {key}={did_you_mean(key, names)}'
         raise TypeError(errormsg)
-    if isinstance(rate, str): # A place by name: its UN crude birth rates by year, with mothers, as agents
-        if state is not None or when is not None:
-            errormsg = f'ss.birth(rate={rate!r}) is the births of everyone, at the UN rates of {rate} (as ss.Births); it takes no state or when='
-            raise ValueError(errormsg)
-        return ss.Births(birth_rate=rate, rate_per=rate_per, **({} if name is None else dict(name=name)))
     on = when.x if isinstance(when, ss.on) and when.delay is None else when
-    if rate_per is not None and (state is not None or on is not None):
-        errormsg = 'rate_per= of ss.birth() is for a crude birth rate of everyone (with no state or when=); a rate of births into a state is per person'
+    if isinstance(rate, (str, pd.DataFrame, pd.Series)): # A place by name, or a table of rates by year: crude birth rates by year
+        if state is not None or on is not None:
+            errormsg = f'ss.birth(rate={rate if isinstance(rate, str) else "<table>"!r}) is the births of everyone, at crude birth rates by year; it takes no state or when='
+            raise ValueError(errormsg)
+        rate, rate_per = ss.demographics.birth_series(rate, columns, rate_per)
+    elif columns is not None:
+        errormsg = f'columns= of ss.birth() names the columns of a table of rates, but the rate is not a table: {rate!r}'
+        raise ValueError(errormsg)
+    if (rate_per is not None or min_age is not None or max_age is not None) and (state is not None or on is not None):
+        errormsg = 'rate_per=, min_age=, and max_age= of ss.birth() are for a crude birth rate of everyone (with no state or when=); a rate of births into a state is per person, and children born by a flow have their parent as mother'
         raise ValueError(errormsg)
     if on is not None and rate is not None:
         errormsg = 'ss.birth() takes either rate= (a crude birth rate) or when= (a transition that drives the births), not both'
@@ -1253,6 +1302,8 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     note = None
     if state is None: # The births of everyone, a crude birth rate (as for ss.death(): births into a disease's state are in the model's unit)
         rate, note = ss.demographics.bare_rate(rate, 'rate of ss.birth()', rate_per)
+    if rel_birth is not None:
+        rate = scale_rate(rate, rel_birth, 'rel_birth of ss.birth()')
     out = Transition(unborn, state, rate=rate, name=name, label=label)
     out.rate_note = note
     out.per_capita = on is None
@@ -1260,7 +1311,21 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     out.n_born = children
     out.p_female = p_female
     out.state_given = state is not None
+    out.mother_ages = None if on is not None else (sc.ifelse(min_age, 15), sc.ifelse(max_age, 50)) # As agents, the ages of the women who are mothers (see ss.solvers.agents_stepping.step_births())
     return out
+
+
+def scale_rate(rate, rel, name):
+    """ A rate of births or deaths (a number, a typed rate, or a time series of either) times a multiplier, e.g. `rel_birth` """
+    if rate is None:
+        errormsg = f'{name} multiplies a rate, but none was given'
+        raise ValueError(errormsg)
+    if not sc.isnumber(rel) or rel < 0:
+        errormsg = f'{name} is a multiplier on the rate, a number that is not negative, not {rel!r}'
+        raise ValueError(errormsg)
+    if isinstance(rate, ss.timeseries):
+        return rate.map(lambda v: v*rel)
+    return rate*rel
 
 
 class lifetable:
@@ -1342,34 +1407,62 @@ class lifetable:
         return np.array(out)
 
 
-def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, name=None, label=None, **kwargs):
+def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, rel_death=None, columns=None, name=None, label=None, **kwargs):
     """
     An outflow of people, e.g. `ss.death(I, rate=ss.peryear(0.1))`
 
+    With no state, the deaths of everyone, in `ss.Sim(demographics=[...])`: at a crude death rate (a number, a typed rate, or a time
+    series of either), or from a life table, these are declared, and run under every solver. Death rates that differ by year, sex,
+    and age (a table, a place by name, or a life table for each sex or year) need each person's sex and age, so they make the
+    module `ss.Deaths`, which runs as agents (with its own results, `deaths.death` and `deaths.cmr`). Either way, the sim's `death` and `cmr` count them.
+
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number is per year (`0.01` is `ss.peryear(0.01)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number is per year (`0.01` is `ss.peryear(0.01)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; also a table of death rates by year, sex, and age (columns `Time`, `Sex`, `AgeGrpStart`, and `mx`, as UN data; see `columns`), or a place by name, for its UN rates (e.g. `rate='Kenya'`), both as `ss.Deaths`
         dur (any): the mean time to death (instead of `rate`)
-        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
-        rate_per (float): for the deaths of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`)
-        name (str): the name of the transition
+        lifetable (`ss.lifetable`/dict): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age; as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model. A life table for each sex (`dict(female=..., male=...)`) or year (`{2000: ..., 2010: ...}`), or one with `rel_death`, is `ss.Deaths(lifetable=...)`, as agents
+        rate_per (float): for the deaths of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`); not needed for a place
+        rel_death (float): a multiplier on the death rate (e.g. on a place's rates)
+        columns (dict): for a table, its column for each standard key, where they differ from the defaults (see `ss.Deaths`)
+        name (str): the name of the transition (or of the `ss.Deaths` it makes)
         label (str): a human-readable name
+
+    Examples:
+        ```python
+        ss.death(rate=ss.peryear(0.01)) # 10 deaths per 1,000 people a year
+        ss.death(I, rate=ss.perday(0.002)) # Deaths of the infectious, in a disease
+        ss.death(rate='Kenya') # Kenya's UN death rates by year, sex, and age (as ss.Deaths)
+        ss.death(lifetable=ss.lifetable(ages=ages, deaths=dx)) # From a life table
+        ```
     """
+    names = ['rate', 'dur', 'lifetable', 'rate_per', 'rel_death', 'columns', 'name', 'label']
     if 'p' in kwargs: # A fraction who die is a branch of the way out of a state, not a death rate
         errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a fraction of the people leaving a state who die, make it a branch of that exit, e.g. '
                     f'ss.Transition(I, {{R: None, ss.dead: {kwargs["p"]}}}, dur=ss.days(10))')
         raise TypeError(errormsg)
+    elif 'death_rate' in kwargs:
+        errormsg = 'ss.death() takes rate=, not death_rate= (which is the keyword of the class ss.Deaths)'
+        raise TypeError(errormsg)
     elif kwargs:
         key = list(kwargs)[0]
-        errormsg = f'ss.death() takes a state, rate=, dur=, lifetable=, rate_per=, name=, and label=, not {key}={did_you_mean(key, ["rate", "dur", "lifetable", "rate_per", "name", "label"])}'
+        errormsg = f'ss.death() takes a state, {sc.strjoin([f"{k}=" for k in names])}, not {key}={did_you_mean(key, names)}'
         raise TypeError(errormsg)
-    if isinstance(rate, str): # A place by name: its UN death rates by year, sex, and age, as agents
-        if state is not None or dur is not None:
-            errormsg = f'ss.death(rate={rate!r}) is the deaths of everyone, at the UN rates of {rate} (as ss.Deaths); it takes no state or dur='
+    if (rate_per is not None or rel_death is not None or columns is not None) and (state is not None or dur is not None):
+        errormsg = 'rate_per=, rel_death=, and columns= of ss.death() are for a death rate of everyone (rate= or lifetable=, with no state); a rate of deaths from a state, or a duration, is per person'
+        raise ValueError(errormsg)
+    table = isinstance(rate, (str, dict, pd.DataFrame, pd.Series))
+    by_module = lifetable is not None and (isinstance(lifetable, dict) or rel_death is not None) # Life tables by sex or year, or scaled: as ss.Deaths reads them
+    if table or by_module: # Death rates by year, sex, and age, which need each person's: as agents, by ss.Deaths
+        if state is not None or dur is not None or (table and lifetable is not None):
+            errormsg = f'ss.death(rate={rate if isinstance(rate, str) else "<table>"!r}) is the deaths of everyone, at rates by year, sex, and age (as ss.Deaths); it takes no state, dur=, or lifetable=' if table else 'ss.death(lifetable=) is the deaths of everyone, from a life table; it takes no state, rate=, or dur='
             raise ValueError(errormsg)
-        return ss.Deaths(death_rate=rate, rate_per=rate_per, **({} if name is None else dict(name=name)))
-    if rate_per is not None and (state is not None or dur is not None or lifetable is not None):
-        errormsg = 'rate_per= of ss.death() is for a crude death rate of everyone (rate= with no state); a rate of deaths from a state, a duration, or a life table is per person'
+        kw = dict(death_rate=rate) if table else dict(lifetable=lifetable)
+        return ss.Deaths(**kw, rate_per=rate_per, rel_death=sc.ifelse(rel_death, 1), columns=columns, **({} if name is None else dict(name=name)))
+    if columns is not None:
+        errormsg = f'columns= of ss.death() names the columns of a table of rates, but the rate is not a table: {rate!r}'
+        raise ValueError(errormsg)
+    if rate_per is not None and lifetable is not None:
+        errormsg = 'rate_per= of ss.death() is for a crude death rate of everyone; a life table is per person'
         raise ValueError(errormsg)
     if lifetable is not None:
         if rate is not None or dur is not None or state is not None:
@@ -1385,6 +1478,8 @@ def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, name=N
     note = None
     if state is None: # The deaths of everyone, a crude death rate (a disease's deaths, from one state, can be faster)
         rate, note = ss.demographics.bare_rate(rate, 'rate of ss.death()', rate_per)
+    if rel_death is not None:
+        rate = scale_rate(rate, rel_death, 'rel_death of ss.death()')
     out = Transition(state, dead, rate=rate, dur=dur, name=name, label=label)
     out.rate_note = note
     out.every_state = state is None
@@ -1483,7 +1578,7 @@ def emigration(state=None, rate=None, dur=None, name=None, label=None):
     """
     People leaving the population, e.g. `ss.emigration(rate=ss.peryear(0.01))`
 
-    As `ss.death()`, but as agents they are recorded as having left (`results.emigrated`)
+    As `ss.death()`, but as agents they are recorded as having left (`results.emigration`)
     rather than as having died.
 
     Args:

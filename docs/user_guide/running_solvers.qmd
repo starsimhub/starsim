@@ -9,6 +9,11 @@ authorship:
 
 A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters, and what each solver supports, approximates, or can't run ([Will my model run as an ODE?](#appendix-what-needs-agents)). How the solvers work inside is in [Engines and transmission](architecture_engines.qmd).
 
+Two words describe how a model is run:
+
+- **Solver:** the method, the mathematics of how the model becomes numbers: `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'` (`ss.Sim(solver=...)`). It can change the results (an ODE has no chance in it; agents do).
+- **Backend:** the code that computes them: Rust or Numba (compiled; the same numbers, bit for bit), plain Python (for debugging), or JAX (an ODE, and gradients). It never changes the results, and is set for the session with `ss.options.backend` ([Backends](running_performance.qmd#backends)).
+
 ## The solvers
 
 | Solver | What it computes | Use it for |
@@ -219,7 +224,7 @@ Here is a less transmissible infection than measles, with β = 0.05 per contact 
 
 ```{python}
 S, I, R = ss.states('S I R')
-flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.001, name='flu')
+flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.001)
 contacts = ss.RandomNet(n_contacts=8, dynamic=False)
 
 agents = ss.Sim(flu, networks=contacts, n_agents=10_000, stop=ss.days(150), dt=ss.days(0.5), label='Agents, fixed contacts').run()
@@ -246,7 +251,7 @@ for solver in ['binomial', 'tau', 'gillespie']:
 
 With tens of millions of events, use tau-leaping rather than Gillespie. Agents take time in proportion to the number of agents and the number of steps; each agent can stand for several people (see [Branching and rescaling](running_branching.qmd)), and [Speed and scale](running_performance.qmd) covers finding what slows a run down.
 
-Whichever solver is chosen, the numbers are worked out by compiled code (the *backend*: Rust or Numba, or JAX when asked), which Starsim chooses itself; the choice never changes the results. How to choose one, compile it ahead of time, and use JAX is in [Speed and scale](running_performance.qmd#backends).
+Whichever solver is chosen, the numbers are worked out by the backend (Rust or Numba, or JAX when asked), which Starsim chooses itself; the choice never changes the results. How to choose one, compile it ahead of time, and use JAX is in [Speed and scale](running_performance.qmd#backends).
 
 The ODE has no tolerance to set: by default, a step too fast for RK4 to be accurate is taken by Dormand–Prince instead, which sets its own substeps. Giving `ss.solvers.ode(substeps=)` takes every step by RK4 with that many.
 
@@ -262,7 +267,7 @@ The ODE has no tolerance to set: by default, a step too fast for RK4 to be accur
 
 The properties of each solver, for looking up (`ss.solvers.solver_names` lists them).
 
-| Solver | Deterministic | Time | Chosen by `'auto'` | Whole run in the kernels | JAX and gradients |
+| Solver | Deterministic | Time | Chosen by `'auto'` | Whole run in one call | JAX and gradients |
 |---|---|---|---|---|---|
 | `'ode'` | Yes | Continuous, integrated in substeps | When nothing in the model needs agents | Yes, unless something needs a step of its own | Yes |
 | `ss.solvers.ode(dwells='exact')` | Yes | Whole steps, with each dwell time as a conveyor of steps | No | Yes, as for `'ode'` | Yes |
@@ -282,8 +287,8 @@ This appendix answers "will my model run as an ODE?", feature by feature, and th
 |---|---|---|---|
 | Have births, deaths, and migration at a rate? | Supported | Supported | Declared: `ss.birth()`, `ss.death()`, `ss.migration()` ([People and demographics](populations_people.qmd)) |
 | Have deaths from a disease, or imported cases? | Supported | Supported | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_people.qmd)) |
-| Use a country's birth and death rates? | Unsupported | Supported | `ss.birth(rate='Kenya')` is `ss.Births(birth_rate='Kenya')`, which needs agents; a rate or a time series of rates runs under every solver. A country's migration, `ss.migration(rate='Kenya')`, is supported by both ([Rates from data](populations_people.qmd)) |
-| Link each child to its mother? | Unsupported | Supported | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_people.qmd)) |
+| Use a country's birth and death rates? | Births and migration only | Supported | `ss.birth(rate='Kenya')` and `ss.migration(rate='Kenya')` are rates by year, so run under every solver; `ss.death(rate='Kenya')`, by age and sex, makes `ss.Deaths`, which needs agents ([Rates from data](populations_people.qmd)) |
+| Link each child to its mother? | Unsupported | Supported | `ss.birth()`, `ss.Pregnancy` ([Pregnancy](populations_people.qmd)) |
 | Add or remove people from my own code? | Supported | Supported | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
 
 ### Groups
@@ -350,7 +355,7 @@ This appendix answers "will my model run as an ODE?", feature by feature, and th
 
 ### The rules Starsim checks
 
-The rules that decide which engine runs a model are in `ss.solvers.solver_table()`. A model with any of these runs as agents under `solver='auto'`, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
+The rules that decide how a model can be run are in `ss.solvers.solver_table()`. A model with any of these runs as agents under `solver='auto'`, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
 
 ```{python}
 import pandas as pd

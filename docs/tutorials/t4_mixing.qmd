@@ -345,7 +345,7 @@ A model with a network runs as agents. To see when a network matters, take the s
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.63*I       # A rate of infection of 0.63 per contact per day
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-measles = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 pars = dict(n_agents=10_000, stop=ss.days(100))
 sims = {

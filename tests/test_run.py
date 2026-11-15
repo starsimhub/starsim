@@ -52,7 +52,7 @@ def test_parallel():
 
     # Workers started by forkserver, as they are once Numba's or JAX's threads have started here, give the same runs as by default (fork on Linux, if safe), with a lambda in the sim
     make = lambda: [ss.Sim(make_sim_pars(interventions=lambda sim: None), rand_seed=i) for i in range(2)]
-    fork, server = [ss.parallel(make(), par_args=dict(start_method=method)).sims for method in [ss.kernels.start_method(), 'forkserver']]
+    fork, server = [ss.parallel(make(), par_args=dict(start_method=method)).sims for method in [ss.solvers.backends.kernels.start_method(), 'forkserver']]
     assert all(np.array_equal(a.results.sis.prevalence, b.results.sis.prevalence) for a,b in zip(fork, server)) # The same either way
 
     return s1, s2
@@ -215,16 +215,16 @@ def test_scenarios():
     assert list(res.summarize().keys()) == ['Base', 'Vaccine'] and len(res.summarize().Base) == 10
     assert msim.summarize('sir.infection').equals(msim.summarize().loc['sir.infection'])
     sim = msim.sims[0]
-    assert sim.summarize('sir.infection') == sim.summarize().value.sir_infection
+    assert sim.summarize('sir.infection') == sim.summarize().value.sir.infection
     once = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, **kw, rand_seed=2), workers=1) # Each scenario run once: the same table as a sim's, with a value column
     for s,(label,table) in zip(once.sims, once.summarize().groupby(level='scenario')):
-        assert table.droplevel('scenario').equals(s.summarize()) and s.summarize().value.died == 0 # Results that are 0 throughout are kept, so the tables line up
+        assert table.droplevel('scenario').equals(s.summarize()) and s.summarize().value.death == 0 # Results that are 0 throughout are kept, so the tables line up
     assert sim.summarize('sir.I', how='max') == sim.results.sir.I.max() and msim.summarize('sir.S', how='min').equals(msim.summarize('sir.S')) # Peaks and troughs by name (S only falls, so its least is its last)
     with pytest.raises(ValueError, match="Unknown how='maxx'"): # Rather than N/A in the table
         sim.summarize(how='maxx')
     with pytest.raises(ValueError, match="Unknown how='maxx' for sir_I"):
         msim.summarize(how=dict(sir_I='maxx'))
-    assert sim.summarize(how={'sir.I': 'max'}).value.sir_I == sim.results.sir.I.max() # A result in how= is named as in key=, by module and name
+    assert sim.summarize(how={'sir.I': 'max'}).value.sir.I == sim.results.sir.I.max() # A result in how= is named as in key=, by module and name
     assert msim.summarize(how={'sir.I': 'max'}).equals(msim.summarize(how=dict(sir_I='max')))
     with pytest.raises(KeyError, match='"sir_II" is not a result'): # Rather than quietly summarized the usual way
         sim.summarize(how=dict(sir_II='max'))
@@ -300,9 +300,9 @@ def test_multisim_args():
     assert len(msim.sims) == 2 and msim.label == 'both'
     msim.run()
     summary = msim.summarize()
-    assert 'sis.infection' in summary.index.get_level_values('result') and summary.sis_infection.equals(summary.loc['sis.infection']) # Read as an attribute, with _ for .
+    assert 'sis.infection' in summary.index.get_level_values('result') and summary.sis.infection.equals(summary.loc['sis.infection']) # Read as attributes
     one = s1.summarize()
-    assert one.loc['sis.I', 'value'] == one.value.sis_I == s1.summarize('sis_I') == s1.results.sis.I[-1]
+    assert one.loc['sis.I', 'value'] == one.value.sis.I == s1.summarize('sis_I') == s1.results.sis.I[-1]
 
     # A delivery's coverage over the runs is each run's, the total delivered over the total eligible, not the mean over steps (mostly between rounds)
     vx = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5, when=[2001, 2003], name='vx')

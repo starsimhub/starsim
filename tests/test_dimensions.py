@@ -269,7 +269,7 @@ def test_property_values():
 
     # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and shares for it raise
     def make(urban=[False, True]):
-        ppl = ss.People(5000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.9), result=True), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
+        ppl = ss.People(5000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
         S, I = ss.states('S I')
         sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
         sim.stratify(urban=urban)
@@ -306,7 +306,7 @@ def test_given_splits():
     # Stratifying by a property the people already have keeps it, and is not described as guessed (everyone was put at False, the first level)
     N = 10_000
     tob = np.random.default_rng(1).random(N) < 0.3
-    ppl = ss.People(N, extra_states=[ss.BoolArr('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool), result=True)])
+    ppl = ss.People(N, extra_states=[ss.BoolArr('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), default_state='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
@@ -469,6 +469,23 @@ def test_levels_effects():
     return
 
 
+def test_levels_R0():
+    sc.heading('Protection as a level of S lowers R0 itself, while immunity as starting in R lowers only the R at the start (as in T7)')
+    def make(**kwargs):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), name='d', **kwargs)
+    base = make().R0()
+    leaky = make(init_n=dict(I=10))
+    leaky.stratify(vaccinated=ss.levels({False: 0.5, True: 0.5}, states=['S'], rel_sus=[1, 0.1]))
+    sim = ss.Sim(leaky, total_pop=10_000, unit='day', stop=10, **kw).run()
+    R0, R = sim.diseases.d.R0(), sim.diseases.d.Rt().values[0]
+    assert np.isclose(R0, 0.55*base, rtol=0.01) and np.isclose(R, R0, rtol=0.01) # Each person in S counts with their susceptibility
+    immune = ss.Sim(make(init=dict(R=0.5), init_n=dict(I=10)), total_pop=10_000, unit='day', stop=10, **kw).run()
+    R0, R = immune.diseases.d.R0(), immune.diseases.d.Rt().values[0]
+    assert np.isclose(R0, base, rtol=0.01) and np.isclose(R, 0.5*base, rtol=0.01)
+    return
+
+
 def test_strains_class_twice():
     sc.heading('A class with an outcome for each strain carried can be made twice: the strains change the copies of its transitions, not the class')
     class TB(ss.Disease):
@@ -498,4 +515,5 @@ if __name__ == '__main__':
     levels  = test_levels()
     test_levels_fractions()
     test_levels_effects()
+    test_levels_R0()
     test_strains_class_twice()

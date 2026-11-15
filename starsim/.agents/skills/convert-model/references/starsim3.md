@@ -25,7 +25,7 @@ The user-facing version of this mapping, with the traps that change results, is 
 | Per-agent relative risk after recovery | Separate states (tbsim's `cleared`, `recovered`, `treated`) with their own reinfection rates | Exact |
 | `define_pars(...)` | `ss.par(value, bounds=[lo, hi], doc=...)`, with typed values (`ss.peryear(...)`, `ss.years(...)`) | Exact |
 | `init_prev=ss.bernoulli(0.01)` | `init_prev=0.01`, or `init=dict(I=0.01)` | Exact |
-| `ss.Births`, `ss.Deaths` | `ss.Sim(demographics=[ss.birth(rate=...), ss.death(rate=...)])` with `rate_per=1000` (v3's rates were per 1,000 by default; v4's are per person unless `rate_per=` says otherwise), or keep the v3 demographics modules (agents), also with `rate_per=1000` | Exact |
+| `ss.Births`, `ss.Deaths` | `ss.Sim(demographics=[ss.birth(rate=...), ss.death(rate=...)])` with `rate_per=1000` (v3's rates were per 1,000 by default; v4's are per person unless `rate_per=` says otherwise), or for data or a place, `ss.birth(rate='Kenya')` and `ss.death(rate=df)` (the v3 modules `ss.Births`/`ss.Deaths` still run, as agents, also with `rate_per=1000`) | Exact |
 | `ss.Connector` editing `rel_sus` or a rate from another disease | `ss.modify(tb.latent_asy, multiply=1.9, who=hiv.latent)`, passed as `connectors=` | Exact (and compartmental: the diseases are crossed, `ss.solvers.JointStates`) |
 | `ss.Vx`/`ss.routine_vx`, `ss.Tx`/`ss.treat_num`, `ss.Dx`/`ss.routine_screening` | Products `ss.Vaccine(efficacy=dict(<transition>=...), waning=...)`, `ss.Treatment(...)`, `ss.Diagnostic(sensitivity=..., ...)`, delivered with `ss.vaccinate(...)`, `ss.treat(...)`, `ss.screen(...)` and keywords (`who=`, `when=`, `coverage=`), with what follows a test as a step of its own (`ss.treat(..., when=screening.positive)`) | Exact, with one trap: v3's `routine_vx(prob=p)` reached a fraction `p` each year, which is `ss.vaccinate(..., when=ss.schedule(every=ss.years(1)), coverage=p)`; without `every=` in `when=`, v4 offers it once, at first eligibility. A `Dx` table with more than two outcomes is `ss.Diagnostic(outcomes=...)`, and `treat_num`'s queue is `ss.treat(..., capacity=ss.capacity(n, queue=True))` |
 | A custom `ss.Intervention.step()` | A delivery's `who=` as a function, a plain function passed to the disease (called each step), or keep it as a v3 module | Agents only, unless it works on groups |
@@ -74,7 +74,7 @@ symptomatic = ss.State()
 T.tb_death = ss.death(symptomatic, rate=p.sym_dead, name='tb_death')
 T.diagnosis = ss.Transition([S.non_infectious, S.asymptomatic, S.symptomatic], S.treatment, rate=p.theta, name='diagnosis')
 
-bcg = ss.Vaccine(efficacy=dict(latent_asy=0.34, latent_non=0.34, tb_death=0.72), waning=ss.years(10), name='bcg')
+bcg = ss.Vaccine(efficacy=dict(latent_asy=0.34, latent_non=0.34, tb_death=0.72), waning=ss.years(10))
 sim = ss.Sim(tb, interventions=ss.vaccinate(bcg, who=ppl.age < 1, coverage=0.9))
 ```
 

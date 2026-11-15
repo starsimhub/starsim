@@ -22,7 +22,7 @@ def make_measles():
     infection   = S >> E @ 0.14*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
 
@@ -91,14 +91,13 @@ restored    = A >> R @ ss.years(2)
 measles = ss.Disease(infection, progression, recovery, restored,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
     init_n = dict(I=10),
-    name = 'measles',
 )
 measles.stratify(age=ages)
 
 S, C = ss.states('S C')
 acquisition = S >> C @ 0.003*C
 clearance   = C >> S @ ss.days(30)
-pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0.17, 0.17])), name='pneumococcus')
+pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0.17, 0.17])))
 pneumococcus.stratify(age=ages)
 
 amnesia = ss.modify(pneumococcus.rel_sus, multiply=2, who=measles.I | measles.A)

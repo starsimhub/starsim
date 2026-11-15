@@ -182,7 +182,7 @@ skip = "*-musllinux*"
 archs = ["auto64"]
 test-sources = ["tests"]
 test-requires = ["pytest", "pytest-env"]
-test-environment = { STARSIM_RUST_REQUIRED = "1", STARSIM_KERNELS = "rust" }
+test-environment = { STARSIM_RUST_REQUIRED = "1", STARSIM_BACKEND = "rust" }
 test-command = "pytest tests/test_kernel_sets.py -v"
 
 [tool.cibuildwheel.linux]

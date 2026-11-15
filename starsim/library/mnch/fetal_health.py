@@ -139,10 +139,10 @@ class FetalHealth(ss.Module):
 
             # Birth outcomes (stored on newborns at delivery)
             ss.FloatArr('birth_weight', label='Birth weight (grams)'),
-            ss.BoolArr('lbw',  label='Low birth weight'),
-            ss.BoolArr('vlbw', label='Very low birth weight'),
-            ss.BoolArr('sga',  label='Small for gestational age'),
-            ss.BoolArr('svn',  label='Small vulnerable newborn'),
+            ss.BoolArr('lbw',  label='Low birth weight', result=False),
+            ss.BoolArr('vlbw', label='Very low birth weight', result=False),
+            ss.BoolArr('sga',  label='Small for gestational age', result=False),
+            ss.BoolArr('svn',  label='Small vulnerable newborn', result=False),
         )
         return
 

@@ -254,7 +254,7 @@ def test_coded_modifiers():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.probperyear(0.2))
-            self.define_states(ss.BoolArr('affected', label='Affected', result=True), ss.FloatArr('rel_sus', default=1.0))
+            self.define_states(ss.BoolArr('affected', label='Affected'), ss.FloatArr('rel_sus', default=1.0))
             self.update_pars(**kwargs)
         def init_pre(self, sim):
             super().init_pre(sim)

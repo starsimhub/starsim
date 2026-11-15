@@ -58,7 +58,7 @@ An empty cell is not a promise that everything nearby can be declared, only that
 
 ## Conditions
 
-A condition on people says who something applies to: `who=` on `ss.modify()`, transitions, events, and deliveries. A condition on the whole population (a count, a fraction, or incidence) says when, so on `ss.modify()`, events, and deliveries it goes in `when=`, and it then applies to everyone while it holds (on a transition, it goes in `who=`). An event, or a condition that moves people as soon as it holds, also says when, in `when=` (or `ss.on()`). Conditions are built from:
+A condition on people says who something applies to: `who=` on `ss.modify()`, transitions, events, and deliveries. A condition on the whole population (a count, a fraction, or incidence) says when, so it goes in `when=` everywhere, and it then applies to everyone while it holds; on a transition with a rate, it is when the rate applies (`ss.Transition(I, H, rate=ss.perday(0.1), when=H.n < 20)`, admissions while there are beds). In `who=`, alone or joined to a condition on people, it is an error that shows how to split it. In the `when=` of an event, a delivery, or `ss.modify()` (not of a transition, which takes the condition alone), it can be joined to a schedule or to an event, with `&` for both (`when=ss.schedule(start='2025-05-05') & (sir.I.n > 1000)`) or `|` for either (`when=ss.schedule(every=ss.years(1)) | (sir.I.n > 1000)`). An event, or a condition that moves people as soon as it holds, also says when, in `when=` (or `ss.on()`). Conditions are built from:
 
 | A condition on | Example | Runs as compartments? |
 |---|---|---|
@@ -67,6 +67,7 @@ A condition on people says who something applies to: `who=` on `ss.modify()`, tr
 | The incidence over a period | `when=infection.incidence(over=ss.days(7)) > 0.01` | Yes, a step at a time |
 | How incidence is changing | `when=weekly > infection.incidence(over=ss.days(14)) - weekly` (this week more than last) | Yes, a step at a time |
 | Dates | `start=`, `stop=`, `when=` | Yes, in compiled code |
+| Dates and a count | `when=ss.schedule(start='2025-05-05') & (sir.I.n > 1000)`, or `\|` for either | Yes, as the count does (with `\|`, a step at a time) |
 | A person's traits | `who=ss.person.age < 5`, `who=ss.person.female` | Only if the model is stratified by them; otherwise as agents |
 | Any of these combined | `&` (and), `\|` (or), `~` (not) | As the least of its parts |
 
@@ -82,7 +83,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.3*I
 recovery  = I >> R @ ss.days(10)
 waning    = R >> S @ ss.days(180)
-flu = ss.Disease(infection, recovery, waning, init_n=dict(I=100), name='flu')
+flu = ss.Disease(infection, recovery, waning, init_n=dict(I=100))
 
 weekly = infection.incidence(over=ss.days(7)) # The fraction of people infected in the last 7 days
 last_week = infection.incidence(over=ss.days(14)) - weekly
@@ -128,7 +129,7 @@ sim = ss.Sim(flu, interventions=measure, **pars)
 sim.describe()
 ```
 
-The `Solver` line under "Results and running" in `sim.describe()` says why a run is taken a step at a time, and `require_kernels=True` on the sim makes that an error instead.
+The `Solver` line under "Results and running" in `sim.describe()` says why a run is taken a step at a time, and `require_compiled=True` on the sim makes that an error instead.
 
 ## Performance
 

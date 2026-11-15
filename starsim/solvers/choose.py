@@ -5,6 +5,7 @@ It exists so that a model need not say how it runs: the choice is made from what
 
 Used with: agents and compartments; declared and coded modules
 """
+import importlib.util
 import re
 import inspect
 import itertools
@@ -19,7 +20,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_backend', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
 
 
 
@@ -189,7 +190,7 @@ class Undeclared(Transmission):
         return
 
     def record_states(self):
-        """ The count of each `ss.BoolArr` with `result=True`, as for any module """
+        """ The count of each `ss.BoolArr` unless `result=False`, as for any module """
         ss.Module.record_states(self.mod)
         return
 
@@ -279,9 +280,9 @@ def choose_solver(sim):
     Agents are made only when something needs them, whether the model is declared or
     written as code: a sim of modules written as code with nothing per person (e.g. an
     ODE of its own in NumPy) has no agents, and one with per-person arrays (e.g. a
-    disease written as code) runs as agents. Which engine then takes a whole
-    compartmental run, the kernels or (with `sim.jax = True`) JAX, is chosen when the sim is
-    run, by `choose_engine()`.
+    disease written as code) runs as agents. Which backend then takes a whole
+    compartmental run, the compiled one or (with `ss.options.backend = 'jax'`) JAX, is chosen when the sim is
+    run, by `choose_backend()`.
 
     The steps: the modules are gathered and the declared model is built (`init_model()`); what
     matters to the choice is recorded (`init_capabilities()`), with what the layout of the
@@ -498,33 +499,35 @@ def check_model(sim):
     return
 
 
-def choose_engine(sim):
+def choose_backend(sim):
     """
-    Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the kernels, and why
+    Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the compiled backend (Rust or Numba), and why
 
-    By `sim.jax`: True for JAX, and otherwise (False, or None, the default) the kernels. JAX is never chosen for a run by
+    By `ss.options.backend`: 'jax' for JAX, and otherwise the compiled backend. JAX is never chosen for a run by
     itself: it is chosen where it is needed, for gradients and the fits and log-densities that use them (`sim.gradient()`,
     `sim.log_density()`, `sim.fit()`), and is worth asking for only for a long run over many groups (it takes about half a
-    second to start in a session, and compiles each model; an ODE run in JAX agrees with the kernels to about 1e-14). The
-    other solvers are run by the kernels, as is a model JAX does not cover (see `why_not()`), with a note.
+    second to start in a session, and compiles each model; an ODE run in JAX agrees with the compiled backend to about 1e-14).
+    With `backend='jax'`, the other solvers are run as under 'auto', since JAX runs only the ODE; an ODE that JAX cannot run
+    (see `why_not()`) is too, with a note.
 
-    Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
+    Returns whether to use JAX, and the reason.
     """
     use, why = False, None
-    if not sim.jax:
-        why = 'kernels' + (', as asked (sim.jax = False)' if sim.jax is False else '')
+    if ss.options.backend != 'jax':
+        why = f'ss.options.backend="{ss.options.backend}"'
     elif not isinstance(sim.solver, ss.solvers.ode):
-        why = f'kernels: JAX does not run solver="{sim.solver}"'
-        ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
+        why = f'not JAX, which runs only solver="ode", not solver="{sim.solver}"'
+    elif importlib.util.find_spec('jax') is None: # Asked for by name, so an error rather than another backend
+        errormsg = 'ss.options.backend="jax" runs the ODE in JAX, which is not installed: use pip install "starsim[jax]", or ss.options.backend="auto"'
+        raise ImportError(errormsg)
     else:
         no = why_not(sim, 'jax')
         if no is not None:
-            why = f'kernels: JAX cannot run this sim, since {no}'
-            ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
+            why = f'not JAX, which cannot run this sim, since {no}'
+            ss.note(f'JAX cannot run this sim, since {no}, so it is run as with ss.options.backend="auto"', sim=sim)
         else:
             use = True
-            why = 'JAX, as asked (sim.jax = True)'
-    sim.engine_reason = why
+            why = 'JAX, as asked (ss.options.backend="jax")'
     return use, why
 
 
@@ -573,6 +576,7 @@ def init_flows(sim):
             named = tr.dest[0] if tr._inflow and tr.state_given else None # A state of one of the diseases
             holder = next((mod for mod in sim.declared if named is None or any(st is named for st in mod.graph.states.values())), sim.declared[0])
             tr = sc.dcp(tr, memo={} if named is None else {id(named):named}) # The sim's own, so the module is unchanged if it is built again
+            tr.of_population = True
             holder.graph.add_flow(tr)
     holders = [mod.name for mod in sim.declared if flows_of(mod)]
     if len(holders) > 1:
@@ -611,6 +615,7 @@ def set_par_values(sim):
     values = {}
     levels = sc.ddict(dict)
     for key,val in (sim._par_values or {}).items():
+        key = ss.utils.own_path(list(sim.declared) + coded, key) # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
         base, bracket, label = key.partition('[')
         if bracket and key.endswith(']'):
             levels[base][label[:-1]] = val
@@ -900,6 +905,10 @@ def init_where(sim):
             if where is not None and key not in sim.pars.connectors and tr.trigger is None: # A trigger takes who= into its condition
                 if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
                     sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
+                    sim.pars.connectors[key].on_rate = True
+                    continue
+                if isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(where): # Counts joined together, e.g. (Q.n < 20) & (I.n > 5): the rate is 0 while it does not hold
+                    sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, when=~ss.conditions.as_cond(where), name=key)
                     sim.pars.connectors[key].on_rate = True
                     continue
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
@@ -1261,16 +1270,19 @@ def findings(sim, rows, mods=None):
     return
 
 
-def why_not(sim, engine, mods=None):
+def why_not(sim, kind, mods=None):
     """
-    Why an engine (`'kernels'`, a whole run in one call; or `'jax'`, the ODE in JAX, as for gradients) cannot run the sim, in a few words, or None if it can
+    Why a sim cannot be run in one of two ways (`'compiled'`, the whole run in one compiled call; or `'jax'`, the ODE in JAX, as for gradients), in a few words, or None if it can
 
     Args:
         sim (`ss.Sim`): the sim
-        engine (str): the engine
-        mods (list): for the kernels, only these declared modules' rules
+        kind (str): 'compiled' or 'jax'
+        mods (list): for 'compiled', only these declared modules' rules
     """
-    rows = kernels if engine == 'kernels' else [rule for rule in jax if engine not in rule.engines]
+    if kind not in ['compiled', 'jax']:
+        errormsg = f'ss.solvers.why_not() asks about "compiled" or "jax", not {kind!r}'
+        raise ValueError(errormsg)
+    rows = compiled if kind == 'compiled' else [rule for rule in jax if kind not in rule.engines]
     rows = [rule for rule in rows if rule.scope == 'declared'] if mods else rows
     for rule,_,values in findings(sim, rows, mods):
         return rule.message.format(**values)
@@ -1279,8 +1291,8 @@ def why_not(sim, engine, mods=None):
 
 def solver_table():
     """
-    What decides which engine runs a model, as a dataframe: a row for each rule, in the order they are read, with a column for each
-    engine: `agents`, `compartments` (one step at a time), `kernels` (the whole run in one call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
+    What decides how a model can be run, as a dataframe: a row for each rule, in the order they are read, with a column for each
+    way: `agents`, `compartments` (one step at a time), `compiled` (the whole run in one compiled call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
     a compartmental solver that was asked for runs, approximating it.
 
     Example:
@@ -1302,12 +1314,12 @@ def solver_table():
 
 Rule = collections.namedtuple('Rule', ['scope', 'test', 'engines', 'message', 'ingredient'], defaults=[None]) # What it reads ('sim'; 'module', every module; 'graph', a module with a graph; 'transition', each of its transitions; 'declared', every declared module); what it looks for: truthy, or a dict of values for the message, or several; the engines that can run a model with it; why not; and for a capability record, the ingredient
 
-engine_names = ['agents', 'compartments', 'kernels', 'jax'] # Each needs what the one before it does
+engine_names = ['agents', 'compartments', 'compiled', 'jax'] # Each needs what the one before it does
 AGENTS = ('agents',) # A compartmental solver is refused, and solver='auto' runs as agents
 ASKED = ('agents', 'asked') # A compartmental solver that was asked for runs it, approximately, or with a note; solver='auto' runs as agents
 RAISES = ('agents', 'raises') # A compartmental solver is refused, as is solver='auto', with what to do, unless something else needs agents
 STEPPED = ('agents', 'compartments') # In compartments, a step at a time
-KERNELS = STEPPED + ('kernels',) # A whole run in the kernels, not in JAX
+COMPILED = STEPPED + ('compiled',) # A whole run in one compiled call, not in JAX
 
 said_of = lambda e: str(e).split('\n')[0] # A CapabilityError's reason
 
@@ -1446,7 +1458,7 @@ def far_dwell(sim, mod, tr):
     if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
         return None
     shape = raw.pars.get('shape')
-    fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.kernels.convey())
+    fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.solvers.backends.kernels.convey())
     exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
     how = beyond_stages(raw, exact, sim)
     return dict(kind=type(raw).__name__, how=how) if how else None
@@ -1676,7 +1688,7 @@ def fixed_reason(sim, mod):
     return dict(reason=engine.whole) if engine.whole else None
 
 
-kernels = [ # What stops the kernels taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
+compiled = [ # What stops the compiled backend taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
     Rule('sim', lambda sim: isinstance(sim.solver, ss.solvers.abm), STEPPED, 'it runs as agents'),
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), STEPPED, 'it has no declared model'),
     Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
@@ -1741,7 +1753,7 @@ fixed = [ # The same, for what cannot change once the sim is initialized
 
 def not_whole(sim):
     """ Whatever stops the kernels taking the whole run """
-    return dict(reason=sim._kernel_reason()) if sim._kernel_reason() is not None else None
+    return dict(reason=sim._compiled_reason()) if sim._compiled_reason() is not None else None
 
 
 def certain_rate(sim, mod):
@@ -1751,15 +1763,15 @@ def certain_rate(sim, mod):
 
 
 jax = [ # What stops JAX taking a whole run of the ODE
-    Rule('sim', lambda sim: not getattr(sim, 'declared', None), KERNELS, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
-    Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
-    Rule('sim', not_whole, KERNELS, '{reason}'),
-    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), KERNELS, '"{mod.name}" has a movement register'),
-    Rule('declared', certain_rate, KERNELS, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'),
-    Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], KERNELS, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
+    Rule('sim', lambda sim: not getattr(sim, 'declared', None), COMPILED, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
+    Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), COMPILED, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
+    Rule('sim', not_whole, COMPILED, '{reason}'),
+    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), COMPILED, '"{mod.name}" has a movement register'),
+    Rule('declared', certain_rate, COMPILED, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which a whole compiled run takes as everyone moving at once'),
+    Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], COMPILED, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
 ]
 
-rules = capabilities + layouts + kernels + fixed + jax # The whole table, as solver_table() shows it
+rules = capabilities + layouts + compiled + fixed + jax # The whole table, as solver_table() shows it
 
 
 def auto_reasons(sim):

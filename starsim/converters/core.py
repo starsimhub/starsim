@@ -670,7 +670,7 @@ def disease_code(source, var, total=None):
             name = flow.rate
         guess = name is None or name in taken
         if guess: # Named from its endpoints, as Starsim would
-            base = f'{flow.src or "in"}_to_{flow.dst or "out"}'
+            base = f'{flow.src or "unborn"}_to_{flow.dst or "dead"}'
             name = base
             for i in range(2, len(source.flows) + 2):
                 if name not in taken:

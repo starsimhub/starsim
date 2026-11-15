@@ -331,10 +331,10 @@ def substeps(rates, dt, n_sub, solver):
 def choose(seconds=0.0):
     """
     The kernels to take a run with: the Rust ones (see `ss.solvers.backends.rust`) if they are in use, else these, compiled by
-    Numba, or the same code as plain Python (see `uncompiled()`), as `ss.options.kernels` says
+    Numba, or the same code as plain Python (see `uncompiled()`), as `ss.options.backend` says
 
     Compiling them takes about two minutes (`compile_seconds`), once per install (or ahead of time, with `ss.compile()`). By default
-    (`ss.options.kernels = 'auto'`, without Rust) they are compiled first if the runs taken as plain Python in this session, with
+    (`ss.options.backend = 'auto'`, without Rust) they are compiled first if the runs taken as plain Python in this session, with
     this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
     saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
     `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
@@ -346,7 +346,7 @@ def choose(seconds=0.0):
     global plain_total, noted, chosen
     if ss.solvers.backends.rust.on: # Compiled ahead of time
         return ss.solvers.backends.rust.compartmental()
-    mode = ss.options.kernels
+    mode = ss.options.backend
     if mode == 'python':
         return uncompiled()
     if chosen or is_compiled():
@@ -367,23 +367,33 @@ def choose(seconds=0.0):
     return sys.modules[__name__]
 
 
-def compile(verbose=True):
+def compile(check=False, verbose=True):
     """
     Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use), so that no run waits for them: e.g. after installing Starsim (as `starsim init compile` does), in a Docker image, in CI, or before a calibration
 
     Compiling takes about five minutes (`compile_all_seconds`), once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, then a temporary folder, or in
-    `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
-    Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.kernels.compile_status()`.
+    `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.backend`. With the
+    Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile(check=True)`.
 
-    Example:
+    Args:
+        check (bool): rather than compile, say which backend is in use and whether it is compiled (as `starsim init compile --check` does), and return that as an `sc.obj` of `backend`, `compiled`, `missing`, and `summary` (see `compile_status()`)
+        verbose (bool): whether to print what it does (with `check=True`, the summary)
+
+    Examples:
         ```python
         ss.compile()
+        ss.compile(check=True) # e.g. "Starsim backend: Rust, compiled"
         ```
     """
+    if check:
+        status = compile_status()
+        if verbose:
+            print(status.summary)
+        return status
     if ss.solvers.backends.rust.on:
         if verbose:
-            print('Nothing to compile: the Rust kernels are in use, and are compiled already (for Numba\'s, set ss.options.kernels="numba" first)')
+            print('Nothing to compile: the Rust kernels are in use, and are compiled already (for Numba\'s, set ss.options.backend="numba" first)')
         return
     T = sc.timer()
     from . import passes
@@ -401,7 +411,7 @@ def compile(verbose=True):
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
         return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
     try:
-        with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
+        with ss.options.context(backend='numba', verbose=ss.options.verbose if verbose else 0):
             with part('agents'): # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels, and the rest of what sims with agents compile on their first run; the quickest
                 make('abm').run()
                 for sim in typical_sims():
@@ -438,11 +448,11 @@ def compile_status():
     From the shell, `starsim init compile --check` says the same, and exits with 1 if it isn't compiled.
 
     Returns:
-        An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
+        An `sc.obj` of `backend` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
 
     Example:
         ```python
-        print(ss.kernels.compile_status().summary)
+        print(ss.solvers.backends.kernels.compile_status().summary) # Or ss.compile(check=True)
         ```
     """
     from . import passes
@@ -450,23 +460,23 @@ def compile_status():
     parts = {'the compartmental solvers':step, 'the agent solver':passes.bounds, 'the draws':draws.uniform} # One function for each file, since a file's functions go out of date together
     cold = [part for part,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())]
     if rust.on:
-        engine = 'rust'
+        backend = 'rust'
         missing = ['the Rust kernels'] if rust.source_hash() not in [None, rust.load().source_hash] else [] # None in a wheel, which has no source beside it
         if missing:
-            summary = 'Starsim kernels: Rust, OUT OF DATE (built before its source last changed, so results may be wrong): run "./build" in starsim/solvers/rust/'
+            summary = 'Starsim backend: Rust, OUT OF DATE (built before its source last changed, so results may be wrong): run "./build" in starsim/solvers/rust/'
         elif cold:
-            summary = 'Starsim kernels: Rust, compiled (Numba\'s copy is not, which only comparing the two needs)'
+            summary = 'Starsim backend: Rust, compiled (Numba\'s copy is not, which only comparing the two needs)'
         else:
-            summary = 'Starsim kernels: Rust, compiled'
-    elif ss.options.kernels == 'python':
-        engine = 'python'
+            summary = 'Starsim backend: Rust, compiled'
+    elif ss.options.backend == 'python':
+        backend = 'python'
         missing = list(parts)
-        summary = 'Starsim kernels: plain Python, NOT COMPILED, so runs are slow: set ss.options.kernels = "auto"'
+        summary = 'Starsim backend: plain Python, NOT COMPILED, so runs are slow: set ss.options.backend = "auto"'
     else:
-        engine = 'numba'
+        backend = 'numba'
         missing = cold
-        summary = f'Starsim kernels: Numba, NOT COMPILED ({sc.strjoin(cold)}), so the first runs are slow: run "starsim init compile" or ss.compile()' if cold else 'Starsim kernels: Numba, compiled'
-    return sc.obj(engine=engine, compiled=not missing, missing=missing, summary=summary)
+        summary = f'Starsim backend: Numba, NOT COMPILED ({sc.strjoin(cold)}), so the first runs are slow: run "starsim init compile" or ss.compile()' if cold else 'Starsim backend: Numba, compiled'
+    return sc.obj(backend=backend, compiled=not missing, missing=missing, summary=summary)
 
 
 def note_uncompiled():
@@ -2872,18 +2882,18 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 #%% Threads, for the workers of ss.parallel() and of a calibration
 
-def one_thread(func, *args, main_modules=None, kernels=None, **kwargs):
+def one_thread(func, *args, main_modules=None, backend=None, **kwargs):
     """
     Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the runs of a particle filter): for the workers of `ss.parallel()` and of a calibration, which share the cores already
 
-    With `kernels`, the main process's `ss.options.kernels`, which a worker started afresh would not otherwise have
+    With `backend`, the main process's `ss.options.backend`, which a worker started afresh would not otherwise have
 
     With `main_modules` (see `worker()`), the modules imported in the main process's `__main__` are imported in this one's
     first, for a worker started afresh (by forkserver, see `start_method()`)
     """
     ss.options.threads = 1 # Every threaded pass asks this first (see `ss.solvers.backends.passes.n_chunks()`), so Numba's threads are never started (as nb.set_num_threads(1) would start them)
-    if kernels is not None and kernels != ss.options.kernels:
-        ss.options.kernels = kernels
+    if backend is not None and backend != ss.options.backend:
+        ss.options.backend = backend
     if main_modules: # A function defined in a notebook or script looks up its names (e.g. cv of import covasim as cv) in __main__, which in a worker started afresh lacks them
         main = sys.modules['__main__']
         for alias,name in main_modules.items():
@@ -2896,10 +2906,10 @@ def one_thread(func, *args, main_modules=None, kernels=None, **kwargs):
 
 
 def worker(func):
-    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, the main process's kernels, and the modules imported in `__main__` (see `one_thread()`) """
+    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, the main process's backend, and the modules imported in `__main__` (see `one_thread()`) """
     main = sys.modules.get('__main__')
     modules = {alias:val.__name__ for alias,val in vars(main).items() if type(val) is type(sys) and not alias.startswith('_')} if main is not None else {}
-    return ft.partial(one_thread, func, main_modules=modules, kernels=ss.options.kernels)
+    return ft.partial(one_thread, func, main_modules=modules, backend=ss.options.backend)
 
 
 def unguarded_main():

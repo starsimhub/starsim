@@ -183,7 +183,7 @@ def make_measles(beta):
     S, I, R = ss.states('S I R')
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction in each
     return measles
 

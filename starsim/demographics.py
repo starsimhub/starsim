@@ -1,10 +1,13 @@
 """
 Births, deaths, migration, and pregnancy
 
-These exist so that the population can change during a run. `ss.Births` and `ss.Deaths`
-are written as code, `ss.birth()` and the like declare the same flows for the whole
-population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions
-that other modules can modify or respond to.
+These exist so that the population can change during a run. Births and deaths are given with
+`ss.birth()` and `ss.death()`, which declare them for the whole population and take every kind
+of rate: a number, a typed rate, a time series, a table, or a place by name. `ss.Births` and
+`ss.Deaths` are the same births and deaths written as code: `ss.death()` makes an `ss.Deaths` for
+death rates by year, sex, and age, which need agents, and both are there to subclass. `ss.Pregnancy`
+is declared, so that conception and delivery are transitions that other modules can modify or
+respond to.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -45,6 +48,11 @@ def rate_size(rates):
     vals = np.abs(np.asarray(vals, dtype=float))
     vals = vals[np.isfinite(vals)]
     return float(np.median(vals)) if vals.size else None
+
+
+def per_year(rate):
+    """ A crude rate of births or deaths as a number per year: a bare number is per year, and a typed rate is converted """
+    return rate.to('year').value if isinstance(rate, ss.Rate) else rate
 
 
 def check_rate_per(per, name):
@@ -229,6 +237,27 @@ def note_sparse(rows, years, sim, name):
     return
 
 
+def birth_series(rate, columns=None, rate_per=None):
+    """
+    Crude birth rates by year, as `ss.birth()` takes them: a place by name (its UN rates, per 1,000, linearly interpolated
+    to each year, as `ss.Births` reads them) or a table (columns `Year` and `CBR`, or those `columns=` names), as an
+    `ss.timeseries` whose rates each hold until the next year given; returns it and how many people the rates are per
+
+    Args:
+        rate (str/dataframe/series): the place, or the table
+        columns (dict): the table's column for each standard key, where they differ from the defaults (`year='Year'`, which may also be `Time`, and `value='CBR'`)
+        rate_per (float): how many people the rates are per, as given
+    """
+    metadata = data_columns(dict(year='Year', value='CBR'), columns)
+    named = isinstance(rate, str)
+    if named:
+        rate_per = named_rate_per(rate_per, 1000, 'the UN crude birth rates of a place')
+        rate = ss.data.rates(rate, 'births')
+    data = ss.utils.standardize_data(data=rate, metadata=metadata).xs(0, level='age')
+    rows, years, _ = yearly_rows(rate_rows(data)) if named else rate_rows(data)
+    return ss.timeseries({float(y):float(rows[y]) for y in years}), rate_per
+
+
 class Demographics(ss.Module):
     """
     Base class for demographic modules.
@@ -288,7 +317,7 @@ class Flows(Demographics):
 
 class Births(Demographics):
     """
-    Births at a crude birth rate, without modeling pregnancy: for when the number of births matters but not the pregnancies behind them (for those, use `ss.Pregnancy`)
+    Births at a crude birth rate, without modeling pregnancy, written as code: the module to subclass for births of your own (to give births, use `ss.birth()`, which takes the same rates and runs under every solver; for pregnancies, `ss.Pregnancy`)
 
     The birth rate can vary by year. The number of births in each step is the birth rate times the number of people alive;
     each newborn's parent (`people.parent`) is a woman of reproductive age (`min_age` to `max_age`).
@@ -296,7 +325,7 @@ class Births(Demographics):
     Note: CRN safe.
 
     Args:
-        birth_rate (float/rate/dataframe/str): the crude birth rate: a bare number (per year) or a typed rate, per person (e.g. `0.02`, or `ss.peryear(0.02)`, the default) unless `rate_per` says otherwise; birth rate data (also per person unless `rate_per` says otherwise); or a place by name, for its UN rates (e.g. 'Kenya', per 1,000, which is known, so `rate_per` is not needed)
+        birth_rate (float/rate/timeseries/dataframe/str): the crude birth rate: a bare number (per year) or a typed rate, per person (e.g. `0.02`, or `ss.peryear(0.02)`, the default) unless `rate_per` says otherwise, or a time series of either; birth rate data (also per person unless `rate_per` says otherwise); or a place by name, for its UN rates (e.g. 'Kenya', per 1,000, which is known, so `rate_per` is not needed)
         rel_birth (float): constant used to scale all birth rates
         min_age (float): the youngest age of a mother (default 15)
         max_age (float): the age that mothers are younger than (default 50)
@@ -345,7 +374,9 @@ class Births(Demographics):
         return [] if getattr(self, 'compartmental', None) else [f'"{self.name}" ({type(self).__name__}) adds and removes agents; ss.birth() and ss.death() in the disease are its compartmental form']
 
     def standardize_birth_data(self):
-        """ Standardize/validate birth rates; see `ss.utils.standardize_data()` """
+        """ Standardize/validate birth rates; see `ss.utils.standardize_data()` (a time series is read each step, as a rate is) """
+        if isinstance(self.pars.birth_rate, ss.timeseries):
+            return self.pars.birth_rate
         birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
@@ -387,12 +418,11 @@ class Births(Demographics):
 
         if self.birth_rows is not None:
             rows, years, _ = self.birth_rows
-            this_birth_rate = rows[period_year(years, sim.t.now('year'))] / p.rate_per * p.rel_birth
-        elif isinstance(p.birth_rate, ss.Rate): # A typed rate, per year
-            this_birth_rate = p.birth_rate.to('year').value / p.rate_per * p.rel_birth
-        else: # A number, per year
-            this_birth_rate = p.birth_rate / p.rate_per * p.rel_birth
-        scaled_birth_prob = ss.probperyear(np.asarray(this_birth_rate, dtype=float)).to_prob(self.t.dt) # A probability per year, over the step
+            this_birth_rate = rows[period_year(years, sim.t.now('year'))]
+        else: # A rate, or a time series of rates, read now
+            this_birth_rate = per_year(p.birth_rate.at(sim.t.now('year'), sim) if isinstance(p.birth_rate, ss.timeseries) else p.birth_rate)
+        this_birth_rate = this_birth_rate / p.rate_per * p.rel_birth
+        scaled_birth_prob = np.asarray(this_birth_rate, dtype=float)*self.t.dt_year # The expected births per person over the step, as for ss.birth()
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
@@ -489,7 +519,7 @@ def lifetable_rates(tables):
 
 class Deaths(Demographics):
     """
-    Background deaths: deaths from causes other than the diseases modeled
+    Background deaths: deaths from causes other than the diseases modeled, written as code; `ss.death()` makes this module for death rates by year, sex, and age (a table, a place by name, or life tables by sex or year), and it is the module to subclass for deaths of your own (to give deaths, use `ss.death()`)
 
     Each agent's chance of dying in each step comes from `death_rate` and the length of the step. By default, this is
     `ss.peryear(0.01)` (10 per 1,000 people per year), so everyone faces about a 1% chance of death per year. For more
@@ -500,7 +530,7 @@ class Deaths(Demographics):
 
     Args:
         rel_death (float): constant used to scale all death rates
-        death_rate (float/rate/dict/dataframe/series/str): the death rate: a bare number (per year) or a typed rate, per person (e.g. `0.01`, or `ss.peryear(0.01)`, the default) unless `rate_per` says otherwise; mortality data by year, sex, and age (also per person, as the UN's `mx` are, unless `rate_per` says otherwise); or a place by name, for its UN rates (e.g. 'Kenya')
+        death_rate (float/rate/timeseries/dict/dataframe/series/str): the death rate: a bare number (per year) or a typed rate, per person (e.g. `0.01`, or `ss.peryear(0.01)`, the default) unless `rate_per` says otherwise, or a time series of either; mortality data by year, sex, and age (also per person, as the UN's `mx` are, unless `rate_per` says otherwise); or a place by name, for its UN rates (e.g. 'Kenya')
         lifetable (`ss.lifetable`/dict): instead of `death_rate`, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
         rate_per (float): how many people the rates are per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rates are above 1 per year (see `ss.demographics.rate_per_of()`). The crude mortality rate result (`cmr`) is per 1,000 people per year.
         columns (dict): if `death_rate` is a table, its column for each standard key, where they differ from the defaults, those of UN data (`year='Time'`, `sex='Sex'`, `age='AgeGrpStart'`, `value='mx'`), e.g. `columns=dict(value='rate')`; and `sex_keys`, the data's label for each sex, if not `Female` and `Male` (e.g. `sex_keys=dict(F='f', M='m')`)
@@ -534,13 +564,17 @@ class Deaths(Demographics):
         self.metadata = data_columns(defaults, columns, sex_keys) # The columns of a table of rates
         self.load_rates() # Here, so that errors in the data show at once; again in init_pre(), for any change to the parameters since
         self._p_death = ss.bernoulli(p=0) # Set to the chances from make_p_death() each step
+        self._p_death_born = ss.bernoulli(p=0) # The same for those born later in the step (see on_birth()), with a stream of its own so others' draws are unchanged
+        self._stepped_ti = None # The last step this module chose who dies in
         self.n_deaths = 0 # For results tracking
         return
 
     agent_reasons = Births.agent_reasons
 
     def standardize_death_data(self):
-        """ Standardize/validate death rates; see `ss.utils.standardize_data()` """
+        """ Standardize/validate death rates; see `ss.utils.standardize_data()` (a time series is read each step, as a rate is) """
+        if isinstance(self.pars.death_rate, ss.timeseries):
+            return self.pars.death_rate
         death_rate = ss.utils.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
@@ -557,10 +591,12 @@ class Deaths(Demographics):
             self.death_rows = yearly_rows(self.death_rows)
         return
 
-    def make_p_death(self):
-        """ The chance that each agent alive dies in this step: one number if it is the same for everyone, else one for each, by age, sex, and year """
+    def make_p_death(self, uids=None):
+        """ The chance that each agent alive (or each of `uids`) dies in this step: one number if it is the same for everyone, else one for each, by age, sex, and year """
         sim = self.sim
         drd = self.pars.death_rate if self.death_rows is None else self.death_rate_data # A rate is read from the parameters, so a change to them counts
+        if isinstance(drd, ss.timeseries): # A time series of rates: the rate now
+            drd = drd.at(sim.t.now('year'), sim)
 
         if sc.isnumber(drd): # A rate per year
             return ss.peryear(drd / self.pars.rate_per * self.pars.rel_death).to_prob(self.t.dt)
@@ -568,7 +604,7 @@ class Deaths(Demographics):
             return (drd * (self.pars.rel_death / self.pars.rate_per)).to_prob(self.t.dt)
         else: # Rates by year, sex, and age
             ppl = sim.people
-            uids = ppl.auids
+            uids = ppl.auids if uids is None else uids
 
             rows, years, ages = self.death_rows
             nearest_year = period_year(years, sim.t.now('year')) # Each period's rate holds until the next
@@ -607,6 +643,7 @@ class Deaths(Demographics):
 
     def step(self):
         """ Select people to die """
+        self._stepped_ti = self.ti
         self._p_death.set(p=self.make_p_death())
         death_uids = self._p_death.filter()
         ppl = self.sim.people
@@ -614,6 +651,19 @@ class Deaths(Demographics):
             death_uids = death_uids[ppl.age.raw[death_uids] >= 0]
         ppl.request_death(death_uids, cause=self)
         return death_uids
+
+    def on_birth(self, parents, children):
+        """
+        Children born later in a step than this module chose who dies (by a module after it, or by declared births, which come with the
+        diseases) face that step's deaths too, as those born before it do: so each child faces its first year at the rate for age 0,
+        whatever the order of the modules or the kind of births
+        """
+        if self._stepped_ti != self.ti or not len(children):
+            return
+        self._p_death_born.set(p=self.make_p_death(children))
+        death_uids = self._p_death_born.filter(children)
+        self.sim.people.request_death(death_uids, cause=self)
+        return
 
     def record_events(self):
         self.n_deaths = len(self.sim.people.died_of(self)) # Once each death has one cause: someone another module killed in the same step may have died of that instead
@@ -822,19 +872,19 @@ class Pregnancy(Demographics, ss.Disease):
         self.fertility_rate_data = None # Set in init_pre()
         self.mean_dur_pregnancy = None # In years; set in init_pre()
         self.define_states(
-            ss.BoolArr('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile, result=True),
+            ss.BoolArr('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('parity', label='Parity', default=0),
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
-            ss.BoolArr('fetal', label='A fetus, as an agent', result=True),
+            ss.BoolArr('fetal', label='A fetus, as an agent'),
             ss.FloatArr('gestation_at_birth', label='Gestational age at birth, in weeks (on the newborn)'),
-            ss.BoolArr('preterm', label='Preterm birth (on the newborn)'),
-            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)'),
+            ss.BoolArr('preterm', label='Preterm birth (on the newborn)', result=False),
+            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)', result=False),
             ss.FloatArr('rel_preterm_base', default=self.pars.preterm.rel, label='Baseline relative risk of preterm birth'),
             ss.FloatArr('rel_preterm', default=1.0, label='Relative risk of preterm birth (set at conception: see preterm_risk())'),
             ss.FloatArr('n_pregnancies', default=0, label='Number of pregnancies'),
             ss.FloatArr('ti_delivered', label='The step of the last delivery'),
             ss.FloatArr('dur_gestation', label='The duration of the current (or last) pregnancy as drawn, in weeks'),
-            ss.BoolArr('lactating', label='Breastfeeding', result=True),
+            ss.BoolArr('lactating', label='Breastfeeding'),
             ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
         self.rng_md = ss.random() # For p_maternal_death set to a plain number later, the chance at delivery
@@ -901,7 +951,7 @@ class Pregnancy(Demographics, ss.Disease):
             sim (Sim): the sim being initialized
         """
         declared = [tr for mod in sim.module_list if isinstance(mod, Flows) for tr in mod.transitions]
-        if any(isinstance(mod, Births) for mod in sim.module_list) or any(hasattr(tr, 'n_born') for tr in declared):
+        if any(isinstance(mod, Births) for mod in sim.module_list) or any(tr.per_capita and not tr.migration for tr in declared):
             ss.warn(f'{self.name} makes births, and so does the sim\'s ss.Births or ss.birth(): the two add up. Keep only one, unless both are meant.')
         pars = self.pars
         if self.fertility_data is not None:

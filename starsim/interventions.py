@@ -23,12 +23,14 @@ class Intervention(ss.Module):
 
     An intervention written as code can be given `who=`, who it can reach, as for a delivery: a condition on people
     (`ss.person.age < 5`), people as they reach an age (`ss.at_age(5)`: those who reached it on this step), or a function
-    of the sim (and of the intervention, as `self`) returning UIDs or a mask. Its `step()` then reads the people eligible
-    now with `check_eligibility()`.
+    of the sim (and of the intervention, as `self`) returning UIDs or a mask. And `when=`, when it can reach them: a
+    condition on the population (`sir.I.n > 1000`), while it holds; an `ss.schedule()`, on the steps it is due; or the two
+    joined with `&` (both) or `|` (either). Its `step()` then reads the people eligible now with `check_eligibility()`.
 
     Args:
         args (list): passed to `ss.Module`
         who (Cond/at_age/func): who it can reach (by default everyone alive), read by `check_eligibility()`
+        when (Cond/schedule): when it can reach them (by default at every step): a condition on the population, an `ss.schedule()`, or both joined with `&` or `|`
         kwargs (dict): passed to `ss.Module`
 
     **Example**:
@@ -41,13 +43,20 @@ class Intervention(ss.Module):
     sim = ss.Sim(diseases='sis', networks='random', interventions=Discount(who=ss.person.age < 15)).run()
     ```
     """
+    timepar_skip = ['eligible_when'] # Its schedule and condition refer to other modules, which hold their own time parameters (see Module.link_timepars())
 
-    def __init__(self, *args, who=None, **kwargs):
+    def __init__(self, *args, who=None, when=None, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', kwargs)
         super().__init__(*args, **kwargs)
         if isinstance(who, str): # A state by its path, e.g. 'sis.I'
             who = ss.conditions.ref(who)
+        ss.conditions.check_who_people(who.who if isinstance(who, at_age) else who, f'{type(self).__name__}()')
         self.eligible = ss.conditions.as_cond(who) if isinstance(who, ss.Arr) else who # Who it can reach, as a condition, ss.at_age(), or a function of the sim (an event or delivery parses it: see parse_who())
+        either = when.either if isinstance(when, ss.schedule) else None
+        if when is not None and (not isinstance(when, ss.schedule) and not (isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when)) or (either is not None and (isinstance(either, ss.on) or not ss.conditions.on_population(either)))):
+            errormsg = f'when= of {type(self).__name__}() is when it can reach people: a condition on the population (e.g. sir.I.n > 1000), an ss.schedule(), or both joined with & or | (e.g. ss.schedule(every=ss.years(1)) & (sir.I.n > 1000)); not {when!r}'
+            raise TypeError(errormsg)
+        self.eligible_when = when # A schedule is linked to the timeline when the sim is initialized (see Module.init_post())
         return
 
     @property
@@ -68,16 +77,26 @@ class Intervention(ss.Module):
 
     def check_eligibility(self):
         """
-        The UIDs of the people eligible now: those alive whom `who=` holds for (evaluated as a delivery's `who=` is), or everyone alive
+        The UIDs of the people eligible now: those alive whom `who=` holds for (evaluated as a delivery's `who=` is), or everyone alive;
+        nobody on a step `when=` does not hold
 
         A subclass can override it, for a rule of its own.
         """
         sim = self.sim
         alive = sim.people.alive.raw
         who = self.eligible
-        if who is None:
+        when = getattr(self, 'eligible_when', None) # A subclass may not call Intervention.__init__()
+        if isinstance(when, ss.schedule):
+            if not when.due(): # With its condition, if it has one
+                return ss.uids()
+            when = None
+        if who is None and when is None:
             return sim.people.auids
         selector = ss.conditions.Selector(sim)
+        if when is not None and not np.any(selector.select(ss.conditions.resolve_paths(when, sim))): # A condition on the population: everyone or nobody
+            return ss.uids()
+        if who is None:
+            return sim.people.auids
         reaching = None
         if isinstance(who, at_age): # Those who reached the age on this step (in the step before it, as their age now is at most a step past it)
             age = ss.years(who.age).value if isinstance(who.age, ss.TimePar) else who.age
@@ -262,19 +281,25 @@ def parse_when(when, name, start=None, stop=None):
         out = parse_when(when, name)
         out.update(start=start, stop=stop) # Within the window, whatever when= is: e.g. on an event (when=screening.positive, start=2001), or rounds
         return out
-    out = dict(at=None, every=None, start=None, stop=None, on=None, delay=None, when=None, where=None)
+    out = dict(at=None, every=None, start=None, stop=None, on=None, delay=None, when=None, where=None, or_where=None)
     if when is None:
         return out
     if isinstance(when, ss.schedule):
-        out.update(at=when.at, every=when.every, start=when.start, stop=when.stop)
+        out.update(at=when.at, every=when.every, start=when.start, stop=when.stop, where=when.cond) # With a condition on the population joined to it (ss.schedule(...) & (sir.I.n > 1000)): on the schedule, while it holds
         if when.when is not None:
             fn = when.when
             out['when'] = lambda t: ss.timeline.of_date(fn, t) # A function of the date, as for ss.schedule itself
+        if when.either is not None: # Joined with | to an event or a condition on the population: on either
+            either = parse_either(when.either, name)
+            if either['where'] is not None:
+                errormsg = f'when= of "{name}" joins a schedule with | to {when.either!r}, which has a condition joined with & to the whole of it; give that condition to the whole when=, (ss.schedule(...) | ...) & condition'
+                raise TypeError(errormsg)
+            out.update({key:val for key,val in either.items() if key != 'where'})
         return out
-    if isinstance(when, ss.on):
-        out.update(on=when.x, delay=when.delay)
+    if isinstance(when, ss.on) or (isinstance(when, ss.conditions.Cond) and ss.conditions.has_event(when)): # An event, or one joined with | to a condition on the population
+        out.update(parse_either(when, name))
         return out
-    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and on_population(when): # A condition on the population (e.g. sir.I.n > 1000): while it holds, decided for everyone at once
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when): # A condition on the population (e.g. sir.I.n > 1000): while it holds, decided for everyone at once
         out['where'] = when
         return out
     if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.Transition, ss.dimensions.Transfer, ss.products.EventSource)) or (isinstance(when, str) and not when[:1].isdigit()): # An event, or a transition by its path, e.g. 'sir.infection' (a date starts with a digit)
@@ -285,16 +310,30 @@ def parse_when(when, name, start=None, stop=None):
         out['when'] = lambda t: ss.timeline.of_date(fn, t) # A function of the date (e.g. lambda now: now.month == 1), as for ss.schedule()
         return out
     if isinstance(when, (ss.State, ss.Arr)):
-        errormsg = f'when= of "{name}" is when it happens: times, an event, ss.schedule() (for how often, every=), or a condition on the population (e.g. sir.I.n > 1000); {when!r} is a condition on people, which goes in who='
+        errormsg = f'when= of "{name}" is when it happens: times, an event, ss.schedule() (for how often, every=), or a condition on the population (e.g. sir.I.n > 1000), alone or joined to one of the others with & (both) or | (either), e.g. ss.schedule(every=ss.years(1)) & (sir.I.n > 1000); {when!r} is a condition on people, which goes in who='
         raise TypeError(errormsg)
     out['at'] = when # A time, or a list of them: dates, years, or durations after the start (ss.days(10) is 10 days in, the same as [ss.days(10)]; how often is ss.schedule(every=...))
     return out
 
 
-def on_population(cond):
-    """ Whether a condition is on the population as a whole (a count, a fraction, or a parameter, e.g. `sir.I.n > 1000`), and not on people or an event: it says when, not who """
-    cond = ss.conditions.as_cond(cond)
-    return isinstance(cond, (ss.conditions.Cond, ss.expressions.Expr)) and not ss.conditions.has_event(cond) and not ss.conditions.on_people(cond)
+def parse_either(when, name):
+    """
+    An event in when=, as the keywords of `Event._init()`: the event (`on`) and any delay; and, for an event joined with | to a condition on
+    the population (`screening.positive | (sir.I.n > 1000)`), that condition (`or_where`), on whose steps everyone is reached, and a
+    condition joined with & to the whole (`where`)
+    """
+    delay = None
+    if isinstance(when, ss.on):
+        when, delay = when.x, when.delay
+    out = dict(on=when, delay=delay, or_where=None, where=None)
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when): # Only a condition on the population (from a schedule joined to one with |)
+        out.update(on=None, or_where=when)
+        return out
+    if isinstance(when, ss.conditions.Cond) or isinstance(when, (ss.Transition, ss.products.EventSource, Event)):
+        events, population, gate = ss.conditions.split_either(when)
+        if population is not None:
+            out.update(on=events, or_where=population, where=gate)
+    return out # With a delay, the condition still acts at once, at each step it holds: the delay is the event's
 
 
 def parse_who(who, name):
@@ -303,10 +342,8 @@ def parse_who(who, name):
     if isinstance(who, at_age):
         at, who = who.age, who.who
     where = None
-    if isinstance(who, (ss.conditions.Cond, ss.expressions.Expr)) and on_population(who):
-        errormsg = f'who= of "{name}" is who it reaches, a condition on people; {who!r} is a condition on the population, which says when, decided for everyone at once: give it as when={who!r} (with an event, join them: when=event & ({who!r}))'
-        raise TypeError(errormsg)
-    elif callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)):
+    ss.conditions.check_who_people(who, f'"{name}"')
+    if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)):
         who, where = None, who # A function of the sim: who is eligible (UIDs, a mask, or True or False for everyone), as for any condition
     return dict(who=who, where=where, at_age=at)
 
@@ -334,7 +371,7 @@ class Event(ss.products.EventSource, Intervention):
     they reach an age (`ss.at_age()`). And **when**: at times (`when=[2025, 2030]`, `when='2024-03-01'`, or `when=ss.days(30)`, 30 days after the start), on a schedule
     (`when=ss.schedule(every=ss.months(1), start='2024-01-01', stop='2025-01-01')`), when another event happens
     (`when=sir.infection`, or `when=ss.on(sir.infection, delay=ss.days(5))`), while a condition on the population holds
-    (`when=sir.I.n > 1000`, decided for everyone at once), or, with no `when=`, routinely: each person once, at the first step
+    (`when=sir.I.n > 1000`, decided for everyone at once; joined with `&` (both) or `|` (either) to a schedule or an event, e.g. `when=ss.schedule(start=2025) & (sir.I.n > 1000)`), or, with no `when=`, routinely: each person once, at the first step
     they are eligible. `start=` and `stop=` limit any of these to a window (the same as `when=ss.schedule(start=..., stop=...)`
     for routine events), e.g. `when=screening.positive, start=2001`.
 
@@ -358,8 +395,13 @@ class Event(ss.products.EventSource, Intervention):
         when (date/list/dur/event/func/schedule): when it happens: a time or list of them (dates, years, or durations after the start of the sim:
             `ss.days(10)` is 10 days in, and with no calendar day 10); an event that triggers it (`sir.infection`, `screening.positive`, or a transition by its path), or
             `ss.on(event, delay=...)` for a time after it; a function of the date of each step, true when it happens; a condition on the population,
-            while it holds (`sir.I.n > 1000`, or joined to an event with `&`); or `ss.schedule()`, for how often (`every=`), or any of these with a
-            `start=` and `stop=` (with only those, routinely between them)
+            while it holds (`sir.I.n > 1000`); or `ss.schedule()`, for how often (`every=`), or any of these with a
+            `start=` and `stop=` (with only those, routinely between them). A condition on the population can be joined with `&` to a schedule
+            (`ss.schedule(every=ss.years(1)) & (sir.I.n > 1000)`: each round runs only if it holds then; `ss.schedule(start=2025) & (sir.I.n > 1000)`, routinely from 2025 while it holds;
+            times are `ss.schedule([2025, 2030]) & ...`) or to an event (`screening.positive & (sir.I.n > 1000)`, or `ss.on(screening.positive, delay=...) & ...`, checked when it acts).
+            Joined with `|`, it acts on either: `ss.schedule(every=ss.years(1)) | (sir.I.n > 1000)` is a round each year and one at each step the
+            condition holds; `screening.positive | (sir.I.n > 1000)` reaches those the event happens to, and everyone eligible at each step the condition
+            holds; `ss.schedule(every=ss.years(1)) | screening.positive` is a round each year, and those the event happens to. A start and stop bound all of it
         start (date/float/dur): the start of a window it happens in, with any `when=` (e.g. on an event, from 2001): a shorthand for
             `when=ss.schedule(start=...)` that also goes with an event (default: the start of the sim)
         stop (date/float/dur): the end of the window, likewise (default: the end of the sim)
@@ -408,7 +450,7 @@ class Event(ss.products.EventSource, Intervention):
         return
 
     def _init(self, move=None, who=None, increment=None, start=None, stop=None, at=None, every=None, where=None, on=None, coverage=None,
-              rate=None, capacity=None, when=None, delay=None, at_age=None, strain=None, name=None, label=None, **kwargs):
+              rate=None, capacity=None, when=None, delay=None, at_age=None, strain=None, or_where=None, name=None, label=None, **kwargs):
         """ Set it up from the keywords the engine reads, which `__init__()` of each class makes from its own """
         cov_key, cap_key = self._keys['coverage'], self._keys['capacity'] # The keywords the user gave them as
         called = name or type(self).__name__ # For messages, before it has a name
@@ -436,8 +478,11 @@ class Event(ss.products.EventSource, Intervention):
         self.move = move # For a transfer: the level people move to, by dimension
         self.increment = ss.transitions.parse_increment(increment, f'"{called}"') # Or the amount they move up a counter
         rounds = sc.tolist(at)
+        if or_where is not None and not ss.conditions.on_population(or_where):
+            errormsg = f'when= of "{called}" joins with | a condition that is not on the population ({or_where!r}); a condition on people says who, so give it as who='
+            raise TypeError(errormsg)
         if at_age is not None: # As people reach the age: routine delivery to those that age or older, leaving out those already past it at the start (see _skip_past())
-            if rounds or every is not None or trigger is not None:
+            if rounds or every is not None or trigger is not None or or_where is not None:
                 errormsg = 'who=ss.at_age() reaches people as they reach the age, so it cannot have a when= other than ss.schedule(start=..., stop=...)'
                 raise ValueError(errormsg)
             self.where_given = None if eligible is None else ss.conditions.as_cond(eligible) # Checked for a compartmental form apart from the age: see _age_reason()
@@ -454,6 +499,7 @@ class Event(ss.products.EventSource, Intervention):
         self.rate = rate
         self.capacity = capacity
         self.trigger = trigger # The events of when= (or of ss.on())
+        self.or_where = None if or_where is None else ss.conditions.as_cond(or_where) # A condition on the population joined to the rest of when= with |: on the steps it holds, everyone eligible is reached (see _due())
         self.delay = delay # From the trigger to delivery
         if delay is not None and trigger is None:
             errormsg = f'A delay is the time from a trigger, so it goes with an event, as when=ss.on(event, delay=...); "{called}" has none'
@@ -640,6 +686,7 @@ class Event(ss.products.EventSource, Intervention):
     def _find_disease(self, sim):
         """ The disease whose states it moves, and whose engine evaluates its conditions: as given, else the one whose states or dimensions it moves people along, else that of its trigger, else the only one """
         declared = [mod.name for mod in sim.declared]
+        self.disease = ss.utils.own_name(sim.diseases(), self.disease) # A disease by its default name, e.g. disease='sir' for an ss.SIR called measles
         if self.disease is None and (self.move or self.increment): # Moving people along a dimension of one disease's states: that disease
             owners = [mod.name for mod in sim.declared if any(strat.name in list(self.move or {}) + list(self.increment or {}) for strat in mod.graph.strats)]
             if len(owners) == 1:
@@ -922,14 +969,26 @@ class Event(ss.products.EventSource, Intervention):
     #%% Stepping
 
     def _due(self):
-        """ Whether it acts on this step: within its window, on one of its rounds (if it has them), and when its when= function holds (if it has one) """
+        """
+        Whether it acts on this step: within its window, on one of its rounds (if it has them), and when its when= function holds (if it has one).
+        With parts of when= joined with | (`ss.schedule(...) | (sir.I.n > 1000)`, `ss.schedule(...) | screening.positive`,
+        `screening.positive | (sir.I.n > 1000)`), on either: also on each step the condition holds, and at every step for the event
+        """
         sim = self.sim
         ti = sim.ti
+        self._all_now = False # Whether everyone eligible arrives on this step, not only those the event happened to (see _arrivals())
         if ti < self.ti_start or ti >= self.ti_stop:
             return False
-        if self.round_tis is not None and ti not in self.round_tis:
+        timed = (self.round_tis is None or ti in self.round_tis) and (self.when is None or ss.conditions.holds_now(self.when, sim))
+        if self.or_where is not None and ss.conditions.holds(self.or_where, sim, self._selector):
+            self._all_now = True
+            return True
+        if self.trigger is not None and (self._in_rounds or self.when is not None): # A schedule joined to an event with |: due at every step, since the event can happen at any
+            self._all_now = timed
+            return True
+        if self.or_where is not None and self.trigger is None and not (self._in_rounds or self.when is not None): # Only the condition (an event that is not given here cannot be due)
             return False
-        return self.when is None or ss.conditions.holds_now(self.when, sim)
+        return timed
 
     def step(self):
         """ Deliver the product to whoever it is due to in this step (at its time point, as for all code in a step: see `ss.loop.Loop`), before the disease's transitions in it, under every solver """
@@ -960,7 +1019,8 @@ class Event(ss.products.EventSource, Intervention):
         selector = self._selector
         if self.trigger is None:
             return selector.everyone()
-        return selector.select(self.trigger) if self.delay is None else self._delayed_arrivals()
+        arrived = selector.select(self.trigger) if self.delay is None else self._delayed_arrivals() # Read even when everyone arrives, so a delay keeps its count
+        return selector.everyone() if self.__dict__.get('_all_now') else arrived
 
     def _delayed_arrivals(self):
         """
@@ -1108,7 +1168,7 @@ class Event(ss.products.EventSource, Intervention):
     def tabulated(self):
         """
         Whether a compartmental run can apply this delivery in the compiled kernels, for the whole run at once (fast), rather than step by
-        step in Python (see `ss.kernels.apply_shifts()`): in a compartmental run of one disease, a product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
+        step in Python (see `ss.solvers.backends.kernels.apply_shifts()`): in a compartmental run of one disease, a product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
         with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups (see `ss.solvers.CompartmentalDelivery.shifts()`)
         """
         return self.in_compartments is not None and self.in_compartments.tabulated()
@@ -1271,6 +1331,10 @@ class Event(ss.products.EventSource, Intervention):
             how += f' at {sc.strjoin([at(t) for t in self.rounds[:4]])}' + (f' (and {len(self.rounds) - 4} more)' if len(self.rounds) > 4 else '')
         if self.delay is not None:
             how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
+        if self.trigger is not None and self._in_rounds:
+            how += f', or on {self.trigger}'
+        if self.or_where is not None:
+            how += f', or to everyone eligible while {self.or_where}'
         for key,val in [('coverage', self.coverage), ('rate', self.rate)]:
             if val is not None and not callable(val):
                 how += f', {key} {ss.expressions.value_str(val)}'

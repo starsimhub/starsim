@@ -1462,7 +1462,7 @@ def test_split_null():
         assert np.isclose(died/n0, 0.05, rtol=0.15), f'{solver}: {died/n0:n} of those in I died, not 0.05'
         assert np.isclose(r.I[-1]/n0, 0.95, rtol=0.01), f'{solver}: the rest should stay in I, never taking it again, but {r.I[-1]/n0:n} are left'
         if solver == 'abm':
-            assert sim.results.died.values.sum() == died # Counted as deaths, as a transition to ss.dead is
+            assert sim.results.death.values.sum() == died # Counted as deaths, as a transition to ss.dead is
         out[solver] = died/n0
 
         # With a state: the deaths are res.<transition>.dead
@@ -1473,7 +1473,7 @@ def test_split_null():
         assert np.isclose(r['death.dead'].values.sum() + r['death.R'].values.sum(), r.death.values.sum())
         assert np.isclose(r.S[-1] + r.I[-1] + r.R[-1] + r['death.dead'].values.sum(), r.S[0] + n0), f'{solver}: everyone is in a state or dead'
         if solver == 'abm':
-            assert sim.results.died.values.sum() == r['death.dead'].values.sum()
+            assert sim.results.death.values.sum() == r['death.dead'].values.sum()
     assert np.isclose(out.abm, out.ode, rtol=0.15)
 
     # The messages for a source or destination that is not a state or a list of states
@@ -1564,7 +1564,7 @@ def test_branch_ends():
             dis.stratify(age={0: 0.25, 18: 0.6, 65: 0.15})
         return dis
     run = lambda dis, **kw: ss.Sim(dis, total_pop=10_000, dur=ss.days(200), verbose=0, solver='ode', **kw).run().results
-    frac = lambda r: r.died.sum()/(r.died.sum() + r.sir.H[-1] + r.sir.R[-1])
+    frac = lambda r: r.death.sum()/(r.death.sum() + r.sir.H[-1] + r.sir.R[-1])
     base = run(make())
     assert np.isclose(frac(base), 0.02)
     byage = run(make(dead=ss.by(age=[0.001, 0.01, 0.1]), by_age=True)) # A branch probability by group (once a crash)
@@ -1599,10 +1599,10 @@ def test_noise():
     sc.heading('Testing noise on a rate: its multiplier has mean 1 and variance sigma²/h, sigma = 0 is no noise, it is a parameter, and the solvers that cannot draw it refuse it')
     rng = np.random.default_rng(1)
     for sigma, h in [(0.0878, 1/365.25), (0.3, 0.5)]: # A shape below 1 (He et al.'s, in years) and above it
-        x = np.array([ss.kernels.noise(rng, sigma, h) for _ in range(20_000)])
+        x = np.array([ss.solvers.backends.kernels.noise(rng, sigma, h) for _ in range(20_000)])
         var = sigma**2/h
         assert abs(x.mean() - 1) < 4*np.sqrt(var/len(x)) and abs(x.var()/var - 1) < 0.15, (x.mean(), x.var(), var)
-    assert ss.kernels.noise(rng, 0.0, 1.0) == 1.0
+    assert ss.solvers.backends.kernels.noise(rng, 0.0, 1.0) == 1.0
 
     def make(noise=None, solver='binomial'):
         S, I, R = ss.states('S I R')

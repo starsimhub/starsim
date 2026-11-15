@@ -7,6 +7,7 @@ Used with: agents and compartments; declared and coded modules
 """
 import os
 import time
+import collections
 import fnmatch
 import functools
 import itertools
@@ -35,7 +36,7 @@ class Sim(ss.modules.Base):
 
     Every Starsim model, whatever its kind, is run with a sim. It gathers the people and the
     modules (`ss.Disease`, `ss.Network`, `ss.Intervention`, `ss.Demographics`, and others),
-    runs them step by step (see `ss.loop.Loop`), or all at once in the compiled kernels when
+    runs them step by step (see `ss.loop.Loop`), or all at once in one compiled call when
     nothing needs to happen between the steps, and holds the results.
 
     Args:
@@ -70,9 +71,9 @@ class Sim(ss.modules.Base):
         crn (bool): whether this sim uses common random numbers (by default, `ss.options.crn`, which is True): each agent gets the same random numbers in every scenario, so the difference between two scenarios is due to what changed rather than to chance. False gives slightly faster draws, which differ between scenarios. It applies while the sim initializes and runs
         keep_times (bool): for a declared disease run as agents, keep the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.n_times`), for your own code to read after the run, e.g. in an analyzer. By default, only those the model needs are kept, which saves memory and time (default: `ss.options.keep_times`, False)
         aging (bool): whether agents age (by default, they age if there are births or deaths)
-        record_people (bool): whether to record the results about people (alive, female, died, emigrated, etc.) every step (default True); False saves a little time in a sim that doesn't need them, but some modules, e.g. demographics, rely on `results.alive`
+        record_people (bool): whether to record the results about people (alive, female, birth, death, emigration, cbr, cmr, etc.) every step (default True); False saves a little time in a sim that doesn't need them, but some modules, e.g. demographics, rely on `results.alive`
         step_order (str): the order in which the modules step: 'type' (default) at the place of each kind of module in the loop (see `ss.Loop`), or 'given' in the order they were given (the model and `modules=` first, then the modules given by kind, e.g. `diseases=`), before the deaths and results of the step; 'given' is for when one module must act on what another did earlier in the same step. Analyzers, which read the step's results, still step last
-        require_kernels (bool): raise an error (`ss.CapabilityError`) if a compartmental sim can't be run all at once in the compiled kernels, and would instead run step by step in plain Python, which can be 100 times slower; useful for making sure a fit or a large batch of runs stays fast (`sim.describe()` says why a sim can't use them)
+        require_compiled (bool): raise an error (`ss.CapabilityError`) if a compartmental sim can't be run whole, in one compiled call, and would instead run step by step in plain Python, which can be 100 times slower; useful for making sure a fit or a large batch of runs stays fast (`sim.describe()` says why a sim can't be run whole)
         group_results (list): the results to keep by group (e.g. by age), by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals, which saves memory in a sim with many groups (default: all, at every few steps if every step would take more than about 100 MB)
         verbose (int/float): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress at each such fraction of the run (e.g. 0.1 for every 10%)
         kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.SimPars`)
@@ -89,6 +90,13 @@ class Sim(ss.modules.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Modules of several kinds, sorted by kind
         ```
     """
+    # The attributes a sim sets on itself (in __init__(), init(), or only for some sims, e.g. imported), and the keys that the search for distributions skips (see ss.Dists.init()):
+    # a module can't take one of these from its variable (see _name_modules()), since sim.<name> would not find it, and the sim would find the module where it looks for its own
+    _attrs = {'capabilities', 'clipped', 'complete', 'created', 'data', 'declared', 'diagnostics', 'dists', 'elapsed', 'filename', 'gathered', 'given', 'given_pyramid',
+              'groups', 'imported', 'initialized', 'joint_states', 'laid', 'layouts', 'loop', 'metadata', 'mixed', 'mixing', 'modifiers', 'module', 'named_people',
+              'named_unsized', 'notes', 'overlaps', 'pars', 'people_from', 'pop_from', 'progress', 'results', 'results_ready', 'rng_rescale', 'shrunken', 'sim',
+              'solver_reason', 'stopped', 't', 'timer', 'unit_base', 'unit_source', 'unitless'}
+
     def __init_subclass__(cls, **kwargs):
         """ A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): the sim is copied before it runs (see `outermost()`) """
         super().__init_subclass__(**kwargs)
@@ -132,7 +140,6 @@ class Sim(ss.modules.Base):
         self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, modules)
         interventions = self._order_steps(interventions)
         self._par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = None # Whether a whole run of the ODE is taken in JAX (see ss.gradients): True to ask for it; otherwise the kernels take a run (see ss.solvers.choose_engine()), and JAX is used only where it is needed (gradients, and ss.parallel() for many runs with different values, unless False)
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a setting of the sim given as ss.par too (e.g. n_agents=ss.par(...), when it is fitted: pars=fit.pars)
             pars = dict(pars)
             kwargs |= {key:pars.pop(key) for key in list(pars) if isinstance(kwargs.get(key), ss.par)}
@@ -193,28 +200,46 @@ class Sim(ss.modules.Base):
 
     @staticmethod
     def _name_modules(names, *args):
-        """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
-        taken = set(ss.SimPars()) | set(dir(ss.Sim)) | ss.People.taken_names() # Names the sim or the people already use, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions), or version
+        """
+        Name each module that was not given a name: by the variable it was assigned to when it was made (`measles = ss.SIR()`), else by the
+        one that holds it where it is given to the sim (`ss.Sim(diseases=measles)`); else it keeps the default for its class (`sir`), or a plain
+        `ss.Disease`, the initials of its states. A variable that would name several modules (e.g. one assigned in a loop) names none of them.
+        The same rule names every kind of module, and the transitions of a declared disease (see `ss.Disease`).
+
+        Args:
+            names (dict): the names of the variables of the code that made the sim, by the id of what they hold (see `ss.utils.caller_names()`)
+            args (list): the modules given, by kind
+        """
+        taken = set(ss.SimPars()) | set(dir(ss.Sim)) | ss.Sim._attrs | ss.People.taken_names() # Names the sim or the people already use, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions), or version; such a module keeps its default name
+        objs = {}
         for arg in args:
-            mods = list(sc.tolist(arg))
-            for mod in mods:
-                named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Event)) else []
-                named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Event)
-                for obj in named:
-                    if obj is not None and obj._default_name and not getattr(obj, '_from_keywords', False): # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
-                        name = getattr(obj, '_assigned', None) or names.get(id(obj)) # The variable it was first assigned to, else the one that holds it here
-                        if name in taken:
-                            name = None
-                        if name is None and getattr(obj, 'graph', None) is not None: # Not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
-                            name = ''.join(s.name[0].lower() for s in obj.graph.people_states) or None
-                            obj._implicit = name is not None
-                        if name is not None:
-                            obj.name = obj.label = name
-                            obj._default_name = False
+            for mod in sc.tolist(arg):
+                if isinstance(mod, ss.Module):
+                    objs[id(mod)] = mod
+                    if isinstance(mod, ss.Event) and getattr(mod, 'product', None) is not None:
+                        objs[id(mod.product)] = mod.product
+        unnamed = [obj for obj in objs.values() if obj._name_source == 'class' and not getattr(obj, '_from_keywords', False)] # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
+        found = {}
+        for obj in unnamed:
+            if obj._assigned: # The variable it was first assigned to
+                found[id(obj)] = (obj._assigned, obj._assigned_in)
+            elif names.get(id(obj)): # Else the one that holds it here
+                found[id(obj)] = (names[id(obj)], getattr(names, 'where', None))
+        counts = collections.Counter(name for name,_ in found.values())
+        for obj in unnamed:
+            name, where = found.get(id(obj), (None, None))
+            if name in taken or counts[name] > 1:
+                name = None
+            if name is not None:
+                obj._set_name(name, source='variable', where=where)
+                obj._assigned = name
+            elif type(obj) is ss.Disease and getattr(obj, 'graph', None) is not None: # A plain disease not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
+                obj.name = obj.label = obj.default_name
+                obj._implicit = True
         steps = [mod for arg in args for mod in sc.tolist(arg) if isinstance(mod, ss.Event)]
-        used = [mod.name for mod in steps if not mod._default_name]
+        used = [mod.name for mod in steps if mod._name_source != 'class']
         for mod in steps: # Steps made in a function, with no variable to be named by: numbered, e.g. screen, screen_1, here rather than when the sim copies them, since a condition refers to a step by its name
-            if mod._default_name:
+            if mod._name_source == 'class':
                 mod.name = mod.label = sc.uniquename(mod.name, used, style='_%d')
             used.append(mod.name)
         return
@@ -226,24 +251,25 @@ class Sim(ss.modules.Base):
             return interventions
         return ss.solvers.deliveries.order_steps(sc.tolist(interventions))
 
-    def _named_modules(self, attr):
-        """ The modules called `attr`: the sim's own once it has them (from early in `init()`, so e.g. one module's `init_post()` can read `sim.<name>` of another), else those it was given """
+    def _named_modules(self):
+        """ The modules that `sim.<name>` looks in: the sim's own once it has them (from early in `init()`, so e.g. one module's `init_post()` can read `sim.<name>` of another), else those it was given """
         if 'modules' in self.__dict__: # Set by _move_modules(), the last of the module types
-            mods = self.module_list
-        else:
-            mods = ss.utils.given_modules(self.__dict__.get('pars'))
-        return [mod for mod in mods if mod.name == attr]
+            return self.module_list
+        return ss.utils.given_modules(self.__dict__.get('pars'))
 
     def __getattr__(self, attr):
-        """ A module by its name, e.g. `sim.sir` for `sim.diseases.sir` """
+        """ A module by its name, or its default name if no module is called that (see `ss.utils.find_module()`), e.g. `sim.sir` for `sim.diseases.sir` """
+        mods = []
         if not attr.startswith('_') and 'pars' in self.__dict__ and attr not in ss.modules.module_types() + ['modules']: # Not the module types, which init() sets
-            mods = self._named_modules(attr)
-            if len(mods) == 1:
-                return mods[0]
+            mods = self._named_modules()
+            if (mod := ss.utils.find_module(mods, attr)) is not None:
+                return mod
         if not self.__dict__.get('initialized') and attr in ss.modules.module_types() + ['modules', 'people']: # Made by init(), from what was given
             given = f'; until then, what was given is sim.pars.{attr}' if attr != 'people' else ''
             raise AttributeError(f'sim.{attr} is made when the sim is initialized, by sim.init() (or sim.run()){given}')
         ss.v3_deprecations.check_attr(type(self), attr)
+        if sum(mod.default_name == attr for mod in mods) > 1: # The default name of several: say which they are
+            ss.utils.find_module(mods, attr, error=AttributeError)
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def __getitem__(self, key):
@@ -323,6 +349,7 @@ class Sim(ss.modules.Base):
         self.pars.freeze(False) # And set (frozen again once it is initialized)
         self.__dict__.pop('_valued', None) # Arithmetic on a parameter builds the model until it is built (see below)
         self.pars.validate()
+        ss.networks.resolve_routes(self) # A beta by route that names a network by its kind, e.g. dict(random=...) for one called after its variable
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         ss.solvers.choose_solver(self) # Build the declared model, and choose the unit and the solver
         self._init_time()
@@ -388,7 +415,7 @@ class Sim(ss.modules.Base):
         if not isinstance(base, Sim):
             errormsg = base or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy (e.g. it was saved by an earlier version); make it again instead'
             raise ValueError(errormsg)
-        data, jax = kwargs.pop('data', self.data), self.jax # Not sim parameters: taken from this sim, as they may be set once it is initialized
+        data = kwargs.pop('data', self.data) # Not a sim parameter: taken from this sim, as it may be set once it is initialized
         kinds = ss.modules.module_types() + ['modules']
         if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
             self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
@@ -413,7 +440,6 @@ class Sim(ss.modules.Base):
             elif val is not None and key not in sim.given:
                 sim.given.append(key)
         sim.data = sc.dcp(data)
-        sim.jax = jax
         sim._par_values = sc.mergedicts(sim._par_values, pars or None)
         return sim
 
@@ -633,11 +659,7 @@ class Sim(ss.modules.Base):
         Args:
             name (str): the name of the module
         """
-        mods = {mod.name:mod for mod in self.declared}
-        if name not in mods:
-            errormsg = f'No module named "{name}" with declared transitions was found; these are {sc.strjoin(mods.keys())}'
-            raise KeyError(errormsg)
-        return mods[name]
+        return ss.utils.find_module(self.declared, name, kind='modules with declared transitions', error=sc.KeyNotFoundError) # By its name, else its default name
 
     def describe(self):
         """
@@ -676,9 +698,9 @@ class Sim(ss.modules.Base):
         self._init_quietly()
         return ss.display.sim_equations(self)
 
-    def _kernel_reason(self):
-        """ Why the sim is not run in one call to the kernels, in a few words, or None if it is (`sim.describe()` says so) """
-        return ss.solvers.why_not(self, 'kernels')
+    def _compiled_reason(self):
+        """ Why the sim is not run whole, in one compiled call, in a few words, or None if it is (`sim.describe()` says so) """
+        return ss.solvers.why_not(self, 'compiled')
 
     def _init_quietly(self):
         """ Initialize the sim, if it isn't, without the line a run says as it starts """
@@ -900,6 +922,8 @@ class Sim(ss.modules.Base):
             else:
                 modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
                 setattr(self, attr, modules) # Add the modules ndict to the sim
+                if isinstance(modules, ss.ndict):
+                    modules.setattribute('_kind', 'modules of no standard kind' if attr == 'modules' else attr)
                 self.pars[attr] = sc.obj() # Recreate with just the module parameters
                 for key,module in modules.items():
                     self.pars[attr][key] = module.pars
@@ -1258,21 +1282,20 @@ class Sim(ss.modules.Base):
         try:
             # Main simulation loop
             restarted = self.__dict__.pop('_restarted', None)
-            reason = self._kernel_reason() if until is None and not profile and restarted is None else None
-            kernels = until is None and not profile and reason is None
+            reason = self._compiled_reason() if until is None and not profile and restarted is None else None
+            whole = until is None and not profile and reason is None
             if reason is not None and not isinstance(self.solver, ss.solvers.abm) and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
-            if self.pars.require_kernels and not kernels:
-                raise ss.CapabilityError(f'require_kernels=True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
-            if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
-                known = self.__dict__.get('_engine_known')
-                if restarted == 'same' and known is not None and known[0] is self.jax and not self.jax: # A choice from the model and its values, which are as they were
-                    use_jax, why = known[1:]
+            if self.pars.require_compiled and not whole:
+                raise ss.CapabilityError(f'require_compiled=True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
+            if whole: # JAX or the compiled backend: see ss.solvers.choose_backend()
+                known = self.__dict__.get('_backend_known')
+                if restarted == 'same' and known is not None and known[0] == ss.options.backend != 'jax': # A choice from the model and its values, which are as they were
+                    use_jax = known[1]
                 else:
-                    use_jax, why = ss.solvers.choose_engine(self)
-                    self._engine_known = (self.jax, use_jax, why)
-                sc.printv(f'engine: {why}', 2, self.verbose)
-            if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
+                    use_jax, _ = ss.solvers.choose_backend(self) # The reason is for when JAX was asked for and can't run it, which is a note
+                    self._backend_known = (ss.options.backend, use_jax)
+            if whole: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)
                 self.complete = True # Without making the loop's plan, which is not needed
@@ -1291,7 +1314,7 @@ class Sim(ss.modules.Base):
                     self._blank_after(self.stopped)
                 if self.pars.branching:
                     self._summarize_branching()
-                if not kernels:
+                if not whole:
                     self._check_method_calls()
                 if self.progress is not None:
                     self.progress.finish(ss.display.end_line(self))
@@ -1376,7 +1399,7 @@ class Sim(ss.modules.Base):
         The derivative of results, or of a function of the run sim, with respect to parameters, at their current values
 
         The ODE run is differentiated by JAX (see `ss.gradients`), so this needs JAX, a sim
-        with `solver='ode'`, and one that the kernels run from start to finish (see
+        with `solver='ode'`, and one that runs whole, in one compiled call (see
         `sim.describe()`). The sim itself is not changed. A parameter with several values
         (a value for each level, `ss.by(patch=[...])`; an array; or a time series) has a
         derivative for each, named as `sim.fit()` names them (`beta[a]`, `beta[b]`, ...).
@@ -1406,7 +1429,7 @@ class Sim(ss.modules.Base):
         """
         The log of the posterior density of the fitted parameters, as a function in JAX of their values, with its gradient by reverse mode; see `ss.gradients.LogDensity`
 
-        Needs JAX, a sim with `solver='ode'` that the kernels run whole, data, and a likelihood for every data series.
+        Needs JAX, a sim with `solver='ode'` that runs whole, in one compiled call, data, and a likelihood for every data series.
 
         Args:
             pars (str/list): the parameters, by name (default: every one with bounds); one with several values has a value for each, named as `sim.fit()` names them
@@ -1430,7 +1453,7 @@ class Sim(ss.modules.Base):
         (`sim.restart().run(until=2010)`), or for a function that sets the values to try (as for `ss.gradients.Density`).
         The values given are kept for later runs, until changed again.
 
-        For a sim that is nothing but compartments (one that the kernels run from start to finish: see `sim.describe()`), this makes
+        For a sim that is nothing but compartments (one that runs whole, in one compiled call: see `sim.describe()`), this makes
         repeated runs many times faster; any other sim (or a change the compartments were
         not laid out for, such as a new distribution) is built again, as `sim.new()` would.
         `ss.parallel(sim, n_runs=...)` and `sim.fit()` use it where they can.
@@ -1448,7 +1471,7 @@ class Sim(ss.modules.Base):
         rebuild = lambda: self.new(pars=sc.mergedicts(self._par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
         same = not pars
         numbers = all(isinstance(val, (int, float, np.number)) for val in (pars or {}).values()) # A number in place of a number does not change how the sim runs
-        if not (numbers and self.__dict__.get('_kernels_known') or self._kernel_reason() is None) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        if not (numbers and self.__dict__.get('_kernels_known') or self._compiled_reason() is None) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
@@ -1477,6 +1500,7 @@ class Sim(ss.modules.Base):
         self.t.ti = 0
         for joint in self.joint_states: # Nothing left over from the run that has ended
             joint.reset()
+        ss.solvers.hold_flows(self, restore=True) # The results the run writes to
         for mod in self.declared:
             mod.t.ti = 0
             mod.finalized = False
@@ -1497,6 +1521,10 @@ class Sim(ss.modules.Base):
             mod.finalize()
         self._check_finite()
         ss.solvers.record_people(self)
+        res = self.results
+        if 'cbr' in res: # The crude birth and mortality rates, from the births, deaths, and people alive, as agents or compartments
+            res.cbr[:], res.cmr[:] = ss.solvers.crude_rates(res.birth.values, res.death.values, res.alive.values, ss.solvers.people_t(self).dt_year)
+        ss.solvers.hold_flows(self) # The sim's birth and death count them now
         return
 
     def _check_finite(self):
@@ -1545,7 +1573,7 @@ class Sim(ss.modules.Base):
             how (str/dict): 'mean', 'median', 'sum', 'last', 'max', 'min', or a function, to summarize every result that way; or a dict of these by result, named as for `key` (e.g. `dict(sir_I='max')` or `{'sir.I': 'max'}`), with the rest by their `summarize_by`
 
         Returns:
-            A dataframe with a row for each result, by its module and name (e.g. `'sir.infection'`), and one column, `value`; with `key`, that result's summary. A row can also be read with `_` for `.`, e.g. `sim.summarize().value.sir_infection`
+            A dataframe with a row for each result, by its module and name (e.g. `'sir.infection'`), and one column, `value`; with `key`, that result's summary. A row can also be read as attributes, e.g. `sim.summarize().value.sir.infection`
 
         Example:
             ```python

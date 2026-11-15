@@ -55,7 +55,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 - **The equations are not in the script.** Read the model's `get_derivatives()` in the C++ source for the exact flows (e.g. the flow from `INS` to `ISy` is `(1 - mu_CR)/TimeInfectedNoSymptoms * INS`). The rates are per day.
 - **The threshold is on a flow.** Test-and-trace capacity compares the number becoming symptomatic each day with the capacity; Starsim cannot name a transition's current flow in a rate, so write the flow as a count expression (`0.91/2*INS.n`, repeating the probability and the time), with a comment.
-- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in the kernels; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
+- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in compiled code; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
 - **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `interpolation='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `(-StartDay/365) % 1` (the peak is a fraction of the year from 0 to 1, or a time of year such as `ss.days(305)`).
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.

@@ -29,7 +29,6 @@ def make_measles(prior=True):
     measles = ss.Disease(infection, progression, recovery, cases,
         init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
         init_n = dict(I=10),
-        name = 'measles',
     )
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
@@ -93,7 +92,7 @@ def make_measles():
     infection   = S >> E @ 0.14*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
 
@@ -116,7 +115,7 @@ With more births, the later outbreaks come sooner and closer together, and settl
 ```{python}
 pars = dict(start=2020, stop=2040)
 constant = ss.Sim(people=ss.population('Niger', n_agents=5000), demographics=[ss.birth(rate=ss.peryear(0.045)), ss.death(rate=ss.peryear(0.009))], **pars)
-un = ss.Sim(people=ss.population('Niger', n_agents=5000), demographics=[ss.Births(birth_rate='Niger'), ss.Deaths(death_rate='Niger')], **pars)
+un = ss.Sim(people=ss.population('Niger', n_agents=5000), demographics=[ss.birth(rate='Niger'), ss.death(rate='Niger')], **pars)
 msim = ss.parallel({'Constant rates': constant, 'UN rates': un})
 msim.plot('alive')
 

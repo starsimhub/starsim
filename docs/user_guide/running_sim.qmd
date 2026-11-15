@@ -244,7 +244,7 @@ def make_sim(seed=1, n_agents=10_000, start=1990, stop=2030, scenario='baseline'
     # Population and demography, from data
     people = ss.People(n_agents, age_data=pd.read_csv('data/age_dist_1990.csv'))
     pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv('data/asfr.csv'), rate_per=1000) # Per 1,000 women, as the UN's
-    deaths = ss.Deaths(death_rate=pd.read_csv('data/deaths.csv'))
+    deaths = ss.death(rate=pd.read_csv('data/deaths.csv')) # By year, sex, and age
 
     # Networks, disease, and interventions
     sexual = ss.SexualNet()
@@ -312,13 +312,13 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.solvers.ode(integrator=, substeps=, dwells=)`, `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=)` (see [Solvers and backends](running_solvers.qmd)) |
 | `branching` | False | Run as a branching process: infection takes no one from the uninfected (see [Branching and rescaling](running_branching.qmd)) |
 | `approximations` | 'note' | What to do with each approximation a solver makes: 'note' notes it, 'allow' keeps the note in `sim.notes` without printing it, 'error' makes it an error |
-| `require_kernels` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole in the kernels (see `sim.describe()`) |
+| `require_compiled` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole, in one compiled call (see `sim.describe()`) |
 | `rand_seed` | 1 | The random seed, from which each module's seeds are made |
 | `even_draws` | False | For agents (an error for a compartmental run): space each call's random numbers evenly, which reduces the variance between runs, but makes outbreaks die out less often than they should |
 | `crn` | None | Whether this sim uses [common random numbers](mechanics_random.qmd); None follows `ss.options.crn` (True by default) |
 | **Output** | | |
 | `group_results` | all | The results to keep by group (e.g. `['I', 'cases']`); the others keep only their totals, which saves memory in a model with many groups (by default all are kept, but only every few steps if every step would take more than about 100 MB) |
 | `keep_times` | False | For a declared disease run as agents, keep the time each agent entered every state (`ti_S`) and the history of every transition, to read after the run; by default only those the model reads are kept |
-| `record_people` | True | Whether to record the people's results (`alive`, `female`, `died`, `emigrated`) each step; False saves a little time in a light sim that doesn't need them, though demographics read `alive` |
+| `record_people` | True | Whether to record the people's results (`alive`, `female`, `birth`, `death`, `emigration`, `cbr`, `cmr`) each step; False saves a little time in a light sim that doesn't need them, though demographics read `alive` |
 | `label` | none | A name for the sim, used in plots and comparisons |
 | `verbose` | 1 | How much to print: 0 nothing, 1 the solver, notes, and progress, 2 everything; a fraction gives progress at each such fraction of the run |

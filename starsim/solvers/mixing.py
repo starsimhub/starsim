@@ -222,8 +222,8 @@ class Mixing(Telling):
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (who=). {fix}')
 
         # The side of each group: by sex on a network between men and women (between='mf') or men ('mm')
-        if not net.forms_partnerships:
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} forms its own partnerships (forms_partnerships = False), which only agents follow. {fix}')
+        if net.own_step:
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} has a step() of its own, which only agents follow. {fix}')
         sexual = net.groups is not None
         if sexual and not set(net.groups) <= {'male', 'female'}:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')

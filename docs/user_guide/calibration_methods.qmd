@@ -19,7 +19,7 @@ By default a fit is a best fit, by a method that suits the model, which `sim.fit
 | Stochastic compartmental | `'optuna'` | `'pmcmc'` (particle MCMC), given a likelihood for every series |
 | Agent-based | `'optuna'` | `'abc-smc'`, which needs no likelihood |
 
-Every method, with what it gives, needs, and costs, is in the table below. "Stochastic compartmental" is a model with `solver='binomial'`, `'gillespie'`, or `'tau'` that the kernels run from start to finish (as `sim.describe()` says; if not, `'if2'` and `'pmcmc'` raise an error that gives the reason). The costs are rough, in runs of the model, with the default settings and two or three parameters.
+Every method, with what it gives, needs, and costs, is in the table below. "Stochastic compartmental" is a model with `solver='binomial'`, `'gillespie'`, or `'tau'` that runs whole, in one compiled call (as `sim.describe()` says; if not, `'if2'` and `'pmcmc'` raise an error that gives the reason). The costs are rough, in runs of the model, with the default settings and two or three parameters.
 
 | Method | Gives | Suits | Needs | Rough cost, in runs | Choose it when |
 |---|---|---|---|---|---|
@@ -50,7 +50,7 @@ dur_inf = ss.par(ss.days(5), bounds=[3, 15]) # Infectious period, in days
 S, I, R = ss.states('S I R')
 infection = S >> I @ beta*I
 cases = ss.outcome(0.5*infection) # Half of infections are reported
-sir = ss.Disease(infection, I >> R @ dur_inf, cases, init=dict(I=0.002), name='sir')
+sir = ss.Disease(infection, I >> R @ dur_inf, cases, init=dict(I=0.002))
 
 pars = dict(total_pop=10_000, unit='day', stop=120)
 truth = dict(beta=0.3, dur_inf=8)

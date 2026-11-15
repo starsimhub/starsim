@@ -10,6 +10,7 @@ Used with: agents and compartments; declared and coded modules
 """
 # Authorship: written by AI, reviewed by humans
 
+import copy
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -280,16 +281,22 @@ def parse_when(when, start=None, stop=None):
             raise ValueError(errormsg)
         return (start, stop) + parse_when(when)[2:]
     if when is None:
-        return None, None, None, None
-    if isinstance(when, ss.schedule):
-        steps = None if (when.every is None and when.at is None and when.when is None) else when
-        return when.start, when.stop, steps, None
-    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.interventions.on_population(when): # While a condition on the population holds, e.g. sir.I.n >= 1000
-        return None, None, None, when
+        return None, None, None, None, None
+    if isinstance(when, ss.schedule): # With a condition on the population joined to it (ss.schedule(...) & (sir.I.n > 1000)): on the schedule, while it holds
+        either = when.either
+        if either is not None and (isinstance(either, ss.on) or not ss.conditions.on_population(either)):
+            errormsg = f'when= of ss.modify() joins a schedule with | to a condition on the population, for either (e.g. ss.schedule(every=ss.years(1)) | (sir.I.n > 1000)); {either!r} is an event, which a modifier does not take'
+            raise TypeError(errormsg)
+        steps = None if (when.every is None and when.at is None and when.when is None) else copy.copy(when)
+        if steps is not None:
+            steps.cond = steps.either = None # Kept apart, as the conditions
+        return when.start, when.stop, steps, when.cond, either
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when): # While a condition on the population holds, e.g. sir.I.n >= 1000
+        return None, None, None, when, None
     if callable(when) and not isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition, ss.on, ss.TimePar)):
-        return None, None, ss.schedule(when), None
+        return None, None, ss.schedule(when), None, None
     if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.on)):
-        errormsg = f'when= of ss.modify() is when it applies: a window (ss.schedule(start=..., stop=...)), a function of the date, or a condition on the population (e.g. when=sir.I.n >= 1000); {when!r} is a condition on people or an event, which goes in who='
+        errormsg = f'when= of ss.modify() is when it applies: a window (ss.schedule(start=..., stop=...)), a function of the date, or a condition on the population (e.g. when=sir.I.n >= 1000), or a schedule joined to one with & (when=ss.schedule(start=2025) & (sir.I.n >= 1000)); {when!r} is a condition on people or an event, which goes in who='
         raise TypeError(errormsg)
     first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
     errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use start={first!r} to start then, or when=ss.schedule(at={when!r}) for those steps only'
@@ -348,7 +355,7 @@ class modify(Connector):
         who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), or a function of the sim (default: everyone); a condition on the population, such as a count, goes in `when=`; with `network=`, the people who would be infected
         start (date/float/dur): when it starts to apply (default: the start of the sim): a date, a bare number (a calendar year if the sim has a calendar, else a time in its unit from 0), or a duration, that long after the start of the sim; the same as `when=ss.schedule(start=...)`
         stop (date/float/dur): when it stops applying, likewise (default: never; a stop after the end of the sim never stops it)
-        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); or a condition on the population, while it holds (e.g. `sir.I.n > 1000`, a count, or `sir.I.frac`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels); a condition on people goes in `who=`
+        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); or a condition on the population, while it holds (e.g. `sir.I.n > 1000`, a count, or `sir.I.frac`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a schedule joined to one with `&`, on the schedule's steps while it holds (e.g. `ss.schedule(start='2025-05-05') & (sir.I.n > 1000)`), or with `|`, on its steps and also while it holds (`ss.schedule(lambda now: now.month == 1) | (sir.I.n > 1000)`); a condition on people goes in `who=`
         until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=` or a condition as `when=`; while both hold, that condition wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
         name (str): the name of the modifier
 
@@ -388,7 +395,7 @@ class modify(Connector):
     """
     compartmental = True # It works on groups as well as on agents
 
-    timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
+    timepar_skip = ['where', 'until', 'when', 'schedule', 'either', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
     def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, frac=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
@@ -419,10 +426,8 @@ class modify(Connector):
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
         where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
         ss.conditions.check_not_time(where, 'ss.modify()')
-        if isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.interventions.on_population(where):
-            errormsg = f'who= of ss.modify() is who it applies to, a condition on people; {where!r} is a condition on the population, which says when, decided for everyone at once: give it as when={where!r}'
-            raise TypeError(errormsg)
-        self.start, self.stop, self.schedule, count = parse_when(when, start, stop) # A window, any steps within it (as an ss.schedule()), and a condition on the population
+        ss.conditions.check_who_people(where, 'ss.modify()')
+        self.start, self.stop, self.schedule, count, self.either = parse_when(when, start, stop) # A window, any steps within it (as an ss.schedule()), a condition on the population joined with &, and one joined with | (also on while it holds)
         where = ss.conditions.join('&', [where, count]) # Both decide who it applies to now
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
         self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
@@ -473,6 +478,8 @@ class modify(Connector):
         if self.target_module is None:
             raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}" does not belong to a module yet. A modifier of a module\'s own quantities is a member of it; otherwise build the module first, then use e.g. sir.pars.beta.')
         modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
+        if isinstance(self.target_module, str): # A module by its default name, e.g. 'randomnet.pars.n_contacts' for the only ss.RandomNet (see ss.utils.find_module())
+            modname = self.target_module = ss.utils.own_name(sim.module_list, modname)
         mods = {mod.name:mod for mod in sim.declared}
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
@@ -565,7 +572,7 @@ class modify(Connector):
     @property
     def timed(self):
         """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
-        return self.where is None and self.schedule is None and self.fixed_amount
+        return self.where is None and self.schedule is None and self.either is None and self.fixed_amount
 
     @property
     def holding(self):
@@ -575,7 +582,7 @@ class modify(Connector):
     @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        return self.inlined or (not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim))
+        return self.inlined or (not self.holding and self.fixed_amount and self.either is None and ss.conditions.is_static(self.where, self.sim))
 
     @property
     def fixed_amount(self):
@@ -615,7 +622,7 @@ class modify(Connector):
             return False
         if self.when is None:
             return True
-        on = ss.conditions.holds_now(self.when, sim)
+        on = ss.conditions.holds_now(self.when, sim) or (self.either is not None and ss.conditions.holds(self.either, sim)) # A condition joined to the schedule with |: on while it holds too
         if self.hold is not None: # Held on for a while after
             if on:
                 self.when_until = sim.ti + self.hold_steps
@@ -710,15 +717,24 @@ class modify(Connector):
             out += f'   frac={getattr(self.frac, "__name__", self.frac)}'
         if self.networks is not None:
             out += f'   network={sc.strjoin(self.networks)}'
+        people, population = None, None
         if self.where is not None:
-            out += f'   {"who" if not ss.interventions.on_population(self.where) else "when"}={getattr(self.where, "__name__", self.where)}'
+            people, population = ss.conditions.split_population(self.where) if isinstance(self.where, (ss.conditions.Cond, ss.expressions.Expr)) else (self.where, None)
+        if people is not None:
+            out += f'   who={getattr(people, "__name__", people)}'
         window = ', '.join(f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None)
+        when = None
         if self.schedule is not None and self.schedule.when is None: # Its own repr has the window
-            out += f'   when={self.schedule}'
+            when = f'{self.schedule}'
         elif self.schedule is not None: # A function of the date
-            out += f'   when={getattr(self.schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
+            when = f'{getattr(self.schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
         elif window:
-            out += f'   when=ss.schedule({window})'
+            when = f'ss.schedule({window})'
+        if self.either is not None:
+            when = f'({when} | {self.either!r})'
+        when = sc.strjoin([w for w in [when, population if population is None else repr(population)] if w is not None], sep=' & ')
+        if when:
+            out += f'   when={when}'
         if self.hold is not None:
             out += f'   until={self.hold}'
         if self.until is not None:

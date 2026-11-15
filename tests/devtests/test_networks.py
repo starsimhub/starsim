@@ -386,9 +386,8 @@ def test_between():
     res = sim.networks[0].results
     assert np.isclose(res.match[-24:].mean(), 0.8, atol=0.05) and np.isclose(res.mean_degree[-1], 0.8, rtol=0.1), (res.match[-24:].mean(), res.mean_degree[-1])
 
-    # A subclass that forms its own partnerships (forms_partnerships = False) gets none from the base; between men, its error suggests between='mm'
+    # A subclass that forms its own partnerships (its own step()) gets none from the base; between men, its error suggests between='mm'
     class OwnMSM(ss.SexualNet):
-        forms_partnerships = False
         def step(self):
             self.end_pairs()
             if not len(self):

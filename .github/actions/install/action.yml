@@ -4,7 +4,7 @@
 # The Rust kernels are built once for each version of their source, then restored from the cache, since
 # nothing else in a job compiles them (CARGO=false makes the install skip it: they are optional there). If the job
 # has them already (as tests.yml's jobs do, from its job that builds them once), neither is needed.
-# Afterwards STARSIM_KERNELS=rust, so that any import of Starsim is an error if the kernels are missing or
+# Afterwards STARSIM_BACKEND=rust, so that any import of Starsim is an error if the kernels are missing or
 # were built from other source than is here, rather than falling back to Numba's.
 #
 # With `numba`, Numba's compiled kernels are restored too. The key is every file that mentions Numba, and
@@ -61,8 +61,8 @@ runs:
       if: inputs.rust == 'true'
       shell: bash
       run: |
-        echo "STARSIM_KERNELS=rust" >> "$GITHUB_ENV"
-        STARSIM_KERNELS=rust python -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.kernels.compile_status().summary)"
+        echo "STARSIM_BACKEND=rust" >> "$GITHUB_ENV"
+        STARSIM_BACKEND=rust python -c "import starsim as ss; assert ss.solvers.backends.rust.on; ss.compile(check=True)"
     - name: Find Numba's cache
       id: numba
       if: inputs.numba == 'true'

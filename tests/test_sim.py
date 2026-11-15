@@ -92,10 +92,9 @@ def test_demo(do_plot=do_plot):
     # Test explicit demo: its SIR has beta per contact, for an R0 of 3 on the network
     s2 = ss.Sim(diseases=dict(type='sir', beta=0.03), networks='random').run()
 
-    # Test explicit
+    # Test explicit (a module's name seeds its random numbers, so the network is not held in a variable, which would name it)
     sir = ss.SIR(beta=ss.perday(0.03))
-    net = ss.RandomNet()
-    s3 = ss.Sim(diseases=sir, networks=net).run()
+    s3 = ss.Sim(diseases=sir, networks=ss.RandomNet()).run()
     assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
     return s1
 
@@ -126,7 +125,7 @@ def test_simple(do_plot=do_plot):
     # A sim of modules written as code can be built again with other values, as a declared one can
     agentsim = ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
     again = agentsim.new(rand_seed=2).run()
-    assert again.summarize().value.sis_infection == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summarize().value.sis_infection
+    assert again.summarize().value.sis.infection == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summarize().value.sis.infection
 
     # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept
     class MySim(ss.Sim):
@@ -283,8 +282,8 @@ def test_shared_product(do_plot=do_plot):
         plt.xlabel('Year')
         plt.ylabel('Cumulative infections')
 
-    assert s2.summarize().value.sir_infection < s1.summarize().value.sir_infection, 'Vaccine should avert infections'
-    assert s3.summarize().value.sir_infection < s2.summarize().value.sir_infection, 'Vaccine should avert infections'
+    assert s2.summarize().value.sir.infection < s1.summarize().value.sir.infection, 'Vaccine should avert infections'
+    assert s3.summarize().value.sir.infection < s2.summarize().value.sir.infection, 'Vaccine should avert infections'
     return s3
 
 
@@ -437,10 +436,9 @@ def test_new_after_init():
     assert sim.restart(pars=dict(beta=0.5), rand_seed=3).run().results.sir.I[-1] == ref
     assert sim.run().results.sir.I[-1] == ref and sim.new().run().results.sir.I[-1] == ref, 'Run again, or new, with the values of the restart'
     df = pd.DataFrame({'time':[10, 20], 'sir.I':[50, 100]})
-    sim.data = df # Not settings of the run, so they can be set after init
-    sim.jax = True
+    sim.data = df # Not a setting of the run, so it can be set after init
     new = sim.new()
-    assert new.data is not None and new.jax is True
+    assert new.data is not None
     return
 
 
@@ -579,7 +577,7 @@ def test_rescale():
     assert res.flu.I[0] == 10 and np.isclose(res.flu.prevalence[0], 1e-5)
     deadly = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), p_death=0.5, init_prev=0.002) # An agent's death is scale people, not those no agent stands for yet
     res = ss.Sim(diseases=deadly, networks='random', n_agents=2000, total_pop=2e6, rescale=True, stop=40, unit='day', verbose=0).run().results
-    assert res.died.cum[-1] > 0 and np.allclose(res.alive, 2e6 - (res.died.cum - res.died)) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive) # Those alive at each time point: less the deaths of the steps before it
+    assert res.death.cum[-1] > 0 and np.allclose(res.alive, 2e6 - (res.death.cum - res.death)) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive) # Those alive at each time point: less the deaths of the steps before it
     preg = lambda rescale: ss.Sim(demographics=ss.Pregnancy(), n_agents=2000, total_pop=1e6, rescale=rescale, stop=5, unit='day', verbose=0).run().results.pregnancy
     assert np.allclose(preg(True).P, preg(False).P, rtol=1e-3) # In a module that is not a disease, those no agent stands for are in each state as the agents are (rather than all not pregnant); a birth changes the agents' shares a little
 
@@ -686,7 +684,7 @@ def test_engine_rules():
     assert isinstance(ss.Sim(analyzers=Survey(), **sc.dcp(kw)).init().solver, ss.solvers.abm)
     assert isinstance(ss.Sim(analyzers=Survey(), solver='ode', **sc.dcp(kw)).init().solver, ss.solvers.ode)
 
-    assert ss.solvers.why_not(ss.Sim(**sc.dcp(kw)).init(), 'kernels') is None
+    assert ss.solvers.why_not(ss.Sim(**sc.dcp(kw)).init(), 'compiled') is None
     table = ss.solvers.solver_table()
     assert len(table) == len(ss.solvers.rules) and set(table.compartments) == {'yes', 'no', 'if asked'}
     with pytest.raises(ss.CapabilityError, match='does not define count'):
@@ -786,7 +784,7 @@ def test_printed_output():
         def step(self):
             self.n = getattr(self, 'n', 0) + 1
     sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), interventions=Counter(), total_pop=1000, **kw)
-    assert 'a step of its own' in sim.init()._kernel_reason() and 'a step of its own' in sim.run()._kernel_reason()
+    assert 'a step of its own' in sim.init()._compiled_reason() and 'a step of its own' in sim.run()._compiled_reason()
 
     # Numbers by group that disagree with the split say so
     d = ss.Disease(S >> I @ ss.perweek(0.1)*I, init_n=dict(S=ss.by(risk=[999, 9000]), I=ss.by(risk=[1, 0])), name='d')
@@ -823,7 +821,7 @@ def test_small_fixes():
     trs = dict(death=ss.death(rate=ss.peryear(0.01)), die=I >> ss.dead @ 0.1, split=ss.Transition(I, {R: 0.9, ss.dead: None}, dur=5), leave=ss.emigration(rate=ss.peryear(0.1)), recover=I >> R @ 0.1)
     assert [(tr.dies, tr.may_die) for tr in trs.values()] == [(True, False), (True, False), (False, True), (False, False), (False, False)]
     res = ss.Sim(demographics=[ss.emigration(rate=ss.peryear(0.1))], diseases='sir', total_pop=1000, stop=2005, solver='ode', verbose=0).run().results
-    assert np.isclose(res.emigrated[:-1].sum(), 1000 - res.alive[-1]) # Up to the last stock, at the start of the last step; a compartmental run counted no one as having left
+    assert np.isclose(res.emigration[:-1].sum(), 1000 - res.alive[-1]) # Up to the last stock, at the start of the last step; a compartmental run counted no one as having left
     rerun = ss.Sim(diseases='sir', networks='random', n_agents=500, stop=2005, verbose=0).run()
     rerun.restart(pars=dict(beta=0))
     assert not rerun.started
@@ -861,6 +859,110 @@ def test_sim_names():
         with warnings.catch_warnings():
             warnings.simplefilter('error')
             ss.Sim(diseases=ss.SIR(dur_inf=ss.days(10)), networks='random', n_agents=100, start=2000, stop=2010, verbose=0).init()
+    return sim
+
+
+@sc.timer()
+def test_module_names():
+    """ One rule for every name: the variable, else the default for the class or kind; lookups by the default name; errors that say where each name came from """
+    sc.heading('Testing module names, lookups by the default name, and missing-name errors')
+    kw = dict(n_agents=200, start=2000, stop=2002, verbose=0)
+    def make_sim():
+        m = ss.SIR()
+        net = ss.RandomNet()
+        return ss.Sim(diseases=m, networks=net, analyzers=ss.infection_log(), **kw)
+    sim = make_sim().init()
+    assert list(sim.diseases.keys()) == ['m'] and list(sim.networks.keys()) == ['net'] and list(sim.analyzers.keys()) == ['infection_log'] # Networks and analyzers too, not only declared diseases and deliveries
+    assert sim.diseases.m.name_origin() == 'named from the variable `m` in `make_sim()`' and sim.analyzers[0].name_origin() == 'the default for ss.infection_log'
+
+    # B: by the default name, if unambiguous, without changing what is stored
+    assert sim.diseases.sir is sim.diseases['sir'] is sim.diseases.get('sir') is sim.sir is sim.diseases.m and 'sir' not in sim.diseases
+    assert sim.networks.randomnet is sim.networks.net
+    assert sim.results.sir is sim.results.m and sim.results['sir.I'] is sim.results.m.I
+
+    # C: a missing name lists the names, and where each came from
+    with pytest.raises(AttributeError, match=r'the diseases are: `m` \(named from the variable `m` in `make_sim\(\)`\)'):
+        sim.diseases.measles
+    with pytest.raises(KeyError, match=r'`net` \(named from the variable `net`'):
+        sim.networks['contacts']
+    with pytest.raises(AttributeError, match='the modules are'):
+        sim.results.measles
+
+    # An ambiguous default name lists the candidates
+    a = ss.SIR()
+    b = ss.SIR()
+    two = ss.Sim(diseases=[a, b], networks='random', **kw).init()
+    for get in [lambda: two.diseases.sir, lambda: two.results.sir, lambda: two.sir]:
+        with pytest.raises(AttributeError, match=r'default name of 2 .*`a`.*`b`'):
+            get()
+
+    # A variable that would name several modules (here, in a loop) names none of them; a name given (or a key) always wins
+    steps = []
+    for year in [2000, 2001]:
+        step = ss.vaccinate(efficacy=0.9, coverage=0.5, when=year)
+        steps.append(step)
+    flu = ss.SIR(name='flu')
+    sim = ss.Sim(diseases=flu, networks=dict(main=ss.RandomNet()), interventions=steps, **kw).init()
+    assert list(sim.interventions.keys()) == ['vaccinate', 'vaccinate_1'] and list(sim.diseases.keys()) == ['flu'] and list(sim.networks.keys()) == ['main'] # It raised that "step" was taken twice
+
+    # Transitions: an outflow is named as written
+    S, I, R = ss.states(3)
+    dis = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), I >> ss.dead @ ss.perday(0.01), ss.unborn >> S @ ss.peryear(0.02))
+    assert list(dis.graph.transitions) == ['infection', 'I_to_R', 'I_to_dead', 'unborn_to_S'] # It was I_to_out and in_to_S
+    return sim
+
+
+@sc.timer()
+def test_module_names_paths():
+    """ Paths by a module's default name ('sir.beta', 'sir.I'), exact names across the sims of a MultiSim, variable names the sim uses itself, and arrays defined too late """
+    sc.heading('Testing paths by default name, and names a module cannot take')
+    kw = dict(n_agents=300, dur=5, verbose=0)
+    def make(**kwargs):
+        measles = ss.SIR(beta=0.1)
+        return ss.Sim(diseases=measles, networks='random', **kw, **kwargs)
+
+    # Paths by the default name, for an ss.SIR called measles
+    sim = make(pars={'sir.beta':0.2}).init()
+    assert sim.diseases.measles.pars.beta.raw == 0.2 and sim.pars.sir is sim.pars['sir'] is sim.pars.measles
+    assert sim.new(pars={'sir.beta':0.3}).init().diseases[0].pars.beta.raw == 0.3
+    assert ss.parallel(make(), pars={'sir.beta':[0.1, 0.2]}, workers=1, verbose=0).runs['sir.beta'].tolist() == [0.1, 0.2]
+    for mod in [ss.modify('sir.pars.beta', multiply=0.5, who='sir.I'), ss.modify('sir.pars.beta', multiply=0.5, who=ss.ref('sir.I'))]:
+        assert make(connectors=mod).run().results.sir.infection.sum() > 0
+    vx = make(interventions=ss.vaccinate(efficacy=0.9, disease='sir', who='sir.S', coverage=0.5, when=2)).run()
+    assert vx.interventions[0].disease == 'measles'
+    fig = vx.plot('sir')
+    assert len(fig.axes) >= 3
+    plt.close(fig)
+    with pytest.raises(KeyError, match=r'default name of 2'): # Ambiguous
+        ss.Sim(diseases=[ss.SIR(name='a'), ss.SIR(name='b')], networks='random', pars={'sir.beta':0.2}, **kw).init()
+
+    # A MultiSim takes each result from the module of that name only, not from another module whose default name it is
+    def scen(vx):
+        sir = ss.SIR(beta=0.1)
+        dis = ss.SIR(beta=0.1)
+        return ss.Sim(diseases=dis if vx else sir, networks='random', label='vx' if vx else 'base', **kw)
+    summary = ss.parallel(scen(False), scen(True), workers=1, verbose=0).summarize()
+    rows = list(summary.index)
+    assert ('sir.I', 'base') in rows and ('sir.I', 'vx') not in rows and ('dis.I', 'vx') in rows
+
+    # A variable whose name the sim uses itself names nothing: the module keeps its default name
+    for name in ['module', 'declared', 'imported', 'sim', 'pars', 'results']:
+        ns = dict(ss=ss, kw=kw)
+        exec(f'{name} = ss.SIR(beta=0.1)\nout = ss.Sim(diseases={name}, networks="random", **kw).run()', ns)
+        assert ns['out'].diseases[0].name == 'sir' and ns['out'].results.sir.infection.sum() > 0, name
+    run = make().run()
+    extra = {key for key in vars(run) if not key.startswith('_')} - ss.Sim._attrs - set(dir(ss.Sim)) - set(ss.SimPars()) - ss.People.taken_names()
+    assert not extra, f'New attributes of the sim, which a module must not take from its variable: add {extra} to ss.Sim._attrs'
+
+    # An array defined once the module is in the sim is an error that says where to define it
+    class Late(ss.Module):
+        def init_post(self):
+            super().init_post()
+            self.define_states(ss.BoolArr('late', default=True))
+        def step(self):
+            pass
+    with pytest.raises(RuntimeError, match=r'define arrays in __init__\(\)'):
+        ss.Sim(modules=Late(), diseases='sir', networks='random', **kw).init()
     return sim
 
 

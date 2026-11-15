@@ -191,8 +191,8 @@ def test_counts():
     S, I, Q, R = ss.states(4)
     quarantine = ss.Disease(S, I, Q, R, infection=S >> I @ 0.3*I, isolate=I >> Q @ ss.perday(0.5)*(Q.n < 30), recovery=I >> R @ ss.days(10), release=Q >> R @ ss.days(5), init_prev=0.01, name='quarantine')
     assert 29 < ss.Sim(quarantine, unit='day', dt=ss.days(0.01), stop=60, **kw).run().results.quarantine.Q.max() < 30 + 0.5*10_000*0.01 # Up to one step's arrivals over it
-    S, I, Q = ss.states('S I Q') # Or as where=
-    d = ss.Disease(S, I, Q, infection=S >> I @ ss.peryear(2)*I, q=ss.Transition(I, Q, rate=ss.peryear(5), who=Q.n < 20), init_prev=0.1, name='d')
+    S, I, Q = ss.states('S I Q') # Or as when=, which says when the rate applies
+    d = ss.Disease(S, I, Q, infection=S >> I @ ss.peryear(2)*I, q=ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20), init_prev=0.1, name='d')
     assert ss.Sim(d, n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), **kw).run().results.d.Q[-1] < 100
     return sim
 
@@ -240,7 +240,7 @@ def test_births():
         assert np.isclose(n_flu, 2000*np.exp(0.03*20), rtol=0.06) # 3,644
     assert isinstance(ss.Sim(flu(), demographics=demog, **kw).init().solver, ss.solvers.ode) # Not agents, as birth_rate= gave
     alone = ss.Sim(demographics=True, **kw).run() # With no declared disease, a declared module of everyone alive, chosen for as any declared model (it was ss.Births and ss.Deaths, as agents)
-    assert isinstance(alone.solver, ss.solvers.ode) and alone.results.population.births.sum() > 0
+    assert isinstance(alone.solver, ss.solvers.ode) and alone.results.birth.sum() > 0
     with pytest.raises(ValueError): # Births in two diseases would count people twice
         ss.Sim(ss.SIR(name='a', births=ss.birth(rate=ss.peryear(0.02))), ss.SIS(name='b', births=ss.birth(rate=ss.peryear(0.02))), **kw).init()
 
@@ -262,7 +262,7 @@ def test_births():
             mig.stratify(age=[0, 15, 50])
         sim = ss.Sim(mig, n_agents=10_000, total_pop=10_000, start=2000, stop=2010, **kw).run()
         res = sim.results
-        assert res.died.sum() == 0 and res.emigrated.sum() == res.mig.leave.sum() > 0
+        assert res.death.sum() == 0 and res.emigration.sum() == res.mig.leave.sum() > 0
         assert np.isclose(res.alive[-1], 10_000, rtol=0.05) # As many arrive as leave
         assert sim.people.age.mean() > 25 # Not newborns
         if age:
@@ -666,7 +666,7 @@ def test_modify():
         mods = [ss.modify(sir.pars.beta, multiply=0.5, when=ss.schedule(start=30, stop=60)), ss.modify(sir.recovery, multiply=2.0, when=ss.schedule(start=40)), ss.modify(sir.rel_sus, multiply=0.8, when=ss.schedule(start=50))]
         return ss.Sim(sir, interventions=mods, unit='day', stop=120, **kw).init() # A yearly cycle needs a unit
     fast, slow = timed(), timed()
-    assert fast._kernel_reason() is None
+    assert fast._compiled_reason() is None
     assert np.allclose(fast.run().results.sir.I, slow.perf_profile(kind='loop', plot=False).sim.results.sir.I)
 
     # A modifier can also be given as a path, and combines with others by multiplication
@@ -955,7 +955,7 @@ def test_time_values():
 
     # A rate times a trend in time or a function of the sim, in either order, also as the deaths of everyone (DuplicateDeclaration and IncompatibleTypes before)
     trend = ss.timeseries({2000: 1.0, 2005: 0.5})
-    deaths = [ss.Sim(make_sir(), demographics=ss.death(rate=rate), start=2000, stop=2010, total_pop=1000, **kw).run().results.sir.deaths.values.sum()
+    deaths = [ss.Sim(make_sir(), demographics=ss.death(rate=rate), start=2000, stop=2010, total_pop=1000, **kw).run().results.death.values.sum()
               for rate in [ss.peryear(0.02)*trend, trend*ss.peryear(0.02), ss.peryear(0.02)*(lambda sim: 1.0)]]
     assert deaths[0] == deaths[1] and np.isclose(deaths[0], 0.75*deaths[2], rtol=0.05) # Halved for the second half
 

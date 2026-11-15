@@ -679,7 +679,7 @@ def test_engine_copy():
     h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', default_state='A')
-    ppl = ss.People(1000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(p=0.5), result=True)])
+    ppl = ss.People(1000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(p=0.5))])
     sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
     u = sim.people.auids
     urban, obj, went = sim.people.urban[u], sim.diseases.m.obj[u], sim.diseases.m.B[u]

@@ -706,7 +706,7 @@ class Compiled(Agents):
             if ev_d[lo] < 0: # Deaths, requested as the agent engine does (see send()), and counted once each has one cause (see uncount_deaths())
                 srcs = ev_s[lo:hi]
                 self.record(tr, uids, srcs, -1)
-                self.sim.people.request_death(uids, cause=self.mod)
+                self.sim.people.request_death(uids, cause=self.cause_of(tr))
                 states = np.unique(srcs).tolist()
                 self._died.append((tr, [self.graph.people_states[i] for i in states], [uids[srcs == i] for i in states]))
                 events[name] = uids if name not in events else ss.uids.concatenate([events[name], uids])
@@ -853,6 +853,7 @@ class Compiled(Agents):
         finally:
             collected, self._collect = self._collect, None
         self._drawn_ti = self.ti
+        self._members = None # Counts read from now on are live, as in Agents.step_state(), not those of the start of the step (which an intervention in the next step would otherwise read)
         for nm in self.krescaled: # What is left of the dwell times whose speed has changed, rescaled (those with competing rates too, by leave())
             if not self.competing.get(nm):
                 uids = ss.uids(np.flatnonzero(self.mod[nm].raw))

@@ -24,7 +24,7 @@ masks = ss.par(50e3, name='masks') # Spending on masks
 N = (S + I + R).total
 reach = lambda spend, cost: 1 - np.exp(-spend/cost/N) # The fraction of people reached, at a cost per person
 beta = ss.perday(0.2)*(1 - 0.6*reach(tests, 10))*(1 - 0.3*reach(masks, 5))
-sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
+sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001)
 
 sim = ss.Sim(sir, total_pop=10_000, start=2025, stop=2026, verbose=0) # One year, in daily steps
 ```

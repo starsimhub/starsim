@@ -335,8 +335,8 @@ class ParticleFilter(sc.prettyobj):
         """ Why the particle filter cannot run a sim (apart from any data series without a likelihood), if it cannot """
         if not isinstance(sim.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau)):
             return f'it has solver="{sim.solver}", not a stochastic compartmental one'
-        elif sim._kernel_reason() is not None:
-            return f'it is not run in one call to the kernels ({sim._kernel_reason()})'
+        elif sim._compiled_reason() is not None:
+            return f'it is not run whole, in one compiled call ({sim._compiled_reason()})'
         elif sim.data is None:
             return 'it has no data'
         for col in sim.data.columns:
@@ -516,7 +516,7 @@ def data_end(sim):
 
 def run_kept(sim, end):
     """
-    Run a sim that the kernels take whole (restarted), and keep its run up to time point `end` (see `data_end()`), as `ss.fitting.ParticleFilter`
+    Run a sim taken whole, in one compiled call (restarted), and keep its run up to time point `end` (see `data_end()`), as `ss.fitting.ParticleFilter`
     keeps the run it draws (see `path` there), to continue from there: the run is taken in two parts, the same as one, with the
     compartments of each engine or joint states at `end` between them
     """
@@ -532,7 +532,7 @@ def run_kept(sim, end):
                 engine.keep_at = None
         ys = {e.mod.name:e.kept_y for e in engines}
         if any(y is None for y in ys.values()):
-            errormsg = f'run_kept() needs a run that the kernels take whole, but {sc.strjoin(k for k,y in ys.items() if y is None)} was run a step at a time'
+            errormsg = f'run_kept() needs a run taken whole, in one compiled call, but {sc.strjoin(k for k,y in ys.items() if y is None)} was run a step at a time'
             raise RuntimeError(errormsg)
     else:
         if 0 < end < sim.t.npts: # A step at a time up to end, for joint states or results by group kept every few steps
@@ -552,7 +552,7 @@ def run_kept(sim, end):
         res = mod.results
         flows = np.zeros((mod.t.npts, engine.n_trans + len(engine.movers))) # Movement between places is not a result, nor needed for the others
         for name,ind in (engine.tr_index | engine.transfer_index).items():
-            flows[:, ind] = res[name].values
+            flows[:, ind] = (res[name] if name in res else engine.held_flows[name]).values # Births and deaths of everyone are kept by the engine once the run is done (see ss.solvers.hold_flows())
         out[key].stocks[mod.name] = np.array([res[name].values for name in engine.graph.states], dtype=float).T[:ti]
         out[key].flows[mod.name] = flows[:ti]
     return sim, out
@@ -600,7 +600,7 @@ class Swarm(sc.prettyobj):
         self.consts = {k:self.index[id(par)] for k,par in enumerate(engine.prog_pars) if id(par) in self.index}
         self.flows = []
         for f,flow in enumerate(engine.flows): # The flows whose rate is worked out from fitted values alone, as in ss.gradients.Density
-            if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
+            if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.solvers.backends.kernels.convey())
                 continue
             dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
             leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
@@ -644,7 +644,7 @@ class Swarm(sc.prettyobj):
         return
 
     def fracs(self, x=None):
-        """ The time fraction between places of every particle, as `ss.kernels.advance()` takes it (particles by entries; default, the swarm's) """
+        """ The time fraction between places of every particle, as `ss.solvers.backends.kernels.advance()` takes it (particles by entries; default, the swarm's) """
         x = self.to_x(self.z)[0] if x is None else x
         return np.ascontiguousarray(self.sh0 + (x - self.x0) @ self.sh_slopes)
 
@@ -674,7 +674,7 @@ class Swarm(sc.prettyobj):
         return self.to_x(self.z.mean(axis=0))[0]
 
     def tables(self, x=None, rows=slice(None)):
-        """ The parts of the program that vary in time, as `ss.kernels.advance()` takes them: for every particle, with its own values (particles by values; default, the swarm's), at some rows (of those that vary in time) """
+        """ The parts of the program that vary in time, as `ss.solvers.backends.kernels.advance()` takes them: for every particle, with its own values (particles by values; default, the swarm's), at some rows (of those that vary in time) """
         x = self.to_x(self.z)[0] if x is None else x
         n = len(x)
         ctx = ParticleCtx(self, self.engine, x.T[:, :, None, None], rows) # Each value as particles by 1 by 1, so a value by row and group broadcasts
@@ -901,9 +901,9 @@ def pmmh(logpost, z0, draws='auto', warmup=1000, chains=4, particles=None, rand_
     def take(chain_list, count):
         """ Take every chain `count` steps further, in parallel processes or one after another """
         if parallel:
-            method = ss.kernels.start_method()
-            with ss.kernels.starting_workers(method):
-                return sc.parallelize(ss.kernels.worker(advance), iterarg=[(c, count) for c in chain_list], start_method=method)
+            method = ss.solvers.backends.kernels.start_method()
+            with ss.solvers.backends.kernels.starting_workers(method):
+                return sc.parallelize(ss.solvers.backends.kernels.worker(advance), iterarg=[(c, count) for c in chain_list], start_method=method)
         return [advance(c, count) for c in chain_list]
 
     auto = draws == 'auto'
@@ -1349,7 +1349,7 @@ class Fit(sc.prettyobj):
         else:
             try:
                 restarted = ss.run.restart_runs(sims, 1, pars=draws.to_dict('records'), draws=True, starts=starts)
-                why = 'a scenario is not a sim that the kernels run whole (e.g. it has an intervention they do not take)' if restarted is None else None
+                why = 'a scenario is not a sim that runs whole, in one compiled call (e.g. it has an intervention that is taken a step at a time)' if restarted is None else None
             except ss.CapabilityError as E: # E.g. a delivery due before the point the runs continue from
                 why = str(E)
         if why:
@@ -1669,7 +1669,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
         return float(vals[i])
 
     runner = sim.new(pars=values(before), verbose=0).init() # Built with the spending as it will be given, so a restart can change it
-    restart = runner._kernel_reason() is None
+    restart = runner._compiled_reason() is None
     n_runs = [0]
     def run(amounts):
         n_runs[0] += 1
@@ -1756,6 +1756,8 @@ def bounded_pars(probe, pars=None, unused=()):
     Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim.restart()`).
     """
     fitted = sc.obj()
+    if pars is not None: # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
+        pars = [ss.utils.own_path(probe.module_list, name) for name in pars]
     for mod in probe.declared:
         for name,p in mod.graph.pars.items():
             if id(p) in unused: # A parameter of a likelihood that is not used in this fit
@@ -2249,7 +2251,7 @@ class Problem(sc.prettyobj):
         self.particles = None # The particles of the filter that scores each point, if one does; see choose()
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
-        self.can_restart = runner.init()._kernel_reason() is None and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
+        self.can_restart = runner.init()._compiled_reason() is None and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
         self.no_grad = ss.solvers.why_not(runner, 'jax') or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         self._density = None # The log-likelihood in JAX, once built: see jax_density()
@@ -2284,7 +2286,7 @@ class Problem(sc.prettyobj):
             raise ValueError(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
         elif method == 'pmcmc' and (not self.use_lik or (self.stochastic and filtered)): # A deterministic sim's likelihood is exact, so it needs no filter
             why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not self.use_lik else filtered
-            raise ValueError(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a deterministic sim (an ODE) or a stochastic compartmental sim that the kernels run whole, but {why}.')
+            raise ValueError(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a deterministic sim (an ODE) or a stochastic compartmental sim that runs whole, in one compiled call, but {why}.')
         elif method == 'abc-smc' and not self.stochastic: # Every run at the same values is the same, so the tolerance shrinks toward zero and the population with it, by as much as the generations allow
             errormsg = ('method="abc-smc" gives no posterior for a deterministic sim (solver=ode): its runs have no chance in them, so the width of what it gives is set by the number of generations, not by the data. '
                         + ('For a posterior, use the likelihood: method="pmcmc" (a random walk on the exact likelihood) or method="nuts" (with gradients).' if self.use_lik else
@@ -2292,7 +2294,7 @@ class Problem(sc.prettyobj):
             raise ss.CapabilityError(errormsg)
         elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.elements or self.n_model < len(self.fitted)):
             why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not self.use_lik else filtered or ('a parameter has several values' if self.levels or self.elements else 'a parameter of a likelihood is fitted')
-            raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
+            raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that runs whole, in one compiled call, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
         return method
 
     def choose_scoring(self, method, filtered):
@@ -2813,9 +2815,9 @@ def fit_optuna(problem, n_trials=None, workers=None, storage=None, **kwargs): # 
     remaining = n_trials - len(study.trials)
     if remaining > 0 and workers > 1:
         fracs = [len(part) for part in np.array_split(np.arange(remaining), workers)]
-        method = ss.kernels.start_method()
-        with ss.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(fracs)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
+        method = ss.solvers.backends.kernels.start_method()
+        with ss.solvers.backends.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
+            sc.parallelize(ss.solvers.backends.kernels.worker(optuna_worker), iterarg=list(enumerate(fracs)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
@@ -2855,7 +2857,7 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
     """
     Maximum likelihood by iterated filtering (IF2; Ionides et al. 2015): passes of a particle filter in which each particle's values are perturbed by a shrinking random walk, and selected with it (see `Swarm`)
 
-    For a stochastic compartmental sim that the kernels run whole, with a likelihood for every data series, and parameters
+    For a stochastic compartmental sim that runs whole, in one compiled call, with a likelihood for every data series, and parameters
     that are single values of the model's rates. It gives the best values, not a posterior, with the range of the chains' estimates
     in `fit.table`; for a posterior, use `method='pmcmc'`. It has converged if the chains end within 2 of each other in log-likelihood.
 
@@ -2922,7 +2924,7 @@ def fit_pmcmc(problem, scan=None, particles=None, draws='auto', warmup=1000, cha
     """
     Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), each chain from one of the best points of a scan that are apart
 
-    For a stochastic compartmental sim that the kernels run whole, with a likelihood for every data series. It gives a posterior (`fit.samples`),
+    For a stochastic compartmental sim that runs whole, in one compiled call, with a likelihood for every data series. It gives a posterior (`fit.samples`),
     and with each draw a run of the sim drawn from the filter, which follows the data (`fit.trajectories`; Andrieu, Doucet & Holenstein 2010),
     from which `fit.project()` continues. For a deterministic sim (an ODE), whose likelihood is exact, the same random walk on that likelihood
     (adaptive random-walk Metropolis), with no particles: for an ODE that JAX cannot run, which NUTS needs.

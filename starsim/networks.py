@@ -121,6 +121,48 @@ def standardize_netkey(key):
     return re.sub(r'net(_\d+)?$', r'\1', key.lower())
 
 
+def route_aliases(networks):
+    """
+    The default name of each network (see `ss.Module.default_name`), standardized (`'random'` for an `ss.RandomNet`), mapped to its own name,
+    if no other network has that default name and none is called it: so a beta by route can name a network by its kind (`beta=dict(random=0.1)`),
+    whatever it is called (e.g. `net`, after its variable)
+
+    Args:
+        networks (list): the networks
+    """
+    own = {standardize_netkey(net.name) for net in networks}
+    defaults = [standardize_netkey(net.default_name) for net in networks]
+    return {d:net.name for d,net in zip(defaults, networks) if d not in own and defaults.count(d) == 1}
+
+
+def resolve_routes(sim):
+    """
+    Give each network named by its default name (see `route_aliases()`) its own name: in the keys of a beta by route (a dict, in a disease's
+    parameters or in a declared transmission) and in `network=` of a modifier; done once the modules are named, when the sim is initialized
+    """
+    aliases = route_aliases([net for net in sim.pars.networks.values() if isinstance(net, ss.Module)])
+    if not aliases:
+        return
+    def rename(d):
+        if isinstance(d, dict) and any(k != 'default' and isinstance(k, str) and standardize_netkey(k) in aliases for k in d):
+            items = [(aliases.get(standardize_netkey(k), k) if isinstance(k, str) and k != 'default' else k, v) for k,v in d.items()]
+            d.clear()
+            d.update(items)
+    mods = [mod for kind in ['diseases', 'connectors', 'interventions'] for mod in sim.pars[kind].values() if isinstance(mod, ss.Module)]
+    for mod in mods:
+        if isinstance(mod, ss.Disease):
+            for val in mod.pars.values():
+                rename(getattr(val, 'raw', val) if isinstance(val, ss.par) else val)
+            graph = getattr(mod, 'graph', None)
+            for tr in (getattr(graph, 'transitions', None) or {}).values():
+                for coef in (getattr(tr, 'terms', None) or {}).values():
+                    rename(getattr(coef, 'raw', coef))
+        nets = getattr(mod, 'networks', None) if isinstance(mod, ss.modify) else None
+        if nets:
+            mod.networks = [aliases.get(standardize_netkey(n), n) if isinstance(n, str) and n not in sim.pars.networks else n for n in nets]
+    return
+
+
 def route_beta(betas, route):
     """
     The value of a beta for each route (a dict by route name) on one route, or None if it has none
@@ -243,7 +285,7 @@ class Network(Route):
 
         self.edge_defaults = dict(weight=1.0) # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
         self.edges = sc.obj()
-        self.participant = ss.BoolArr('participant')
+        self.participant = ss.BoolArr('participant', result=False)
         self.agent_edges = None # The edges of each agent, once the edges have stayed the same for a step (see edge_index())
 
         # The columns of the edges (p1=, p2=, weight=, or any in edges=) are edges; the rest are parameters, and update_pars() raises for any it does not know
@@ -1210,9 +1252,9 @@ class DegreeNet(DynamicNetwork):
     default), people who have no partner are paired on every step, so nobody has more
     than one at a time.
 
-    A subclass that forms its own partnerships (its own `step()`, not calling `super().step()`) says so
-    with `forms_partnerships = False` in its class: the base then starts none for it. A subclass
-    that changes how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
+    A subclass with a `step()` of its own forms its own partnerships, and gets the base's (those it
+    starts with, and those on each step) only by calling `super().step()`. A subclass that changes
+    how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
 
     Note: not CRN safe when people are born or die.
 
@@ -1249,8 +1291,6 @@ class DegreeNet(DynamicNetwork):
         sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.freqperweek(1))
         ```
     """
-    forms_partnerships = True # Whether the base forms the partnerships; False for a subclass whose own step() forms them, so the base starts none
-
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
@@ -1277,7 +1317,13 @@ class DegreeNet(DynamicNetwork):
         self.departures = 0.0 # The fraction of partnerships ended each step by a partner leaving (dying), estimated as the run goes
         self.lost = 0 # Partnerships ended that way on this step
         self.waiting = ss.uids() # People who looked for a partner and were left over, who look again
+        self.started = False # Whether the partnerships it starts with have been formed: see start_pairs()
         return
+
+    @property
+    def own_step(self):
+        """ Whether a subclass has a `step()` of its own, which forms its partnerships unless it calls `super().step()` """
+        return type(self).step is not DegreeNet.step
 
     def agent_reasons(self, sim):
         """ Lasting partnerships are approximate in compartments, so `solver='auto'` keeps agents """
@@ -1341,8 +1387,6 @@ class DegreeNet(DynamicNetwork):
         self.match_extra = np.zeros(len(match or {})) # For each property, how many more look within their level than by the target alone: see match_pairs()
         self.match_results = {key:'match' if len(match) == 1 else f'match_{key}' for key in match or {}} # The result of the fraction at the same level of each property
         super().init_pre(sim)
-        if not self.forms_partnerships:
-            return
         p = self.pars
         check_acts(self, p.acts)
         if isinstance(p.acts, ss.TimePar):
@@ -1573,19 +1617,25 @@ class DegreeNet(DynamicNetwork):
         return len(p1)
 
     def init_post(self, add_pairs=True):
-        """ Start at the target: give each person a number of partners, and pair them at random (with match=, some within their level)
+        """ Start with the partnerships under way (see `start_pairs()`), unless a subclass has a `step()` of its own, when they start in `DegreeNet.step()`, if it calls it
 
         Args:
-            add_pairs (bool): whether to add partnerships
+            add_pairs (bool): whether to start partnerships (if False, the network starts with none, even from `DegreeNet.step()`)
         """
-        if not self.forms_partnerships: # Start no partnerships for a subclass that forms its own, unless with its own add_pairs()
-            super().init_post(add_pairs=add_pairs and type(self).add_pairs is not DegreeNet.add_pairs)
-            return
-        self.set_network_states()
-        if not self.targeted or not add_pairs:
-            super().init_post(add_pairs=add_pairs) # Pair everyone who takes part, as on each step (unless a subclass pairs its own)
-            return
         super().init_post(add_pairs=False)
+        if not add_pairs:
+            self.started = True # None to start
+        elif not self.own_step:
+            self.start_pairs()
+        return
+
+    def start_pairs(self):
+        """ Start at the target: give each person a number of partners, and pair them at random (with match=, some within their level); with no target, pair everyone who takes part, as on each step """
+        self.started = True
+        self.set_network_states()
+        if not self.targeted:
+            self.add_pairs()
+            return
         uids = self.active(self.sim.people).uids
         rows = self.rows(uids)
         self.dist_degree = np.bincount(rows, minlength=len(self.dists_degree))/max(len(uids), 1) @ self.dists_degree # The population's target, from the mix of rows, for the results and check()
@@ -1655,7 +1705,9 @@ class DegreeNet(DynamicNetwork):
         return
 
     def step(self):
-        """ End partnerships, set the states of people (e.g. debut), and form new partnerships """
+        """ End partnerships, set the states of people (e.g. debut), and form new partnerships (first starting those under way, for a subclass with a `step()` of its own that calls this) """
+        if not self.started:
+            self.start_pairs()
         self.end_pairs()
         self.set_network_states()
         self.add_pairs()
@@ -1768,9 +1820,9 @@ class SexualNet(DegreeNet):
     transmission on the network reads, e.g.
     `ss.modify(hiv.infection, efficacy=0.8, frac=lambda net: net.edges.condoms, network='sexualnet')`.
 
-    A subclass that forms its own partnerships (its own `step()`, not calling `super().step()`) says so
-    with `forms_partnerships = False` in its class: the base then starts none for it. A subclass
-    that changes how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
+    A subclass with a `step()` of its own forms its own partnerships, and gets the base's (those it
+    starts with, and those on each step) only by calling `super().step()`. A subclass that changes
+    how pairs are made overrides `add_pairs()` (or `end_pairs()`) instead.
 
     For several types of partnership with their own rules, see STIsim; for partnerships that
     are not sexual (e.g. needle sharing), `ss.DegreeNet`.
@@ -1822,7 +1874,7 @@ class SexualNet(DegreeNet):
         self.meta.condoms = ss_float # The fraction of acts with a condom, e.g. for ss.modify(..., frac=lambda net: net.edges.condoms, network=)
         self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
-        self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
+        self.decided = ss.BoolArr('decided', result=False) # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
         return
 
     def active(self, people):

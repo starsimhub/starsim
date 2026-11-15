@@ -678,11 +678,11 @@ class MultiSim:
         sims = list(self.sims)
         scenarios = list(self.runs['scenario'])
         def get(sim, res, origin=sims[0]): # The same result of another sim, or of its one disease if the origin's was named differently (see own_disease())
-            mod = sim.results.get(res.module)
+            mod = dict.get(sim.results, res.module) # By its name only: another sim's module with this as its default name is another module
             if not isinstance(mod, ss.Results) and res.module is not None and res.module == own_disease(origin):
-                mod = sim.results.get(own_disease(sim))
+                mod = dict.get(sim.results, own_disease(sim))
             found = mod.find(res.name, die=False) if isinstance(mod, ss.Results) else None
-            return found if found is not None else sim.results.get(res.name)
+            return found if found is not None else dict.get(sim.results, res.name)
         keys = list(ss.results.match_result_keys(sims[0].results, key, show_skipped=bool(key)).values())
         if key is None: # Also the results that only later sims have, e.g. of an intervention only some scenarios have
             for sim in sims[1:]:
@@ -944,9 +944,9 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
     """
     kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if workers != 1:
-        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
-        with ss.kernels.starting_workers(par_args['start_method']):
-            P = sc.Parallel(ss.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.solvers.backends.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
+        with ss.solvers.backends.kernels.starting_workers(par_args['start_method']):
+            P = sc.Parallel(ss.solvers.backends.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
                 if progress is not None:
@@ -957,7 +957,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
                 P.finalize()
             except BaseException as E:
                 P.close() # Without leaving the workers running, as sc.parallelize() does
-                ss.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
+                ss.solvers.backends.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
                 raise
         return P.results
     show = None if progress is None else progress.update
@@ -1080,11 +1080,9 @@ class MultiResults(ss.Results):
     @classmethod
     def from_sims(cls, sims, runs):
         """ Every result that every sim has (with the same shape), across the sims: one run per sim """
-        def get(sim, modname, key):
-            try:
-                return sim.results[key] if modname is None else sim.results[modname][key]
-            except (KeyError, AttributeError, TypeError):
-                return None
+        def get(sim, modname, key): # By name only: another sim's module with this as its default name is another module
+            res = sim.results if modname is None else dict.get(sim.results, modname)
+            return dict.get(res, key) if isinstance(res, dict) else None
 
         def stack(found):
             """ The same result of each run that has it, as one array across those runs """
@@ -1317,8 +1315,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
 
     With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times (as runs of their sim's scenario if they are `draws`). An ODE
-    with `sim.jax = True` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
-    the kernels for tens of thousands of runs, once JAX has started.
+    with `ss.options.backend = 'jax'` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
+    the compiled backend for tens of thousands of runs, once JAX has started.
 
     With `starts`, one for each set of values: where its runs start, by the name of the module that runs the compartments (each a `start`
     of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fitting.Fit.project()`);
@@ -1332,7 +1330,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
-        if runner._kernel_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
+        if runner._compiled_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built
@@ -1353,7 +1351,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     group_ti = dict()
     for r,sim in enumerate(runners):
         first = r*len(sets[r])*n_runs # The position of the sim's first run
-        if pars is not None and None not in sets[r] and starts is None and sim.jax is True and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+        if pars is not None and None not in sets[r] and starts is None and ss.options.backend == 'jax' and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
             outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []
@@ -1384,7 +1382,10 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
         sim.restart(pars=sets[r][-1], rand_seed=seeds[first + len(sets[r])*n_runs - 1]).run() # The sim itself is left as its last run
     arrays = {}
     join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) if len({np.shape(a)[1:] for a in arrs}) == 1 else None # Without a copy for one sim, since by group they can be large; None if the sims have different groups (e.g. a delivery that adds a group), as in MultiResults.from_sims()
+    held = {(mod.name, key) for mod in runners[0].declared for key in ss.solvers.population_flows(mod)} # Counted by the sim's own birth and death (see ss.solvers.hold_flows())
     for (modname,key),vals in values.items():
+        if (modname, key) in held:
+            continue
         res = next(sim.results[modname][key] for sim in runners if modname in sim.results) # A delivery may be in some of the sims only
         vals = join(vals)
         if len(vals) == len(runs): # A result that every sim has
@@ -1392,11 +1393,18 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
     sim = runners[0]
-    if 'alive' in sim.results: # The sim's own results (alive, died, emigrated), as one run gives them
+    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration, cbr, cmr), as one run gives them
+        def get(mod, key):
+            vals = join(values[mod.name, key]) if (mod.name, key) in values else None
+            if vals is None or len(vals) != len(runs): # A result some runs don't have
+                raise KeyError(key)
+            return np.asarray(vals, dtype=float)
         try:
-            counts = ss.solvers.people_counts(sim, lambda mod, key: np.asarray(arrays[mod.name, key]['values'], dtype=float))
-        except KeyError: # A result some runs don't have
+            counts = ss.solvers.people_counts(sim, get)
+        except KeyError:
             counts = None
+        if counts is not None and 'cbr' in sim.results:
+            counts.cbr, counts.cmr = ss.solvers.crude_rates(counts.birth, counts.death, counts.alive, ss.solvers.people_t(sim).dt_year)
         for key,vals in (counts or {}).items():
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')

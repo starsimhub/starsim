@@ -14,13 +14,13 @@ and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` keeps
 its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
-way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
+way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), `ss.BoolState` (now `ss.BoolArr`) and `ss.BoolArr` (now `ss.BoolArr(result=False)`, since Starsim 4's makes a result by default), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_n=20`, and `dur_inf=10` is
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3; with none, `rate_per=1000` is added to `ss.Births`, `ss.Deaths`, and `ss.Pregnancy` given a rate, since Starsim 3's were per 1,000 by default and Starsim 4's are per person), `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), `sim.modules` (every module, now `sim.module_list`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `death`, `cum_deaths` is `death.cum`, and `new_emigrants` is `emigration`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), `sim.modules` (every module, now `sim.module_list`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -35,6 +35,9 @@ import sciris as sc
 
 __all__ = ['migrate']
 
+boolstate_note = "ss.BoolState is ss.BoolArr: one class for a true-or-false value per agent, whose count is a result unless result=False"
+boolarr_note = "Starsim 3's ss.BoolArr made no result; Starsim 4's makes one, the number for whom it is true, unless result=False (added, so it stays a flag; remove it to have the result)"
+
 # Names whose rename is mechanical: Starsim 3 spelling (a regular expression) to Starsim 4's
 counted = 'alive|female|susceptible|infected|recovered|exposed|infectious' # The states that Starsim's own modules count (n_alive is now alive)
 renames = [
@@ -44,12 +47,13 @@ renames = [
     (r'\bss\.RandomExactNet\(',    "ss.RandomNet(method='exact', ", "ss.RandomExactNet is ss.RandomNet(method='exact')"),
     (r'\bss\.(ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
     (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (between='mf' is its default)"),
-    (r'\bss\.(networks\.)?SexualNetwork\b', 'ss.SexualNet',         'ss.SexualNetwork is ss.SexualNet, which has parameters and forms partnerships itself, unless a subclass sets forms_partnerships = False'),
+    (r'\bss\.(networks\.)?SexualNetwork\b', 'ss.SexualNet',         'ss.SexualNetwork is ss.SexualNet, which has parameters and forms partnerships itself; a subclass with a step() of its own forms its own, unless it calls super().step()'),
     (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.MSMNet\(',            "ss.SexualNet(between='mm', ",      "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.NCD\b',              'ssl.NCD',                        'ss.NCD moved to the library (ssl.NCD)'),
-    (r'\bss\.BoolState\(\s*\)',      'ss.BoolArr(result=True)',        'ss.BoolState is ss.BoolArr(..., result=True): one class for a true-or-false value per agent, whose count is a result only with result=True'),
-    (r'\bss\.BoolState\(([^()]*)\)', r'ss.BoolArr(\1, result=True)', 'ss.BoolState is ss.BoolArr(..., result=True): one class for a true-or-false value per agent, whose count is a result only with result=True'),
+    (r'\bss\.BoolArr\(\s*\)',      'ss.BoolArr(result=False)',        boolarr_note), # Before ss.BoolState, which becomes an ss.BoolArr with a result
+    (r'\bss\.BoolArr\(((?:(?!\bresult\s*=)[^()])+)\)', r'ss.BoolArr(\1, result=False)', boolarr_note),
+    (r'\bss\.BoolState\(([^()]*)\)', r'ss.BoolArr(\1)',                boolstate_note),
     (r'\bss\.Route\b',             'ss.networks.Route',              'ss.Route is ss.networks.Route'),
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
@@ -120,12 +124,12 @@ moved = dict(
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
     utils         = 'standardize_data shrink',
     loop          = 'Loop',
-    kernels       = 'compile_status',
     networks      = 'find_contacts standardize_netkey',
     arrays        = 'BaseArr IndexArr',
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))
+renames.append((r'\bss\.(compile_status)\b', r'ss.solvers.backends.kernels.\1', 'internal helpers are in their submodule (ss.solvers.backends.kernels.)'))
 
 # The keywords of the distributions that Starsim 4 names by their moments (or shape), by distribution
 dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
@@ -139,7 +143,8 @@ dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
-    (r'\bss\.BoolState\b', 'ss.BoolState is ss.BoolArr(..., result=True): one class for a true-or-false value per agent, whose count is a result only with result=True'),
+    (r'\bss\.BoolState\b', boolstate_note),
+    (r'\bss\.BoolArr\((?![^\n]*\bresult\s*=)(?:[^()\n]*\(|[^()\n]*$)', boolarr_note + ' (this one has parentheses inside it, or goes on to the next line, so it was not rewritten)'),
     (r'\bdef infect\(\s*self\s*\)|\b(super\(\)|self)\.infect\(\s*\)', "ss.Infection's transmission pass, infect(self), is ss.AgentDisease's transmit(), which returns the UIDs of the new cases (and records their sources and routes in an ss.infection_log); an override of it calls super().transmit(rel_trans=..., rel_sus=...) for its own arrays, e.g. once for each strain (infect(uids) now infects those agents at once)"),
     (r'\bvalidate_beta\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and the beta of each route from route_betas(), which validate_beta() was)"),
     (r'\b(people|ppl)\.n_alive\b', 'people.n_alive (the number of agents alive) was removed: people.n is the number of people alive (as agents, the people they stand for, which is the number of agents only with no population scale), and people.alive.count() is the number of agents alive'),
@@ -207,7 +212,7 @@ flags = [
     (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
     (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or ss.modify(network=) keyed 'sexual' (or ss.SexualNet(name='mf'))"),
     (r'\bfloat\((?![^)]*(\.raw|\.values|\[|_units\b|_steps\b))[^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
-    (r'\bclass\s+\w+\(.*\bss\.SexualNet\b', 'ss.SexualNet has parameters and forms partnerships itself (between=, n_contacts=, dur=, ...): a subclass that forms its own in its own step() sets forms_partnerships = False in its class, and the base then starts none for it'),
+    (r'\bclass\s+\w+\(.*\bss\.SexualNet\b', 'ss.SexualNet has parameters and forms partnerships itself (between=, n_contacts=, dur=, ...): a subclass with a step() of its own forms its own (the base forms none for it, at the start or on each step, unless it calls super().step())'),
     (r'\bkeep_case\s*=', 'Results.flatten() always keeps the case of keys now (as to_df() does): drop keep_case='),
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
     (r'\bss\.change\(', 'ss.change() is ss.modify() of a time series, from its first time: ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), when=ss.schedule(start=t1)) for by=, and set= for to='),
@@ -216,8 +221,8 @@ flags = [
 
 # The names of results that depend on the rest of the code: the counts of states (n_<state>), and the results of ss.SIR and the others
 counts_note = 'the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])'
-infections_note = "ss.Infection's results are those of a declared disease: new_infections is infection, and cum_infections is infection.cum (sis_infection in sim.summarize(), which is its total)"
-deaths_note = "the people who died or left are the flows results.died and results.emigrated (new_deaths, new_emigrants), with results.died.cum for cum_deaths; a disease's is its flow, results.hiv.death"
+infections_note = "ss.Infection's results are those of a declared disease: new_infections is infection, and cum_infections is infection.cum (sis.infection in sim.summarize(), which is its total)"
+deaths_note = "the people who died or left are the flows results.death and results.emigration (new_deaths, new_emigrants), with results.death.cum for cum_deaths; a disease's is its flow, results.hiv.death"
 results_like = r'(?:\bresults(?:\.\w+)*|\bres\w*)' # An object of results: results, sim.results.sir, res, res_sir, ...
 fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
 make_results = r'(\w*Result)$' # A call that makes a result, e.g. ss.Result('n_ill', ...)
@@ -289,7 +294,7 @@ def rename_counts(line, names):
 def rename_infections(line, names, context):
     """ Rename the results of `ss.Infection` to those of a declared disease, the flow `infection` and its total `infection.cum`, in `res.new_infections`, `res['new_infections']`, summaries (`sis_cum_infections`), and paths (`'hiv.new_infections'`), unless the code makes a result of that name itself; a name with a prefix only if that is a disease of the file, since `df['obs_new_infections']` is not (see `count_flags()`); returns the line and whether it changed """
     new = line
-    summary = lambda m: f'{m[1]}_infection' if m[1].lower() in context.diseases else m[0]
+    summary = lambda m: f'{m[1]}.infection' if m[1].lower() in context.diseases else m[0]
     if 'cum_infections' not in names.own:
         new = re.sub(r'(?<!self)\.cum_infections\b', '.infection.cum', new)
         new = re.sub(r"""\[(['"])cum_infections\1\]""", r'[\1infection\1].cum', new)
@@ -302,7 +307,7 @@ def rename_infections(line, names, context):
 
 
 def rename_deaths(line, names, context):
-    """ Rename the deaths and emigrants of a sim (`died`, its total `died.cum`, and `emigrated`) and of a disease (`death`), as `rename_infections()` does, unless the code makes a result of that name itself; returns the line and whether it changed """
+    """ Rename the deaths and emigrants of a sim (`death`, its total `death.cum`, and `emigration`) and of a disease (`death`), as `rename_infections()` does, unless the code makes a result of that name itself; returns the line and whether it changed (a disease's, by its module or path, are rewritten before the sim's) """
     new = line
     module = rf'({results_like}\.\w+)' # e.g. results.hiv, but not results
     summary = lambda m: f'{m[1]}_death' if m[1].lower() in context.diseases else m[0]
@@ -310,16 +315,16 @@ def rename_deaths(line, names, context):
         new = re.sub(rf'{module}\.new_deaths\b', r'\1.death', new)
         new = re.sub(r"""(['"])(\w+)\.new_deaths\1""", r'\1\2.death\1', new)
         new = re.sub(r'\b(\w+)_new_deaths\b', summary, new)
-        new = re.sub(r'(?<!self)\.new_deaths\b', '.died', new)
-        new = re.sub(r"""\[(['"])new_deaths\1\]""", r'[\1died\1]', new)
+        new = re.sub(r'(?<!self)\.new_deaths\b', '.death', new)
+        new = re.sub(r"""\[(['"])new_deaths\1\]""", r'[\1death\1]', new)
     if 'cum_deaths' not in names.own:
         new = re.sub(rf'{module}\.cum_deaths\b', r'\1.death.cum', new)
         new = re.sub(r'\b(\w+)_cum_deaths\b', summary, new)
-        new = re.sub(r'(?<!self)\.cum_deaths\b', '.died.cum', new)
-        new = re.sub(r"""\[(['"])cum_deaths\1\]""", r'[\1died\1].cum', new)
+        new = re.sub(r'(?<!self)\.cum_deaths\b', '.death.cum', new)
+        new = re.sub(r"""\[(['"])cum_deaths\1\]""", r'[\1death\1].cum', new)
     if 'new_emigrants' not in names.own:
-        new = re.sub(r'(?<!self)\.new_emigrants\b', '.emigrated', new)
-        new = re.sub(r"""\[(['"])new_emigrants\1\]""", r'[\1emigrated\1]', new)
+        new = re.sub(r'(?<!self)\.new_emigrants\b', '.emigration', new)
+        new = re.sub(r"""\[(['"])new_emigrants\1\]""", r'[\1emigration\1]', new)
     return new, new != line
 
 

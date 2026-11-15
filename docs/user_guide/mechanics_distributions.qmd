@@ -187,9 +187,9 @@ def p_by_age(self, sim, uids):
 
 def make_sim(campaign=None):
     S, I, R = ss.states('S I R')
-    measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
-    school = ss.RandomNet(name='school', n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
-    community = ss.RandomNet(name='community', n_contacts=2)
+    measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01)
+    school = ss.RandomNet(n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
+    community = ss.RandomNet(n_contacts=2)
     return ss.Sim(measles, networks=[school, community], interventions=campaign, n_agents=5000, stop=ss.days(200))
 
 scenarios = {

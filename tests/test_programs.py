@@ -69,7 +69,7 @@ def test_rescreen():
         make(solver='ode', total_pop=10_000, verbose=0).init()
     sim = make(total_pop=10_000, n_agents=10_000, verbose=0).run()
     d, e = sim.results.primary.delivered, sim.results.primary.eligible
-    assert np.isclose(d[1], 10_000*(1 - 0.7**0.25), rtol=0.05)
+    assert np.isclose(d[:4].sum()/e[:4].sum(), 1 - 0.7**0.25, rtol=0.05) # 30% a year of those eligible, over the first year (the eligible fall as they are screened)
     assert np.isclose(e[20], 10_000 - d[1:20].sum()) and np.isclose(e[21], 10_000 - d[2:21].sum()) # Those screened first are due again after exactly 5 years
     return sim
 

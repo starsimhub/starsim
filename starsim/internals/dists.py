@@ -9,6 +9,7 @@ The distributions themselves are in `ss.distributions`.
 Used with: agents and compartments; declared and coded modules
 """
 import inspect
+import collections
 import sciris as sc
 import numpy as np
 import numba as nb
@@ -199,6 +200,48 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **
     return dists
 
 
+def seed_names(sim):
+    """
+    The name that seeds each module's random numbers, by its name: the name given (`name=`, or its key), else its default name, numbered within
+    its kind in the order given (the first `ss.SIR` is `sir`, a second `sir2`), but never the variable it is assigned to, so that renaming a
+    variable doesn't change a run, and scenarios keep common random numbers however their variables are named; giving two modules (e.g. one
+    declared and one written as code) the same name gives them the same random numbers
+    """
+    def default(mod): # For a plain ss.Disease, its states in any order (its default name is their initials in the order declared)
+        if type(mod) is ss.Disease and getattr(mod, 'graph', None) is not None:
+            return 'disease_' + '_'.join(sorted(s.name for s in mod.graph.people_states))
+        return mod.default_name
+
+    names = {}
+    for kind in ss.modules.module_types() + ['modules']:
+        counts = collections.Counter()
+        for mod in (getattr(sim, kind, None) or {}).values():
+            if getattr(mod, '_name_source', 'class') == 'given':
+                names[mod.name] = mod.name
+                continue
+            name = default(mod)
+            counts[name] += 1
+            names[mod.name] = name + (str(counts[name]) if counts[name] > 1 else '')
+    return names
+
+
+def seed_paths(sim, dists):
+    """ The paths of a sim's distributions, which seed them, with each module's name replaced by the one that seeds it (see `seed_names()`) """
+    kinds = ss.modules.module_types() + ['modules']
+    names = seed_names(sim)
+
+    def rename(path):
+        path = list(path)
+        for i,part in enumerate(path):
+            if i and path[i-1] in kinds and part in names: # E.g. ('diseases', 'measles', ...), or ('pars', 'diseases', 'measles', ...)
+                path[i] = names[part]
+            elif isinstance(part, tuple) and part and part[0] in names: # A modifier of a module, e.g. ('measles', 'rel_sus', None)
+                path[i] = (names[part[0]],) + part[1:]
+        return tuple(path)
+
+    return type(dists)({rename(path):dist for path,dist in dists.items()})
+
+
 def make_dist(pars=None, **kwargs):
     """
     Make a distribution from a dictionary
@@ -271,12 +314,13 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
             skip = dict(keys=ss.utils.skipkeys(['module', '_before_init', 'declared']), subclasses=(Dists,) + no_dists()) # The copy of the sim before it was initialized is only for sim.new(); the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
-            dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
+            dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
             skip['subclasses'] += (ss.Module,) # Found on the first round
-            dists += sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
+            dists += sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
+            dists = sc.sc_nested.flatten_traces(seed_paths(sim, dists))
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
         self.dists = dists

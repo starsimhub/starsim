@@ -21,8 +21,7 @@ def compile(args=None, needed=False):
     """
     import starsim as ss
     if getattr(args, 'check', False):
-        status = ss.kernels.compile_status()
-        print(status.summary)
+        status = ss.compile(check=True) # Prints the summary
         sys.exit(0 if status.compiled else 1)
     if choose_rust(args, built=ss.solvers.backends.rust.built()):
         build_rust(again='starsim init compile --rust')
@@ -32,7 +31,7 @@ def compile(args=None, needed=False):
     if needed and ss.solvers.backends.rust.on:
         print('Nothing to compile: the Rust kernels are in use, and are compiled already ("starsim init compile" compiles Numba\'s too)')
         return
-    with ss.options.context(kernels='numba'): # Called for, so Numba's, even if the Rust ones are in use
+    with ss.options.context(backend='numba'): # Called for, so Numba's, even if the Rust ones are in use
         ss.compile()
     return
 
@@ -129,7 +128,7 @@ def init_dev(args):
     build_rust()
 
     print('\nCompiling the Numba kernels, which the tests compare with the Rust ones (a few minutes, once) ...')
-    subprocess.run([sys.executable, '-m', 'starsim', 'init', 'compile'], env=os.environ | dict(STARSIM_KERNELS='numba'), check=True) # A new process, since this one started before the build
+    subprocess.run([sys.executable, '-m', 'starsim', 'init', 'compile'], env=os.environ | dict(STARSIM_BACKEND='numba'), check=True) # A new process, since this one started before the build
 
     print()
     ai.install(args)

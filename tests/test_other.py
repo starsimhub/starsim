@@ -150,7 +150,7 @@ def test_class_body_parts():
         half_life = ss.par(ss.years(2))
         p_reset = ss.par(ss.bernoulli(p=0.1))
         level = ss.FloatArr(default=1.0)
-        reset = ss.BoolArr(result=True)
+        reset = ss.BoolArr()
         noise = ss.normal(0, 1)
         def step(self):
             self.level[:] *= 0.5**(self.t.dt/self.pars.half_life)
@@ -177,7 +177,7 @@ def test_class_body_parts():
     assert vx.waning == ss.years(5) and vx.efficacy == 0.8 and vx.pars.boost == 0.3
     class Anemia(ss.Disease):
         p_onset = ss.par(ss.bernoulli(0.05))
-        anemic = ss.BoolArr(result=True)
+        anemic = ss.BoolArr()
         def step_state(self):
             self.anemic[self.pars.p_onset.filter()] = True
     assert Anemia(p_onset=0.1).graph is None
@@ -252,11 +252,11 @@ class Counter(ss.Module):
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
     assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name
     text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summarize().value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.AgentDisease
-    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summarize().value.sis_infection; data = {'hiv.infection': x}"
+    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summarize().value.sis.infection; data = {'hiv.infection': x}"
     text, changes, todo = migrate_text("df['obs_new_infections']; total_cum_infections = 3")
     assert 'obs_new_infections' in text and 'total_cum_infections' in text and len(todo) == 1 # Not the name of a disease of the file: listed
     text = migrate_text("a = sim.results.new_deaths; b = res.cum_deaths[-1]; c = res['new_deaths']; d = res['cum_deaths']; e = sim.results.hiv.new_deaths; f = results.new_emigrants; g = 'hiv.new_deaths'; h = sim.results.hiv.cum_deaths")[0]
-    assert text == "a = sim.results.died; b = res.died.cum[-1]; c = res['died']; d = res['died'].cum; e = sim.results.hiv.death; f = results.emigrated; g = 'hiv.death'; h = sim.results.hiv.death.cum"
+    assert text == "a = sim.results.death; b = res.death.cum[-1]; c = res['death']; d = res['death'].cum; e = sim.results.hiv.death; f = results.emigration; g = 'hiv.death'; h = sim.results.hiv.death.cum"
     text = migrate_text("a = sim.results.births.new; b = res.deaths.cumulative[-1]; c = sim.results.pregnancy.n_preterm; d = preg.results.neonatal_deaths; msim.plot('births.new')")[0]
     assert text == "a = sim.results.births.birth; b = res.deaths.death.cum[-1]; c = sim.results.pregnancy.preterm; d = preg.results.neonatal_death; msim.plot('births.birth')"
     mine = migrate_text("self.define_results(ss.Result('new_infections'))\nx = self.results.new_infections")
@@ -540,7 +540,7 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
     monkeypatch.setattr(build.subprocess, 'run', lambda *args, **kwargs: None) # The --check after building
     monkeypatch.setattr(ss, 'compile', lambda: done.append('numba'))
     monkeypatch.setattr(sys.stdin, 'isatty', lambda: True, raising=False)
-    with ss.options.context(kernels='auto'), monkeypatch.context() as m: # 'auto', as in a clone without them, even if the suite runs with kernels='rust'; the kernels are restored after the fakes below are undone
+    with ss.options.context(backend='auto'), monkeypatch.context() as m: # 'auto', as in a clone without them, even if the suite runs with kernels='rust'; the kernels are restored after the fakes below are undone
         m.setattr(ss.solvers.backends.rust, 'built', lambda: False)
         m.setattr(ss.solvers.backends.rust, 'on', False)
         for answer, argv, expected in [('', [], 'rust'), ('n', [], 'numba'), ('y', ['--numba'], 'numba'), ('n', ['--rust'], 'rust')]:
@@ -554,25 +554,25 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
 
 
 def test_jax_platform(monkeypatch):
-    """ ss.options.jax chooses JAX's platform, also once JAX has started, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
+    """ ss.options.jax_platform chooses JAX's platform, also once JAX has started, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
     sc.heading('Testing the platform of JAX')
     with pytest.raises(ValueError, match='JAX platform'):
-        ss.options.jax = 3
-    assert ss.options.jax == 'cpu' # The default
-    with ss.options(jax='auto'):
-        assert ss.options.jax == 'auto'
-    assert ss.options.jax == 'cpu'
+        ss.options.jax_platform = 3
+    assert ss.options.jax_platform == 'cpu' # The default
+    with ss.options(jax_platform='auto'):
+        assert ss.options.jax_platform == 'auto'
+    assert ss.options.jax_platform == 'cpu'
 
     import importlib.metadata as md
     pytest.importorskip('jax')
     env = os.environ.get('JAX_PLATFORMS')
-    with ss.options(jax='auto'):
+    with ss.options(jax_platform='auto'):
         jax = ss.gradients.jax() # Started on its own platforms (the CPU in the tests: see conftest.py)
-    with ss.options(jax='cpu'): # Started again, on these
+    with ss.options(jax_platform='cpu'): # Started again, on these
         assert ss.gradients.jax().default_backend() == 'cpu'
         assert os.environ['JAX_PLATFORMS'] == 'cpu'
         assert float(jax.numpy.ones(2).sum()) == 2
-    with ss.options(jax='auto'):
+    with ss.options(jax_platform='auto'):
         ss.gradients.jax() # And back to what it had
     assert os.environ.get('JAX_PLATFORMS') == env
     assert (jax.config.jax_platforms or None) == ss.gradients.original['platforms']
@@ -582,7 +582,7 @@ def test_jax_platform(monkeypatch):
         metadata = {'Name': 'jax_cuda12_plugin'}
     monkeypatch.setattr(md, 'distributions', lambda: list(real()) + [Plugin()])
     monkeypatch.delenv('JAX_PLATFORMS', raising=False)
-    with pytest.warns(RuntimeWarning, match='STARSIM_JAX=cpu'):
+    with pytest.warns(RuntimeWarning, match='STARSIM_JAX_PLATFORM=cpu'):
         ss.gradients.check_plugins()
     monkeypatch.setenv('JAX_PLATFORMS', 'cpu') # Chosen already: nothing to say
     ss.gradients.check_plugins()
@@ -599,7 +599,7 @@ def test_no_numba_cache(tmp_path):
     shutil.copytree(ss.root/'starsim', site/'starsim', ignore=shutil.ignore_patterns('__pycache__', '*.so', 'target', 'library', 'converters'))
     subprocess.run(['chmod', '-R', 'a-w', site, home], check=True)
     try:
-        env = {k:v for k,v in os.environ.items() if k not in ['NUMBA_CACHE_DIR', 'XDG_CACHE_HOME', 'STARSIM_KERNELS']} | dict(HOME=str(home), PYTHONPATH=str(site), TMPDIR=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
+        env = {k:v for k,v in os.environ.items() if k not in ['NUMBA_CACHE_DIR', 'XDG_CACHE_HOME', 'STARSIM_BACKEND']} | dict(HOME=str(home), PYTHONPATH=str(site), TMPDIR=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
         out = subprocess.run([sys.executable, '-c', 'import starsim, numba; print(starsim.__file__, numba.config.CACHE_DIR)'], env=env, capture_output=True, text=True, cwd=tmp_path)
     finally:
         subprocess.run(['chmod', '-R', 'u+w', site, home], check=True) # So that it can be cleaned up

@@ -981,7 +981,7 @@ def flow_terms(graph, engine=None, contacts=None):
 
     out = []
     mocked = getattr(engine.mod.t, 'dt', None) is None
-    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.kernels.convey())
+    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.solvers.backends.kernels.convey())
     for cv in engine.conveyors:
         for i,(a,b) in enumerate(zip(cv.slots[:-1], cv.slots[1:])):
             term = per_step(2 if i == 0 else 1).format(comp_name(a))
@@ -1073,7 +1073,7 @@ def what_modifies(sim, target):
     if not sim.initialized:
         sim.init()
     mod, kind, name = ss.connectors.parse_target(target)
-    modname = mod if isinstance(mod, str) else mod.name
+    modname = ss.utils.own_name(sim.module_list, mod) if isinstance(mod, str) else mod.name # A module by its default name too, e.g. 'sir' for an ss.SIR called measles
     coded = not any(mod.name == modname for mod in sim.declared) and isinstance(sim.diseases.get(modname), ss.Disease)
     if modname in sim.all_networks(): # The contacts of a network
         kind = 'par'
@@ -1217,7 +1217,7 @@ def describe_sim(sim):
         if isinstance(sim.solver, ss.solvers.abm):
             add('Solver', f'{sc.strjoin(declared)}: as agents, each step in Python')
         else:
-            whole = sim._kernel_reason()
+            whole = sim._compiled_reason()
             joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.joint_states)
             add('Solver', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
         tabulated = [mod.name for mod in sim.module_list if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]

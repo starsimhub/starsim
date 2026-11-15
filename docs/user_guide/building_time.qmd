@@ -110,10 +110,10 @@ A bare number is also accepted. The slot says what it is (after `@`, it is a rat
 3. `start` or `stop` given as dates: days.
 4. A typed `dt` (`dt=ss.weeks(1)`), or else a typed `start`, `stop`, or `dur` (`dur=ss.days(50)`).
 5. `start` or `stop` given as years: years.
-6. The typed values of the networks, demographics, and interventions given to the sim, such as the yearly rates of `ss.Births()` or of `ss.birth()` given as `demographics=`. These never decide the unit when anything above does.
+6. The typed values of the networks, demographics, and interventions given to the sim, such as the yearly rates of `ss.birth()` and `ss.death()` given as `demographics=`. These never decide the unit when anything above does.
 7. None of these: time is counted in steps ([below](#time-in-steps)).
 
-So in `S >> I @ 1.9*I` beside `I >> R @ ss.days(8)`, the 1.9 is per day, and adding `ss.birth(S, rate=ss.peryear(0.02))` to the disease, or `ss.Births()` to the sim, leaves it per day. The unit is never guessed from the size of a number, since 0.05 is plausible per day and per year. Nor is how many people a rate of births, deaths, or migration is per: it is per person unless `rate_per=` says otherwise (e.g. `rate_per=1000`; see [Data of your own](populations_people.qmd#data-of-your-own)). `sim.describe()` says where the unit came from, and the sim says so in a note when it came from anything other than the diseases' typed values or dates.
+So in `S >> I @ 1.9*I` beside `I >> R @ ss.days(8)`, the 1.9 is per day, and adding `ss.birth(S, rate=ss.peryear(0.02))` to the disease, or `ss.birth(rate=ss.peryear(0.02))` to the sim's demographics, leaves it per day. The unit is never guessed from the size of a number, since 0.05 is plausible per day and per year. Nor is how many people a rate of births, deaths, or migration is per: it is per person unless `rate_per=` says otherwise (e.g. `rate_per=1000`; see [Data of your own](populations_people.qmd#data-of-your-own)). `sim.describe()` says where the unit came from, and the sim says so in a note when it came from anything other than the diseases' typed values or dates.
 
 When the typed values of rule 2 have different units (days in one disease, years in another, say):
 

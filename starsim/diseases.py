@@ -158,7 +158,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         # Written as code: a disease that is not transmitted
         class Anemia(ss.Disease):
             p_onset = ss.par(ss.bernoulli(0.01))
-            anemic  = ss.BoolArr(label='Anemic', result=True)
+            anemic  = ss.BoolArr(label='Anemic')
 
             def step_state(self):
                 self.anemic[self.pars.p_onset.filter()] = True
@@ -1203,7 +1203,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         return
 
     def record_states(self):
-        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolArr` with `result=True` (see `ss.Module.record_states()`) """
+        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolArr` unless `result=False` (see `ss.Module.record_states()`) """
         self.engine.record_states()
         return
 
@@ -1259,7 +1259,7 @@ class AgentDisease(Disease):
             beta         = ss.par(ss.perday(0.05))
             init_prev    = ss.par(0.01)
             dur_inf      = ss.par(10)
-            recovered    = ss.BoolArr(result=True)
+            recovered    = ss.BoolArr()
             ti_recovered = ss.TimeArr()
 
             def step_state(self):
@@ -1296,8 +1296,8 @@ class AgentDisease(Disease):
         self.update_pars(pars, strains=strains, **kwargs)
         rel = self.__dict__.pop('_rel_given', {})
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible', result=True),
-            ss.BoolArr('infected', label='Infected', result=True),
+            ss.BoolArr('susceptible', default=True, label='Susceptible'),
+            ss.BoolArr('infected', label='Infected'),
             ss.FloatArr('rel_sus', default=rel.get('rel_sus', 1.0), label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=rel.get('rel_trans', 1.0), label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection'),
@@ -1382,7 +1382,7 @@ class AgentDisease(Disease):
         out = super().init_pre(sim)
         unknown = [name for imm in (self.strains.immunity if self.strains is not None else []) for name in imm.names if not isinstance(getattr(self, name, None), ss.BoolArr)]
         if unknown:
-            raise sc.KeyNotFoundError(f'the strains of "{self.name}" are protected by ss.immunity(due_to={unknown[0]!r}), which is not one of its states (a boolean array, e.g. ss.BoolArr("recovered", result=True))')
+            raise sc.KeyNotFoundError(f'the strains of "{self.name}" are protected by ss.immunity(due_to={unknown[0]!r}), which is not one of its states (a boolean array, e.g. ss.BoolArr("recovered"))')
         return out
 
     def init_post(self):
@@ -1402,7 +1402,7 @@ class AgentDisease(Disease):
         return seeds
 
     def init_results(self):
-        """ The counts of the states (one for each `ss.BoolArr` with `result=True`), and the prevalence and new infections """
+        """ The counts of the states (one for each `ss.BoolArr` unless `result=False`), and the prevalence and new infections """
         super().init_results()
         self.define_results(
             ss.Result('prevalence', dtype=float, scale=False, label='Prevalence', kind='ratio'),

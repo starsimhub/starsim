@@ -71,14 +71,12 @@ def main():
         import importlib
         ss, import_time = timed(lambda: importlib.import_module('starsim'))
         import_compiles = len(listener.rows)
-        ss.options(kernels='numba', verbose=0) # Numba's kernels, compiled on first use (not Rust's, nor plain Python)
+        ss.options(backend='numba', verbose=0) # Numba's kernels, compiled on first use (not Rust's, nor plain Python)
 
         def make(stop=3):
             S, I, R = ss.states(3)
             disease = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
-            sim = ss.Sim(disease, total_pop=100, unit='day', stop=stop, solver='ode', verbose=0)
-            sim.jax = False
-            return sim
+            return ss.Sim(disease, total_pop=100, unit='day', stop=stop, solver='ode', verbose=0)
 
         _, cold_time = timed(lambda: ss.compile(verbose=False) if args.full else make().run())
         cold_compiles = len(listener.rows) - import_compiles
@@ -97,7 +95,6 @@ def main():
             ns = dict(__name__='ported')
             exec(compile(args.model_code.read_text(), str(args.model_code), 'exec'), ns)
             sim = ns['sim']
-            sim.jax = False
             _, out['model_init'] = timed(sim.init)
             _, out['model_run'] = timed(sim.run)
             if args.arrays:

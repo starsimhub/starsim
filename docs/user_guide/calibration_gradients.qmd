@@ -9,7 +9,7 @@ authorship:
 
 For a deterministic model, run as an ODE, Starsim can work out the *gradient*: how each result changes as each parameter changes. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step. Gradients make it possible to fit many parameters quickly, to draw from a posterior with the No-U-Turn sampler (NUTS), and to see which parts of the epidemic a parameter affects.
 
-This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`) and a model whose whole run JAX can follow: a rate that calls a Python function, a module written as code, or a movement register rules this out. The fit says why when it can't use gradients, and `ss.solvers.why_not(sim, 'jax')` says so for any sim (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). JAX runs on the CPU unless `ss.options.jax` says otherwise: for these runs, a GPU is several times slower.
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`) and a model whose whole run JAX can follow: a rate that calls a Python function, a module written as code, or a movement register rules this out. The fit says why when it can't use gradients, and `ss.solvers.why_not(sim, 'jax')` says so for any sim (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). JAX runs on the CPU unless `ss.options.jax_platform` says otherwise: for these runs, a GPU is several times slower.
 
 ## The gradient of a result
 

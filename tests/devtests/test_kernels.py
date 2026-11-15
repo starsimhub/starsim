@@ -87,7 +87,7 @@ def run(key, how, **kwargs):
     make, pars = models[key]
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
-        assert sim._kernel_reason() is None
+        assert sim._compiled_reason() is None
     return sim.perf_profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
@@ -126,7 +126,7 @@ def test_stochastic():
     sim = ss.Sim(lognormal, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
     for ti in range(5):
         sim.run_one_step()
-    kn, joint = ss.kernels, sim.joint_states[0]
+    kn, joint = ss.solvers.backends.kernels, sim.joint_states[0]
     p, places = joint.program, np.arange(joint.program.n_places)
     out = sc.obj()
     for how in ['sparse', 'dense']:
@@ -258,9 +258,9 @@ def test_restart():
     # A sim that needs the loop (here, a modifier with a function of the sim: masks once there are more than 10 infectious) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.results.sir.I[sim.ti] > 10)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
-    assert 'masks' in (sim._kernel_reason() or '')
+    assert 'masks' in (sim._compiled_reason() or '')
     assert sim.run().results.sir.I.max() < new[1]
-    assert base.new().init()._kernel_reason() is None
+    assert base.new().init()._compiled_reason() is None
     return msim
 
 
@@ -268,7 +268,7 @@ def test_restart():
 def test_compile():
     sc.heading('Testing that the kernels can be compiled ahead of time')
     ss.compile(verbose=False)
-    assert ss.kernels.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
+    assert ss.solvers.backends.kernels.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
     return
 
 
@@ -282,7 +282,7 @@ def test_numpy_ode():
                 for how in hows:
                     sims = []
                     for ode.mode in ['always', 'never']:
-                        with ss.options.context(kernels='numba'):
+                        with ss.options.context(backend='numba'):
                             sims.append(run(key, how, solver=ss.solvers.ode(integrator=integrator)))
                     diff = largest_diff(*sims)
                     assert diff < 1e-10, f'{key} ({integrator}, {how}): the ODE in NumPy differs from the kernels by {diff:.3g}'

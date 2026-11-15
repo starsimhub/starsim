@@ -139,8 +139,8 @@ cat("Treated:", sum(sim$results$treatment$delivered$values), "\n")
 test = ss.Diagnostic(sensitivity=0.9, specificity=0.98) # The product: what the test does
 drug = ss.Treatment(cure=0.95)
 
-screening = ss.screen(test, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5, name='screening') # The delivery: who gets it, and when
-treatment = ss.treat(drug, when=screening.positive, coverage=0.8, name='treatment')
+screening = ss.screen(test, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5) # The delivery: who gets it, and when
+treatment = ss.treat(drug, when=screening.positive, coverage=0.8)
 
 sim = ss.Sim(sis, interventions=[screening, treatment], **kw)
 sim.run()
@@ -201,7 +201,7 @@ recovery_res  = Ir >> S @ ss.years(1)
 cure          = I  >> S @ 0                 # A rate of 0: only treatment moves people along it
 drug = ss.Treatment(cure={cure: 0.95})
 resistance = ss.Transition(I, Ir, when=drug.failed, p=0.2) # Resistance arises in 20% of failures
-ng = ss.Disease(infection, infection_res, recovery, recovery_res, cure, resistance, init_n=dict(I=500), name='ng') # 500 sensitive infections at the start
+ng = ss.Disease(infection, infection_res, recovery, recovery_res, cure, resistance, init_n=dict(I=500)) # 500 sensitive infections at the start
 
 treatment = ss.treat(drug, start='2005', rate=ss.peryear(0.5)) # Given to the people in the source of cure, I
 sim = ss.Sim(ng, interventions=treatment, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0)

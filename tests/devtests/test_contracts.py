@@ -353,9 +353,9 @@ def test_empty_place():
         return ss.Sim(sir, solver=solver, total_pop=10_000, unit='day', stop=60, verbose=0)
     one = make('ode', places=False).run().results.sir.R.values
     for solver in ['ode', 'jax', 'binomial', 'tau', 'gillespie']:
-        sim = make('ode' if solver == 'jax' else solver).init()
-        sim.jax = solver == 'jax'
-        res = sim.run().results.sir
+        sim = make('ode' if solver == 'jax' else solver)
+        with ss.options.context(backend='jax' if solver == 'jax' else ss.options.backend):
+            res = sim.run().results.sir
         assert np.all(np.isfinite(res.I.values)) and res.I.select(place='b').values.max() == 0, solver
         if solver in ['ode', 'jax']:
             assert np.allclose(res.R.values, one, rtol=1e-9), f'{solver}: an empty place changes the epidemic'

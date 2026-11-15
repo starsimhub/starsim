@@ -42,7 +42,7 @@ This is *frequency-dependent* transmission: what matters is the fraction infecti
 
 **Durations.** `I >> R @ ss.days(8)` gives a duration instead of a rate: 8 days in `I` on average, or a recovery rate of 1/8 per day, exponentially distributed as in the standard SIR model ([Tutorial 3](t3_disease.qmd) shows other distributions).
 
-**The disease.** `ss.Disease` puts the transitions together, with how the outbreak starts. It is named `measles` after its variable, as the transitions (`infection`, `recovery`) are, which names their results.
+**The disease.** `ss.Disease` puts the transitions together, with how the outbreak starts. It is named `measles` after its variable, as the transitions (`infection`, `recovery`) are, which names their results. Everything in Starsim is named this way: after its variable, else by a default for its kind ([Names](../user_guide/building_writing.qmd#names) has the rule).
 
 ## How the outbreak starts
 

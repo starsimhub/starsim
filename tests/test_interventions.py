@@ -205,7 +205,7 @@ def test_state_results_at_start():
     class Program(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_states(ss.BoolArr('never_reached', default=True, result=True))
+            self.define_states(ss.BoolArr('never_reached', default=True))
             self.define_aliases(reached=lambda mod: ~mod.never_reached)
 
         def init_results(self):
@@ -254,7 +254,7 @@ def test_modify_fast_paths():
     fast = make(**dates)
     with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
         slow = make(**dates)
-    assert fast._kernel_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert fast._compiled_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
     assert not np.array_equal(fast.results.sir.I.values, make().results.sir.I.values) # They had an effect
 
     # A step function is worked out where it changes, as a date is
@@ -268,12 +268,12 @@ def test_modify_fast_paths():
     fast = make(when=lambda now: now.day in [1, 15])
     with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
         slow = make(when=lambda now: now.day in [1, 15])
-    assert fast._kernel_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert fast._compiled_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
 
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, rate=ss.peryear(0.5)), require_kernels=True, **kw).run().complete
+    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, rate=ss.peryear(0.5)), require_compiled=True, **kw).run().complete
 
     # An amount or share that varies in time is not taken for a dated one
     series = ss.timeseries({30: 1.0, 100: 0.2})
@@ -283,14 +283,14 @@ def test_modify_fast_paths():
         sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()
         assert sim.diseases.sir.engine.changing_steps(0, 365) is None
 
-    # With require_kernels=True, what would fall back to Python raises an error instead
+    # With require_compiled=True, what would fall back to Python raises an error instead
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), require_kernels=True, **kw)
+    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), require_compiled=True, **kw)
     assert make(when=ss.schedule(start='2026-03-01')).run().complete and make(when=sir.I.n >= 20_000).run().complete
     for mod in [dict(when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
-        with pytest.raises(ss.CapabilityError, match='require_kernels'):
-            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), require_kernels=True, **kw).run()
+        with pytest.raises(ss.CapabilityError, match='require_compiled'):
+            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), require_compiled=True, **kw).run()
 
     # A comparison of counts is part of the rate: the same as writing it there
     beta = ss.par(0.3, name='beta')
@@ -298,12 +298,12 @@ def test_modify_fast_paths():
     sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, when=sir.I.n >= 20_000), **kw).run()
     beta2 = ss.par(0.3, name='beta')
     written = ss.Sim(ss.Disease(infection=S >> I @ (beta2*(1 - 0.25*(I.n >= 20_000)))*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir'), **kw).run()
-    assert sim._kernel_reason() is None and sim.interventions()[0].inlined
+    assert sim._compiled_reason() is None and sim.interventions()[0].inlined
     assert np.allclose(sim.results.sir.I.values, written.results.sir.I.values, rtol=1e-12)
 
     # What needs memory is applied each step, and the other sim from the same disease is unchanged
     held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
-    assert not held.interventions()[0].inlined and held._kernel_reason() is not None
+    assert not held.interventions()[0].inlined and held._compiled_reason() is not None
     assert ss.Sim(sir, **kw).run().results.sir.I.values.max() > 2.9e5
     return sim
 

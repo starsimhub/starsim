@@ -689,13 +689,13 @@ class CompartmentalDelivery(sc.prettyobj):
         product = d.product
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d._routine or (d._in_rounds and d.trigger is None)
-        watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
+        watched = d.name in [ss.utils.own_name(sim.module_list, ss.conditions.modname(leaf.args[0])) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
         fixed = d.coverage is None or sc.isnumber(d.coverage) or isinstance(d.coverage, ss.by)
         typed = d.rate is None or (isinstance(d.rate, ss.TimePar) and not d._in_rounds) # A rate among those eligible, the same fraction at each step
         static = ss.conditions.is_static(d.eligible, sim) and fixed and typed
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Event._skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
-        return moves and scheduled and static and not limited and d.when is None and not watched and not past
+        return moves and scheduled and static and not limited and d.when is None and d.or_where is None and not watched and not past
 
     def plain_move(self):
         """ Whether a move between states (`move=S >> I`) keeps everyone in their group, so the kernels can take it: no strain to arrive with, no record of who was offered it, and states of the same dimensions """
@@ -707,7 +707,7 @@ class CompartmentalDelivery(sc.prettyobj):
 
     def shifts(self):
         """
-        The delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the fraction of the people in each state and group
+        The delivery as the kernels take it (see `ss.solvers.backends.kernels.Shifts`): the steps it happens on; the fraction of the people in each state and group
         who are eligible, and of those, who are reached; the group that each group's people move to if reached, and if not; and for a move
         between states, the fraction of those reached who land in each compartment (by compartment and group; otherwise all zero)
         """

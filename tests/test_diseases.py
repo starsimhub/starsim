@@ -37,7 +37,7 @@ def test_sir():
     if do_plot:
         res = sim.results
         plt.figure()
-        plt.stackplot(sim.timevec, res.sir.S, res.sir.I, res.sir.R, res.died.cum)
+        plt.stackplot(sim.timevec, res.sir.S, res.sir.I, res.sir.R, res.death.cum)
         plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
         plt.title('SIR')
 
@@ -75,7 +75,7 @@ def test_sir_epi():
         key = 'networks' if par == 'n_contacts' else 'diseases'
         s0, s1 = [ss.Sim(sc.mergedicts(sc.dcp(base_pars), {key: sc.mergedicts(base_pars[key], {par: val})}), label=f'{par} {val}').run() for val in [lo, hi]]
         if par == 'p_death':
-            v0, v1 = s0.results.died.cum[-1], s1.results.died.cum[-1]
+            v0, v1 = s0.results.death.cum[-1], s1.results.death.cum[-1]
         else:
             prev = [s.results.sir.prevalence for s in [s0, s1]]
             v0, v1 = [p[1] if par == 'init_prev' else p.max() if par in ['beta', 'n_contacts'] else p[-1] for p in prev] # The peak for what speeds the epidemic up, which may have burned out by the end
@@ -125,7 +125,7 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('isolated', label='Isolated', result=True),
+                ss.BoolArr('isolated', label='Isolated'),
                 reset = 'infectious', # Remove the inherited string alias before replacing it
                 infectious = lambda self: self.infected & ~self.isolated, # Isolated agents don't transmit
             )
@@ -159,7 +159,7 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('symptomatic', label='Symptomatic', result=True),
+                ss.BoolArr('symptomatic', label='Symptomatic'),
                 asymptomatic = lambda self: self.infected & ~self.symptomatic,
                 ti_onset = 'ti_infected',
             )
@@ -177,8 +177,8 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('infectious', label='Infectious', result=True), # Replaces the inherited alias
-                ss.BoolArr('infected', label='Redefined', result=True), # Replaces the inherited state
+                ss.BoolArr('infectious', label='Infectious'), # Replaces the inherited alias
+                ss.BoolArr('infected', label='Redefined'), # Replaces the inherited state
                 overwrite = True,
             )
             return
@@ -250,7 +250,7 @@ def test_ncd():
     assert ncd.results.affected.label == 'Affected'
     if do_plot:
         plt.figure()
-        plt.stackplot(sim.timevec, ncd.results.not_at_risk, ncd.results.at_risk - ncd.results.affected, ncd.results.affected, sim.results.died.cum)
+        plt.stackplot(sim.timevec, ncd.results.not_at_risk, ncd.results.at_risk - ncd.results.affected, ncd.results.affected, sim.results.death.cum)
         plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
         plt.title('NCD')
 
@@ -260,7 +260,7 @@ def test_ncd():
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
             self.update_pars(**kwargs)
-            self.define_states(ss.BoolArr('anemic', result=True))
+            self.define_states(ss.BoolArr('anemic'))
 
         def step_state(self):
             self.anemic[self.pars.p_onset.filter()] = True
@@ -456,7 +456,7 @@ def test_same_transmission():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolArr('recovered', result=True), ss.TimeArr('ti_recovered'))
+            self.define_states(ss.BoolArr('recovered'), ss.TimeArr('ti_recovered'))
             self.update_pars(**kwargs)
         def step_state(self):
             done = (self.infected & self.ti_recovered.due()).uids # At the start of the step after dur_inf, as a declared dwell time ends
@@ -471,7 +471,7 @@ def test_same_transmission():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_pars(beta=ss.perday(0.1), dur_inf=10)
-            self.define_states(ss.BoolArr('S', default=True, result=True), ss.BoolArr('I', result=True), ss.BoolArr('R', result=True), ss.TimeArr('ti_recovered'),
+            self.define_states(ss.BoolArr('S', default=True), ss.BoolArr('I'), ss.BoolArr('R'), ss.TimeArr('ti_recovered'),
                                ss.FloatArr('rel_sus', default=1.0), ss.FloatArr('rel_trans', default=1.0))
             self.trans_rng = ss.multi_random('source', 'target')
         def init_results(self):
@@ -521,7 +521,7 @@ def test_same_strains():
         def __init__(self, seed_strain, imm=None, **kwargs):
             super().__init__(strains=strains(imm and 'recovered'))
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolArr('recovered', result=True), ss.TimeArr('ti_recovered'))
+            self.define_states(ss.BoolArr('recovered'), ss.TimeArr('ti_recovered'))
             self.seed_strain = seed_strain # The strain of each seed, as the declared one gives them
             self.update_pars(**kwargs)
         def step_state(self):
@@ -571,7 +571,7 @@ def test_coded_strains():
         def __init__(self, strains=None, **kwargs):
             super().__init__(strains=strains)
             self.define_pars(beta=ss.perday(0.08), dur_inf=8, dur_imm=30, init_prev=ss.bernoulli(0.02))
-            self.define_states(ss.BoolArr('recovered', result=True), ss.FloatArr('ti_recovered'), ss.FloatArr('ti_waned'))
+            self.define_states(ss.BoolArr('recovered'), ss.FloatArr('ti_recovered'), ss.FloatArr('ti_waned'))
             self.update_pars(**kwargs)
         def step_state(self):
             done = (self.infected & (self.ti_recovered <= self.ti)).uids
@@ -711,7 +711,7 @@ def test_code_seams():
     S, I = ss.states('S I')
     sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.years(1), ss.death(rate=ss.peryear(0.02)), init=dict(I=0.05), name='sis')
     ode = ss.Sim(sis, total_pop=1000, start=2000, stop=2004, verbose=0).run() # The people results agents give the sim
-    assert ode.results.alive[0] == 1000 and np.isclose((ode.diseases.sis.S | ode.diseases.sis.I).n, 1000 - ode.results.died.cum[-1]) # The people after the run are the start less every step's deaths
+    assert ode.results.alive[0] == 1000 and np.isclose((ode.diseases.sis.S | ode.diseases.sis.I).n, 1000 - ode.results.death.cum[-1]) # The people after the run are the start less every step's deaths
     return sim
 
 

@@ -40,7 +40,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.2*I        # β = 0.2 per day
 recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average: R0 = 2
-sir = ss.Disease(infection, recovery, init_n=dict(I=1), name='sir') # One imported case
+sir = ss.Disease(infection, recovery, init_n=dict(I=1)) # One imported case
 
 sim = ss.Sim(sir, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
 msim = ss.parallel(sim, n_runs=100, until=sir.I.n + sir.R.n >= 100)
@@ -55,7 +55,7 @@ print(f'Fraction of introductions that died out: {b.p_extinct:.2f} (95% interval
 For chains of transmission, run the same model as agents. A branching process of agents makes agents only for the people infected, so a city of 10 million costs no more than a village: here, 100 imported cases, followed for 60 days:
 
 ```{python}
-sir = ss.Disease(infection, recovery, init_n=dict(I=100), name='sir') # 100 imported cases, for enough chains to count
+sir = ss.Disease(infection, recovery, init_n=dict(I=100)) # 100 imported cases, for enough chains to count
 sim = ss.Sim(sir, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
 sim.run()
 b = sim.branching
@@ -76,7 +76,7 @@ k = 0.2
 offspring = {}
 for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.gamma(shape=k, scale=1/k)))]: # Each person's infectiousness, with mean 1
     S, I, R = ss.states('S I R')
-    sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='sars', **extra)
+    sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), **extra)
     sim = ss.Sim(sars, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
     msim = ss.parallel(sim, n_runs=8)
     b = msim.branching
@@ -99,7 +99,7 @@ plt.legend();
 ```{python}
 S, E, I, R = ss.states('S E I R')
 latent = ss.lognormal(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
-seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
+seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10))
 solvers = {'Renewal equation (exact dwells)': ss.solvers.ode(dwells='exact'), 'Erlang stages (ode)': 'ode'}
 sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}
 ss.parallel(sims).plot('seir.I')

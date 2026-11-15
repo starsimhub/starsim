@@ -76,7 +76,7 @@ A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a
 - its **timeline**, `mod.t` (an `ss.Timeline`), which is the sim's unless the module is given a `dt`, `start` or `stop` of its own;
 - its **distributions**, each with a random number stream of its own, found by searching the module when the sim is initialized ([Random numbers](mechanics_random.qmd#how-it-works));
 - its **states**, arrays with one value per agent (`ss.FloatArr`, `ss.BoolArr`, ..., in its class body or given with `define_states()`), which the people grow and shrink with the population;
-- its **results**, `mod.results`, one `ss.Result` per quantity per time point; every `ss.BoolArr` with `result=True` gets a count of the same name without being declared;
+- its **results**, `mod.results`, one `ss.Result` per quantity per time point; every `ss.BoolArr` (unless `result=False`) gets a count of the same name without being declared;
 - a link to the sim, `mod.sim`, set when the sim is initialized.
 
 A few attributes are locked (`pars`, `t`, `sim`, `dists`, `results`, and each state), so that `self.I = ...` in a step raises an error instead of quietly replacing the array: the error suggests `self.I[:] = ...`.
@@ -95,7 +95,7 @@ What kind of module it is decides only where in each step it is called, and wher
 
 A module can be more than one kind: `ss.Pregnancy` is both a demographic module and a declared disease, so it adds people and has states and transitions; a delivery such as `ss.screen` is an intervention that is also a source of events (the people it reached, `screening`, and its outcomes, `screening.positive`), which other deliveries can be triggered by. A product (`ss.Vaccine`) is a module too, but it has no step of its own: it is held by the delivery that gives it, and listed by `sim.products()`.
 
-Modules can be given to a sim by keyword (`diseases=`, `networks=`, ...), as positional arguments, which the sim sorts by kind (`simpars.py`), or by name as strings (`diseases='sis'`), which `ss.modules.find_modules()` looks up among Starsim's classes and any registered with `ss.register_modules()`. A module given no name is named after its class in lower case, and numbered if two would clash (`randomnet`, `randomnet_1`).
+Modules can be given to a sim by keyword (`diseases=`, `networks=`, ...), as positional arguments, which the sim sorts by kind (`simpars.py`), or by name as strings (`diseases='sis'`), which `ss.modules.find_modules()` looks up among Starsim's classes and any registered with `ss.register_modules()`. A module given no name is named after the variable it was assigned to, else after its class in lower case, and numbered if two would clash (`randomnet`, `randomnet_1`); `ss.Sim._name_modules()` does this, and an `ss.ndict` also finds a module by its default name ([Names](building_writing.qmd#names)).
 
 ```{python}
 import starsim as ss
@@ -193,10 +193,10 @@ class Exposure(ss.Module):
         infectious = self.sim.diseases.sir.I.uids
         self.days_infectious[infectious] += 1
 
-for mod in [None, Alarm(), Exposure()]:
-    sim = ss.Sim(make_sir(), modules=mod, unit='day', stop=ss.days(100), verbose=0)
+for cls in [None, Alarm, Exposure]:
+    sim = ss.Sim(make_sir(), modules=cls() if cls else None, unit='day', stop=ss.days(100), verbose=0) # Each module named after its class
     sim.init()
-    label = type(mod).__name__ if mod else 'No module'
+    label = cls.__name__ if cls else 'No module'
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')
 ```
 

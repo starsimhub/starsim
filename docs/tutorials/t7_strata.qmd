@@ -38,7 +38,7 @@ def make_measles():
     infection   = S >> E @ 0.14*I       # β = 0.14 per contact per day
     progression = E >> I @ ss.days(10)  # Latent for 10 days on average
     recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
-    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
     return measles
 
@@ -134,7 +134,25 @@ sim$results$measles$infection$by("vaccinated")$plot()
 ```
 :::
 
-The run prints an R0 of about 2.3, not 16. R0 is still for a population in which nobody has left `S`, as in [T2](t2_model.qmd), but it counts each person in `S` with the susceptibility they have, and here the vaccinated are in `S`, at 3% of it. So protection written as a level of `S` (with `rel_sus`) lowers R0 itself, while immunity written as starting in `R` (as in T2) leaves R0 at 16 and lowers only the R at the start. Who is infected?
+The run prints an R0 of about 2.3, though measles has an R0 of about 16. Compare the same model with nobody vaccinated, which prints its R0 when it is initialized, and the reproduction number at the start of this run (`Rt()` gives it at each time point):
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+unvaccinated = ss.Sim(make_measles(), networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), **settings).init() # Prints its R0
+print('R at the start, with vaccination:', round(sim.diseases.measles.Rt().values[0], 1))
+```
+
+## R
+
+```r
+unvaccinated <- make_sim(make_measles(), networks = contacts(ages = c(0, 15, 65), matrix = age_contacts))$init() # Prints its R0
+cat("R at the start, with vaccination:", round(sim$diseases$measles$Rt()$values[1], 1), "\n")
+```
+:::
+
+R0 is for a population in which nobody has left `S`, as in [T2](t2_model.qmd), but it counts each person in `S` with the susceptibility they have. The vaccinated are in `S`, at 3% of it, so here R0 is the same as the R at the start, 2.3: protection written as a level of `S` (with `rel_sus`) lowers R0 itself, while immunity written as starting in `R` (as in T2) leaves R0 at 16 and lowers only the R at the start. Who is infected?
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -337,7 +355,6 @@ restored    = A >> R @ ss.years(2)  # Immune memory of other infections restored
 measles = ss.Disease(infection, progression, recovery, restored,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),
-    name = 'measles',
 )
 measles.stratify(age=ages)
 

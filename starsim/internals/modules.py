@@ -288,7 +288,7 @@ class Module(Base):
     does not have); its arrays are defined with `define_states()`.
 
     Args:
-        name (str): a short, key-like name for the module (e.g. "randomnet")
+        name (str): a short, key-like name for the module (e.g. "randomnet"); if not given, the variable it is assigned to (`net = ss.RandomNet()` is "net"), else its `default_name` (see `ss.Sim._name_modules()`)
         label (str): the full, human-readable name for the module (e.g. "Random network")
         pars (dict): values of the parameters declared in its class body, as an alternative to giving them by keyword
         kwargs (dict): values of those parameters, by name; or passed to `ss.Timeline()` (e.g. start, stop, dt)
@@ -333,10 +333,10 @@ class Module(Base):
 
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
-        self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
+        self._name_source = 'class' # Where its name came from: 'class' (the default, see default_name), 'variable' (the variable it was assigned to; see ss.Sim._name_modules()), or 'given' (name=, or a key)
+        self._name_where = None # For a name from a variable, the function whose variable it is (see name_origin())
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
-        named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Event, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
-        self._assigned = ss.utils.assigned_name(self) if named else None # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...)
+        self._assigned, self._assigned_in = ss.utils.assigned_name(self) # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...), and the function it is in
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         class_pars, class_arrs = class_parts(type(self))
         if isinstance(self, ss.Disease) and not isinstance(self, ss.AgentDisease): # A disease's parameters are part of what it declares, if it declares states and transitions: see ss.Disease.build_graph()
@@ -528,7 +528,7 @@ class Module(Base):
         Set metadata for the module
 
         Args:
-            name (str): the name of the module; if None, the lowercase name of its class
+            name (str): the name of the module; if None, the one it has, else the lowercase name of its class
             label (str): the label of the module; if None, its name
         """
         # Validation
@@ -543,12 +543,48 @@ class Module(Base):
         cls_lower = cls_name.lower()
         old_name = getattr(self, 'name', None)
         self.name = self._reconcile('name', name, cls_lower)
-        if name is not None or self.name != cls_lower: # The user chose the name, so never rename it
-            self._default_name = False
+        if name is not None or (self.name != cls_lower and getattr(self, '_name_source', 'class') == 'class'): # The user (or the class itself, as ss.Pregnancy does) chose the name, so never rename it
+            self._name_source = 'given'
         default_label = self.name if self.name != cls_lower else cls_name
         if label is None and getattr(self, 'label', None) in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
             label = default_label
         self.label = self._reconcile('label', label, default_label)
+        return
+
+    @property
+    def default_name(self):
+        """
+        The name the module has if it is not given one and is not assigned to a variable: the lower-case name of its class (`'sir'`
+        for `ss.SIR`, `'randomnet'` for `ss.RandomNet`), or for a plain `ss.Disease`, the initials of its states (`'sir'`)
+
+        A module can always be found by this name too, if no other module of its kind has it: `sim.diseases.sir` and `sim.results.sir`
+        find the only `ss.SIR` even if it is called `measles` (see `ss.ndict`).
+        """
+        if type(self) is ss.Disease and getattr(self, 'graph', None) is not None:
+            return ''.join(s.name[0].lower() for s in self.graph.people_states) or 'disease'
+        return type(self).__name__.lower()
+
+    def name_origin(self):
+        """ Where the module's name came from, for messages: e.g. 'named from the variable `m` in `make_sim()`', or 'the default for ss.SIR' """
+        source = getattr(self, '_name_source', 'class')
+        if source == 'variable':
+            where = self._name_where
+            return f'named from the variable `{self._assigned or self.name}`' + (f' in `{where}()`' if where and not where.startswith('<') else '')
+        elif source == 'given':
+            return 'given'
+        cls = type(self)
+        if cls is ss.Disease:
+            return 'the default, from its states'
+        prefix = 'ss.' if cls.__module__.startswith('starsim.') and not cls.__module__.startswith('starsim.library') else ''
+        return f'the default for {prefix}{cls.__name__}'
+
+    def _set_name(self, name, source='given', where=None):
+        """ Rename the module, keeping its label if one was given (the user gives `name=` instead); `source` and `where` say where the name came from (see `name_origin()`) """
+        self.set_metadata(name=name)
+        self._name_source = source
+        self._name_where = where
+        if isinstance(getattr(self, 'results', None), ss.Results):
+            self.results.setattribute('_module', self.label)
         return
 
     @classmethod
@@ -779,8 +815,8 @@ class Module(Base):
 
         Examples:
             ```python
-            self.define_states(ss.BoolArr('exposed', result=True), reset='ti_infected') # Add a state and remove an inherited one
-            self.define_states(ss.BoolArr('infectious', result=True), overwrite=True) # Replace an inherited state or alias
+            self.define_states(ss.BoolArr('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolArr('infectious'), overwrite=True) # Replace an inherited state or alias
             ```
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
@@ -793,12 +829,15 @@ class Module(Base):
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
-                state = ss.BoolArr(*arg, result=True)
+                state = ss.BoolArr(*arg)
             elif isinstance(arg, dict):
-                state = ss.BoolArr(**arg, result=True)
+                state = ss.BoolArr(**arg)
             else:
                 state = arg
             assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
+            if self.pre_initialized: # The module's arrays were added to the people (with their results) in init_pre(), so a later one would never have a value per agent
+                errormsg = f'"{state.name}" is defined after "{self.name}" was added to the sim (e.g. in init_post()), so the people would not have it: define arrays in __init__() (or in the class body) instead'
+                raise RuntimeError(errormsg)
 
             # Add the state to the module, replacing any existing state or alias of the same
             # name if overwrite=True (removing it first, so it isn't listed or counted twice)
@@ -845,7 +884,7 @@ class Module(Base):
         (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
         module-level function, or a property, if plain pickling is required.
 
-        A callable alias also generates an automatic result, in the same way an `ss.BoolArr(result=True)`
+        A callable alias also generates an automatic result, in the same way an `ss.BoolArr`
         does: an alias named `infected` produces the result `infected`. A string alias does not,
         since the state it points to is already counted under its own name.
 
@@ -857,7 +896,7 @@ class Module(Base):
             ```python
             self.define_aliases(infectious='infected') # Everyone infected is infectious
             self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
-            self.define_states(ss.BoolArr('exposed', result=True), infectious='infected') # Aliases can also be defined alongside states
+            self.define_states(ss.BoolArr('exposed'), infectious='infected') # Aliases can also be defined alongside states
             ```
         """
         for key in kwargs:
@@ -966,6 +1005,8 @@ class Module(Base):
             elif isinstance(sim.pars[self.name], ss.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
                 sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
+            self.results.setattribute('_default', self.default_name) # So that sim.results.sir finds them by the default name too
+            self.results.setattribute('_origin', self.name_origin())
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
             self.define_results(*self._early_results)
@@ -1012,7 +1053,7 @@ class Module(Base):
         Initialize results output; called during `init_pre()`
 
         By default, modules all report on counts for any explicitly defined "States", e.g. if
-        a disease contains an `ss.BoolArr('susceptible', result=True)` it will automatically contain a
+        a disease contains an `ss.BoolArr('susceptible')` it will automatically contain a
         Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
         generate results, leave out `result=True`.
         """
@@ -1083,7 +1124,7 @@ class Module(Base):
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.BoolArr` with `result=True`) that were added
+        List of "automatic" states with boolean type (`ss.BoolArr` unless `result=False`) that were added
         via `define_states()`
 
         For diseases, these states typically represent attributes like 'susceptible',
@@ -1100,7 +1141,7 @@ class Module(Base):
 
         Unlike a string alias, which points at a state that is already counted under its
         own name, a derived state has no state object of its own, so it generates an
-        automatic result (e.g. `infected`) in the same way an `ss.BoolArr(result=True)` does.
+        automatic result (e.g. `infected`) in the same way an `ss.BoolArr` does.
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
@@ -1180,7 +1221,7 @@ class Module(Base):
         in the step (a flow, or one that needs a flow) goes in `record_events()` instead.
 
         Args:
-            names (list): the states to count (default: every `ss.BoolArr` with `result=True`, and derived state)
+            names (list): the states to count (default: every `ss.BoolArr` unless `result=False`, and derived state)
         """
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:

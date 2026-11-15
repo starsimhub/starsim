@@ -998,7 +998,7 @@ class TimeArr(FloatArr):
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
 
         # In a disease written as code
-        self.define_states(ss.BoolArr('exposed', result=True), ss.TimeArr('ti_infectious'))
+        self.define_states(ss.BoolArr('exposed'), ss.TimeArr('ti_infectious'))
         self.ti_infectious[uids] = self.ti + dur # In steps
         mask = self.exposed & self.ti_infectious.due() # Those whose time has come
         ```
@@ -1104,7 +1104,7 @@ class Unkept(BaseArr):
 
     def unkept(self):
         """ The error for reading it """
-        errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
+        errormsg = (f'{self.mod.name}.{self.name} is not kept, since the solver does not need it (to save memory).\n'
                     f'     Declare the state with ss.State(keep_time=True) to keep it, or make the sim with ss.Sim(..., keep_times=True) to keep the time of entering every state.')
         return AttributeError(errormsg)
 
@@ -1249,17 +1249,18 @@ class BoolArr(Arr):
     """
     Subclass of `ss.Arr` for booleans: a value of true or false for each agent
 
-    With `result=True`, the number of people for whom it is true is recorded as a result of the
-    module of the same name (e.g. a state named "susceptible" makes a result "susceptible"); people's
-    `alive` and `female`, and the states of a declared disease run as agents, are such arrays. Without it
-    (the default), it is a flag for the module's own use (e.g. `disease.has_immunity`).
+    By default, the number of people for whom it is true is recorded as a result of its module, of the
+    same name (e.g. a state named "susceptible" makes a result "susceptible"); people's `alive` and
+    `female`, and the states of a declared disease run as agents, are such arrays. With `result=False`,
+    it is a flag for the module's own use (e.g. `disease.has_immunity`), with no result; an array with
+    several columns (`columns=`) needs it.
 
     Not to be confused with `ss.State`, a state of a declared model (a compartment), which people move
     between by its transitions; as agents, each `ss.State` is kept as one of these arrays.
 
     Args:
         name (str): the name of the array
-        result (bool): whether the number of people for whom it is true is recorded as a result (a 1D array only)
+        result (bool): whether the number of people for whom it is true is recorded as a result (default true; false for an array with several columns)
         kwargs (dict): passed to `ss.Arr`
 
     Examples:
@@ -1270,17 +1271,18 @@ class BoolArr(Arr):
         infected.count()  # Returns 3
         infected.uids     # Returns ss.uids([0, 2, 4])
 
-        # In a module, with a result of the number vaccinated
+        # In a module: a result of the number vaccinated, and a flag with no result
         class Vaccinate(ss.Intervention):
-            vaccinated = ss.BoolArr(result=True)
+            vaccinated = ss.BoolArr()
+            reminded = ss.BoolArr(result=False)
         ```
     """
     result = False # Whether the number for whom it is true is a result of its module: see Module.define_states()
     watch = None # What keeps count of the agents in it (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
 
-    def __init__(self, name=None, *, result=False, **kwargs): # No good NaN equivalent for bool arrays
+    def __init__(self, name=None, *, result=True, **kwargs): # No good NaN equivalent for bool arrays
         if result and kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
-            errormsg = f'BoolArr "{name}" cannot be 2D with result=True, since its result is one number per step; leave out result=True for a 2D array'
+            errormsg = f'BoolArr "{name}" has several columns, so it cannot make a result, which is one number per step; give result=False, e.g. ss.BoolArr("{name}", columns=..., result=False)'
             raise ValueError(errormsg)
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         self.result = result

@@ -339,12 +339,18 @@ class Stepping:
             table.carry = due[~placed] # Anyone due who is in no state does not die by it yet, and is due again next step
         return
 
+    def cause_of(self, tr):
+        """ What the people who die by a transition die of: the module, or for deaths declared for the population (`ss.Sim(demographics=ss.death(...))`), the transition's own name (e.g. "deaths"), as `ss.Deaths` gives its module's """
+        return tr.name if tr.of_population else self.mod
+
     def uncount_deaths(self):
         """ Take out of this step's death flows anyone who died of something else, when another module requested their death in the same step too (see `People.request_death()`) """
         died, self._died = getattr(self, '_died', []), []
         people = self.sim.people
-        mine = people.causes.index(self.mod.name) if self.mod.name in people.causes else -1
         for tr,srcs,uidlist in died:
+            cause = self.cause_of(tr)
+            cause = cause.name if isinstance(cause, ss.Module) else cause
+            mine = people.causes.index(cause) if cause in people.causes else -1
             for src,uids in zip(srcs, uidlist):
                 other = uids[people.cause_of_death.raw[uids] != mine]
                 if len(other):
@@ -403,6 +409,11 @@ class Stepping:
                         of.append(np.full(n, c))
             levels = {dim:cells[np.concatenate(of), j] for j,dim in enumerate(dims) if dim != d} if of else None
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
+            if getattr(tr, 'mother_ages', None) is not None and not tr.migration and len(new):
+                self.give_mothers(tr, new)
+                sim.people.born(new)
+            elif not tr.migration: # Births with no parents, counted as born() counts those with
+                sim.people.count_births(new)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new): # An event, e.g. when=measles.births, as for births driven by a flow (see step_per())
@@ -413,6 +424,29 @@ class Stepping:
                 self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
             if sim.groups.n_groups > 1:
                 self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
+        return
+
+    def give_mothers(self, tr, new):
+        """ A mother for each child born at a crude rate (`ss.birth(rate=)`): a woman alive of the ages it gives (`min_age` to `max_age`), in the child's place if the model has places, chosen at random as `ss.Births` chooses them; none if there is no such woman """
+        sim = self.sim
+        ppl = sim.people
+        lo, hi = tr.mother_ages
+        women = ss.solvers.backends.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, lo, hi).view(ss.uids)
+        women = women[~np.isin(women, new)]
+        if not len(women):
+            return
+        u = self.draw(f'mother_{tr.name}', new)
+        d = sim.mixing.space
+        if d is None:
+            ppl.parent[new] = women[np.minimum((u*len(women)).astype(int), len(women) - 1)]
+            return
+        level = sim.groups.level_raw(d)
+        places, kids = level[women], level[new]
+        for place in np.unique(kids):
+            here = women[places == place]
+            mine = kids == place
+            if len(here):
+                ppl.parent[new[mine]] = here[np.minimum((u[mine]*len(here)).astype(int), len(here) - 1)]
         return
 
     def transfer_uids(self, name, tf):

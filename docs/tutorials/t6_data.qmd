@@ -375,7 +375,7 @@ Over decades, children are born susceptible, which is what makes measles come ba
 ## Python
 
 ```{python}
-measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
+measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # The made-up town's age groups
 demographics = [
     ss.birth(rate=ss.peryear(0.03)), # 30 births a year per 1,000 people
@@ -414,7 +414,7 @@ The birth and death rates are per year and β per day, so `unit='day'` says whic
 
 Without births, there is one outbreak, and then measles is gone. With births, smaller outbreaks follow a year or two apart: the classic pattern of measles where too few children are vaccinated. In the troughs, only a handful of people are infectious, and in reality measles would often die out; an ODE can't show this, but a stochastic run can ([Solvers and backends](../user_guide/running_solvers.qmd#fade-out-between-epidemics)).
 
-Real birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN's for 187 countries and territories: `ss.population('Nigeria')` gives the ages, sex ratio, and size of Nigeria's population in the start year, `ss.Births(birth_rate='Nigeria')` its births, and `ss.Deaths(death_rate='Nigeria')` its deaths by year, age, and sex. [People and demographics](../user_guide/populations_people.qmd#rates-from-data) shows how to check such a model against the UN's estimates.
+Real birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN's for 187 countries and territories: `ss.population('Nigeria')` gives the ages, sex ratio, and size of Nigeria's population in the start year, `ss.birth(rate='Nigeria')` its births, and `ss.death(rate='Nigeria')` its deaths by year, age, and sex. [People and demographics](../user_guide/populations_people.qmd#rates-from-data) shows how to check such a model against the UN's estimates.
 
 ## Exercises
 
@@ -432,5 +432,5 @@ Real birth and death rates change from year to year, and death rates differ by a
 - [Stan: Bayesian workflow for disease transmission modeling](https://mc-stan.org/learn-stan/case-studies/boarding_school_case_study.html): fitting an SIR model to an outbreak, with checks of the fit and of its identifiability
 - [epydemix: Calibration of epidemic models to data](https://epydemix.readthedocs.io/en/latest/tutorials/04_Model_Calibration_part1.html): fitting a compartmental model to case data by approximate Bayesian computation
 - [Prem et al. (2021): Projecting contact matrices in 177 geographical regions](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009098): the source of `ss.contacts('Kenya')`
-- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.population()`, `ss.Births()`, and `ss.Deaths()`
+- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.population()`, `ss.birth()`, and `ss.death()`
 

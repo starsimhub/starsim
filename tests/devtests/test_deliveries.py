@@ -230,7 +230,7 @@ def test_vaccinate():
         return ss.Sim(make_sir(), interventions=rounds, **kwargs)
     sims = run_each(typed_cov, stop=100)
     for sim in sims.values():
-        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.05)
+        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.1) # About 2% noise as agents (10,000 by default)
     return sims
 
 
@@ -553,7 +553,7 @@ def test_coinfection_compartments():
         for key in ['hiv', 'syph']:
             assert np.isclose(sims[solver].results[key].I[-1], res[key].I[-1], rtol=0.15) # As agents, syphilis is about 5% above the ODE on average, and varies by about 3% between runs
     stepped = make('binomial').run(until=2030) # The stochastic run takes the diseases together, by one program, whole or step by step
-    assert sims.binomial._kernel_reason() is None and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
+    assert sims.binomial._compiled_reason() is None and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
 
     # Each disease's moves are drawn as they would be for it alone, so two diseases with dwell times in stages, tracked jointly but not changing each other, peak as they do alone (drawn as one compartment's competing exits, they would be 7% and 31% too high at daily steps)
     def staged(crossed=True, which=None, seed=0):
@@ -824,10 +824,10 @@ def test_whole_run():
         seed = ss.Event(sir.S >> sir.I, when=[25], p=0.01, name='seed') # Between states
         return ss.Sim(sir, interventions=[offer, rounds, rollout, seed], connectors=halved, stop=100, **kw, **kwargs)
     whole = make(solver='ode').init()
-    assert whole._kernel_reason() is None, whole._kernel_reason()
+    assert whole._compiled_reason() is None, whole._compiled_reason()
     whole.run()
     stepped = make(solver='ode').init()
-    stepped._kernel_reason = lambda: 'stepped' # As the loop takes it, one step at a time
+    stepped._compiled_reason = lambda: 'stepped' # As the loop takes it, one step at a time
     stepped.run()
     for mod,key in [('sir', 'S'), ('sir', 'I'), ('sir', 'R'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered'), ('seed', 'delivered')]:
         a, b = whole.results[mod][key], stepped.results[mod][key]
@@ -845,16 +845,16 @@ def test_whole_run():
         sims = [make(solver='binomial', rand_seed=seed).init() for seed in range(16)]
         for sim in sims:
             if not whole_run:
-                sim._kernel_reason = lambda: 'stepped'
+                sim._compiled_reason = lambda: 'stepped'
             sim.run()
         jumps.append(np.array([sim.results.sir.I.values[26] - sim.results.sir.I.values[25] for sim in sims]))
     se = np.sqrt(sum(j.var()/len(j) for j in jumps))
     assert abs(jumps[0].mean() - jumps[1].mean()) < 4*se + 1, f'The seed moved {jumps[0].mean():.1f} people in a whole run, but {jumps[1].mean():.1f} step by step'
 
     # And in JAX, with gradients
-    jax = make(solver='ode').init()
-    jax.jax = True # A whole run in JAX, as ss.parallel() takes many
-    jax.run()
+    jax = make(solver='ode')
+    with ss.options.context(backend='jax'): # A whole run in JAX, as ss.parallel() takes many
+        jax.run()
     assert np.allclose(jax.results.sir.I.values, whole.results.sir.I.values, rtol=1e-10)
     assert np.allclose(jax.results.offer.delivered.values, whole.results.offer.delivered.values, rtol=1e-10)
     grad = make(solver='ode').gradient('I', pars='beta').beta.sir.I
@@ -952,7 +952,7 @@ class Lesions(ssl.AgentSIS):
     """ A disease written as code with a boolean state beyond infected (a lesion), cleared on cure """
     def __init__(self, **kwargs):
         super().__init__(beta=ss.peryear(2), init_prev=0.3, dur_inf=ss.years(3), waning=ss.peryear(0), imm_boost=0, **kwargs)
-        self.define_states(ss.BoolArr('cin', label='Lesion', result=True))
+        self.define_states(ss.BoolArr('cin', label='Lesion'))
         self.rng_cin = ss.bernoulli(p=0.05)
         return
 

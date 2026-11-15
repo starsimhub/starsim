@@ -14,13 +14,13 @@ import starsim as ss
 
 S, I, R = ss.states('S I R')
 beta = ss.par(0.3, bounds=[0.1, 0.5])
-sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100))
 pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.days(1), solver='ode', verbose=0)
 ```
 
 ## A compartmental run in one call
 
-A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which for a small model can be 30 to 100 times slower (the ratio depends on the model and the computer). The `Solver` line under "Results and running" in `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
+A compartmental run is fastest when the backend can take every step in one compiled call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which for a small model can be 30 to 100 times slower (the ratio depends on the model and the computer). The `Solver` line under "Results and running" in `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
 
 ```{python}
 masks = ss.modify(sir.pars.beta, multiply=0.75, when=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
@@ -30,15 +30,15 @@ for mod in [masks, late]:
     print(how[0].strip())
 ```
 
-The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_kernels=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
+The first runs in one call: a condition on a count is worked out in the compiled code, as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_compiled=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
 
 ```{python}
-sim = ss.Sim(sir, interventions=masks, require_kernels=True, **pars).run() # Fine: the whole run is in the kernels
+sim = ss.Sim(sir, interventions=masks, require_compiled=True, **pars).run() # Fine: the whole run is one call
 ```
 
-What stays in the kernels, and what does not:
+What can be taken in one call, and what can't:
 
-| In the kernels | A step at a time |
+| In one call | A step at a time |
 |---|---|
 | Parameters that vary in time (`ss.timeseries`, `ss.seasonal`) | A parameter that is a function of the sim (`lambda sim: ...`), called at each step |
 | `ss.modify()` with `when=` (a window, `ss.schedule(start=, stop=)`, other times, or a function of the date), `who=` on a stratum (or on a state, for a transition), or `when=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=`, a function as its amount, `who=` as a function of the sim, or `when=` on incidence over a period (`infection.incidence(over=ss.days(7))`) |
@@ -47,11 +47,11 @@ What stays in the kernels, and what does not:
 | Births and deaths declared with `ss.birth()` and `ss.death()` | Interventions, analyzers, or connectors written as code with a `step()` of their own |
 | `verbose=0` or `1` | `verbose=2`, `until=` in `sim.run()`, `sim.perf_profile(kind='loop')`, and diagnostics |
 
-A module written as code is always taken a step at a time, since its `step()` is Python. If it only needs to act at a few times, or on a condition that one of the declared forms above can say, writing it that way keeps the run in the kernels.
+A module written as code is always taken a step at a time, since its `step()` is Python. If it only needs to act at a few times, or on a condition that one of the declared forms above can say, writing it that way keeps the run in one call.
 
 ### Many runs
 
-Running the same model many times is fastest with `ss.parallel()`: with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together by the kernels. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
+Running the same model many times is fastest with `ss.parallel()`: with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together, in compiled code. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
 
 ```{python}
 msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=10) # 30 runs, taken together
@@ -63,20 +63,21 @@ For the same reason, in a loop that runs one sim many times with new parameter v
 
 `substeps=1` (in `ss.solvers.ode()` or `ss.solvers.binomial()`) takes each step whole, which is faster but less accurate when rates are fast compared with the step ([Solvers](running_solvers.qmd#the-solvers)).
 
-### Backends: kernels, compiling, and JAX {#backends}
+### Backends: Rust, Numba, and JAX {#backends}
 
-Whichever solver is chosen, the numbers are worked out by compiled code, which Starsim chooses itself; the choice never changes the results. The *kernels* are compiled loops that run compartmental models, the passes over the agents, and the random draws. There are two copies that give the same numbers bit for bit, and `ss.options.kernels` (or the environment variable `STARSIM_KERNELS`) chooses between them:
+Whichever solver is chosen, the numbers are worked out by the *backend*: the code that runs compartmental models, the passes over the agents, and the random draws. Starsim chooses it, and the choice never changes the results. The compiled backends come as two copies (Rust and Numba) that give the same numbers bit for bit, and `ss.options.backend` (or the environment variable `STARSIM_BACKEND`) chooses between them:
 
-| `ss.options.kernels` | What it is | Use it for |
+| `ss.options.backend` | What it is | Use it for |
 |---|---|---|
 | `'auto'` (default) | Rust where it is installed, otherwise Numba, with short compartmental runs taken as plain Python until Numba has compiled | Every model: there is rarely a reason to change it |
-| `'rust'` | Kernels in Rust, compiled ahead of time and included in the wheels that `pip install starsim` gets (from a clone, build them with `cd starsim/solvers/rust && ./build`) | No compiling on the first run: notebooks, dashboards, and clusters where many tasks start at once |
-| `'numba'` | Kernels in Numba, compiled on first use (a few minutes, once per install, then kept on disk) | An install from source without Rust, and comparing with Rust's, since Numba's are the reference |
-| `'python'` | The compartmental kernels as plain Python (the passes over agents are still compiled) | Stepping through a compartmental run in a debugger; it is slow |
+| `'rust'` | Compiled in Rust ahead of time and included in the wheels that `pip install starsim` gets (from a clone, build them with `cd starsim/solvers/rust && ./build`) | No compiling on the first run: notebooks, dashboards, and clusters where many tasks start at once |
+| `'numba'` | Compiled by Numba on first use (a few minutes, once per install, then kept on disk) | An install from source without Rust, and comparing with Rust's, since Numba's are the reference |
+| `'python'` | The compartmental solvers as plain Python (the passes over agents are still compiled) | Stepping through a compartmental run in a debugger; it is slow |
+| `'jax'` | A whole run of the ODE in JAX, and many ODE runs with different values in one call; everything else as `'auto'` | Long ODE runs over many groups, and tens of thousands of ODE runs (below) |
 
-If the first run after installing is slow, Numba is compiling. `ss.compile()` (or `starsim init compile`) does it ahead of time: once after installing, when building a container image, or before a long batch of runs on a cluster (see [Speed and scale](running_performance.qmd#on-a-cluster)). `ss.kernels.compile_status().summary` says which kernels are in use and whether they are compiled, and with `verbose=2` a run says which engine took it and why (or why a compartmental run was taken step by step rather than in one call).
+If the first run after installing is slow, Numba is compiling. `ss.compile()` (or `starsim init compile`) does it ahead of time: once after installing, when building a container image, or before a long batch of runs on a cluster (see [Speed and scale](running_performance.qmd#on-a-cluster)). `ss.compile(check=True)` (or `starsim init compile --check`) says which backend is in use and whether it is compiled, and `sim.describe()` says why a compartmental run is taken step by step rather than in one call.
 
-JAX is used for [gradients](calibration_gradients.qmd) and the fits that use them, and takes an ODE run when asked, with `sim.jax = True`. It takes about half a second to start, so it repays that only for long runs over many groups, or for tens of thousands of ODE runs in one call (`ss.parallel(sim, pars=...)`). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on: `'cpu'` by default, since a run is a long loop of small steps, which a GPU runs several times slower; `'auto'` lets JAX choose (a GPU if it finds one), or name another platform, e.g. `'cuda'`. Starsim sets `JAX_PLATFORMS` to it the first time it uses JAX, so other JAX code in the same session (and processes started from it) then runs there too; if JAX had started elsewhere, it is restarted. The rest (the step loop of agent-based runs, and modules written as code) is plain Python and NumPy, and your own loops can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)). How each engine is built, and how fast, is in [Engines and transmission](architecture_engines.qmd).
+JAX is used for [gradients](calibration_gradients.qmd) and the fits that use them, whatever the backend, and takes ODE runs when asked, with `ss.options.backend = 'jax'` (or for a block, `with ss.options.context(backend='jax'):`). It takes about half a second to start, so it repays that only for long runs over many groups, or for tens of thousands of ODE runs in one call (`ss.parallel(sim, pars=...)`); an ODE it can't run is run as under `'auto'`, with a note. `ss.options.jax_platform` (`STARSIM_JAX_PLATFORM`) is the platform it runs on: `'cpu'` by default, since a run is a long loop of small steps, which a GPU runs several times slower; `'auto'` lets JAX choose (a GPU if it finds one), or name another platform, e.g. `'cuda'`. Starsim sets `JAX_PLATFORMS` to it the first time it uses JAX, so other JAX code in the same session (and processes started from it) then runs there too; if JAX had started elsewhere, it is restarted. The rest (the step loop of agent-based runs, and modules written as code) is plain Python and NumPy, and your own loops can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)). How each solver is built, and how fast, is in [Engines and transmission](architecture_engines.qmd).
 
 ## Agents and code of your own
 
@@ -89,7 +90,7 @@ An agent-based run takes time in proportion to the number of agents and the numb
 
 ### Code of your own
 
-A module written as code runs its `step()` in Python, once a step, and Starsim then stays out of the way (though such a run can't be taken in one call to the kernels, run in JAX, or differentiated). What decides its speed is how it handles the people:
+A module written as code runs its `step()` in Python, once a step, and Starsim then stays out of the way (though such a run can't be taken in one compiled call, run in JAX, or differentiated). What decides its speed is how it handles the people:
 
 - **Work on arrays, not people.** A loop over the agents in Python is many times slower than the same work on the whole array at once (see [Array indexing](mechanics_indexing.qmd)).
 - **Compile a loop that can't be written as array operations.** `@ss.jit` compiles a function with Numba, keeps it on disk between sessions, and says why if it can't (see [Custom modules](building_modules.qmd)); called with JAX arrays, it is traced by JAX instead, so it can be differentiated. Numba's own `@nb.njit` works as well, and either works whether Starsim's own kernels are Rust or Numba.
@@ -231,7 +232,7 @@ msim.summarize()
 Some things matter more on a cluster than on a laptop:
 
 - **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., workers=1)` within a task, or limit it with `workers=`. Starsim's own threads (used only for passes over 200,000 agents or more, and never in the workers of `ss.parallel()`) are turned off with `STARSIM_THREADS=1`, and NumPy's with `SCIRIS_NUM_THREADS=1` in the task's environment.
-- **Compile once, before the runs.** With the Numba kernels, run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile them ([Backends](#backends)); `starsim init compile --check` says whether it has been done.
+- **Compile once, before the runs.** With the Numba backend, run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile them ([Backends](#backends)); `starsim init compile --check` says whether it has been done.
 - **Settings from the environment.** Every option in `ss.options` can be set by an environment variable (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`), the easiest way to set it for every task of a job (see the [appendix](#appendix-every-option)).
 - **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment): sims are sent between computers as Python pickles, which need the same code to load.
 - **A seed for each run.** Give each run its own `rand_seed`, or every run of a stochastic model is the same.
@@ -285,7 +286,7 @@ rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optd
 pd.DataFrame.from_dict(rows, orient='index')
 ```
 
-Starsim also reads `SCIRIS_NUM_THREADS` for the threads of linear algebra, and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed. The settings of a sim that affect speed or memory (`n_agents`, `dt`, `solver`, `require_kernels`, `group_results`, `record_people`) are in [Running sims](running_sim.qmd#appendix-every-sim-setting).
+Starsim also reads `SCIRIS_NUM_THREADS` for the threads of linear algebra, and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent solver for testing it, at a cost in speed. The settings of a sim that affect speed or memory (`n_agents`, `dt`, `solver`, `require_compiled`, `group_results`, `record_people`) are in [Running sims](running_sim.qmd#appendix-every-sim-setting).
 
 ## Appendix: the starsim command
 
@@ -293,10 +294,10 @@ Installing Starsim also installs a `starsim` command, for setting up an environm
 
 | Command | What it does |
 |---|---|
-| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use (`-y` not to ask) |
-| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (a few minutes, once per install); optional, since they are otherwise compiled on first use. `--rust` builds the Rust kernels instead, in a clone of Starsim; `--check` says which kernels are in use and whether they are compiled, exiting with 1 if not |
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust backend is in use (`-y` not to ask) |
+| `starsim init compile` | Compiles the Numba backend ahead of time, as `ss.compile()` does (a few minutes, once per install); optional, since it is otherwise compiled on first use. `--rust` builds the Rust backend instead, in a clone of Starsim; `--check` says which backend is in use and whether it is compiled, exiting with 1 if not |
 | `starsim init ai` | Links the Starsim skills for AI coding agents into this project, as `starsim ai install` does; `--global` installs a short skill for all projects, `--to=claude,agents` chooses the agents, and `--force` replaces a skill of the same name |
-| `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
+| `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both compiled backends (Rust and Numba) |
 | `starsim ai` | Where the skills are installed; `list`, `show` (the guide, or one skill), `install` and `uninstall`, and `off` and `on` (whether other commands suggest the skills) |
 | `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or `--from=`); `--to=` another format, `--out=` the file, `--force` to replace it. `starsim convert` lists the formats |
 | `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills (`--headless` to run it on its own; `--ai=claude` names the agent, by default the one in `STARSIM_AGENT` or the only one installed) |

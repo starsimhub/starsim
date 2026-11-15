@@ -21,7 +21,7 @@ def make_measles(immune=ss.by(age=[0.8, 0.92, 0.98])):
     infection   = S >> E @ beta*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, progression, recovery, init=dict(R=immune), init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, progression, recovery, init=dict(R=immune), init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
 
@@ -114,7 +114,7 @@ import starsim.library as ssl
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.083*I
 recovery  = I >> R @ ss.days(8)
-disease = ss.Disease(infection, recovery, init_prev=0.001, name='disease')
+disease = ss.Disease(infection, recovery, init_prev=0.001)
 
 pars = dict(n_agents=10_000, stop=ss.days(200))
 sims = {

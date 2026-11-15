@@ -222,7 +222,7 @@ class Moving:
                 if tr.migration:
                     self.sim.people.request_removal(uids)
                 else:
-                    self.sim.people.request_death(uids, cause=mod)
+                    self.sim.people.request_death(uids, cause=self.cause_of(tr))
                     self._died.append((tr, srcs, uidlist)) # Counted once each death has one cause: see uncount_deaths()
                 continue
             entering = ng > 1 and any(self.enters(tr, src) for src in srcs) # Into a dimension: recorded at the level they arrive at

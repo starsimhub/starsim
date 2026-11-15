@@ -146,11 +146,11 @@ This is the view from inside; you don't need it to write a module that keeps com
 
 ### Random streams
 
-**Every distribution has its own random number stream**, seeded from the sim's `rand_seed` and the distribution's name, which is its path in the sim (e.g. `fishing.p_catch`). Within a stream, each person's random number depends only on that person, not on how many others drew from it, so a person not drawing doesn't change what anyone else draws. In a stochastic compartmental run (`binomial`, `tau`, `gillespie`), each module has its own generator, seeded from `rand_seed` and the module's name, and draws its flows in an order set by the names of its states and transitions rather than the order they were declared in. The streams of a declared disease are named after its states and transitions:
+**Every distribution has its own random number stream**, seeded from the sim's `rand_seed` and the distribution's name, which is its path in the sim (e.g. `fishing.p_catch`), with each module by the name given (`name=`), else by its default name, numbered within its kind in the order given (`sir`, `sir2`), never by the variable it is assigned to, so that naming a variable doesn't change its numbers. Within a stream, each person's random number depends only on that person, not on how many others drew from it, so a person not drawing doesn't change what anyone else draws. In a stochastic compartmental run (`binomial`, `tau`, `gillespie`), each module has its own generator, seeded from `rand_seed` and the same name, and draws its flows in an order set by the names of its states and transitions rather than the order they were declared in. The streams of a declared disease are named after its states and transitions:
 
 ```{python}
 S, I, R = ss.states('S I R')
-sir = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+sir = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_prev=0.01)
 sim = ss.Sim(sir, networks=ss.RandomNet(), n_agents=1000, verbose=0)
 sim.init()
 print([name for name in sim.dists.dists if 'infection' in name or 'recovery' in name])
@@ -196,7 +196,7 @@ With agents, `ss.Sim(even_draws=True)` also makes each call's random numbers eve
 
 ### Run identity
 
-A seed makes a run repeatable, but doesn't say what was run. The record of that is the code (the commit of the script), with the seed (`rand_seed`) and the versions of Starsim and its dependencies. With all of these the same, a run gives the same results again, and the kernel sets (Rust, Numba, and plain Python) are tested to give the same numbers bit for bit. Across machines, platforms, or JAX on a GPU, floating-point arithmetic can differ in the last digits, which in a stochastic run can change a draw and grow from there; compare such runs by how well they agree, not by whether they are identical. Two versions of a model are compared by their code (in a text editor), their `describe()`, or their results.
+A seed makes a run repeatable, but doesn't say what was run. The record of that is the code (the commit of the script), with the seed (`rand_seed`) and the versions of Starsim and its dependencies. With all of these the same, a run gives the same results again, and the backends (Rust, Numba, and plain Python) are tested to give the same numbers bit for bit. Across machines, platforms, or JAX on a GPU, floating-point arithmetic can differ in the last digits, which in a stochastic run can change a draw and grow from there; compare such runs by how well they agree, not by whether they are identical. Two versions of a model are compared by their code (in a text editor), their `describe()`, or their results.
 
 A related check is `sim.check_dt()`, which reruns the sim at half the timestep and reports how much each result moves. That covers every effect of order `dt` at once: converting rates to probabilities, the one-step delay between modules, and module order.
 

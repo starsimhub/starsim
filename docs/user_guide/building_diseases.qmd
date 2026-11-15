@@ -68,7 +68,7 @@ measles_explicit.equations()
 - a **rate**, per person in the source state per unit of time, such as `ss.perday(0.125)`, or an expression of states and parameters, such as `1.9*I`;
 - a **duration**, such as `ss.days(8)`: the average time people spend in the source state before they take this transition. A duration of 8 days and a rate of 1/8 per day are the same transition.
 
-The operators are a short way to write `ss.Transition()` (the "Explicit" tab; every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords, and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
+The operators are a short way to write `ss.Transition()` (the "Explicit" tab; every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords ([Names](building_writing.qmd#names)), and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
 
 ## Transmission
 
@@ -172,9 +172,9 @@ A trigger has no rate: people move in the step its condition first holds for the
 ```{python}
 U, A = ss.states('U A') # Not yet sexually active, and active
 debut = U >> A @ ss.on(ss.person.age >= 15) # As soon as they are 15
-sexual = ss.Disease(debut, name='sexual')
+sexual = ss.Disease(debut)
 
-demog = [ss.Births(birth_rate=ss.peryear(0.03)), ss.Deaths(death_rate=ss.peryear(0.01))]
+demog = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 sim = ss.Sim(sexual, demographics=demog, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
 sim.run()
 res = sim.results.sexual
@@ -188,7 +188,7 @@ states("U A") # Not yet sexually active, and active
 debut <- Transition(U, A, when = ss$on(ss$person$age >= 15)) # As soon as they are 15
 sexual <- Disease(debut)
 
-demog <- list(ss$Births(birth_rate = ss$peryear(0.03)), ss$Deaths(death_rate = ss$peryear(0.01)))
+demog <- list(ss$birth(rate = ss$peryear(0.03)), ss$death(rate = ss$peryear(0.01)))
 sim <- Sim(sexual, demographics = demog, n_agents = 5000, start = 2000, stop = 2010, dt = ss$months(1), verbose = 0)
 sim$run()
 active <- sim$results$sexual$A$values
@@ -209,7 +209,7 @@ def debut_fn(sim):
     dis.move(ready, dis.A)
     return
 
-demog = [ss.Births(birth_rate=ss.peryear(0.03)), ss.Deaths(death_rate=ss.peryear(0.01))]
+demog = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 sim_explicit = ss.Sim(sexual_explicit, interventions=debut_fn, demographics=demog, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
 sim_explicit.run()
 res_explicit = sim_explicit.results.sexual

@@ -155,7 +155,7 @@ Routine childhood immunization instead vaccinates each child at an age (`who=ss.
 
 Some interventions change how the disease spreads rather than giving people anything: isolating cases, or keeping unvaccinated children home. [`ss.modify()`](../api/connectors.qmd) changes a parameter from a date (and, with `stop=`, until another), without overwriting it. Here, a response from 1 March cuts transmission by 30%.
 
-**`when=` or `start=`?** `when=` gives the moments something *happens*, such as the days of a vaccination campaign (a date, a list of dates, an event, or `ss.schedule()`); `start=` and `stop=` give a *window* during which something *applies*, such as a response that stays in place, or routine vaccination (`until=` ends a window on a condition instead, and `dur=` is a length of time, not a date).
+**`when=` or `start=`?** `when=` gives the moments something *happens*, such as the days of a vaccination campaign (a date, a list of dates, an event, or `ss.schedule()`); `start=` and `stop=` give a *window* during which something *applies*, such as a response that stays in place, or routine vaccination (`until=` ends a window on a condition instead, and `dur=` is a length of time, not a date). A condition on the whole population, such as more than 1,000 infectious (`measles.I.n > 1000`), is a `when=` too, never a `who=`: it says when, for everyone at once, and can be joined to a schedule with `&` (both) or `|` (either), e.g. `when=ss.schedule(start='2025-03-01') & (measles.I.n > 1000)`.
 
 Written out, `start=` is a function of the sim's date:
 

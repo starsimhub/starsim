@@ -1,7 +1,7 @@
 """
 Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
 
-A compartmental engine flattens its flows into a `ss.kernels.Program`. The kernels
+A compartmental engine flattens its flows into a `ss.solvers.backends.kernels.Program`. The kernels
 (Numba or Rust) step through it; `run()` here takes the same program and runs the same
 fourth-order Runge-Kutta (or Euler) steps in JAX, so that the run can be
 differentiated (`gradient()`) and many runs with different values can be taken in
@@ -30,13 +30,13 @@ diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 
 table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
-platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu)' # What to do when JAX fails to start on a GPU
-original = {} # JAX's platforms, and JAX_PLATFORMS, before ss.options.jax first changed them (see jax()), which "auto" goes back to
+platform_advice = 'run JAX on the CPU: ss.options.jax_platform = "cpu" (or the environment variable STARSIM_JAX_PLATFORM=cpu, or JAX_PLATFORMS=cpu)' # What to do when JAX fails to start on a GPU
+original = {} # JAX's platforms, and JAX_PLATFORMS, before ss.options.jax_platform first changed them (see jax()), which "auto" goes back to
 
 
 def jax():
     """
-    Import JAX (imported only when first used, since it takes a few tenths of a second), on the platform that `ss.options.jax` says
+    Import JAX (imported only when first used, since it takes a few tenths of a second), on the platform that `ss.options.jax_platform` says
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), or as many as the threads asked for in the
@@ -44,18 +44,18 @@ def jax():
     of a posterior run on cores of their own; everything else runs on the first. XLA's own
     threads (most of them compiling) are not limited by it: no flag of XLA's limits them.
 
-    The platform it runs on is `ss.options.jax` (e.g. "cpu"), if not "auto". If JAX has
+    The platform it runs on is `ss.options.jax_platform` (e.g. "cpu"), if not "auto". If JAX has
     started already on others (by Starsim or anything else), it is started again on these:
     arrays made already stay on their devices, and are moved when used with new ones, and
     what was compiled is compiled again. "auto" goes back to the platforms JAX had before
     Starsim first changed them. The first time, its devices are started here, so that a GPU
     that fails to start (e.g. with a CUDA plugin of another version than jaxlib) says what to do.
     """
-    if ss.options.jax != 'auto':
+    if ss.options.jax_platform != 'auto':
         if not original: # About to change them for the first time
             env = os.environ.get('JAX_PLATFORMS')
             original.update(env=env, platforms=sys.modules['jax'].config.jax_platforms if 'jax' in sys.modules else env)
-        platforms = ss.options.jax
+        platforms = ss.options.jax_platform
         os.environ['JAX_PLATFORMS'] = platforms # So that processes started from this one (e.g. MultiSim's) use them too
     elif original: # Changed by Starsim before: go back
         platforms = original['platforms']
@@ -177,7 +177,7 @@ class Run(sc.prettyobj):
         program (Program): the engine's program, for how its flows are put together
         dt (float): the timestep
         npts (int): the number of steps
-        solver (int): 0 for RK4, 1 for Euler (see `ss.kernels.solvers`)
+        solver (int): 0 for RK4, 1 for Euler (see `ss.solvers.backends.kernels.solvers`)
         n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
@@ -236,14 +236,14 @@ class Run(sc.prettyobj):
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
         self.dense_frac = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time fraction with at least an eighth of its entries is taken as a matrix (see function())
-        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
+        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.solvers.backends.kernels.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
         self.cv_first = np.array([s[0] for s in slots], dtype=int)
         self.cv_last = np.array([s[-1] for s in slots], dtype=int)
         self.cv_prev = np.array([c for s in slots for c in s[:-1]], dtype=int)
         self.cv_next = np.array([c for s in slots for c in s[1:]], dtype=int)
-        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.kernels.release_rates())
+        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.solvers.backends.kernels.release_rates())
         self.comp_mats = {}
         return
 
@@ -259,7 +259,7 @@ class Run(sc.prettyobj):
         return self.comp_mats[nc]
 
     def rates(self, ys, vals):
-        """ The rate of every flow, by group, with the compartments at ys and the program's values in vals: as `ss.kernels.step()` works them out """
+        """ The rate of every flow, by group, with the compartments at ys and the program's values in vals: as `ss.solvers.backends.kernels.step()` works them out """
         jnp = jax().numpy
         p = self.p
         fixed, mult, consts, rel_trans, X = vals
@@ -302,14 +302,14 @@ class Run(sc.prettyobj):
             exposures.append(expo)
 
         rows = [fixed[f] for f in range(self.nf)]
-        regs = {} # The parts used more than once (see ss.kernels.LOAD), those several rates share first
+        regs = {} # The parts used more than once (see ss.solvers.backends.kernels.LOAD), those several rates share first
         self.evaluate(ys, 0, p.starts[0], consts, exposures, local_n, regs)
         for f in self.dynamic: # The operations on a stack, as in the kernels
             rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n, regs), (self.ng,))*mult[f]
         return jnp.stack(rows)
 
     def members(self, ys, s, consts):
-        """ The compartments of set s, by group, each times its weight if it has one (as `ss.kernels.member()`) """
+        """ The compartments of set s, by group, each times its weight if it has one (as `ss.solvers.backends.kernels.member()`) """
         jnp = jax().numpy
         rows = self.set_w[s]
         out = ys[self.sets[s]]
@@ -318,10 +318,10 @@ class Run(sc.prettyobj):
         return out
 
     def evaluate(self, ys, a, b, consts, exposures, local_n, regs):
-        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.kernels.step()` works out a rate) """
+        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.solvers.backends.kernels.step()` works out a rate) """
         jnp = jax().numpy
         p = self.p
-        kn = ss.kernels
+        kn = ss.solvers.backends.kernels
         stack = []
         for k in range(a, b):
             op, arg = p.ops[k], p.args[k]
@@ -343,7 +343,7 @@ class Run(sc.prettyobj):
                 local = self.members(ys, arg, consts).sum(axis=0)
                 if not self.simple:
                     local = self.place.local(local)
-                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_frac(): the fraction of an empty place is 0
+                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.solvers.backends.kernels.leaf_frac(): the fraction of an empty place is 0
             elif op >= kn.EXP:
                 x = stack.pop()
                 func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
@@ -367,7 +367,7 @@ class Run(sc.prettyobj):
         return stack[0] if stack else None # None for the shared parts, which leave nothing on the stack
 
     def frac(self, v, block, X, by_columns):
-        """ The time fraction between places times values by place and level (as `ss.kernels.frac()`) """
+        """ The time fraction between places times values by place and level (as `ss.solvers.backends.kernels.frac()`) """
         jnp = jax().numpy
         p = self.p
         v = v.reshape(-1, block)
@@ -439,9 +439,9 @@ class Run(sc.prettyobj):
         def step(y, ti, step_rows=None):
             nonlocal rows
             rows = step_rows or {} # The rows of the tables that vary in time for this step, if given (see function())
-            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
+            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.solvers.backends.kernels.convey())
 
-            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a fraction of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
+            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a fraction of -1), lowered so that the slot is empty at its end with its other exits (see ss.solvers.backends.kernels.release_rates())
                 x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti)), 0.0)*dt
                 small = x < 1e-12
                 frac = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
@@ -450,26 +450,26 @@ class Run(sc.prettyobj):
                 Xs = X
             if self.n_sub:
                 n = self.n_sub
-            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.kernels.step())
+            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.solvers.backends.kernels.step())
                 rates0 = self.rates(y, vals(ti))
                 fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
-                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.kernels.step())
+                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.solvers.backends.kernels.step())
                     ent = slice(self.p.mov_starts[1, m], self.p.mov_starts[1, m+1])
                     comps = self.p.mov_comps[self.p.mov_starts[0, m]:self.p.mov_starts[0, m+1]]
                     dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, self.p.mov_pair[1, ent]].add(y[comps][:, self.p.mov_pair[0, ent]]*X['mov_rate'][ent]))
-                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.kernels.step())
+                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.solvers.backends.kernels.step())
                 filling = (dy0 > 0) & (y > least)
                 growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
-                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.kernels.step())
+                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.solvers.backends.kernels.step())
                     tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
                     rising = (grow > 0) & (tot > least)
                     growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
                 speed = lax.stop_gradient(jnp.maximum(fastest, growing))
                 n = need = jnp.maximum(jnp.ceil(speed*dt/0.25), 1)
-                fast = speed*dt/n > K.FAST # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length (see ss.kernels.FAST)
+                fast = speed*dt/n > K.FAST # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length (see ss.solvers.backends.kernels.FAST)
                 h_fast = dt/n
                 if clamp:
                     n = jnp.minimum(n, n_max)
@@ -514,7 +514,7 @@ class Run(sc.prettyobj):
                 return y_end, flows, need
 
             def dormand_prince(y):
-                """ The step by Dormand-Prince, as ss.kernels.step() takes it: substeps of its own length, each kept if its error is within the tolerance (the attempts count as the substeps the step needs; clamped, the last it may take ends the step) """
+                """ The step by Dormand-Prince, as ss.solvers.backends.kernels.step() takes it: substeps of its own length, each kept if its error is within the tolerance (the attempts count as the substeps the step needs; clamped, the last it may take ends the step) """
                 A, B, E = K.DP_A, K.DP_B, K.DP_E
                 least = 1e-9*y.sum()
 
@@ -533,7 +533,7 @@ class Run(sc.prettyobj):
                         dys.append(dy)
                         dfs.append(df)
                     err = jnp.abs(h*sum(E[j]*dys[j] for j in range(7)))/(least + K.TOL*jnp.maximum(jnp.abs(y), jnp.abs(ys)))
-                    worst = lax.stop_gradient(jnp.max(jnp.where(err > 0, err, 0.0))) # (Not a NaN: see ss.kernels.step())
+                    worst = lax.stop_gradient(jnp.max(jnp.where(err > 0, err, 0.0))) # (Not a NaN: see ss.solvers.backends.kernels.step())
                     ok = (worst <= 1) | (h < 1e-6*dt)
                     forced = forced | (last & ~(ok & ends))
                     keep = ok | last
@@ -563,14 +563,14 @@ class Run(sc.prettyobj):
             else:
                 y_end, flows, need = lax.cond(fast, dormand_prince, substeps, y)
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
-                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.kernels.convey())
+                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.solvers.backends.kernels.convey())
             return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
 
         return step
 
     @staticmethod
     def deliver(y, X, ti):
-        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.solvers.backends.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
         for k in range(X['sh_due'].shape[0]):
             reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
             a = reached*X['sh_cov'][k]
@@ -775,7 +775,7 @@ def units(sim):
 
 
 def run_joint(joint):
-    """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.kernels.run()` does """
+    """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.solvers.backends.kernels.run()` does """
     captured = [capture(engine) for engine in joint.engines]
     run = joint_runner(joint, [c[:2] for c in captured])
     ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
@@ -798,7 +798,7 @@ def call(run, kind, *args):
 
 
 def run(engine):
-    """ Take a whole run of an engine in JAX: returns what `ss.kernels.run()` does """
+    """ Take a whole run of an engine in JAX: returns what `ss.solvers.backends.kernels.run()` does """
     program, how, X = capture(engine)
     y, stocks, flows, n = call(runner(engine, program, how), 'run', X)
     return np.asarray(y), np.asarray(stocks), np.asarray(flows), 0.0
@@ -1368,7 +1368,7 @@ class Density(sc.prettyobj):
             fitted = lambda leaf: id(leaf) in self.index or id(leaf) in self.levels or (id(engine), id(leaf)) in self.timed
             fixed = []
             for f,flow in enumerate(engine.flows):
-                if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
+                if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.solvers.backends.kernels.convey())
                     continue
                 dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []

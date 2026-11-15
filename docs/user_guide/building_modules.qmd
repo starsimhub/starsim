@@ -151,16 +151,16 @@ A state of a module is an array with one value for each agent: `ss.FloatArr` (nu
 ```python
 # In the class body
 level      = ss.FloatArr(default=0.0, label='Antibody level')
-vaccinated = ss.BoolArr(label='Vaccinated', result=True)
+vaccinated = ss.BoolArr(label='Vaccinated')
 
 # Or the same, in __init__()
 self.define_states(
     ss.FloatArr('level', default=0.0, label='Antibody level'),
-    ss.BoolArr('vaccinated', label='Vaccinated', result=True),
+    ss.BoolArr('vaccinated', label='Vaccinated'),
 )
 ```
 
-Each state becomes an attribute of the module (`self.level`), its own for each instance, and is added to the people (`sim.people.antibodies.level`). States grow as agents are born, and a dead agent's values are kept but left out of sums and means, so keep every value that belongs to a person in a state, not in a NumPy array of your own. An `ss.BoolArr` with `result=True` also gives a result of the same name, the number of people for whom it is true. (`ss.State` is different: it is a state of a declared disease, which people move between by its transitions; as agents, each is kept as an `ss.BoolArr` with `result=True`.) [Array indexing](mechanics_indexing.qmd) covers reading and writing states, the [kinds of array](mechanics_indexing.qmd#appendix-the-kinds-of-array), and states with [several columns](mechanics_indexing.qmd#arrays-with-several-columns). A state that most agents never change from its default can be made with `shared=True`, so that it takes no memory per agent until a value is set.
+Each state becomes an attribute of the module (`self.level`), its own for each instance, and is added to the people (`sim.people.antibodies.level`). States grow as agents are born, and a dead agent's values are kept but left out of sums and means, so keep every value that belongs to a person in a state, not in a NumPy array of your own. An `ss.BoolArr` also gives a result of the same name, the number of people for whom it is true; give `result=False` for a flag the module uses itself, which needs no result. (`ss.State` is different: it is a state of a declared disease, which people move between by its transitions; as agents, each is kept as an `ss.BoolArr`.) [Array indexing](mechanics_indexing.qmd) covers reading and writing states, the [kinds of array](mechanics_indexing.qmd#appendix-the-kinds-of-array), and states with [several columns](mechanics_indexing.qmd#arrays-with-several-columns). A state that most agents never change from its default can be made with `shared=True`, so that it takes no memory per agent until a value is set.
 
 A property of each person that several modules read, rather than a state of one module (e.g. a social determinant of health that two conditions depend on), is added to the people themselves, from `init_pre()`, with `sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.2)))`. Adding one that is there already returns it, so each module that reads it can add it. A declared rate reads it as `ss.person.housing`, or as `ss.person.get('housing', 0)` to have a value when no module adds it.
 

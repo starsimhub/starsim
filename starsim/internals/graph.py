@@ -397,14 +397,14 @@ class Graph:
         # Fallback names: the only transmission (by contact, or density-dependent) is the infection (as in ss.SIR), the rest are named after their endpoints
         contacts = [tr for tr in list(self.transitions.values()) + self._unnamed if tr.contact or self.counted(tr)]
         for tr in self._unnamed:
-            src = '_'.join([s.name for s in tr.source or []]) or 'in'
-            dst = '_'.join([s.name for s in tr.dest or []]) or 'out'
+            src = '_'.join([s.name for s in tr.source or []]) or ('outside' if tr.migration else 'unborn') # As written: ss.unborn >> S is unborn_to_S
+            dst = '_'.join([s.name for s in tr.dest or []]) or ('outside' if tr.migration else 'dead') # I >> ss.dead is I_to_dead
             if contacts == [tr] and not self.taken('infection'):
                 base, why = 'infection', 'given to the only transmission'
             else:
                 if tr.dest is None: # A birth with no state given is into the first state, found later
                     base = 'immigration' if tr.migration else 'births'
-                elif src == 'in' and dst == 'out': # Out of every state (ss.death() with no state), as add_flow() names it
+                elif not tr.source and not tr.dest: # Out of every state (ss.death() with no state), as add_flow() names it
                     base = 'emigration' if tr.migration else 'deaths'
                 else:
                     base = f'{src}_to_{dst}'

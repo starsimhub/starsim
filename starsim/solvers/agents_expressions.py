@@ -248,7 +248,7 @@ class Expressions:
     def clock(self, clock):
         """ The value of a clock for the agents being evaluated, from the engine of the module its states belong to """
         name = ss.conditions.modname(clock.module)
-        engine = self if name in [None, self.mod.name] else next((m.engine for m in self.sim.declared if m.name == name), None)
+        engine = self if name in [None, self.mod.name] else getattr(ss.utils.find_module(self.sim.declared, name), 'engine', None) # By its name, else its default name
         if engine is None:
             errormsg = f'{clock} is a clock of the module "{name}", which is not in the sim'
             raise KeyError(errormsg)
@@ -333,7 +333,7 @@ class Expressions:
     def attr(self, a):
         """ The value of an attribute for the agents being evaluated, from the engine of the module it belongs to """
         name = ss.conditions.modname(a.module)
-        engine = self if name in [None, self.mod.name] else next((m.engine for m in self.sim.declared if m.name == name), None)
+        engine = self if name in [None, self.mod.name] else getattr(ss.utils.find_module(self.sim.declared, name), 'engine', None) # By its name, else its default name
         if engine is None:
             errormsg = f'The attribute "{a.name}" belongs to the module "{name}", which is not in the sim'
             raise KeyError(errormsg)

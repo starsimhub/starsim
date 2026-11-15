@@ -34,7 +34,6 @@ cases       = ss.outcome(0.4*infection) # Reported cases: 40% of infections
 measles = ss.Disease(infection, progression, recovery, cases,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                          # 10 people infectious at the start
-    name = 'measles',
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
@@ -159,7 +158,7 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. (A stock is usually recorded in `record_states()`, at the start of a step; `remembered` is recorded in `step()` instead, since that is where it is updated, so each value is the memory that step used.) The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module's results are under its class name in lower case, `sim.results.vaccinedemand`. [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
+`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. (A stock is usually recorded in `record_states()`, at the start of a step; `remembered` is recorded in `step()` instead, since that is where it is updated, so each value is the memory that step used.) The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module is not assigned to a variable, so its results are under its class name in lower case, `sim.results.vaccinedemand` ([Names](../user_guide/building_writing.qmd#names)). [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
 
 With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day:
 

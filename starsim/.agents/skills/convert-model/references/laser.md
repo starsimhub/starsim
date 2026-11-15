@@ -34,7 +34,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 - **The original's order of components changes the durations.** With `Exposed` before `Infectious` in the component list, someone who becomes infectious counts down that same day, so the infectious period is a day shorter than written (`round(normal(8, 2)) − 1`). Check the component order and set the Starsim duration to what the original actually does; say so in a comment.
 - **Bare stops are in the sim's unit.** Write `unit='day', stop=years*365`.
 - **Speed.** Starsim is much slower per agent than LASER (about 20 to 110 ns per agent-step against 1 ns, on one core against all of them). Run a scaled-down version (fewer places, fewer years, or `n_agents` below the population) for the comparison, and run the original at the same scale.
-- **Deaths outside a declared transition** (the life-table function) appear in `sim.results.died`, not in the disease's results.
+- **Deaths outside a declared transition** (the life-table function) appear in `sim.results.death`, not in the disease's results.
 - **Importation into `E` from outside** cannot be `ss.unborn >> E`, which adds people; write it as a rate per susceptible.
 
 ## Worked example

@@ -206,7 +206,7 @@ class Product(EventSource, ss.Module):
             class Bednet(ss.Product):
                 def __init__(self, **kwargs):
                     super().__init__(**kwargs)
-                    self.define_states(ss.BoolArr('has_net', result=True))
+                    self.define_states(ss.BoolArr('has_net'))
 
                 def administer(self, uids):
                     self.has_net[uids] = True
@@ -1055,7 +1055,7 @@ class Treatment(Held):
 
 
 def coded_states(dis):
-    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolArr` with `result=True`), e.g. `cin` """
+    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolArr` unless `result=False`), e.g. `cin` """
     return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolArr) and arr.result}
 
 

@@ -100,12 +100,12 @@ msim_explicit.summarize().loc['measles.infection']
 
 ## Delivering products
 
-A delivery says who receives the product, when, and how many. There is one for each kind of product, `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`; each takes the product as its first argument (`ss.vaccinate(vaccine, ...)`), or the product's own keywords. A delivery takes its name from the variable it is assigned to, and has results of its own: the number `delivered` on each step, the number `eligible`, and the `coverage` reached. Its keywords are the same for every product:
+A delivery says who receives the product, when, and how many. There is one for each kind of product, `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`; each takes the product as its first argument (`ss.vaccinate(vaccine, ...)`), or the product's own keywords. A delivery takes its name from the variable it is assigned to ([Names](building_writing.qmd#names)), and has results of its own: the number `delivered` on each step, the number `eligible`, and the `coverage` reached. Its keywords are the same for every product:
 
 | Keyword | Meaning |
 |---|---|
 | `who=` | Who can receive it: a condition (`ss.person.age < 15`), people as they reach an age (`ss.at_age(ss.months(9))`), or a function of the sim |
-| `when=` | When: at times (`'2025-05-01'`), this far apart (`ss.schedule(every=ss.years(1))`), or on an event (`screening.positive`); with none, routinely |
+| `when=` | When: at times (`'2025-05-01'`), this far apart (`ss.schedule(every=ss.years(1))`), on an event (`screening.positive`), or while a condition on the population holds (`sis.I.n > 1000`), alone or joined to one of the others with `&` (both) or `\|` (either); with none, routinely |
 | `start=`, `stop=` | A window it is delivered in, with any `when=` |
 | `coverage=` | The fraction of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate), or `ss.capacity(n, priority=..., queue=...)` to say who is served first and whether the rest wait |
@@ -197,7 +197,7 @@ As compartments, `ss.at_age()` needs age groups with an edge at that age (e.g. `
 
 ### Who is eligible
 
-`who=` is a condition on people or on the states of modules, written before the sim exists: `ss.person.age < 15`, `sis.I`, or a combination with `&`, `|`, and `~` (and, or, not), such as `(ss.person.age >= 65) & ~sis.I`. It can also be a function of the sim returning a boolean array, the UIDs of people, or `True` or `False` for everyone. A condition on the whole population, such as `sis.I.n > 1000`, says when rather than who, so it goes in `when=` (`when=sis.I.n > 1000`, or joined to an event, `when=screening.positive & (sis.I.n > 1000)`); in `who=` it is an error that points to `when=`. A condition on a property of people, such as age, runs as compartments only if the model is stratified by it; otherwise the model runs as agents. The `who=` of `ss.modify()` [below](#changing-parameters) works the same way.
+`who=` is a condition on people or on the states of modules, written before the sim exists: `ss.person.age < 15`, `sis.I`, or a combination with `&`, `|`, and `~` (and, or, not), such as `(ss.person.age >= 65) & ~sis.I`. It can also be a function of the sim returning a boolean array, the UIDs of people, or `True` or `False` for everyone. A condition on the whole population, such as `sis.I.n > 1000`, says when rather than who, so it goes in `when=`: alone (`when=sis.I.n > 1000`), or joined with `&` to a schedule (`when=ss.schedule(every=ss.years(1)) & (sis.I.n > 1000)`, a round each year in which it holds) or to an event (`when=screening.positive & (sis.I.n > 1000)`). Joined with `|` instead, it acts on either: `when=ss.schedule(every=ss.years(1)) | (sis.I.n > 1000)` is a round each year, and also one at each step the condition holds; `when=screening.positive | (sis.I.n > 1000)` reaches those who test positive, and everyone eligible at each step the condition holds. A schedule can be joined to an event with `|` too, `when=ss.schedule(every=ss.years(1)) | screening.positive`. In `who=` it is an error that points to `when=`, and so is one joined to a condition on people, such as `(ss.person.age < 5) & (sis.I.n > 1000)`: the error shows the split, `who=ss.person.age < 5, when=sis.I.n > 1000`. The same holds everywhere `who=` is taken: in `ss.modify()`, in an intervention written as code, and in a transition. (Python reads `&` and `|` before `>`, so the condition needs its parentheses.) A condition on a property of people, such as age, runs as compartments only if the model is stratified by it; otherwise the model runs as agents. The `who=` of `ss.modify()` [below](#changing-parameters) works the same way.
 
 Here children are vaccinated, and the 200 oldest people who are infected are treated each year, chosen by a function, which is called on each step the delivery happens:
 
@@ -311,7 +311,7 @@ msim.plot('flu.I')
 
 ### What a modifier takes
 
-`ss.modify(target, multiply=...)` applies always, between a start and a stop, at the times `when=` gives, or where a condition holds (`who=`). It takes exactly one of:
+`ss.modify(target, multiply=...)` applies always, between a start and a stop, at the times `when=` gives or while a condition on the population holds (`when=`), or to the people a condition selects (`who=`). It takes exactly one of:
 
 | Keyword | What it does |
 |---|---|
@@ -324,9 +324,9 @@ and any of:
 
 | Keyword | Meaning |
 |---|---|
-| `who=` | Who it applies to: a condition, or a function of the sim (by default, everyone) |
+| `who=` | Who it applies to: a condition on people, or a function of the sim (by default, everyone) |
 | `start=`, `stop=` | When it starts and stops applying (by default, always): dates, years, or durations after the start |
-| `when=` | When it applies, on time alone (by default, always): a schedule of times or how often, or a function of the date that returns `True` on the steps it applies (`lambda now: now.month in [6, 7, 8]`) |
+| `when=` | When it applies (by default, always): a schedule of times or how often, a function of the date that returns `True` on the steps it applies (`lambda now: now.month in [6, 7, 8]`), a condition on the population, while it holds (`flu.I.n >= 2000`), or a schedule joined to one with `&`, while both hold (`ss.schedule(start='2025-05-05') & (flu.I.n > 1000)`), or with `\|`, while either does (`ss.schedule(lambda now: now.month == 1) \| (flu.I.n > 1000)`) |
 | `until=` | Once `who=` (or `when=`) selects someone, it stays on for them: for at least this long (a duration), or until this condition holds |
 | `frac=` | With `multiply=` or `efficacy=`, the fraction of acts (or contacts) it applies to, e.g. condom use in 30% of acts; with `network=`, as agents, a function of the network giving a fraction for each partnership, e.g. `frac=lambda net: net.edges.condoms` |
 | `network=` | For a change to transmission, the network or networks it applies on, by name (by default, all) |
@@ -382,6 +382,8 @@ msim = ss.parallel({
 msim.plot('flu.I')
 ```
 
+To start such a rule only from a date, join a schedule to the condition: `when=ss.schedule(start='2025-05-05') & (flu.I.n > 1000)` applies from 5 May 2025 while more than 1,000 are infectious (the parentheses are needed, since Python reads `&` before `>`). Joined with `|`, it applies while either holds.
+
 A condition on a result can be worked out for each place (or other group) on its own: `who=flu.infection.incidence(over=ss.days(7), by='patch') > 200e-5` applies in each place whose cases over a week pass 200 per 100,000 people.
 
 Any other rule that remembers what it did is an intervention written as code (see [below](#writing-an-intervention-as-code)).
@@ -406,7 +408,7 @@ Anything deliveries and modifiers can't say is a subclass of `ss.Intervention` w
 
 An intervention written as code is best kept to deciding, leaving the change itself to `ss.modify()`, so that the base value is never overwritten and the change combines with others: e.g. an intervention `lockdown` whose `step()` sets `self.active`, and `ss.modify(flu.pars.beta, multiply=0.5, who=lambda sim: sim.interventions.lockdown.active)`. A product whose effect needs code is a subclass of `ss.Product` instead: see [Products](interventions_products.qmd#writing-a-product-as-code).
 
-An intervention that acts on people can be given `who=`, as a delivery is (including a state by its path, `'flu.I'`). Its `step()` then gets the UIDs of those eligible now, and alive, from `self.check_eligibility()`, which a subclass can override for a rule of its own:
+An intervention that acts on people can be given `who=` and `when=`, as a delivery is: `who=` a condition on people (including a state by its path, `'flu.I'`), and `when=` a condition on the population, an `ss.schedule()`, or both joined with `&` or `|`. Its `step()` then gets the UIDs of those eligible now, and alive, from `self.check_eligibility()` (nobody on a step when `when=` does not hold), which a subclass can override for a rule of its own:
 
 ```{python}
 class Isolate(ss.Intervention):
@@ -469,7 +471,7 @@ What `when=` and `who=` (and a capacity's `priority=`) can be:
 | A property of people | `ss.person.age < 15`, `ss.person.female`, any stratification, e.g. `measles.age < 15` | The people with it |
 | A product held | `vaccine.held`, `ss.Vaccine.held` | The people who hold it (or any vaccine) now |
 | Someone's mother | `ss.mother(anc.positive.ever, include_born=True)` | The people whose mother meets the condition (agents only) |
-| A count, or a fraction (`when=`) | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds |
+| A count, or a fraction (`when=` only) | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds; in `who=`, alone or joined to a condition on people, an error that shows how to split it |
 | Recent incidence | `flu.infection.incidence(over=ss.days(7), by='patch') > 200e-5`; without `by=`, in `when=` | Everyone in the groups where it holds, on the steps when it does |
 | A function of the sim | `lambda sim: sim.people.age >= 15` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
 | A function of the date (`when=`) | `lambda now: now.month == 1` | Everyone, on the steps when it returns `True` |
@@ -486,7 +488,12 @@ The ways to time an event or a delivery:
 | `ss.on(screening.positive, delay=ss.months(3))` | That long after the event (agents only) |
 | `ss.schedule(every=ss.years(1), start=2025, stop=2030)` | Times or how often, between a start and a stop; with only `start=` and `stop=`, routinely between them |
 | `start=2025, stop=2030` (beside `when=`) | Any of these within that window, e.g. `when=screening.positive, start=2025` |
-| `sis.I.n > 1000`, `sis.I.frac > 0.02` | Routinely, while the condition on the population holds (decided for everyone at once); joined to an event with `&`, on the event while it holds |
+| `sis.I.n > 1000`, `sis.I.frac > 0.02` | Routinely, while the condition on the population holds (decided for everyone at once) |
+| `ss.schedule(every=ss.years(1)) & (sis.I.n > 1000)` | A schedule while a condition on the population holds: a round only if it holds then; with only `start=` and `stop=`, routinely within them while it holds. Times are `ss.schedule([2025, 2030]) & (...)` |
+| `screening.positive & (sis.I.n > 1000)`, `ss.on(screening.positive, delay=ss.months(3)) & (...)` | An event while a condition on the population holds; after a delay, checked when it acts |
+| `ss.schedule(every=ss.years(1)) \| (sis.I.n > 1000)` | Either: a round at each scheduled time, and also one at each step the condition holds. A start and stop bound both |
+| `screening.positive \| (sis.I.n > 1000)`, `ss.on(screening.positive, delay=ss.months(3)) \| (...)` | Either: those the event happened to (after any delay), and everyone eligible at each step the condition holds |
+| `ss.schedule(every=ss.years(1)) \| screening.positive` | Either: a round at each scheduled time, and those the event happened to |
 
 Reaching people as they reach an age is who, not when: `who=ss.at_age(ss.months(9))`.
 

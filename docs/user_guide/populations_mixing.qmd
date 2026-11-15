@@ -112,7 +112,7 @@ school = ss.MixingPool(
     target = (ss.person.age >= 5) & (ss.person.age < 15), # ... each other
     n_contacts = ss.poisson(mean=10),    # 10 contacts a day on average
 )
-community = ss.MixingPool(name='community', n_contacts=ss.poisson(mean=3))
+community = ss.MixingPool(n_contacts=ss.poisson(mean=3))
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.03*I       # Per contact
@@ -221,7 +221,7 @@ So a matrix from a textbook goes in as given, with the rate written as the textb
 import numpy as np
 beta = np.array([[10, 0.1], [0.1, 1]]) # Per year: row i is the group infected, column j the group infecting
 S, I = ss.states('S I')
-sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init=dict(I=ss.by(risk=[1e-5/0.2, 1e-3/0.8])), name='sis')
+sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init=dict(I=ss.by(risk=[1e-5/0.2, 1e-3/0.8])))
 sis.stratify(risk={'high': 0.2, 'low': 0.8})
 sim = ss.Sim(sis, networks=ss.contacts(risk=beta), total_pop=1, stop=15, unit='year')
 sim.run()
@@ -279,8 +279,8 @@ Each person draws their contacts when they enter an age group, and keeps them wh
 `ss.RandomNet` pairs people at random, with `n_contacts` contacts per person. By default the contacts are redrawn every step; with `dynamic=False`, they are made once at the start and kept, and with `dur=`, each lasts that long and is then replaced. `who=` restricts the network to some people. Several networks can be given together, each with its own name, as a layered population: here households (fully connected clusters of about three people, `ssl.ClusterNet`) and contacts at work among adults:
 
 ```{python}
-households = ssl.ClusterNet(name='households', cluster_size=ss.poisson(3))
-work = ss.RandomNet(name='work', n_contacts=10, who=(ss.person.age >= 20) & (ss.person.age < 65), dynamic=False)
+households = ssl.ClusterNet(cluster_size=ss.poisson(3))
+work = ss.RandomNet(n_contacts=10, who=(ss.person.age >= 20) & (ss.person.age < 65), dynamic=False)
 
 S, I = ss.states('S I')
 infection = S >> I @ 0.02*I       # Per contact, per day
@@ -307,7 +307,7 @@ By default, people with no partner are paired on every step, so nobody has more 
 net = ss.SexualNet(n_contacts=1.2, concurrency=0.1, dur=ss.years(2))
 sim = ss.Sim(n_agents=2000, networks=net, start=2000, stop=2010, dt=ss.months(1), verbose=0)
 sim.run()
-sim.networks.sexualnet.check(output=True)
+sim.networks.net.check(output=True) # Named after its variable, net
 ```
 
 `ss.SexualNet` is `ss.DegreeNet` between men and women, with an age of debut and participation. Partnerships that are not sexual, such as needle sharing, are `ss.DegreeNet` itself, which takes the same targets among anyone (or the people that `who=` gives, or between two groups with `between=`).
@@ -328,7 +328,7 @@ chronic = ss.Disease(infection, init_prev=ss.by(age=[0, 0.1])) # 10% of adults, 
 chronic.stratify(age=[0, 15]) # Children (0-14) and adults (15+)
 
 pregnancy = ss.Pregnancy(fertility_rate=ss.peryear(0.1)) # 100 conceptions per 1,000 women a year
-deaths = ss.Deaths(death_rate=ss.peryear(0.01))          # 10 deaths per 1,000 people a year
+deaths = ss.death(rate=ss.peryear(0.01))                 # 10 deaths per 1,000 people a year
 sim = ss.Sim(chronic, networks=[ss.SexualNet(), ss.PrenatalNet(), ss.BreastfeedingNet()], demographics=[pregnancy, deaths],
              analyzers='infection_log', n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 sim.run()
@@ -360,8 +360,8 @@ A network written as code is a subclass of one of the networks in the [appendix]
 | Method | What it does |
 |---|---|
 | `add_pairs()` | Makes new edges; the main method to override |
-| `remove_pairs()` | Ends edges, e.g. those whose duration is over |
-| `step()` | Called every step; by default removes, then adds, pairs |
+| `end_pairs()` | Ends edges, e.g. those whose duration is over |
+| `step()` | Called every step; by default ends, then adds, pairs. On `ss.DegreeNet` or `ss.SexualNet`, a `step()` of your own forms all the partnerships: the base forms none, not even those it starts with, unless your `step()` calls `super().step()` |
 | `init_post()` | Sets the network up once the people exist |
 | `find_contacts()` | Gives the contacts of some people |
 
@@ -369,7 +369,7 @@ A network written as code is a subclass of one of the networks in the [appendix]
 
 ## Transmission that differs by route
 
-How infectious someone is can depend on the route: HIV, for example, passes far more readily through a shared needle than through sex. The disease then gives one β for each route, as a dict keyed by the route's name (the network's class in lowercase, unless it was given a `name=`), with a value for every route. On a network with directions, β takes a value for each: `ss.peract(m2f=..., f2m=...)` is a probability per act from men to women and from women to men. On a network without acts, β is a rate for each contact with an infectious person, e.g. `ss.peryear(0.2)`. The infection log (`ss.infection_log`; see [Analyzers](interventions_analyzers.qmd#the-infection-log)) records the route of each infection:
+How infectious someone is can depend on the route: HIV, for example, passes far more readily through a shared needle than through sex. The disease then gives one β for each route, as a dict keyed by the route's name (the network's name: its variable's, else its class's in lower case; see [Names](building_writing.qmd#names)), with a value for every route. On a network with directions, β takes a value for each: `ss.peract(m2f=..., f2m=...)` is a probability per act from men to women and from women to men. On a network without acts, β is a rate for each contact with an infectious person, e.g. `ss.peryear(0.2)`. The infection log (`ss.infection_log`; see [Analyzers](interventions_analyzers.qmd#the-infection-log)) records the route of each infection:
 
 ```{python}
 S, I = ss.states('S I')

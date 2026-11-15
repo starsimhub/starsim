@@ -1,6 +1,6 @@
 # Starsim's kernels in Rust
 
-This crate holds a second copy of Starsim's compiled kernels, in Rust, which give the same numbers as the Numba ones, bit for bit. They are compiled ahead of time, so a first run takes no compiling (with an empty Numba cache, a first compartmental run takes 0.01 s rather than about two minutes), and they run at least as fast as Numba's in nearly every case. With `ss.options.kernels = 'auto'` (the default), Starsim uses them whenever they have been built; see the table of kernels in the solvers' architecture page (`docs/user_guide/architecture_solvers.qmd`).
+This crate holds a second copy of Starsim's compiled kernels, in Rust, which give the same numbers as the Numba ones, bit for bit. They are compiled ahead of time, so a first run takes no compiling (with an empty Numba cache, a first compartmental run takes 0.01 s rather than about two minutes), and they run at least as fast as Numba's in nearly every case. With `ss.options.backend = 'auto'` (the default), Starsim uses them whenever they have been built; see the table of kernels in the solvers' architecture page (`docs/user_guide/architecture_solvers.qmd`).
 
 ## Building
 
@@ -12,7 +12,7 @@ From a clone, `starsim init compile --rust` installs Rust if it is missing and b
 cd starsim/solvers/rust && ./build
 ```
 
-This takes about 90 s the first time (about 15 s after that) and puts the library at `starsim/solvers/backends/_rs.abi3.so` (gitignored), where `ss.solvers.backends.rust` loads it. For CPUs with AVX2 (nearly all x86 CPUs since 2013): `RUSTFLAGS="-C target-cpu=x86-64-v3" ./build`. The default build checks for AVX2 at run time where it matters (`avx2!` in `py.rs`), so it is as fast for the vectorized draws. The build compiles in a hash of the source (`build.rs`); if the source beside the library has changed since, it isn't used: `ss.options.kernels='rust'` is an error, and `'auto'` warns and uses Numba's.
+This takes about 90 s the first time (about 15 s after that) and puts the library at `starsim/solvers/backends/_rs.abi3.so` (gitignored), where `ss.solvers.backends.rust` loads it. For CPUs with AVX2 (nearly all x86 CPUs since 2013): `RUSTFLAGS="-C target-cpu=x86-64-v3" ./build`. The default build checks for AVX2 at run time where it matters (`avx2!` in `py.rs`), so it is as fast for the vectorized draws. The build compiles in a hash of the source (`build.rs`); if the source beside the library has changed since, it isn't used: `ss.options.backend='rust'` is an error, and `'auto'` warns and uses Numba's.
 
 ## Keeping the kernels in sync
 

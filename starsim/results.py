@@ -853,13 +853,17 @@ class Result(ss.arrays.BaseArr):
             out = sc.obj({scenario:out[inds] for scenario,inds in self.scenarios().items()})
         return out
 
+    def _flow_ratio(self):
+        """ Whether it is a ratio of two flows (its `parts`, e.g. a delivery's coverage, delivered over eligible), which `summarize()` and `resample()` take as the total of one over the total of the other """
+        return self.summarize_by == 'mean' and self.parts is not None and self.values.ndim == self.t_axis + 1 and all(np.ndim(part.values) == self.values.ndim for part in self.parts)
+
     def _summarize(self):
         """ The summary of `summarize()`, unlabeled """
         if self.summarize_by is None:
             errormsg = f'"{self.name}" is not summarized over time (summarize_by=None)'
             raise ValueError(errormsg)
         t = self.t_axis
-        if self.summarize_by == 'mean' and self.parts is not None and self.values.ndim == t + 1 and all(np.ndim(part.values) == self.values.ndim for part in self.parts): # A ratio of flows, e.g. a delivery's coverage, which is 0 between its rounds: the total of one over the total of the other
+        if self._flow_ratio(): # A ratio of flows, e.g. a delivery's coverage, which is 0 between its rounds: the total of one over the total of the other
             num, den = [np.asarray(part.values, dtype=float).sum(axis=t) for part in self.parts]
             return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
         values = np.moveaxis(np.asarray(self.values), t, 0) # Time first
@@ -930,16 +934,17 @@ class Result(ss.arrays.BaseArr):
         Resample the result to a longer time unit, by its `summarize_by` (which by default follows its kind)
 
         A flow is summed over each period, a stock takes its value at the start of each
-        period (a cumulative total, e.g. `res.infection.cum`, its value at the end), and a ratio sums
-        its numerator and denominator over each period (by group, if it has them) and divides them (one
-        with no parts is averaged over the period). Periods start at the sim's start and include their
+        period (a cumulative total, e.g. `res.infection.cum`, its value at the end), and a ratio is averaged
+        over each period, with or without groups, as `summarize()` takes it over the run; but a ratio of two flows,
+        such as a delivery's coverage, is the total of one over the total of the other in each period. Periods start at the sim's start and include their
         start, as for data, as each time point holds the step that starts there; calendar months and years
         are used instead for a sim with dates. Each period is labeled by its start: for calendar months and years,
         the first day of the month or year (so a year of weekly steps is labeled 1 January, not the first week
         of the year), or the start of the run if later; otherwise its first time point.
         Only whole periods are kept: a monthly run from 2000 to 2020 has 20 years, as its last step (from 2020)
         is one month of 2020, while a yearly one has 21 (unless no period is whole, when all are kept).
-        The values by group (`select()` and `by()`) are resampled too.
+        The values by group (`select()` and `by()`) are resampled too, except a ratio's (other than a ratio of flows),
+        since its mean over a period is not a ratio of its groups' means: select its groups first (`res.select(age=0).resample('year')`).
 
         Args:
             new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
@@ -994,15 +999,17 @@ class Result(ss.arrays.BaseArr):
             if len(g_starts) < len(starts):
                 _no_groups = f'it is kept by group every {group_ti[1]} steps, so its groups cannot be resampled to a shorter period'
                 strata = denom = None
-        if how == 'mean' and denom is not None and self.columns is None: # A ratio: the parts, each summed over the period, then divided
-            new_strata, new_denom = agg_g(strata, 'sum'), agg_g(denom, 'sum')
-            num, den = new_strata.sum(axis=-1), new_denom.sum(axis=-1)
-            values = np.divide(num, den, out=np.zeros(num.shape), where=den!=0)
+        if self._flow_ratio(): # A ratio of two flows, e.g. a delivery's coverage, which is 0 between its rounds: the total of one over the total of the other in each period, as summarize() takes it over the run
+            num, den = [agg(part.values, 'sum') for part in self.parts]
+            values = np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0)
             low = high = None
-        else:
+            new_strata, new_denom = agg_g(strata, 'sum'), agg_g(denom, 'sum')
+        else: # Anything else by its own way, a ratio by the mean of its value over each period, as summarize() takes it over the run
             values, low, high = agg(self.values, how), agg(self.low, how), agg(self.high, how)
-            new_strata = agg_g(strata, how)
-            new_denom = None
+            new_strata, new_denom = agg_g(strata, how), None
+            if how == 'mean' and denom is not None: # The mean of a ratio is not a ratio of the groups' means, so its groups are selected before resampling
+                _no_groups = 'it is a ratio, whose mean over each period is not a ratio of the means of its groups; select the groups first, e.g. res.select(age=0).resample("year")'
+                strata = None
         timevec = self.timevec[starts]
         if period_starts is not None: # The calendar start of each period, or the start of the run
             first = pd.Timestamp(self.timevec[0])
@@ -1260,7 +1267,7 @@ class Results(ss.ndict):
         args (list): passed to `ss.ndict`
         kwargs (dict): passed to `ss.ndict`
     """
-    __slots__ = ('_module', '_implicit', '_given_to')
+    __slots__ = ('_module', '_implicit', '_given_to', '_default', '_origin')
 
     def __new__(cls, *args, **kwargs):
         """
@@ -1270,6 +1277,8 @@ class Results(ss.ndict):
         self.setattribute('_module', None)   # The name of the module the results belong to
         self.setattribute('_implicit', None) # The sim's one disease: see matches()
         self.setattribute('_given_to', None) # The sim's name for a module given to it: see _given_msg()
+        self.setattribute('_default', None)  # The default name of the module (e.g. 'sir'), by which the sim's results also find them: see by_default()
+        self.setattribute('_origin', None)   # Where the module's name came from, for messages (see ss.Module.name_origin())
         return self
 
     def __init__(self, module=None, *args, **kwargs):
@@ -1335,7 +1344,51 @@ class Results(ss.ndict):
         found = found or same([e for e in entries if e[2] == implicit], 1) or same(entries, 1)
         if not found and spelled.lower().endswith('_cum'): # A flow's cumulative total, e.g. 'sis.infection.cum'
             found = {f'{key}_cum':res.cum for key,res in self.matches(name[:-4]).items() if isinstance(res, Result) and res.kind == 'flow'}
+        if not found and (real := self._aliased(name)) is not None: # With the module by its default name, e.g. 'sir.I' for 'measles.I'
+            found = self.matches(real)
         return found
+
+    def _modules(self):
+        """ The results of each module here, by its name """
+        return {key:val for key,val in self.items() if isinstance(val, Results) and val._default is not None}
+
+    def by_default(self, name, error=None):
+        """
+        The results of the only module here whose default name is `name`, e.g. `sim.results.sir` for an `ss.SIR` called `measles` (see `ss.ndict.by_default()`)
+
+        Args:
+            name (str): the default name
+            error (type): if given, the error to raise if there is not exactly one, listing the modules there are; otherwise, None
+        """
+        found = [res for res in self._modules().values() if res._default == name]
+        if len(found) == 1:
+            return found[0]
+        if error is not None:
+            raise error((self._modules_msg(name) or (None, f'"{name}" is not a result'))[1])
+        return None
+
+    def _aliased(self, name):
+        """ A name that starts with a module's default name (`sir.I`), with the module's own name in its place (`measles.I`), if exactly one module has that default name and none is called it """
+        mods = self._modules()
+        for default in {res._default for res in mods.values()}:
+            if default not in mods and (name == default or any(name.startswith(default + sep) for sep in '._')):
+                keys = [key for key,res in mods.items() if res._default == default]
+                if len(keys) == 1:
+                    return keys[0] + name[len(default):]
+        return None
+
+    def _modules_msg(self, key):
+        """ For a name that is not a result here, but could be meant as a module: which modules have it as their default name, or else the names of all of them, and where each came from; as (whether it is several modules' default name, the message) """
+        mods = self._modules()
+        if not mods or not isinstance(key, str):
+            return None
+        origins = lambda keys: ', '.join(f'`{k}` ({mods[k]._origin})' for k in keys)
+        head = key.replace('.', '_').split('_')[0]
+        same = [k for k,res in mods.items() if res._default in (key, head)]
+        if len(same) > 1:
+            what = f'"{key}" is' if head == key else f'"{key}" starts with "{head}", which is'
+            return True, f'{what} the default name of {len(same)} modules, {origins(same)}, so it does not say which: use one of their names'
+        return False, f'the modules are: {origins(mods)}'
 
     def find(self, name, die=True):
         """
@@ -1371,7 +1424,11 @@ class Results(ss.ndict):
             keys = [entry[0] for entry in spellings(self) if not entry[0].endswith('timevec')]
             near = [k for k in keys if key.replace('.', '_').lower() in k.lower()] # A part of a name is only a suggestion
             owner = f'"{self._module}"' if self._module else 'the sim'
-            return f'"{key}" is not a result of {owner}{f"; did you mean {sc.strjoin(near[:3])}?" if near else ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}'
+            several, mods = self._modules_msg(key) or (False, None)
+            if several:
+                return mods
+            mods = f'; {mods}' if mods else ''
+            return f'"{key}" is not a result of {owner}{f"; did you mean {sc.strjoin(near[:3])}?" if near else ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}{mods}'
         return None
 
     def __getitem__(self, key):
@@ -1379,14 +1436,24 @@ class Results(ss.ndict):
             return dict.__getitem__(self, key)
         if (res := self.find(key, die=False)) is not None:
             return res
+        if isinstance(key, str) and (res := self.by_default(key)) is not None: # A module's results by its default name, e.g. sim.results['sir']
+            return res
         if msg := self._given_msg(key) or self._unknown_msg(key):
             raise sc.KeyNotFoundError(msg)
         return super().__getitem__(key)
 
+    def __missing__(self, key):
+        """ As for any `sc.obj` (by index), not by a module's default name, which `__getitem__()` has looked for """
+        return sc.obj.__missing__(self, key)
+
     def __getattr__(self, attr):
         if dict.__contains__(self, attr): # As in __getitem__()
             return dict.__getitem__(self, attr)
+        if attr.startswith('_'):
+            raise AttributeError(attr)
         if (res := self.find(attr, die=False)) is not None:
+            return res
+        if (res := self.by_default(attr)) is not None: # A module's results by its default name, e.g. sim.results.sir
             return res
         if msg := self._given_msg(attr) or self._unknown_msg(attr):
             raise AttributeError(msg)
@@ -1648,13 +1715,15 @@ def format_value(v):
 
 
 def summary_attr(obj, attr):
-    """ A row of a `Summary` (or a value of one of its columns) by its result's name with `_` for `.`, e.g. `summary.value.sir_infection` for `summary.value['sir.infection']`; only for an attribute pandas does not have """
+    """ A row of a `Summary` (or a value of one of its columns) by its result's dotted name, read as attributes, e.g. `summary.sir.infection` or `summary.value.sir.infection` for `summary.loc['sir.infection']`: `summary.sir` is that module's rows; only for an attribute pandas does not have """
     if not attr.startswith('_'):
         index = object.__getattribute__(obj, 'index')
         labels = index.get_level_values(0) if isinstance(index, pd.MultiIndex) else index
-        found = [label for label in dict.fromkeys(labels) if isinstance(label, str) and label.replace('.', '_') == attr]
-        if len(found) == 1:
-            return obj.loc[found[0]]
+        labels = [label for label in dict.fromkeys(labels) if isinstance(label, str)]
+        if attr in labels:
+            return obj.loc[attr]
+        if rows := [label for label in labels if label.startswith(attr + '.')]:
+            return obj.loc[rows].rename(index=lambda label: label.removeprefix(attr + '.'), level=0 if isinstance(index, pd.MultiIndex) else None)
     raise AttributeError(f"'{type(obj).__name__}' object has no attribute '{attr}'")
 
 
@@ -1684,7 +1753,7 @@ class Summary(sc.dataframe):
     The table of `sim.summarize()` and `msim.summarize()`: a dataframe, shown with its numbers rounded to sensible units (see `format_value()`); its values are not rounded
 
     Each row is a result, by its module and name, e.g. `summary.loc['sir.infection']`. A row (or a value of a column) can
-    also be read as an attribute, with `_` for `.`, e.g. `summary.sir_infection` or `summary.value.sir_infection`.
+    also be read as attributes, e.g. `summary.sir.infection` or `summary.value.sir.infection`, and `summary.sir` is a module's rows.
     """
     @property
     def _constructor_sliced(self):
@@ -1781,8 +1850,9 @@ def split_columns(flat, sep='_'):
 
 def match_result_keys(results, key, show_skipped=False):
     """ The results named by a key or list of keys (see `ss.Results.find()`), or all of a module's, or with no key, every one that is plotted by default, leaving out those that are zero throughout (or every one, with `show_skipped`), by their names in `to_df()` """
-    if isinstance(key, str) and isinstance(dict.get(results, key), dict): # All of a module's, e.g. sim.plot('sis')
-        return results[key].flatten()
+    mod = (dict.get(results, key) if dict.__contains__(results, key) else results.by_default(key)) if isinstance(key, str) else None
+    if isinstance(mod, dict): # All of a module's, e.g. sim.plot('sis'), also by its default name
+        return mod.flatten()
     if key is None:
         zero = lambda res: res.values is not None and np.size(res.values) and not np.any(res.values) # e.g. the deaths of a disease that nobody dies of
         return sc.obj({k:res for k,res in results.flatten().items() if show_skipped or (res.auto_plot and not zero(res))})
