@@ -219,18 +219,11 @@ class Sim(ss.modules.Base):
                     if isinstance(mod, ss.Event) and getattr(mod, 'product', None) is not None:
                         objs[id(mod.product)] = mod.product
         unnamed = [obj for obj in objs.values() if obj._name_source == 'class' and not getattr(obj, '_from_keywords', False)] # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
-        found = {}
-        for obj in unnamed:
-            if obj._assigned: # The variable it was first assigned to
-                found[id(obj)] = (obj._assigned, obj._assigned_in)
-            elif names.get(id(obj)): # Else the one that holds it here
-                found[id(obj)] = (names[id(obj)], getattr(names, 'where', None))
+        found = {id(obj):(obj._assigned, obj._assigned_in) if obj._assigned else (names.get(id(obj)), getattr(names, 'where', None)) for obj in unnamed} # The variable it was first assigned to, else the one that holds it here
         counts = collections.Counter(name for name,_ in found.values())
         for obj in unnamed:
-            name, where = found.get(id(obj), (None, None))
-            if name in taken or counts[name] > 1:
-                name = None
-            if name is not None:
+            name, where = found[id(obj)]
+            if name is not None and name not in taken and counts[name] == 1:
                 obj._set_name(name, source='variable', where=where)
                 obj._assigned = name
             elif type(obj) is ss.Disease and getattr(obj, 'graph', None) is not None: # A plain disease not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'

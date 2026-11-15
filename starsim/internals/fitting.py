@@ -1757,7 +1757,7 @@ def bounded_pars(probe, pars=None, unused=()):
     """
     fitted = sc.obj()
     if pars is not None: # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
-        pars = [ss.utils.own_path(probe.module_list, name) for name in pars]
+        pars = [ss.utils.own_name(probe.module_list, name) for name in pars]
     for mod in probe.declared:
         for name,p in mod.graph.pars.items():
             if id(p) in unused: # A parameter of a likelihood that is not used in this fit

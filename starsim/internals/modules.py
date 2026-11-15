@@ -569,7 +569,7 @@ class Module(Base):
         source = getattr(self, '_name_source', 'class')
         if source == 'variable':
             where = self._name_where
-            return f'named from the variable `{self._assigned or self.name}`' + (f' in `{where}()`' if where and not where.startswith('<') else '')
+            return f'named from the variable `{self.name}`' + (f' in `{where}()`' if where and not where.startswith('<') else '')
         elif source == 'given':
             return 'given'
         cls = type(self)

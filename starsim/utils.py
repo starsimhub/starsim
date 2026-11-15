@@ -98,26 +98,16 @@ class ndict(sc.obj):
         return
 
     def __getattr__(self, attr):
-        """ Only for a key that is not here: a module by its default name, e.g. `sim.diseases.sir` (see `by_default()`) """
+        """ Only for a key that is not here: a module by its default name, e.g. `sim.diseases.sir` (see `ss.utils.find_module()`) """
         if attr.startswith('_'):
             raise AttributeError(attr)
-        return self.by_default(attr, error=AttributeError)
+        return find_module(self.values(), attr, kind=getattr(self, '_kind', None) or 'items', error=AttributeError, own=False)
 
     def __missing__(self, key):
         """ As `__getattr__()`, for `ndict[key]`; an index or slice as for any `sc.obj` """
         if isinstance(key, str):
-            return self.by_default(key, error=sc.KeyNotFoundError)
+            return find_module(self.values(), key, kind=getattr(self, '_kind', None) or 'items', error=sc.KeyNotFoundError, own=False)
         return super().__missing__(key)
-
-    def by_default(self, name, error=None):
-        """
-        The only module here whose default name is `name` (e.g. `'sir'` for an `ss.SIR` called `measles`; see `ss.Module.default_name` and `ss.utils.find_module()`)
-
-        Args:
-            name (str): the default name
-            error (type): if given, the error to raise if there is not exactly one, listing the names there are; otherwise, None
-        """
-        return find_module(self.values(), name, kind=getattr(self, '_kind', None) or 'items', error=error, own=False)
 
     def __call__(self):
         """ The values, e.g. `for disease in sim.diseases():` """
@@ -197,7 +187,7 @@ class ndict(sc.obj):
                 return self[key]
             elif not match_case and (found := next((v for k, v in self.items() if k.lower() == key.lower()), None)) is not None:
                 return found
-            found = self.by_default(key)
+            found = find_module(self.values(), key, own=False)
             return default if found is None else found
         elif isinstance(key, type):
             return next((v for v in self.values() if isinstance(v, key)), default)
@@ -248,11 +238,11 @@ def find_module(mods, name, kind='modules', error=None, own=True):
     """
     The module called `name`, else the only one whose default name is `name` (e.g. `'sir'` for an `ss.SIR` called `measles`; see `ss.Module.default_name`)
 
-    Every lookup of a module by a name the user gives goes through this: `sim.diseases.sir`, `sim.sir`, `sim.pars.sir`, and paths such as
-    `'sir.beta'` (in `pars=`) and `'sir.I'` (in a condition; see also `own_path()`).
+    Every lookup of a module by a name the user gives goes through this: `sim.diseases.sir`, `sim.sir`, `sim.pars.sir`, `sim.results.sir`, and paths
+    such as `'sir.beta'` (in `pars=`) and `'sir.I'` (in a condition; see `own_name()`).
 
     Args:
-        mods (list): the modules to look in
+        mods (list): the modules to look in (or anything with `name`, `default_name`, and `name_origin()`)
         name (str): the name
         kind (str): what the modules are, for messages, e.g. "diseases"
         error (type): if given, the error to raise if no module, or several, have the name, listing the names there are and where each came from; otherwise, None
@@ -261,12 +251,10 @@ def find_module(mods, name, kind='modules', error=None, own=True):
     mods = list(mods)
     if own and (found := next((mod for mod in mods if getattr(mod, 'name', None) == name), None)) is not None:
         return found
-    found = [mod for mod in mods if isinstance(mod, ss.Module) and mod.default_name == name]
-    if len(found) == 1:
-        return found[0]
-    if error is None:
-        return None
-    origins = lambda mods: ', '.join(f'`{mod.name}` ({mod.name_origin()})' if isinstance(mod, ss.Module) else f'`{mod.name if hasattr(mod, "name") else mod}`' for mod in mods)
+    found = [mod for mod in mods if getattr(mod, 'default_name', None) == name]
+    if len(found) == 1 or error is None:
+        return found[0] if len(found) == 1 else None
+    origins = lambda mods: ', '.join(f'`{mod.name}` ({mod.name_origin()})' if hasattr(mod, 'name_origin') else f'`{getattr(mod, "name", mod)}`' for mod in mods)
     if found:
         errormsg = f'"{name}" is the default name of {len(found)} {kind}, {origins(found)}, so it does not say which: use one of their names'
     elif len(mods):
@@ -278,29 +266,15 @@ def find_module(mods, name, kind='modules', error=None, own=True):
 
 def own_name(mods, name):
     """
-    The name of the module that `name` finds (see `find_module()`), e.g. `'measles'` for `'sir'`; else `name` as it is (e.g. one that is no module's)
+    A module's name, or a path that starts with one (`'sir'`, `'sir.beta'`), with the name of the module it finds (see `find_module()`), e.g. `'measles'`, `'measles.beta'`; else as it is
 
-    Raises a `KeyError` if `name` is the default name of several modules, and none is called it.
-
-    Args:
-        mods (list): the modules to look in
-        name (str): the name
+    Raises a `KeyError` if it is the default name of several modules, and none is called it.
     """
-    if not isinstance(name, str) or not name:
-        return name
+    head, dot, rest = name.partition('.') if isinstance(name, str) else ('', '', '')
     mods = list(mods)
-    if any(mod.name == name for mod in mods):
+    if not head or any(mod.name == head for mod in mods) or not any(mod.default_name == head for mod in mods):
         return name
-    found = [mod for mod in mods if mod.default_name == name]
-    if len(found) > 1:
-        find_module(mods, name, error=sc.KeyNotFoundError) # Raises, listing them
-    return found[0].name if found else name
-
-
-def own_path(mods, path):
-    """ A path that starts with a module's name, e.g. `'sir.beta'`, with the module's own name (see `own_name()`), e.g. `'measles.beta'`; else the path as it is """
-    head, dot, rest = path.partition('.') if isinstance(path, str) else ('', '', '')
-    return f'{own_name(mods, head)}.{rest}' if dot else path
+    return find_module(mods, head, error=sc.KeyNotFoundError).name + dot + rest
 
 
 def nlist_to_dict(nlist, die=True):

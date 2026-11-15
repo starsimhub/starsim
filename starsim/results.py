@@ -1352,29 +1352,18 @@ class Results(ss.ndict):
         """ The results of each module here, by its name """
         return {key:val for key,val in self.items() if isinstance(val, Results) and val._default is not None}
 
-    def by_default(self, name, error=None):
-        """
-        The results of the only module here whose default name is `name`, e.g. `sim.results.sir` for an `ss.SIR` called `measles` (see `ss.ndict.by_default()`)
-
-        Args:
-            name (str): the default name
-            error (type): if given, the error to raise if there is not exactly one, listing the modules there are; otherwise, None
-        """
+    def by_default(self, name):
+        """ The results of the only module here whose default name is `name`, e.g. `sim.results.sir` for an `ss.SIR` called `measles` (see `ss.utils.find_module()`); else None """
         found = [res for res in self._modules().values() if res._default == name]
-        if len(found) == 1:
-            return found[0]
-        if error is not None:
-            raise error((self._modules_msg(name) or (None, f'"{name}" is not a result'))[1])
-        return None
+        return found[0] if len(found) == 1 else None
 
     def _aliased(self, name):
         """ A name that starts with a module's default name (`sir.I`), with the module's own name in its place (`measles.I`), if exactly one module has that default name and none is called it """
         mods = self._modules()
-        for default in {res._default for res in mods.values()}:
-            if default not in mods and (name == default or any(name.startswith(default + sep) for sep in '._')):
-                keys = [key for key,res in mods.items() if res._default == default]
-                if len(keys) == 1:
-                    return keys[0] + name[len(default):]
+        for default in {res._default for res in mods.values()} - set(mods):
+            keys = [key for key,res in mods.items() if res._default == default]
+            if len(keys) == 1 and (name == default or name.startswith((default + '.', default + '_'))):
+                return keys[0] + name[len(default):]
         return None
 
     def _modules_msg(self, key):

@@ -615,7 +615,7 @@ def set_par_values(sim):
     values = {}
     levels = sc.ddict(dict)
     for key,val in (sim._par_values or {}).items():
-        key = ss.utils.own_path(list(sim.declared) + coded, key) # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
+        key = ss.utils.own_name(list(sim.declared) + coded, key) # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
         base, bracket, label = key.partition('[')
         if bracket and key.endswith(']'):
             levels[base][label[:-1]] = val
