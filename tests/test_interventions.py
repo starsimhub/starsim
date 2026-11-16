@@ -318,6 +318,15 @@ def test_doses_and_holding():
     return sim
 
 
+def test_renamed_hooks():
+    """ Code written for the old names fails loudly rather than silently doing nothing """
+    with pytest.raises(TypeError, match='record_events'):
+        class Old(ss.Analyzer):
+            def record_flows(self):
+                pass
+    assert ss.Intervention(who=ss.person.age < 15).who is not None
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     for name,test in list(globals().items()):

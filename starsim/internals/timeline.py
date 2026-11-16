@@ -239,11 +239,6 @@ class Timeline:
     __hash__ = object.__hash__ # Defining __eq__ removes the default hash, so restore it
 
     @property
-    def ready(self):
-        """ Check if all parameters are in place to be initialized """
-        return not any([getattr(self, k) is None for k in self.time_args])
-
-    @property
     def is_absolute(self):
         """ Whether the times are dates (the start is a date rather than a duration) """
         return isinstance(self.start, ss.date)

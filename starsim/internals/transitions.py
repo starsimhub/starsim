@@ -1047,10 +1047,11 @@ def move(*args, p=None, n=None, uids=None, who=None):
 
     Args:
         args: in any order, told apart by what they are: a move written with the states (`sir.I >> sir.R`), or the state (or a list of states) to move people from and the
-            state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first;
+            state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first; or several moves at once (or a list of them),
+            each from its own states (`sir.E >> sir.R, sir.I >> sir.R`), none of them into a state another moves out of;
             the disease, which is enough to say where they come from (any of its states of people); and the agents to
             move (`ss.uids`), as `uids=`
-        p (float): the fraction of the people in the source to move, in each group (by default, everyone)
+        p (float): the fraction of the people in the source to move, in each group (by default, everyone); with several destinations (a list), the fraction going to each (a list, one of them None for the rest)
         n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
         uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a fraction or number of them
         who (Cond/State/func/str): only the people for whom a condition holds (e.g. `ss.person.age < 15`, a group, or a state by its path, `'sir.I'`), under every solver; with `p=` or `n=`, a fraction or number of them
@@ -1063,7 +1064,9 @@ def move(*args, p=None, n=None, uids=None, who=None):
         ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
         ss.move(sir.I >> sir.R, p=0.5) # The same, written as a move, as for ss.Event()
         ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
+        ss.move(hiv.A, [hiv.D, hiv.R], p=[0.3, None]) # Of those in A, 30% to D and the rest to R: each to one of them
         ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5) # Protect 80% of the susceptible children under 5
+        ss.move(hiv.dx1 >> hiv.tx1, hiv.dx2 >> hiv.tx2, uids=uids) # These agents, each to the state for the one they are in
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
         ss.move(sir.I, ss.dead, p=0.1) # A tenth of those infectious die
@@ -1078,11 +1081,21 @@ def move(*args, p=None, n=None, uids=None, who=None):
 
     # Tell the arguments apart
     diseases, ends = [], []
+    args = [x for arg in args for x in (arg if isinstance(arg, list) and arg and all(isinstance(a, Transition) for a in arg) else [arg])] # A list of moves, as the moves themselves
     moves = [arg for arg in args if isinstance(arg, Transition)] # A move written with the states, sir.I >> sir.R, as for ss.Event() and ss.Treatment(moves=)
+    if len(moves) > 1: # Several at once, each from its own states, e.g. the same agents each to the state for the one they are in
+        if n is not None:
+            raise ValueError('ss.move() of several moves takes a share (p=) or the agents (uids=), not a number (n=), which would not say how to share it among them')
+        srcs = {s.name for tr in moves for s in tr.source}
+        dsts = {s.name for tr in moves for s in tr.dest}
+        if srcs & dsts:
+            raise ValueError(f'ss.move() of several moves moves people out of and into {sc.strjoin(srcs & dsts)} at once, so whether they move on again would depend on the order; make the moves in separate calls')
+        rest = [arg for arg in args if not isinstance(arg, Transition)]
+        return sum(move(*rest, tr, p=p, uids=uids, who=who) for tr in moves)
     if moves:
         others = [arg for arg in args if arg is not moves[0] and not is_uids(arg) and not isinstance(getattr(arg, 'graph', None), ss.graph.Graph)] # Besides the agents and the disease
-        if len(moves) > 1 or len(moves[0].dest) != 1 or others:
-            raise ValueError('ss.move() takes one move, from one or more states to one (e.g. ss.move(sir.I >> sir.R, p=0.5)), or the states (ss.move(sir.I, sir.R, p=0.5)), not both')
+        if len(moves[0].dest) != 1 or others:
+            raise ValueError('ss.move() takes moves, each from one or more states to one (e.g. ss.move(sir.I >> sir.R, p=0.5)), or the states (ss.move(sir.I, sir.R, p=0.5)), not both')
         if moves[0].rate is not None:
             raise ValueError('ss.move() moves people now, so its move has no rate: give the fraction as p= or the number as n= (e.g. ss.move(sir.I >> sir.R, p=0.5))')
         args = [arg for arg in args if arg is not moves[0]] + [moves[0].source, moves[0].dest[0]]
@@ -1110,6 +1123,26 @@ def move(*args, p=None, n=None, uids=None, who=None):
                 raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
             x = getattr(home, x)
         return run_state(x)
+    if isinstance(ends[-1], (list, tuple)): # A split between several destinations, each a fraction of those in the source
+        dsts, ps = [find(x) for x in ends[-1]], (list(p) if isinstance(p, (list, tuple)) else None)
+        if n is not None or ps is None or len(ps) != len(dsts) or sum(x is None for x in ps) > 1:
+            raise ValueError(f'ss.move() to several states splits the people between them: give the fraction going to each as a list of {len(dsts)}, e.g. p=[0.3, None] (None for the rest), not n=')
+        known = sum(x for x in ps if x is not None)
+        if known > 1 + 1e-9:
+            raise ValueError(f'ss.move() to several states was given shares that add up to {known:g}, more than everyone')
+        if len(ends) == 2:
+            srcs = ends[0]
+        elif home is None:
+            raise ValueError('ss.move() to several states needs the state people move from too, or the disease, for any of its other states')
+        else:
+            srcs = [state for state in home.graph.people_states if all(state is not d[1] for d in dsts)]
+        moved, left = 0.0, 1.0
+        for (_,dst),q in zip(dsts, ps): # Each a fraction of those still in the source, so each person is moved to at most one, with the chance given
+            q = max(1.0 - known, 0.0) if q is None else q
+            if q > 0:
+                moved += move(*diseases, srcs, dst, p=min(q/left, 1.0) if left > 0 else 0.0, uids=uids, who=who)
+            left -= q
+        return moved
     outs = [end for end in ends if isinstance(end, Outside)]
     if len(ends) == 2 and len(outs) == 2:
         raise ValueError(f'ss.move() moves people into or out of a state, not from {outs[0]} to {outs[1]}')

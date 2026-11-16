@@ -303,7 +303,7 @@ def on_edge(strat, value):
     return strat.edges[match[0]] if len(match) else None
 
 
-def count_now(sim, cond=None, mod=None):
+def count_now(sim, cond=None, mod=None, by=None):
     """
     The number of people now for whom a condition holds, under every solver (as agents, each counted by their weight and the sim's scale);
     see `Cond.n`
@@ -312,6 +312,7 @@ def count_now(sim, cond=None, mod=None):
         sim (`ss.Sim`): the sim, initialized
         cond (Cond/State/Arr): the condition (default: everyone)
         mod (`ss.Module`): the module its states are looked up in (default: the one it reads)
+        by (str/bool): instead, the number in each level of a dimension the model is stratified by (its name), or in each group (`True`), as an array
     """
     engine = getattr(mod, 'engine', None)
     selector = engine.selector if engine is not None else Selector(sim, mod)
@@ -320,13 +321,29 @@ def count_now(sim, cond=None, mod=None):
         sel = np.asarray(sel, dtype=bool) & sim.people.alive.raw
         if sim.people.has_unborn: # Agents not yet born are not people yet (as in the result alive)
             sel[sim.people.unborn_uids()] = False
+        if by is not None:
+            return by_level(sim, sim.groups.count(sel)*sim.current_scale, by)
         weights = ss.results.agent_weights(sim)
         n = np.sum(weights[sel]) if weights is not None else np.count_nonzero(sel)
         return float(n*sim.current_scale)
     if engine is None:
         errormsg = f'the number now of {cond!r} needs a declared disease to count people in with solver="{sim.solver}"'
         raise ss.CapabilityError(errormsg)
+    if by is not None:
+        return by_level(sim, np.sum(sel*engine.state_counts(), axis=0), by)
     return float(np.sum(sel*engine.state_counts()))
+
+
+def by_level(sim, vals, by):
+    """ Numbers by group (see `count_now()`) as numbers by level of a dimension (`by`, its name), or by group (`by=True`) """
+    groups = sim.groups
+    vals = np.broadcast_to(np.asarray(vals, dtype=float), (groups.n_groups,)).copy()
+    if by is True:
+        return vals
+    d = groups.dim_index(by)
+    if groups.group_fold is not None and not groups.group_inside[:, d].all():
+        raise ss.CapabilityError(f'a count by "{by}" leaves out the people outside its who=, who are counted in groups with no level of it; count by group (by=True) instead')
+    return np.bincount(groups.group_coords[:, d], weights=vals, minlength=groups.strats[d].n)
 
 
 def find_module(cond):

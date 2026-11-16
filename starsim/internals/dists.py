@@ -180,7 +180,7 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
-    dists = sc.search(obj, type=Dist, skip=sc.tolist(skip) + list(no_dists()), **kwargs)
+    dists = sc.search(obj, type=Dist, skip=sc.tolist(skip) + list(no_dists()) + ss.utils.skipkeys(['owner']), **kwargs) # A condition's owner is the module it was written for (see ss.Disease.stratify()), not a part of this one
     for dist in dists.values():
         dist.link_sim(sim, overwrite=overwrite)
         dist.link_module(module, overwrite=overwrite)
@@ -298,7 +298,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=ss.utils.skipkeys(['module', '_before_init', 'declared']), subclasses=(Dists,) + no_dists()) # The copy of the sim before it was initialized is only for sim.new(); the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=ss.utils.skipkeys(['module', '_before_init', 'declared', 'owner']), subclasses=(Dists,) + no_dists()) # The copy of the sim before it was initialized is only for sim.new(); the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found

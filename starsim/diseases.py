@@ -1142,7 +1142,33 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise TypeError(errormsg)
         return self.transmit()
 
-    def current_state(self, states=None):
+    def count(self, who=None, by=None):
+        """
+        The number of people now in a state of this disease (or for whom a condition holds), under every solver: as agents,
+        each counted by their weight and the sim's scale, as its results count them
+
+        Args:
+            who (State/Cond/str/list): the state (as code sees it, `sir.I`, or by name, `'I'`), several (a list, counted together), or a condition (e.g. `sir.I & (ss.person.age < 15)`); default: all of its people
+            by (str/bool): instead, the number in each level of a dimension the sim is stratified by (its name, e.g. `'age'`), or in each group (`True`), as an array
+
+        Examples:
+            ```python
+            sir.count('I') # The number infectious
+            sir.count([sir.I, sir.R], by='age') # The number infectious or recovered in each age group
+            ```
+        """
+        if self.engine is None:
+            raise RuntimeError(f'"{self.name}" counts its people once the sim is initialized (sim.init())')
+        if isinstance(who, (list, tuple)):
+            parts = [self[x] if isinstance(x, str) else x for x in who]
+            who = parts[0]
+            for part in parts[1:]:
+                who = who | part
+        elif isinstance(who, str):
+            who = self[who]
+        return ss.conditions.count_now(self.sim, who, self, by=by)
+
+    def current_state(self, states=None, uids=None):
         """
         The state each agent is in, as a read-only `ss.IntArr` (by UID) of its index among `states`, or -1 for none
 
@@ -1150,11 +1176,13 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         Args:
             states (list): the states to look in, as names or states (default: the module's states of people, in order)
+            uids (uids): instead, only these agents, as an array of their indices (in the order given), without making one for everyone
 
         Example:
             ```python
             cs = sir.current_state() # 0 for S, 1 for I, 2 for R
             cs.labels[cs[uid]] # The name of an agent's state
+            sir.current_state(uids=uids) # The index for some agents only
             ```
         """
         graph = self.graph
@@ -1170,6 +1198,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         unknown = [name for name in names if name not in graph.states]
         if unknown:
             raise sc.KeyNotFoundError(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+        if uids is not None:
+            uids = np.asarray(uids, dtype=np.int64)
+            out = np.full(len(uids), -1, dtype=ss.dtypes.int)
+            for i,name in enumerate(names):
+                out[self[name].raw[uids]] = i
+            return out
         age = self.sim.people.age # A plain array of the people, to copy
         raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
         for i,name in enumerate(names):

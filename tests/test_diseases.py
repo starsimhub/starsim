@@ -192,9 +192,46 @@ def test_current_state():
     assert [cs.labels[i] for i in cs[ss.uids([0, 2])]] == ['I', 'R']
     sub = sir.current_state(['R', sir.I]) # Some of them, by name or as states
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
+    assert sir.current_state(['R', sir.I], uids=ss.uids([3, 2, 0])).tolist() == [-1, 0, 1] # Some agents only, in the order given
+    assert ss.move(sir.S >> sir.I, sir.R >> sir.I, uids=ss.uids([2, 3, 5])) == 3 # Several moves at once, each from its own source
+    assert sir.current_state(uids=ss.uids([2, 3, 5])).tolist() == [1, 1, 1]
+    ss.move([sir.I >> sir.R], uids=ss.uids([2])); ss.move(sir.I >> sir.S, uids=ss.uids([3, 5])) # Back as they were (a list of moves too)
+    with pytest.raises(ValueError, match='separate calls'):
+        ss.move(sir.S >> sir.I, sir.I >> sir.R, uids=ss.uids([0]))
+    with pytest.raises(ValueError): # Read-only
+        cs.raw[0] = 2
+    with pytest.raises(KeyError, match='"sir" has no state X'):
+        sir.current_state(['X'])
     res = sim.run().results.sir
     assert (res.I[0], res.R[0]) == (2, 1) # The start counts the agents moved before the first step
 
+    # A count by group, under every solver
+    for kw in [dict(n_agents=2000), dict(solver='ode')]:
+        d = ss.Sim(diseases=ss.SIR(init_prev=0.2), stratify=dict(age=[0, 15, 50]), stop=2001, verbose=0, **kw).init().diseases.sir
+        by_age = d.count('I', by='age')
+        assert by_age.shape == (3,) and np.isclose(by_age.sum(), d.I.n) and np.isclose(d.count([d.I, d.R]), (d.I | d.R).n)
+        assert np.isclose(d.count((ss.person.age < 15) & d.I, by=True)[0], by_age[0]) and d.count((ss.person.age < 15) & d.I, by='age')[1:].sum() == 0
+
+    # A split between several destinations, under every solver
+    for kw in [dict(n_agents=20_000), dict(solver='ode')]:
+        d = ss.Sim(diseases=ss.SIR(init_prev=0), stop=2001, verbose=0, **kw).init().diseases.sir
+        n = d.S.n
+        moved = d.move(d.S, [d.I, d.R], p=[0.2, 0.3])
+        assert np.isclose(moved, 0.5*n, rtol=0.03) and np.isclose(d.I.n, 0.2*n, rtol=0.05) and np.isclose(d.R.n, 0.3*n, rtol=0.05)
+        d.move(d.S, ['I', 'R'], p=[None, 0.5]) # The rest, by name
+        assert d.S.n == 0 and np.isclose(d.I.n, 0.45*n, rtol=0.05)
+        with pytest.raises(ValueError, match='more than everyone'):
+            d.move(d.I, [d.S, d.R], p=[0.6, 0.6])
+
+    # Only the people for whom a condition holds (where=), under every solver
+    for kw in [dict(n_agents=1000), dict(solver='ode')]:
+        d = ss.Sim(diseases=ss.SIR(), stratify=dict(age=[0, 15]), stop=2001, verbose=0, **kw).init().diseases.sir
+        young = ((ss.person.age < 15) & d.S).n
+        assert np.isclose(d.move(d.S, d.R, who=ss.person.age < 15), young) and np.isclose(d.R.n, young)
+    S, I, R = ss.states('S I R')
+    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
+    with pytest.raises(ss.CapabilityError, match='agents'):
+        ode.diseases.sir.current_state()
     return cs
 
 

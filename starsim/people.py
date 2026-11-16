@@ -606,15 +606,6 @@ class People:
         self.auids = self._auids_view = room[:n+k].view(ss.uids)
         return
 
-    def scale_flows(self, inds):
-        """
-        The number of people some agents stand for, by their weights (`people.scale`), e.g. for a result that counts people rather than agents
-
-        Args:
-            inds (array): the agents to count
-        """
-        return self.scale[inds].sum()
-
     def update_post(self):
         """ Updates at the end of each step: agents get older (see `finish_step()`) """
         sim = self.sim
