@@ -40,7 +40,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.2*I        # β = 0.2 per day
 recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average: R0 = 2
-sir = ss.Disease(infection, recovery, init_n=dict(I=1), name='sir') # One imported case
+sir = ss.Disease(infection, recovery, init_n=dict(I=1)) # One imported case
 
 sim = ss.Sim(sir, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
 msim = ss.parallel(sim, n_runs=100, until=sir.I.n + sir.R.n >= 100)
@@ -55,7 +55,7 @@ print(f'Fraction of introductions that died out: {b.p_extinct:.2f} (95% interval
 For chains of transmission, run the same model as agents. A branching process of agents makes agents only for the people infected, so a city of 10 million costs no more than a village: here, 100 imported cases, followed for 60 days:
 
 ```{python}
-sir = ss.Disease(infection, recovery, init_n=dict(I=100), name='sir') # 100 imported cases, for enough chains to count
+sir = ss.Disease(infection, recovery, init_n=dict(I=100)) # 100 imported cases, for enough chains to count
 sim = ss.Sim(sir, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
 sim.run()
 b = sim.branching
@@ -69,14 +69,14 @@ n = b.offspring[b.complete]
 print('Cases:', len(n), ' Mean offspring:', n.mean().round(2), ' Variance:', n.var().round(1), ' Fraction with none:', (n == 0).mean().round(2))
 ```
 
-To give the cases different infectiousness, give the disease `rel_trans` as an attribute drawn for each person, `ss.attr()`. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*. Here, for a SARS-like infection (R0 = 2, *k* = 0.2), the offspring with and without it, each over 8 runs of 20 imported cases:
+To give the cases different infectiousness, give the disease a distribution as `rel_trans`, drawn for each person. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*. Here, for a SARS-like infection (R0 = 2, *k* = 0.2), the offspring with and without it, each over 8 runs of 20 imported cases:
 
 ```{python}
 k = 0.2
 offspring = {}
-for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.attr(ss.gamma(shape=k, scale=1/k))))]: # Each person's infectiousness, with mean 1
+for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.gamma(shape=k, scale=1/k)))]: # Each person's infectiousness, with mean 1
     S, I, R = ss.states('S I R')
-    sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='sars', **extra)
+    sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), **extra)
     sim = ss.Sim(sars, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
     msim = ss.parallel(sim, n_runs=8)
     b = msim.branching
@@ -99,7 +99,7 @@ plt.legend();
 ```{python}
 S, E, I, R = ss.states('S E I R')
 latent = ss.lognormal(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
-seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
+seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10))
 solvers = {'Renewal equation (exact dwells)': ss.solvers.ode(dwells='exact'), 'Erlang stages (ode)': 'ode'}
 sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}
 ss.parallel(sims).plot('seir.I')
@@ -148,16 +148,16 @@ static.run();
 
 ### Dynamic rescaling
 
-With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the fraction of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
+With `solver=ss.solvers.abm(rescale=True)`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the fraction of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
 
 ```{python}
 sir = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start, as above
-dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=True, label='Dynamic')
+dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), solver=ss.solvers.abm(rescale=True), label='Dynamic')
 dynamic.run()
 dynamic.results.pop_scale.plot()
 ```
 
-The number of people per agent (`sim.results.pop_scale`) grows from 1 to 200. The threshold and the factor are options: `rescale=dict(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Rescaling is for agents only. Here are the three runs:
+The number of people per agent (`sim.results.pop_scale`) grows from 1 to 200. The threshold and the factor are options: `rescale=dict(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Here are the three runs:
 
 ```{python}
 import matplotlib.pyplot as plt

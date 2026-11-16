@@ -65,7 +65,7 @@ class AgentSIR(ss.AgentDisease):
         self.update_pars(pars, **kwargs)
 
         self.define_states(
-            ss.BoolState('recovered', label='Recovered'),
+            ss.BoolArr('recovered', label='Recovered'),
             ss.TimeArr('ti_recovered', label='Time of recovery'),
             ss.TimeArr('ti_dead', label='Time of death'),
         )
@@ -181,8 +181,8 @@ class AgentSEIR(AgentSIR):
         # SIR states are added automatically; here we split I off from "infected", which
         # becomes E plus I, and drop ti_infected in favor of ti_exposed and ti_infectious
         self.define_states(
-            ss.BoolState('exposed', label='Exposed'),
-            ss.BoolState('infectious', label='Infectious'),
+            ss.BoolArr('exposed', label='Exposed'),
+            ss.BoolArr('infectious', label='Infectious'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
             ss.TimeArr('ti_infectious', label='Time of becoming infectious'),
             reset = ['infected', 'infectious', 'ti_infected'],

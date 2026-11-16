@@ -28,12 +28,12 @@ def test_nigeria(which='births', dt=1, start=1995, dur=ss.years(15), do_plot=Fal
 
     if which == 'births':
         birth_rates = pd.read_csv(datadir/'nigeria_births.csv')
-        births = ss.Births(birth_rate=birth_rates)
+        births = ss.Births(birth_rate=birth_rates, rate_per=1000)
         demographics += births
 
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
-        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rel_fertility=1, burnin=False)  # 4/3
+        pregnancy = ss.Pregnancy(fertility_rate=fertility_rates, rate_per=1000, rel_fertility=1, burnin=False)  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
@@ -151,7 +151,7 @@ def test_module_adding():
     demographics = [births, deaths]
     with pytest.raises(TypeError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.peryear(0.01)).run()
-    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], record_people=False, verbose=0).run() # Without people's results
+    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], solver=ss.solvers.abm(record_people=False), verbose=0).run() # Without people's results
     assert sim.results.deaths.death.sum() > 0
     return demographics
 
@@ -284,7 +284,7 @@ def test_pregnancy_short_sim():
     # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
     asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
     for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
-        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
+        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, rate_per=1000, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
         assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
 
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
@@ -358,10 +358,6 @@ def test_count_based_births():
 
     print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
 
-    # A rate above 1 per year is per 1,000 people, and one of 1 or below per person, whether a bare number or typed, unless rate_per says
-    births = [ss.Births(birth_rate=rate, rate_per=units).pars.rate_per for rate,units in [(30, None), (0.5, None), (0.5, 1000), (ss.peryear(0.03), None), (ss.peryear(30), None), (ss.peryear(0.03), 1000)]]
-    assert births == [1000, 1, 1000, 1, 1000, 1000]
-    assert ss.Deaths(death_rate=ss.peryear(20)).pars.rate_per == ss.Deaths(death_rate=20).pars.rate_per == 1000 # 20 per 1,000, typed or not
     with pytest.raises(ValueError, match='rate_per'):
         ss.Births(rate_per=0.001) # Starsim 3's rate_units
     return per_agent, count_based
@@ -378,7 +374,7 @@ def test_birth_data_cols():
 
     def check(births, msg):
         """ The standardized birth rates match the input, regardless of column labels """
-        actual = births.pars.birth_rate.loc[years] # Drop the -inf age entries etc.
+        actual = births.birth_rate_data.loc[years] # Drop the -inf age entries etc.
         assert np.allclose(actual.values, expected.values), f'{msg}: expected {vals}, got {actual.values}'
         return
 
@@ -428,7 +424,7 @@ def test_period_rates():
     assert ss.demographics.period_year([2010, 2010, 2015, 2015], 2014.9) == 2010 and ss.demographics.period_year([2010, 2015], 2015) == 2015
     data = pd.DataFrame(dict(Time=[2010, 2010, 2015, 2015], Sex=['Female', 'Male']*2, AgeGrpStart=0, mx=[0.04, 0.04, 0.0, 0.0]))
     sim = ss.Sim(n_agents=10_000, demographics=ss.Deaths(death_rate=data, rate_per=1), start=2010, stop=2015, dt=ss.months(1), verbose=0).run()
-    deaths = sim.results.died.values[:-1] # The step from 2015 has the 2015 rate, 0
+    deaths = sim.results.death.values[:-1] # The step from 2015 has the 2015 rate, 0
     assert deaths.min() > 0, 'Every step before 2015 has the 2010 rate'
     expected = 10_000*(1 - np.exp(-0.04*5))
     assert abs(deaths.sum() - expected) < 4*np.sqrt(expected), f'Expected about {expected:.0f} deaths, not {deaths.sum()}'
@@ -444,6 +440,47 @@ def test_period_rates():
     assert np.isclose(rows[2015], (rows[2010] + rows[2020])/2) and 2015 in years
     deaths = ss.Deaths(death_rate='Kenya').death_rows[0]
     assert np.allclose(deaths[2015, 'f'], (deaths[2010, 'f'] + deaths[2020, 'f'])/2)
+    return sim
+
+
+@sc.timer()
+def test_rate_per():
+    """ Rates of births, deaths, conceptions, and migration are per person unless rate_per= says otherwise, with a warning for a rate that looks per 1,000; and they are read from the parameters at init """
+    sc.heading('Testing rate_per, and changing the rates after a module is made...')
+    kw = dict(n_agents=2000, start=2000, stop=2005, verbose=0)
+    for rate, per, warns in [(0.02, None, False), (20, None, True), (20, 1000, False), (2, 1, False), (ss.peryear(20), None, True), (ss.perday(0.005), None, True)]:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            births = ss.Sim(demographics=ss.Births(birth_rate=rate, rate_per=per), **kw).init().demographics.births
+        assert births.pars.rate_per == sc.ifelse(per, 1) # Never guessed from the size
+        assert any('rate_per=1000' in str(x.message) for x in w) == warns, f'{rate}, rate_per={per}: a warning only for a rate above 1 per person per year, without rate_per'
+    with pytest.warns(RuntimeWarning, match='rate_per=1000'):
+        ss.death(rate=10)
+
+    # A place's UN rates: per 1,000 (births, fertility, migration) or per person (deaths by age), which is known, so no warning, and another rate_per is an error
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        sim = ss.Sim(demographics=[ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')], **kw).init()
+        assert sim.demographics.births.pars.rate_per == 1000 and sim.demographics.deaths.pars.rate_per == 1 and ss.Pregnancy(fertility_rate='Kenya').pars.rate_per == 1000
+    with pytest.raises(ValueError, match='leave rate_per out'):
+        ss.Births(birth_rate='Kenya', rate_per=1)
+
+    # A typed rate per day is per person: 0.005 a day is about 1.8 a year (read as per 1,000 before, after it was converted to per year)
+    with pytest.warns(RuntimeWarning, match='per person per year'):
+        sim = ss.Sim(demographics=ss.Deaths(death_rate=ss.perday(0.005)), **kw).run()
+    assert sim.results.alive[-1] < 0.01*kw['n_agents']
+
+    # The rates are read when the sim is initialized, so a change to the parameters after the module is made counts
+    deaths = []
+    for rate in [0.01, 0.2]:
+        mod = ss.Deaths(death_rate=0.01)
+        mod.pars.death_rate = ss.peryear(rate)
+        deaths.append(ss.Sim(demographics=mod, **kw).run().results.deaths.death.sum())
+    assert deaths[1] > 5*deaths[0], f'Deaths at 0.2 a year ({deaths[1]}) should be far more than at 0.01 ({deaths[0]})'
+    births = ss.Births(birth_rate=pd.DataFrame(dict(Year=[2000], CBR=[0.01])))
+    births.pars.birth_rate = pd.DataFrame(dict(Year=[2000], CBR=[0.1]))
+    sim = ss.Sim(demographics=births, **kw).run()
+    assert sim.results.births.birth.sum() > 0.05*5*kw['n_agents'], 'The table set after the module was made is the one used'
     return sim
 
 
@@ -487,13 +524,13 @@ def test_lifetable_deaths():
 
 @sc.timer()
 def test_declared_demographics_alone():
-    """ Births and deaths declared with no disease: as agents by default, as compartments with a compartmental solver named, and a rate above 1 per year is per 1,000 """
+    """ Births and deaths declared with no disease: as agents by default, as compartments with a compartmental solver named, and rates per person unless rate_per= says otherwise """
     sc.heading('Testing ss.birth() and ss.death() with no disease...')
     flows = lambda: [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
     ode = ss.Sim(demographics=flows(), start=2000, dur=ss.years(10), solver='ode', verbose=0).run()
     assert np.isclose(ode.results.alive[-1], 10_000*np.exp(0.02*10), rtol=1e-3)
     assert isinstance(ss.Sim(demographics=flows(), n_agents=500, start=2000, dur=ss.years(2), verbose=0).run().solver, ss.solvers.abm)
-    assert ss.birth(rate=ss.peryear(30)).rate.raw == ss.birth(rate=30).rate.raw == ss.peryear(0.03) # 30 per 1,000, typed or not
+    assert ss.birth(rate=ss.peryear(30), rate_per=1000).rate.raw == ss.birth(rate=30, rate_per=1000).rate.raw == ss.birth(rate=0.03).rate.raw == ss.peryear(0.03) # 30 per 1,000, typed or not
     return ode
 
 
@@ -570,7 +607,7 @@ def test_cause_of_death():
     sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init_n=dict(I=10_000), name='sis')
     sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1)), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
     r = sim.results
-    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.death.sum(), r.died.sum()
+    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.death.sum(), r.death.sum()
     assert by_disease + by_deaths == total # Before, about 4.5% were counted twice
     ppl = sim.people
     dead = ss.uids(np.flatnonzero(~ppl.alive.raw[:ppl.uid.len_used]))
@@ -600,10 +637,10 @@ def test_split_by_age():
 def test_declared_newborns():
     """ Agents added by ss.Births and ss.Pregnancy (including the unborn) enter a declared disease, with a level of each dimension """
     sc.heading('Testing newborns in a declared disease')
-    for dem in [ss.Births(birth_rate=40), ss.Pregnancy(fertility_rate=40)]:
+    for dem in [ss.Births(birth_rate=0.04), ss.Pregnancy(fertility_rate=0.04)]:
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=2 * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
-        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk={'lo': 0.2, 'hi': 0.8}), start=2000, stop=2020, verbose=0, rand_seed=1)
+        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=0.01)], stratify=dict(risk={'lo': 0.2, 'hi': 0.8}), start=2000, stop=2020, verbose=0, rand_seed=1)
         sim.run()
         r = sim.results
         n_states = r.sis.S[-1] + r.sis.I[-1]
@@ -619,7 +656,7 @@ def test_declared_newborns():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), name='sir')
     sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', verbose=0).init()
-    assert isinstance(sim.solver, ss.solvers.ode) and sim._kernel_reason() is None
+    assert isinstance(sim.solver, ss.solvers.ode) and sim._compiled_reason() is None
     print('✓ (newborns in declared states)')
     return
 
@@ -658,11 +695,13 @@ def test_birth_death_hooks():
         def step(self):
             pass
 
-    sim = ss.Sim(modules=[Watch(), ss.Births(birth_rate=30), ss.Deaths(death_rate=20)], n_agents=1000, start=2000, stop=2010, verbose=0).run()
+    sim = ss.Sim([Watch(), ss.Births(birth_rate=30, rate_per=1000), ss.Deaths(death_rate=20, rate_per=1000)], n_agents=1000, start=2000, stop=2010, verbose=0).run()
     assert sim.watch.births == sim.results.births.birth.sum() > 0
-    assert sim.watch.deaths == sim.results.died.sum() > 0
+    assert sim.watch.deaths == sim.results.death.sum() > 0
+    sim = ss.Sim(Watch(), demographics=[ss.birth(rate=0.03), ss.death(rate=0.02)], n_agents=1000, start=2000, stop=2010, verbose=0).run() # Declared births tell the modules too
+    assert sim.watch.births == sim.results.birth.sum() > 0
     for fetus in [False, True]:
-        sim = ss.Sim(modules=[Watch(), ss.Pregnancy(fertility_rate=40, fetal_agents=fetus)], n_agents=1000, start=2000, stop=2005, verbose=0).run()
+        sim = ss.Sim([Watch(), ss.Pregnancy(fertility_rate=0.04, fetal_agents=fetus)], n_agents=1000, start=2000, stop=2005, verbose=0).run()
         assert sim.watch.births == sim.results.pregnancy.birth.sum() > 0
     return sim
 
@@ -675,17 +714,17 @@ def test_rates_and_counts():
     # Net migration: a rate per person of either sign, as arrivals or departures, under every solver
     sim = ss.Sim(demographics=[ss.migration(rate=ss.peryear(0.01))], start=2000, stop=2010, solver='ode', verbose=0).run()
     assert np.isclose(sim.results.alive[-1], 10_000*np.exp(0.1), rtol=1e-3)
-    sim = ss.Sim(demographics=[ss.migration(rate=-10)], start=2000, stop=2010, solver='ode', verbose=0).run() # A bare number: per 1,000
+    sim = ss.Sim(demographics=[ss.migration(rate=-10, rate_per=1000)], start=2000, stop=2010, solver='ode', verbose=0).run() # A bare number: per year
     assert np.isclose(sim.results.alive[-1], 10_000*np.exp(-0.1), rtol=1e-3)
-    assert [tr.name for tr in ss.migration(rate=ss.timeseries({2000: 5, 2010: -5}))] == ['immigration', 'emigration'] # Both, as it changes sign
-    assert ss.migration(rate=ss.peryear(-10))[0].rate.raw == ss.migration(rate=-10)[0].rate.raw == ss.peryear(0.01) # Above 1 per year, bare or typed: per 1,000, as for births and deaths
-    assert ss.migration(rate=-0.5, rate_per=1000)[0].rate.raw == ss.peryear(0.0005) and ss.migration(rate=-0.5)[0].rate.raw == ss.peryear(0.5) # Below 1: per person, unless rate_per says
+    assert [tr.name for tr in ss.migration(rate=ss.timeseries({2000: 5, 2010: -5}), rate_per=1000)] == ['immigration', 'emigration'] # Both, as it changes sign
+    assert ss.migration(rate=ss.peryear(-10), rate_per=1000)[0].rate.raw == ss.migration(rate=-10, rate_per=1000)[0].rate.raw == ss.peryear(0.01) # Bare or typed, per 1,000
+    assert ss.migration(rate=-0.5, rate_per=1000)[0].rate.raw == ss.peryear(0.0005) and ss.migration(rate=-0.5)[0].rate.raw == ss.peryear(0.5) # Per person, unless rate_per says
     assert 'emigration' in [tr.name for tr in ss.migration(rate='Albania')] # The UN's net rates, negative since 1990
     with pytest.raises(TypeError, match='n='):
         ss.immigration(**dict(rate=ss.peryear(100))) # A number of people per unit time is n=
     with pytest.raises(TypeError, match='children='):
         ss.birth(**dict(n=2))
-    assert isinstance(ss.birth(rate='Kenya'), ss.Births) and isinstance(ss.death(rate='Kenya'), ss.Deaths) # A place's rates, as agents
+    assert isinstance(ss.birth(rate='Kenya'), ss.Transition) and isinstance(ss.death(rate='Kenya'), ss.Deaths) # A place's crude birth rates are declared; its death rates by age and sex need agents
 
     # init_prev= is a share, and init_n= a number of people, seeded the same way
     many = 5
@@ -716,20 +755,113 @@ def test_rates_and_counts():
 
 @sc.timer()
 def test_signed_rates():
-    sc.heading('Net migration of either sign as a typed rate, bare demographic rates per 1,000 with no warning about units, and preg.attr(when=)')
+    sc.heading('Net migration of either sign as a typed rate, bare demographic rates per year with no warning about units, and preg.attr(when=)')
     assert [tr.name for tr in ss.migration(rate=ss.peryear(-0.005))] == ['emigration']
     sim = ss.Sim(demographics=ss.migration(rate=ss.peryear(-0.01)), stop=2010, verbose=0).run()
     assert np.isclose(sim.results.alive[-1]/sim.results.alive[0], np.exp(-0.1), rtol=0.01)
     with pytest.raises(ValueError, match='ss.migration'): # A negative rate anywhere else is an error
         ss.peryear(-1).to_prob(ss.years(1))
     with warnings.catch_warnings():
-        warnings.simplefilter('error') # birth_rate=20 is per 1,000 a year, whatever the sim's unit
-        ss.Sim(demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=10)], n_agents=200, unit='week', start='2000-01-01', stop='2000-03-01', verbose=0).run()
+        warnings.simplefilter('error') # birth_rate=20 with rate_per=1000 is per 1,000 a year, whatever the sim's unit
+        ss.Sim(demographics=[ss.Births(birth_rate=20, rate_per=1000), ss.Deaths(death_rate=0.01)], n_agents=200, unit='week', start='2000-01-01', stop='2000-03-01', verbose=0).run()
     preg = ss.Pregnancy()
     assert preg.attr('anc', ss.weeks(12), when='delivery').name == 'anc'
     with pytest.raises(TypeError, match="unexpected keyword"):
         ss.Pregnancy().attr('anc', ss.weeks(12), on='delivery')
     return sim
+
+
+@sc.timer()
+def test_birth_forms():
+    """ ss.birth()/ss.death() and the classes they stand for, ss.Births/ss.Deaths, give the same births and deaths, for every kind of rate """
+    sc.heading('Testing that ss.birth() and ss.death() give what ss.Births and ss.Deaths give...')
+    kw = dict(n_agents=20_000, start=2000, stop=2010, dt=ss.years(0.5), verbose=0)
+    ts = lambda: ss.timeseries({2000: 0.04, 2010: 0.02}, interpolation='linear')
+    pairs = { # Each kind of rate, in the lower-case form and in the class
+        'number':  ([ss.birth(rate=0.03), ss.death(rate=0.01)], [ss.Births(birth_rate=0.03), ss.Deaths(death_rate=0.01)]),
+        'series':  ([ss.birth(rate=ts(), rel_birth=0.5), ss.death(rate=ts(), rel_death=0.5)], [ss.Births(birth_rate=ts(), rel_birth=0.5), ss.Deaths(death_rate=ts(), rel_death=0.5)]), # A time series in the classes raised before
+        'place':   ([ss.birth(rate='Kenya'), ss.death(rate='Kenya')], [ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')]),
+    }
+    for key, (lower, upper) in pairs.items():
+        a, b = [ss.Sim(demographics=dem, **kw).run() for dem in [lower, upper]]
+        births = [a.results.birth.sum(), b.results.births.birth.sum()]
+        assert np.isclose(*births, rtol=0.06), f'{key}: {births}' # About 4,000 births each, so within 4 standard deviations
+        assert np.isclose(a.results.death.sum(), b.results.death.sum(), rtol=0.08), key
+        kids = a.people.parent.raw[a.people.auids] >= 0
+        assert kids.sum() > 0.9*births[0] and a.people.female.raw[a.people.parent.raw[a.people.auids[kids]]].all(), key # Each newborn has a mother, as with ss.Births
+
+    # A place's rates and a table are the rates the class reads, each year
+    df = pd.DataFrame(dict(Year=[2000, 2005], CBR=[30, 20]))
+    births = ss.Births(birth_rate='Kenya')
+    rows, years, _ = births.birth_rows
+    rate = ss.birth(rate='Kenya').rate.raw
+    assert all(np.isclose(rate.values[list(rate.times).index(y)].value, rows[y]/1000) for y in [2000, 2003, 2010])
+    assert [v.value for v in ss.birth(rate=df.rename(columns=dict(CBR='rate')), columns=dict(value='rate'), rate_per=1000).rate.raw.values] == [0.03, 0.02]
+    sim = ss.Sim(demographics=[ss.birth(rate='Kenya'), ss.death(rate=0.01)], start=2000, stop=2010, solver='ode', verbose=0).run() # Declared, so under every solver
+    assert sim.results.birth.sum() > 0
+    mx = pd.concat([df.rename(columns=dict(Year='Time', CBR='mx')).assign(Sex=sex, AgeGrpStart=0) for sex in ['Female', 'Male']])
+    for dem in [ss.death(rate=mx, rate_per=1000), ss.death(lifetable={2000: ss.lifetable([0, 50, 100], [1, 2, 3])}), ss.death(lifetable=ss.lifetable([0, 50], [1, 1]), rel_death=2)]:
+        assert isinstance(dem, ss.Deaths) # Rates by year, sex, or age, or a life table by year or scaled: as agents
+    assert isinstance(ss.death(rate=0.01, rel_death=2), ss.Transition) and ss.death(rate=0.01, rel_death=2).rate.raw == ss.peryear(0.02)
+
+    # The mother's ages, in the same place as the child
+    geo = ss.geo.geography(names=['a', 'b'], populations=[6000, 4000])
+    sim = ss.Sim(demographics=[ss.birth(rate=0.04, min_age=20, max_age=30), ss.death(rate=0.01)], n_agents=5000, start=2000, stop=2003, stratify=dict(district=geo), verbose=0).run()
+    ppl = sim.people
+    kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
+    moms = ppl.parent.raw[kids]
+    both = ppl.alive.raw[kids] & ppl.alive.raw[moms]
+    age = ppl.age.raw[moms[both]] - ppl.age.raw[kids[both]]
+    assert len(kids) > 300 and age.min() >= 20 - 0.1 and age.max() < 30 + 0.1
+    assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[moms])
+
+    # Keywords of the classes, and ones that don't apply, raise
+    with pytest.raises(TypeError, match='rate='):
+        ss.birth(**dict(birth_rate=0.03))
+    with pytest.raises(TypeError, match='rate='):
+        ss.death(**dict(death_rate=0.01))
+    with pytest.raises(ValueError, match='not a table'):
+        ss.birth(rate=0.03, columns=dict(value='rate'))
+    with pytest.raises(ValueError, match='crude birth rate of everyone'):
+        ss.birth(ss.State('S'), rate=0.03, min_age=20)
+    with warnings.catch_warnings(): # ss.Pregnancy with deaths of everyone is not two sources of births
+        warnings.simplefilter('error')
+        ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.1)), ss.death(rate=0.01)], n_agents=300, start=2000, stop=2001, verbose=0).run()
+
+    # Newborns face deaths by age in the step they are born, whatever the order of the modules or the form of births: at yearly steps, those born after deaths were chosen used to escape the rate at age 0 entirely
+    kw = dict(start=2000, stop=2010, dt=ss.years(1), verbose=0)
+    final = {}
+    for label, dem in [('births first', lambda: [ss.Births(birth_rate='Kenya'), ss.death(rate='Kenya')]), ('deaths first', lambda: [ss.death(rate='Kenya'), ss.Births(birth_rate='Kenya')]), ('declared', lambda: [ss.birth(rate='Kenya'), ss.death(rate='Kenya')])]:
+        final[label] = np.mean([ss.Sim(people=ss.population('Kenya', year=2000, n_agents=5000), demographics=dem(), rand_seed=seed, **kw).run().results.alive[-1] for seed in [1, 2]])
+    vals = np.array(list(final.values()))
+    assert np.ptp(vals)/vals.mean() < 0.015, final # Was about 4% apart by 2030 (66.4M vs 63.6M for Kenya)
+    return sim
+
+
+@sc.timer()
+def test_sim_births_deaths():
+    """ Births and deaths are read the same way whatever form gave them: the sim's birth, death, cbr, and cmr """
+    sc.heading('Testing the sim\'s births and deaths for every form...')
+    kw = dict(start=2000, stop=2010, dt=ss.years(0.5), verbose=0)
+    declared = lambda: [ss.birth(rate=0.03), ss.death(rate=0.01)]
+    sims = sc.objdict(
+        sir    = ss.Sim(diseases=ss.SIR(), networks='random', demographics=declared(), n_agents=2000, **kw),
+        alone  = ss.Sim(demographics=declared(), n_agents=2000, solver='abm', **kw),
+        coded  = ss.Sim(demographics=[ss.Births(birth_rate=0.03), ss.Deaths(death_rate=0.01)], n_agents=2000, **kw),
+        ode    = ss.Sim(diseases=ss.SIR(), demographics=declared(), total_pop=2000, solver='ode', **kw),
+    )
+    for key,sim in sims.items():
+        res = sim.run().results
+        assert res.birth.sum() > 0 and res.death.sum() > 0, key
+        assert np.isclose(res.cbr[:-1].mean(), 30, rtol=0.25) and np.isclose(res.cmr[:-1].mean(), 10, rtol=0.5), f'{key}: {res.cbr.mean():n}, {res.cmr.mean():n}' # Per 1,000 per year
+    for key in ['sir', 'ode']: # The disease no longer has the population's births and deaths as results, but the transitions are still there
+        assert 'births' not in sims[key].results.sir and 'deaths' not in sims[key].results.sir and 'death' in sims[key].results.sir
+        assert isinstance(sims[key].diseases.sir.births, ss.Transition)
+    assert 'births' not in sims.alone.results.population
+    assert np.isclose(sims.ode.results.alive[-1], 2000 + sims.ode.results.birth[:-1].sum() - sims.ode.results.death[:-1].sum())
+    coded = sims.coded.results
+    assert coded.birth.sum() == coded.births.birth.sum() and np.allclose(coded.cbr, coded.births.cbr) and np.allclose(coded.cmr, coded.deaths.cmr) # The same as the modules' own
+    return sims
 
 
 if __name__ == '__main__':
@@ -757,5 +889,7 @@ if __name__ == '__main__':
     s20 = test_births_by_level()
     s21 = test_rates_and_counts()
     s22 = test_signed_rates()
+    s23 = test_birth_forms()
+    s24 = test_sim_births_deaths()
 
     T.toc()

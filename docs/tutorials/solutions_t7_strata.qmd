@@ -22,7 +22,7 @@ def make_measles():
     infection   = S >> E @ 0.14*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
 
@@ -34,13 +34,12 @@ def make_community_measles(coverage=0.6, rate=None):
         transfers['catchup'] = ss.transfer(dict(vaccinated=True), rate=ss.peryear(ss.by(community=rate)), states=['S'])
     measles = make_measles()
     measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-    measles.stratify(vaccinated=ss.levels([False, True], fractions=split, states=['S']), **transfers)
+    measles.stratify(vaccinated=ss.levels([False, True], fractions=split, states=['S'], rel_sus=[1, 0.03]), **transfers)
     return measles
 
 age_contacts = [[10, 6, 1], [3, 8, 1], [3, 6, 3]]
-clustered = ss.contacts(age=age_contacts, community=[[0.984, 0.016], [0.3, 0.7]], ages=[0, 15, 65])
-protection = ss.modify('measles.rel_sus', multiply=ss.by(vaccinated=[1, 0.03]))
-settings = dict(networks=clustered, connectors=protection, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+clustered = ss.contacts(age_contacts, ages=[0, 15, 65], community=[[0.984, 0.016], [0.3, 0.7]])
+settings = dict(networks=clustered, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
 ```
 
 **1. Higher coverage in the community.**
@@ -92,14 +91,13 @@ restored    = A >> R @ ss.years(2)
 measles = ss.Disease(infection, progression, recovery, restored,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
     init_n = dict(I=10),
-    name = 'measles',
 )
 measles.stratify(age=ages)
 
 S, C = ss.states('S C')
 acquisition = S >> C @ 0.003*C
 clearance   = C >> S @ ss.days(30)
-pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0.17, 0.17])), name='pneumococcus')
+pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0.17, 0.17])))
 pneumococcus.stratify(age=ages)
 
 amnesia = ss.modify(pneumococcus.rel_sus, multiply=2, who=measles.I | measles.A)
@@ -111,8 +109,8 @@ for label, connectors in [('Independent', None), ('Interacting', amnesia)]:
     sims[label + ', campaign'] = ss.Sim([measles, pneumococcus], connectors=connectors, interventions=campaign, **settings)
 msim = ss.parallel(sims)
 summary = msim.summarize()
-print(summary.loc['measles_infection'])
-summary.loc['pneumococcus_acquisition']
+print(summary.loc['measles.infection'])
+summary.loc['pneumococcus.acquisition']
 ```
 
 The campaign prevents about 7,900 of the 8,800 measles infections, with or without the interaction. Without it, the campaign prevents no pneumococcus, since the diseases are independent. With it, the campaign also prevents about 97,000 pneumococcus acquisitions over the three years (nearly all the extra ones measles caused), about 12 per measles infection prevented, among the children spared measles and the people they would have passed pneumococcus to. An evaluation counting only measles would miss this benefit, which is why estimates of immune amnesia matter for the case for measles vaccination.

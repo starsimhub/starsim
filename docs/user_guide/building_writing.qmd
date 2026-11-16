@@ -56,7 +56,7 @@ measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001
 
 sim_explicit = ss.Sim(
     diseases  = measles_explicit,
-    networks  = ss.contacts(1), # Everyone mixes with everyone, with one contact per person per day
+    networks  = ss.MixingPool(n_contacts=1), # Everyone mixes with everyone, with one contact per person per day
     total_pop = 100_000,
     start     = ss.days(0),
     stop      = ss.days(50),
@@ -173,7 +173,7 @@ sim.diseases.measles.Rt().plot()
 
 ## Where the parts of a sim go
 
-A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name. A disease made with `ss.Disease()` is named after its variable (here `measles`), and one made from a class after the class (`sir`); `name=` gives it a name of its own (see the [appendix](#appendix-what-starsim-names-and-fills-in)).
+A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name (here `measles`, after its variable; see [Names](#names)).
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -196,6 +196,37 @@ sim.people.to_df().head()
 
 In a compartmental run, `sim.people` has a row for each group instead.
 
+### Names
+
+Everything that has a name gets it by one rule: **the variable it was assigned to, else a default from its class or kind.** A keyword (`ss.Disease(infection=...)`, `networks=dict(main=...)`) or `name=` gives a name of your own, which always wins.
+
+| What | Assigned to a variable | Otherwise |
+|---|---|---|
+| A module: disease, network, delivery, product, modifier, analyzer, connector, or module of your own | `measles = ss.SIR()` is `measles` | Its class in lower case: `ss.SIR()` is `sir`, `ss.RandomNet()` is `randomnet`; a disease made with `ss.Disease()` is named from the first letters of its states (`sir`, `seir`) |
+| A transition | `recovery = I >> R @ ss.days(8)` is `recovery` | `infection` for the disease's only transmission, else from its ends: `I_to_R`, or `I_to_dead` for `I >> ss.dead` |
+| A state or parameter | `beta = ss.par(1.9)` is `beta` | A parameter is named by where it is (`beta`, `dur_I`; see the [appendix](#appendix-what-starsim-names-and-fills-in)); a state must have a name |
+
+The variable is the one the object was first assigned to (`measles = ss.SIR()`), else the one that holds it where it is given to `ss.Sim()` (or, for a transition, to `ss.Disease()`). So a module made as `m = ss.SIR()` inside a function `make_sim()` is called `m`. A variable that would name several modules, such as one assigned in a loop, names none of them, and neither does one whose name the sim uses itself (e.g. `sim`, `pars`, `results`, or `module`). Two modules with the same default name are numbered (`sir`, `sir_1`).
+
+Since the name depends on the code, a module can also be found by its default name, as long as no other module has the same one: `sim.diseases.sir`, `sim.sir`, `sim.pars.sir`, `sim.results.sir`, and `sim.plot('sir')` all find the only `ss.SIR`, whatever it is called, as do paths that start with a module's name: `pars={'sir.beta': 0.2}`, `who='sir.I'`, `ss.ref('sir.I')`, `disease='sir'`, and `ss.modify('sir.pars.beta', ...)`. This only finds it: it is still stored, listed, and plotted under its own name, and the sims of a `ss.MultiSim` are matched by their modules' own names (so `sir` in one sim and `dis` in another are two results). A name that is neither is an error that lists the names there are and where each came from:
+
+```{python}
+def make_sim():
+    m = ss.SIR()
+    return ss.Sim(diseases=m, networks='random', n_agents=1000, verbose=0)
+
+sim = make_sim()
+sim.init()
+print(list(sim.diseases.keys()))        # Named after its variable
+print(sim.diseases.sir is sim.diseases.m) # Also found by its default name
+try:
+    sim.diseases.measles
+except AttributeError as e:
+    print(e)
+```
+
+A module's random numbers are seeded by the name given (`name=`, or its key), else by its default name, numbered within its kind in the order given (the first `ss.SIR` is `sir`, a second `sir2`), but never by its variable. So renaming a variable doesn't change a run, and scenarios keep common random numbers however their variables are named; giving two modules the same `name=` (e.g. one declared and one written as code) gives them the same random numbers.
+
 ## Checks and pitfalls
 
 A model that runs is not necessarily the model you meant, and a plausible plot is not enough to show that it is. These checks catch most mistakes in a new model:
@@ -205,7 +236,7 @@ A model that runs is not necessarily the model you meant, and a plausible plot i
 - **Check that the states add up.** In a closed model (no births or deaths), the people in all the states of a disease add up to the population at every time point.
 - **Match the quantity to the question.** New infections are a flow (`res.infection`), and the number infectious a stock (`res.I`): summing `I` over time counts each person once for every day they are infectious.
 - **Check the units of β.** Adding a contact matrix or a network changes β from a rate per person to a rate per contact; see [Mixing](populations_mixing.qmd).
-- **Don't change the original after the sim is made.** Since the sim has a copy, changing `measles` after `ss.Sim(measles, ...)` has no effect on that sim. Change the sim's copy, give the new value to the sim by name (`ss.Sim(measles, pars=dict(beta=1.5))`), or make a new sim.
+- **Don't change the original after the sim is made.** The sim runs its own copy ([above](#where-the-parts-of-a-sim-go)), so give a new value by name (`ss.Sim(measles, pars=dict(beta=1.5))`, or `sim.new(pars=...)`) instead.
 
 ## Further reading
 
@@ -232,7 +263,7 @@ From some names and forms, Starsim works out what the model didn't say. Each val
 | A non-Erlang duration run as compartments | As many Erlang stages as match its mean and standard deviation | `stages=` on the transition |
 | How the epidemic starts | A disease with transmission and no starting values starts with 1% of people infected, in the states a transmission (or else an acquisition) leads to: `E` in an SEIR | `init_prev=`, `init=`, or `init_n=` |
 | Where people start, and births with no state go | The state named `S` or `susceptible` (in any case), else the one state transmission infects people from, else the first state made; and the only state with no starting value, if the first has one | `default_state=` on the disease, or `init=` |
-| The fraction of the last branch | 1 minus the others, when one `p=` is `None` or left out | `p=` on every branch |
+| The fraction of the last branch | 1 minus the others, when one `p=` is `None`; leaving `p=` out of a branch is an error, unless the others sum to 1 ([Diseases](building_diseases.qmd#branching)) | `p=` on every branch |
 | A parameter given only bounds | The middle of its bounds | A value |
 | The fractions and kind of a dimension | From the population, the world's ages, or equal fractions; age for ages, a place for a geography, else plain groups ([Stratification](building_stratification.qmd#levels-and-fractions)) | Fractions, and `kind=`, on `stratify()` |
 | Aging | People age only if anyone is born or dies | `aging=True` or `False` |
@@ -243,11 +274,10 @@ From some names and forms, Starsim works out what the model didn't say. Each val
 
 | Name or form | What Starsim does | To say otherwise |
 |---|---|---|
-| A variable that holds a state, transition, parameter, result, or disease made with `ss.Disease()` | Names it after the variable (`measles` is `sim.diseases.measles`, or `sim.measles`). A variable whose name starts with `_`, or is named like a setting of the sim, doesn't | A keyword, or `name=` |
-| A transition with no name | `infection` for the disease's only transmission, else `<source>_to_<destination>` (`I_to_R`) | A variable, a keyword, or `name=` |
-| A disease made from a class (`ss.SIR()`) | Named after its class, in lower case (`sir`) | `name=` |
-| A disease held in no variable, or transitions given straight to the sim | Named from the first letters of its states (`sir`, `seir`); two with the same name are an error | `name=` |
-| A delivery, product, or modifier | Named after its variable, or numbered (`screen`, `screen_1`) | `name=` |
+| A variable that holds a state, transition, parameter, result, or module of any kind | Names it after the variable (`measles` is `sim.diseases.measles`, or `sim.measles`; see [Names](#names)). A variable whose name starts with `_`, is named like a setting of the sim, or would name several modules (e.g. in a loop), doesn't | A keyword, or `name=` |
+| A transition with no name | `infection` for the disease's only transmission, else `<source>_to_<destination>` (`I_to_R`); a death (`I >> ss.dead`) is `I_to_dead`, and a birth (`ss.unborn >> S`) `unborn_to_S` | A variable, a keyword, or `name=` |
+| A module held in no variable (`ss.Sim(diseases=ss.SIR())`) | Named after its class, in lower case (`sir`, `randomnet`); a disease made with `ss.Disease()`, or transitions given straight to the sim, from the first letters of its states (`sir`, `seir`); two with the same name are numbered (`sir`, `sir_1`) | A variable, or `name=` |
+| A module by its default name | `sim.diseases.sir` or `sim.results.sir` is the only `ss.SIR`, whatever it is called; an error if there are several | Its own name |
 | A module given as a string | `diseases='sis'`, `networks='random'`, or `dict(type='sir', ...)` is the class of that name, in lower case | Give the module itself |
 | A path | `'flu.I'`, `'flu.pars.beta'`, or `ss.ref('hpv18.X')` is a part of a module by name, e.g. in `who=` or `ss.modify()` | |
 | A result by its short name | `sim.results.I` is `I` if only one module has it | `sim.results.flu.I` |
@@ -293,7 +323,7 @@ example.pars
 | An expression given to the disease (`prevalence = I/N`) | A result, named after its variable or keyword; in a class body, one whose name starts with `_` is a helper, not a result | |
 | `ss.unborn`, `ss.dead`, `ss.outside`, `ss.stay` | Outside the model: where births come from, where deaths go, and where people arrive from or leave to alive; `ss.stay`, as one destination of a split, keeps people where they are | |
 | `ss.birth()` and `ss.death()` with no state | A birth into the first state, and a death from every state of people | `ss.birth(S, ...)`, `ss.death(I, ...)` |
-| The sim's own results | `alive`, `died`, and `emigrated` (and, as agents, `female`) | `record_people=False` on the sim |
+| The sim's own results | `alive`, `birth`, `death`, `emigration`, `cbr`, and `cmr` (and, as agents, `female`) | `solver=ss.solvers.abm(record_people=False)` |
 | A result of code named `new_...`, `n_...`, `cum_...`, or `...prevalence` | A flow, a stock, a stock, and a ratio; with none of these and no `kind=`, a flow if an integer, else a ratio, with a warning | `kind=` |
-| Each `ss.BoolState` of a module written as code, and each alias given as a function | A result of the same name, the number for whom it is true | `ss.BoolArr`, for no result |
+| Each `ss.BoolArr` of a module written as code, and each alias given as a function | A result of the same name, the number for whom it is true | `ss.BoolArr(result=False)`, for no result |
 | `ss.AgentDisease` | The states `susceptible` and `infected` (with `infectious` an alias of `infected`), and the results `prevalence` and `infection`; a test detects `infected`, and a treatment calls `clear_infection()` | A state `infectious` of its own, as `ssl.AgentSEIR` has |

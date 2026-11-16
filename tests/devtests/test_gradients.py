@@ -30,9 +30,8 @@ def make_sir(beta=0.4, dur=8, init=0.01, data=None, **kwargs):
 
 def run_jax(sim):
     """ Take a whole run in JAX, as ss.parallel() does for many runs """
-    sim.init()
-    sim.jax = True
-    return sim.run()
+    with ss.options.context(backend='jax'):
+        return sim.run()
 
 
 @sc.timer()
@@ -49,19 +48,19 @@ def test_jax_run():
 
 
 @sc.timer()
-def test_jax_engine():
-    sc.heading('Testing the choice of JAX or the kernels')
+def test_jax_backend():
+    sc.heading('Testing the choice of JAX or the compiled backend')
     make, pars = models.towns
-    sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').run()
-    assert sim.engine_reason == 'kernels' # A run is never taken by JAX unless asked
-    sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial')
-    sim.jax = True
-    assert sim.run().engine_reason.startswith('kernels: JAX does not run') # Only the ODE is taken by JAX
-    ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
-    ode.jax = True
-    assert ode.run().engine_reason == 'JAX, as asked (sim.jax = True)' # The ODE, which agrees with the kernels
+    sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').init()
+    assert ss.solvers.choose_backend(sim)[0] is False # A run is never taken by JAX unless asked
+    with ss.options.context(backend='jax'):
+        sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').init()
+        use, why = ss.solvers.choose_backend(sim)
+        assert not use and 'runs only solver="ode"' in why # Only the ODE is taken by JAX
+        ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').init()
+        assert ss.solvers.choose_backend(ode) == (True, 'JAX, as asked (ss.options.backend="jax")') # The ODE, which agrees with the compiled backend
+        ode.run()
     ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
-    ref.jax = False
     assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     return ode
 
@@ -167,7 +166,7 @@ def test_joint_states():
     sc.heading('Testing diseases tracked jointly: a whole run, many runs, in JAX, restarted, differentiated, filtered, and fitted')
     sim = make_coinfection()
     sim.init()
-    assert sim._kernel_reason() is None # Modifiers on states, and a transfer at a constant rate, are worked out before the run
+    assert sim._compiled_reason() is None # Modifiers on states, and a transfer at a constant rate, are worked out before the run
     sim.run()
     stepped = make_coinfection().run(until=2030) # Step by step
     jax = run_jax(make_coinfection())
@@ -257,10 +256,10 @@ def test_parallel_pars():
     sc.heading('Testing many runs with different values, in one call')
     betas = [0.3, 0.4, 0.5]
     singles = [make_sir(beta=beta).run().results.sir.I.values for beta in betas]
-    for jax in [None, True]: # With sim.jax = True, the runs are taken in one call to JAX
+    for jax in [False, True]: # With ss.options.backend = 'jax', the runs are taken in one call to JAX
         sim = make_sir()
-        sim.jax = jax
-        msim = ss.parallel(sim, pars=dict(beta=betas*2))
+        with ss.options.context(backend='jax' if jax else ss.options.backend):
+            msim = ss.parallel(sim, pars=dict(beta=betas*2))
         n_I = msim.results.sir.I.values[:3]
         assert (msim.sims[0].diseases.sir.engine.jax_run is not None) == bool(jax)
         assert msim.run_pars.beta.tolist() == betas*2

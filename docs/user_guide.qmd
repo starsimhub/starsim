@@ -73,9 +73,9 @@ Each page of the user guide covers one topic in full, to read through or to look
 - [Distributions](user_guide/mechanics_distributions.qmd): random draws, for parameters and for agents
 - [Random numbers](user_guide/mechanics_random.qmd): common random numbers, and their limits
 
-## Architecture
+## Architecture (for developers)
 
-How Starsim works inside: for contributors, and for anyone curious. No model needs these pages.
+How Starsim works inside: developer documentation, for contributors, and for anyone curious. No model needs these pages: what a modeler needs to know is on the pages above.
 
 
 - [Overview](user_guide/architecture_index.qmd): the layers, and what a module is

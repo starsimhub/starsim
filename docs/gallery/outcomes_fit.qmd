@@ -31,7 +31,7 @@ recovery  = I >> R @ ss.days(10)
 cases     = ss.outcome(0.5*infection, delay=ss.days(5))
 hosp      = ss.outcome(0.05*infection, delay=ss.days(7), dur=ss.days(10))
 deaths    = ss.outcome(0.2*hosp, delay=ss.lognormal(mean=14, std=5, unit='days'))
-sir = ss.Disease(infection, recovery, cases, hosp, deaths, init=dict(I=0.001), name='sir')
+sir = ss.Disease(infection, recovery, cases, hosp, deaths, init=dict(I=0.001))
 
 pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01')
 ```

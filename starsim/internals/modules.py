@@ -176,6 +176,28 @@ def required():
     return decorator
 
 
+def class_parts(cls):
+    """
+    The parameters (`ss.par`), and the arrays (`ss.FloatArr`, `ss.BoolArr`, ...) and distributions (`ss.bernoulli`, ...), declared in the body of a module's class and its bases, by name, in the order defined
+
+    A name rebound to something else in a subclass is dropped. Each instance gets its own copy of each (see `ss.Module.define_class_parts()`).
+
+    Args:
+        cls (type): the class of the module
+    """
+    pars = {}
+    others = {}
+    for base in reversed(cls.__mro__):
+        for key,val in vars(base).items():
+            pars.pop(key, None)
+            others.pop(key, None)
+            if isinstance(val, ss.par):
+                pars[key] = val
+            elif isinstance(val, (ss.Arr, ss.Dist)):
+                others[key] = val
+    return pars, others
+
+
 class Base:
     """
     The parent class for Sim and Module objects
@@ -256,40 +278,37 @@ class Module(Base):
     """
     The main base class for all Starsim modules: diseases, networks, interventions, etc.
 
-    By convention, keyword arguments to modules are assigned to "_", which is an
-    alias for None. These are then populated with defaults by `mod.define_pars()`,
-    which are then updated with `mod.update_pars()`, which inspects the `__init__`
-    function to get these arguments.
+    A module declares its parameters (`ss.par`) and the arrays it keeps for each agent (`ss.FloatArr`,
+    `ss.BoolArr`, ...) in its class body, and its behavior in methods such as `step()`. Each parameter
+    can then be given by keyword (or as `pars=dict(...)`), and the module's code reads its value from
+    `self.pars`; each array is an attribute of the same name. Each instance has its own copies.
 
-    Note that there is no *functional* difference between specifying arguments
-    this way rather than simply via `**kwargs`, but having the arguments shown in the
-    function signature can make it easier to read, and "_" is a convention to indicate
-    that the default is specified below.
-
-    It is also of course OK to specify the actual values rather than "_"; however
-    module arguments are often complex objects (e.g. `ss.bernoulli`) that can't
-    be easily specified in the function signature.
-
-    Finally, note that you can (and should) call `super().__init__()` with no arguments:
-    the name, label, and time arguments get correctly updated via `self.update_pars()`.
+    A module whose parameters depend on its arguments can instead define them in its `__init__()`, with
+    `define_pars()` and then `update_pars()`, which applies the arguments given (and raises for any it
+    does not have); its arrays are defined with `define_states()`.
 
     Args:
-        name (str): a short, key-like name for the module (e.g. "randomnet")
+        name (str): a short, key-like name for the module (e.g. "randomnet"); if not given, the variable it is assigned to (`net = ss.RandomNet()` is "net"), else its `default_name` (see `ss.Sim._name_modules()`)
         label (str): the full, human-readable name for the module (e.g. "Random network")
-        kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, dt)
+        pars (dict): values of the parameters declared in its class body, as an alternative to giving them by keyword
+        kwargs (dict): values of those parameters, by name; or passed to `ss.Timeline()` (e.g. start, stop, dt)
 
     Examples:
         ```python
-        class SIR(ss.Module):
-            def __init__(self, pars=_, beta=_, init_prev=_, p_death=_, **kwargs):
-                super().__init__() # Call this first with no arguments
-                self.define_pars( # Then define the parameters, including their default value
-                    beta = ss.peryear(0.1),
-                    init_prev = ss.bernoulli(p=0.01),
-                    p_death = ss.bernoulli(p=0.3),
-                )
-                self.update_pars(pars, **kwargs) # Update with any user-supplied parameters, and raise an exception if trying to set a parameter that wasn't defined in define_pars()
-                return
+        class Decay(ss.Intervention):
+            half_life = ss.par(ss.years(2)) # A parameter, given as Decay(half_life=ss.years(5))
+            level = ss.FloatArr(default=1.0) # A value for each agent
+
+            def step(self):
+                self.level[:] *= 0.5**(self.t.dt/self.pars.half_life)
+
+        # The same, with the parameters defined in __init__()
+        class Decay(ss.Intervention):
+            def __init__(self, **kwargs):
+                super().__init__()
+                self.define_pars(half_life=ss.years(2))
+                self.update_pars(**kwargs)
+                self.define_states(ss.FloatArr('level', default=1.0))
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
@@ -306,7 +325,7 @@ class Module(Base):
             raise TypeError(errormsg)
         return
 
-    def __init__(self, name=None, label=None, **kwargs):
+    def __init__(self, name=None, label=None, pars=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
         self.setattribute('_serial', next(Module._serials)) # Which module this is, kept by its copies (e.g. the sim's), so what was made of the module given is found for the sim's (see ss.expressions.Clock.sets_of())
@@ -314,14 +333,22 @@ class Module(Base):
 
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
-        self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
+        self._name_source = 'class' # Where its name came from: 'class' (the default, see default_name), 'variable' (the variable it was assigned to; see ss.Sim._name_modules()), or 'given' (name=, or a key)
+        self._name_where = None # For a name from a variable, the function whose variable it is (see name_origin())
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
-        named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Event, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
-        self._assigned = ss.utils.assigned_name(self) if named else None # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...)
+        self._assigned, self._assigned_in = ss.utils.assigned_name(self) # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...), and the function it is in
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        class_pars, class_arrs = class_parts(type(self))
+        if isinstance(self, ss.Disease) and not isinstance(self, ss.AgentDisease): # A disease's parameters are part of what it declares, if it declares states and transitions: see ss.Disease.build_graph()
+            class_pars = {}
+        kwargs = sc.mergedicts(pars, kwargs)
+        given = {key:kwargs.pop(key) for key in list(kwargs) if key in class_pars}
         unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
         if unknown:
-            errormsg = f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)} (see the migrate-starsim3 skill for keywords that have changed)'
+            valid = list(class_pars) + module_args + ss.Timeline.time_args
+            how = '' if class_pars else '; parameters defined in __init__() are given to update_pars(), after define_pars()' # The usual slip without parameters in the class body: super().__init__(**kwargs)
+            errormsg = (f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)}{ss.expressions.did_you_mean(unknown[0], list(class_pars))}\n'
+                        f'     Valid keywords are {sc.strjoin(valid)}{how} (see the migrate-starsim3 skill for keywords that have changed)')
             raise TypeError(errormsg)
         self.t = ss.Timeline(**kwargs, name=self.name, init=False) # Initialized in init_pre(), so the sim's dt is used if not supplied
 
@@ -337,6 +364,39 @@ class Module(Base):
         self._lock_attrs = True # Prevent key attributes from being overwritten directly
         self._auto_states = [] # Store automatic states (State objects) added via define_states()
         self._early_results = [] # Results defined in __init__(): see define_results()
+        self.define_class_parts(class_pars, class_arrs, given)
+        return
+
+    def define_class_parts(self, pars, arrs, given=None):
+        """
+        Define the parameters, arrays, and distributions declared in the class body (see `class_parts()`), each instance with its own copy, and apply the values given
+
+        Each parameter is also an attribute (`mod.half_life`), the instance's own `ss.par`, which holds its value, as for a
+        declared disease; setting it (`mod.half_life = 3`) sets the parameter. The module's code reads the value from `self.pars`.
+
+        Args:
+            pars (dict): the parameters (`ss.par`), by name
+            arrs (dict): the arrays (`ss.Arr`) and distributions (`ss.Dist`), by name
+            given (dict): the values given for the parameters, by name
+        """
+        if pars:
+            self.define_pars(**{key:sc.dcp(p) for key,p in pars.items()}) # Each kept in pars.bounded(), which mod.<key> reads (see ss.par.__get__())
+            self.setattribute('_class_pars', set(pars)) # Their defaults stand, even if a base class's __init__() defines them after this (see define_pars())
+            if given:
+                self.pars.update(given)
+        states = []
+        for key,arr in arrs.items():
+            if isinstance(arr, ss.Dist): # Its own copy, found by the sim with the module's other distributions
+                self.setattribute(key, sc.dcp(arr))
+                continue
+            if arr.name not in [None, key]:
+                errormsg = f'The array "{key}" of {type(self).__name__} is named "{arr.name}"; an array in a class body takes the name it is assigned to, so leave out the name'
+                raise ValueError(errormsg)
+            arr = sc.dcp(arr)
+            arr.name = key
+            states.append(arr)
+        if states:
+            self.define_states(*states, overwrite=True) # Replacing only the class's own, which every instance copies
         return
 
     def __call__(self, *args, **kwargs):
@@ -380,6 +440,8 @@ class Module(Base):
             raise AttributeError(errormsg)
         elif isinstance(self.__dict__.get(attr), ss.par) and attr in self.pars: # A declared parameter (e.g. sir.beta = 0.1), the same object as sir.pars.beta
             self.pars[attr] = value
+        elif isinstance(getattr(type(self), attr, None), ss.par) and attr in self.pars.bounded(): # Declared in the class body of a module written as code (see define_class_parts())
+            self.pars.update({attr:value})
         else:
             super().__setattr__(attr, value)
         return
@@ -466,7 +528,7 @@ class Module(Base):
         Set metadata for the module
 
         Args:
-            name (str): the name of the module; if None, the lowercase name of its class
+            name (str): the name of the module; if None, the one it has, else the lowercase name of its class
             label (str): the label of the module; if None, its name
         """
         # Validation
@@ -481,12 +543,48 @@ class Module(Base):
         cls_lower = cls_name.lower()
         old_name = getattr(self, 'name', None)
         self.name = self._reconcile('name', name, cls_lower)
-        if name is not None or self.name != cls_lower: # The user chose the name, so never rename it
-            self._default_name = False
+        if name is not None or (self.name != cls_lower and getattr(self, '_name_source', 'class') == 'class'): # The user (or the class itself, as ss.Pregnancy does) chose the name, so never rename it
+            self._name_source = 'given'
         default_label = self.name if self.name != cls_lower else cls_name
         if label is None and getattr(self, 'label', None) in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
             label = default_label
         self.label = self._reconcile('label', label, default_label)
+        return
+
+    @property
+    def default_name(self):
+        """
+        The name the module has if it is not given one and is not assigned to a variable: the lower-case name of its class (`'sir'`
+        for `ss.SIR`, `'randomnet'` for `ss.RandomNet`), or for a plain `ss.Disease`, the initials of its states (`'sir'`)
+
+        A module can always be found by this name too, if no other module of its kind has it: `sim.diseases.sir` and `sim.results.sir`
+        find the only `ss.SIR` even if it is called `measles` (see `ss.ndict`).
+        """
+        if type(self) is ss.Disease and getattr(self, 'graph', None) is not None:
+            return ''.join(s.name[0].lower() for s in self.graph.people_states) or 'disease'
+        return type(self).__name__.lower()
+
+    def name_origin(self):
+        """ Where the module's name came from, for messages: e.g. 'named from the variable `m` in `make_sim()`', or 'the default for ss.SIR' """
+        source = getattr(self, '_name_source', 'class')
+        if source == 'variable':
+            where = self._name_where
+            return f'named from the variable `{self.name}`' + (f' in `{where}()`' if where and not where.startswith('<') else '')
+        elif source == 'given':
+            return 'given'
+        cls = type(self)
+        if cls is ss.Disease:
+            return 'the default, from its states'
+        prefix = 'ss.' if cls.__module__.startswith('starsim.') and not cls.__module__.startswith('starsim.library') else ''
+        return f'the default for {prefix}{cls.__name__}'
+
+    def _set_name(self, name, source='given', where=None):
+        """ Rename the module, keeping its label if one was given (the user gives `name=` instead); `source` and `where` say where the name came from (see `name_origin()`) """
+        self.set_metadata(name=name)
+        self._name_source = source
+        self._name_where = where
+        if isinstance(getattr(self, 'results', None), ss.Results):
+            self.results.setattribute('_module', self.label)
         return
 
     @classmethod
@@ -516,7 +614,7 @@ class Module(Base):
         `name` is taken from the function's name.
 
         This is the mechanism behind "function-based" interventions and analyzers:
-        passing a function to `interventions=`, `analyzers=`, or `modules=`
+        passing a function to `interventions=` or `analyzers=`, or to the sim as an argument
         automatically calls `from_func()` on the appropriate class
         (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
         you don't need to call this method directly. Call it explicitly when you want
@@ -576,10 +674,17 @@ class Module(Base):
         """
         Create or merge Pars objects
 
+        A parameter declared in the class body (`ss.par`) is left as it is there, so that a subclass can change the
+        default of a parameter its base defines here (e.g. `class MyNet(ss.RandomNet): n_contacts = ss.par(4)`).
+
         Args:
             inherit (bool): whether to merge with the parameters already defined, rather than replace them
             **kwargs (dict): the parameters
         """
+        own = self.__dict__.get('_class_pars')
+        keep = {} # A default in the class body (e.g. of a subclass, n_contacts = ss.par(4)), or the value given for it, stands over one defined by a base class's __init__()
+        if own and inherit:
+            keep = {k:sc.dcp(v) for k,v in self.pars.with_bounded().items() if k in own and k in kwargs} # Copies (the base's default would set the value of the ss.par kept), applied over the base's default, as update_pars() would apply it, so that a number sets a distribution's value or takes the default's unit
         if inherit: # Merge with existing
             declared = '_declared' in vars(self) or getattr(self, 'graph', None) is not None # Declared, or being declared (see ss.Disease.define_transitions()), without building it
             given = {k:v for k,v in kwargs.items() if isinstance(v, ss.par)} if not declared else {} # In a module written as code, a parameter given as ss.par (e.g. with bounds, to be fitted) is kept as one, and its code uses the value, as for update_pars()
@@ -587,6 +692,8 @@ class Module(Base):
             if given:
                 self.pars.update(**given)
             self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
+            if keep:
+                self.pars.update(**keep)
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
         return self.pars
@@ -680,7 +787,12 @@ class Module(Base):
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
-            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}{ss.v3_deprecations.hint(keys=sorted(remaining), call=f"ss.{type(self).__name__}")}'
+            remaining = sorted(remaining)
+            valid = list(self.pars.keys()) + module_args + ss.Timeline.time_args
+            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(remaining)}{ss.expressions.did_you_mean(remaining[0], list(self.pars.keys()))}\n     Valid arguments are: {sc.strjoin(valid)}'
+            if type(self) is ss.Network:
+                errormsg += '; its edges are given as p1=, p2=, weight=, or edges=dict(...) for any columns'
+            errormsg += ss.v3_deprecations.hint(keys=remaining, call=f"ss.{type(self).__name__}")
             raise ValueError(errormsg)
         return
 
@@ -703,8 +815,8 @@ class Module(Base):
 
         Examples:
             ```python
-            self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
-            self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
+            self.define_states(ss.BoolArr('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolArr('infectious'), overwrite=True) # Replace an inherited state or alias
             ```
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
@@ -717,12 +829,15 @@ class Module(Base):
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
-                state = ss.BoolState(*arg)
+                state = ss.BoolArr(*arg)
             elif isinstance(arg, dict):
-                state = ss.BoolState(**arg)
+                state = ss.BoolArr(**arg)
             else:
                 state = arg
             assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
+            if self.pre_initialized: # The module's arrays were added to the people (with their results) in init_pre(), so a later one would never have a value per agent
+                errormsg = f'"{state.name}" is defined after "{self.name}" was added to the sim (e.g. in init_post()), so the people would not have it: define arrays in __init__() (or in the class body) instead'
+                raise RuntimeError(errormsg)
 
             # Add the state to the module, replacing any existing state or alias of the same
             # name if overwrite=True (removing it first, so it isn't listed or counted twice)
@@ -744,7 +859,7 @@ class Module(Base):
                 self._locked_attrs.append(attr)
 
             # Add it to the list of auto states, if needed
-            if isinstance(state, ss.BoolState):
+            if isinstance(state, ss.BoolArr) and state.result:
                 self._auto_states.append(state)
 
         # Handle any aliases
@@ -769,7 +884,7 @@ class Module(Base):
         (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
         module-level function, or a property, if plain pickling is required.
 
-        A callable alias also generates an automatic result, in the same way a `BoolState`
+        A callable alias also generates an automatic result, in the same way an `ss.BoolArr`
         does: an alias named `infected` produces the result `infected`. A string alias does not,
         since the state it points to is already counted under its own name.
 
@@ -781,7 +896,7 @@ class Module(Base):
             ```python
             self.define_aliases(infectious='infected') # Everyone infected is infectious
             self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
-            self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
+            self.define_states(ss.BoolArr('exposed'), infectious='infected') # Aliases can also be defined alongside states
             ```
         """
         for key in kwargs:
@@ -890,6 +1005,8 @@ class Module(Base):
             elif isinstance(sim.pars[self.name], ss.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
                 sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
+            self.results.setattribute('_default', self.default_name) # So that sim.results.sir finds them by the default name too
+            self.results.setattribute('_origin', self.name_origin())
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
             self.define_results(*self._early_results)
@@ -936,9 +1053,9 @@ class Module(Base):
         Initialize results output; called during `init_pre()`
 
         By default, modules all report on counts for any explicitly defined "States", e.g. if
-        a disease contains an `ss.BoolState` called 'susceptible' it will automatically contain a
+        a disease contains an `ss.BoolArr('susceptible')` it will automatically contain a
         Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
-        generate results, use `ss.BoolArr` instead of `ss.BoolState`.
+        generate results, leave out `result=True`.
         """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
@@ -1007,7 +1124,7 @@ class Module(Base):
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.BoolState`) that were added
+        List of "automatic" states with boolean type (`ss.BoolArr` unless `result=False`) that were added
         via `define_states()`
 
         For diseases, these states typically represent attributes like 'susceptible',
@@ -1024,7 +1141,7 @@ class Module(Base):
 
         Unlike a string alias, which points at a state that is already counted under its
         own name, a derived state has no state object of its own, so it generates an
-        automatic result (e.g. `infected`) in the same way a `BoolState` does.
+        automatic result (e.g. `infected`) in the same way an `ss.BoolArr` does.
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
@@ -1104,7 +1221,7 @@ class Module(Base):
         in the step (a flow, or one that needs a flow) goes in `record_events()` instead.
 
         Args:
-            names (list): the states to count (default: every `ss.BoolState` and derived state)
+            names (list): the states to count (default: every `ss.BoolArr` unless `result=False`, and derived state)
         """
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:

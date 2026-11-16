@@ -68,7 +68,7 @@ measles_explicit.equations()
 - a **rate**, per person in the source state per unit of time, such as `ss.perday(0.125)`, or an expression of states and parameters, such as `1.9*I`;
 - a **duration**, such as `ss.days(8)`: the average time people spend in the source state before they take this transition. A duration of 8 days and a rate of 1/8 per day are the same transition.
 
-The operators are a short way to write `ss.Transition()` (the "Explicit" tab; every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords, and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
+The operators are a short way to write `ss.Transition()` (the "Explicit" tab; every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords ([Names](building_writing.qmd#names)), and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
 
 ## Transmission
 
@@ -172,9 +172,9 @@ A trigger has no rate: people move in the step its condition first holds for the
 ```{python}
 U, A = ss.states('U A') # Not yet sexually active, and active
 debut = U >> A @ ss.on(ss.person.age >= 15) # As soon as they are 15
-sexual = ss.Disease(debut, name='sexual')
+sexual = ss.Disease(debut)
 
-demog = [ss.Births(birth_rate=ss.peryear(0.03)), ss.Deaths(death_rate=ss.peryear(0.01))]
+demog = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 sim = ss.Sim(sexual, demographics=demog, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
 sim.run()
 res = sim.results.sexual
@@ -188,7 +188,7 @@ states("U A") # Not yet sexually active, and active
 debut <- Transition(U, A, when = ss$on(ss$person$age >= 15)) # As soon as they are 15
 sexual <- Disease(debut)
 
-demog <- list(ss$Births(birth_rate = ss$peryear(0.03)), ss$Deaths(death_rate = ss$peryear(0.01)))
+demog <- list(ss$birth(rate = ss$peryear(0.03)), ss$death(rate = ss$peryear(0.01)))
 sim <- Sim(sexual, demographics = demog, n_agents = 5000, start = 2000, stop = 2010, dt = ss$months(1), verbose = 0)
 sim$run()
 active <- sim$results$sexual$A$values
@@ -209,7 +209,7 @@ def debut_fn(sim):
     dis.move(ready, dis.A)
     return
 
-demog = [ss.Births(birth_rate=ss.peryear(0.03)), ss.Deaths(death_rate=ss.peryear(0.01))]
+demog = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 sim_explicit = ss.Sim(sexual_explicit, interventions=debut_fn, demographics=demog, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
 sim_explicit.run()
 res_explicit = sim_explicit.results.sexual
@@ -354,6 +354,8 @@ print('Deaths:', round(res_explicit['outcome.dead'].sum()))
 
 :::
 
+**Which form?** With the same duration on every branch, the two forms give the same numbers; they differ in their results (`recovery` and `death`, or `outcome.R` and `outcome.dead`), and only separate transitions can give each branch its own duration. The tutorials use separate transitions.
+
 The fractions out of one state add up to 1; one of them can be left as `None`, for the rest. A fraction can vary by age group or in time, like any other value ([Parameters](building_parameters.qmd)).
 
 **Outside the model** are `ss.unborn` for births (`ss.unborn >> S`), `ss.dead` for deaths (`I >> ss.dead`), and `ss.outside` for people who arrive or leave alive, counted as arrivals and emigrants. The dead leave the people, unlike a state `D`, which would keep them in the denominator of `prevalence`.
@@ -368,7 +370,7 @@ Three options say who is in which state at the start, and everyone not placed el
 
 If nothing is given, a disease with transmission starts with 1% infected. `default_state=` says which state is the first, if not `S`. Values can also be given by group, with `ss.by()` ([Stratification](building_stratification.qmd#values-by-group)).
 
-Births and deaths are usually given to the sim ([Demographics](populations_people.qmd#births-and-deaths)), but can also be declared in a disease: `ss.birth(rate=...)` with no state is a crude birth rate into the first state (per year, and per 1,000 people if above 1), and `ss.death(rate=...)` with no state a death rate in every state. `ss.birth(S, rate=...)` and `ss.death(I, rate=...)` are rates like any other. Since this model has values in both days and years, β is typed:
+Births and deaths are usually given to the sim ([Demographics](populations_people.qmd#births-and-deaths)), but can also be declared in a disease: `ss.birth(rate=...)` with no state is a crude birth rate into the first state (per person per year, or per 1,000 with `rate_per=1000`), and `ss.death(rate=...)` with no state a death rate in every state. `ss.birth(S, rate=...)` and `ss.death(I, rate=...)` are rates like any other. Since this model has values in both days and years, β is typed:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -506,16 +508,17 @@ What an expression can't say about transmission can be written in Python, withou
 
 ## Advanced: declaring in `__init__()` {#declaring-in-__init__}
 
-A state or transition that only some versions of the model have is declared in `__init__()`, with `define_states()`, `define_transitions()`, and `define_results()`:
+A state or transition that only some versions of the model have is declared in `__init__()`, with `define_states()`, `define_transitions()`, and `define_results()`. Parameters can still be in the class body, as here, so that `SIRS(beta=ss.perday(0.4))` sets one:
 
 ```{python}
 class SIRS(ss.Disease):
+    beta = ss.par(ss.perday(0.3))
+
     def __init__(self, waning=None, **kwargs):
         super().__init__(init=dict(I=0.001), **kwargs)
-        beta = ss.par(ss.perday(0.3))
         self.define_states(ss.states('S I R'))
         self.define_transitions(
-            infection = self.S >> self.I @ beta*self.I,
+            infection = self.S >> self.I @ self.beta*self.I,
             recovery  = self.I >> self.R @ ss.days(10),
         )
         if waning is not None: # Immunity wanes only if asked for
@@ -536,7 +539,7 @@ A disease that needs what states and transitions can't say, such as a quantity e
 
 | Method | What it does |
 |--------|---------|
-| `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) |
+| The class body | Declares the parameters (`ss.par`) and the arrays for each person (`ss.BoolArr`, `ss.FloatArr`, ...); or `__init__()`, with `define_pars()` and `define_states()` |
 | `set_prognoses(uids, sources)` | What happens to the people just infected; it calls `set_infection()` and `set_progression()`, which can be overridden one at a time |
 | `set_congenital(uids, sources)` | What happens to people infected before birth (see `ssl.mnch.CongenitalDisease`) |
 | `step_state()` | Moves people between the disease's own states each step, before transmission |

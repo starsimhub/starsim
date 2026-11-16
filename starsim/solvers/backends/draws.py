@@ -29,7 +29,7 @@ The tricks that make them cheap:
   LLVM) and with no `fastmath` (which would also let the scalar and row draws differ).
 
 The functions run as plain Python too (in the copy `plain_copy()` makes, used by
-`ss.kernels.uncompiled()`), with the same results.
+`ss.solvers.backends.kernels.uncompiled()`), with the same results.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -73,7 +73,7 @@ plain_draws = None # The copy that runs as plain Python, once made: see plain_co
 
 
 def plain_copy():
-    """ This module as plain Python: the same code run without compiling it, which gives the same draws (for ss.kernels.uncompiled()) """
+    """ This module as plain Python: the same code run without compiling it, which gives the same draws (for ss.solvers.backends.kernels.uncompiled()) """
     global plain_draws
     if plain_draws is None:
         spec = importlib.util.spec_from_file_location('starsim.solvers.backends.plain_draws', __file__)

@@ -158,7 +158,7 @@ msim.summarize()
 `interval=0.5` gives the interquartile range instead. The band in the plot is different: it is the spread at each time point, taken separately. The median curve is not a typical epidemic, since the runs peak at different times, and its peak is lower than the peak of most runs:
 
 ```{python}
-peaks = msim.summarize(how={'measles_I': 'max'}).loc['measles_I'] # The peak of each run, summarized
+peaks = msim.summarize(how={'measles.I': 'max'}).loc['measles.I'] # The peak of each run, summarized
 print('Median of the peaks:', peaks['median'])
 print('Peak of the median curve:', msim.results.measles.I.median().max())
 ```
@@ -224,7 +224,7 @@ msim_explicit.plot('measles.I')
 :::
 
 ```{python}
-msim.summarize(baseline='No campaign').loc['measles_infection']
+msim.summarize(baseline='No campaign').loc['measles.infection']
 ```
 
 The difference in infections is negative: the infections the campaign averts. `msim.diff()` gives the differences themselves, run by run, as results; here, the infections averted so far at each point in time:
@@ -261,7 +261,7 @@ msim$plot("measles.I")
 :::
 
 ```{python}
-msim.summarize().loc['measles_infection']
+msim.summarize().loc['measles.infection']
 ```
 
 The parameter is named as it is in the model: here `beta`, the name of the `ss.par()` it was given (`describe()` lists the names); with more than one disease, give the disease too (`pars={'measles.beta': [1.5, 2.3]}`). The values become columns of `msim.runs`, the table of runs, and a result can be picked by value: `msim.results.measles.I.select(beta=2.3)`. Several parameters given together are taken value by value, so each needs the same number of values; for other sets, such as a full grid, give a list of dicts (`[dict(beta=b, dur=d) for b in betas for d in durs]`). `n_runs=` runs each set that many times, with the same seeds for each set. A seed given in `pars=` is a run of its scenario, not a scenario of its own.
@@ -290,7 +290,7 @@ both.plot('measles.I')
 ```
 
 ```{python}
-both.summarize().loc['measles_infection']
+both.summarize().loc['measles.infection']
 ```
 
 With β uncertain, the band holds both the chance in each run and the uncertainty in β. After a model is fitted to data, the values found by the fit can be carried into a projection the same way (`fit.project()`; see [Fitting a model](calibration_fitting.qmd)).
@@ -317,6 +317,8 @@ With β uncertain, the band holds both the chance in each run and the uncertaint
 The methods of an `ss.MultiSim` that a modeler uses, each with the first line of its docstring (see [ss.MultiSim](../api/run.qmd) for the rest). `combine()` adds the runs together into one sim, as if they were one population (counts summed, other results averaged by population), and `ss.MultiSim.merge()` and `split()` put the runs of several MultiSims together and apart again:
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 import pandas as pd
 pd.set_option('display.max_colwidth', None) # Show each entry in full
@@ -329,6 +331,8 @@ pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
 Its attributes are `msim.results` (every result with a run axis first), `msim.runs` (one row per run: its scenario, the values swept or drawn, and its seed), and `msim.sims` (the sims that were run, by position or by scenario). For many thousands of runs, keep only what you need from each (`msim.summarize()`, `msim.to_df()`) rather than the MultiSim itself; `ss.converters.to_hub()` writes runs as the quantile tables that forecasting hubs take. A result across runs has these methods of its own:
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 names = ['median', 'mean', 'quantiles', 'take', 'select', 'cum', 'plot']
 docs = {name: inspect.getdoc(getattr(ss.Result, name)).split('\n')[0] for name in names}
 pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])

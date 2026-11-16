@@ -162,7 +162,7 @@ measles_explicit = ss.Disease(
     name = 'measles',
 )
 
-sim_explicit = ss.Sim(diseases=measles_explicit, networks=ss.contacts(1), total_pop=100_000, start=ss.days(0), stop=ss.days(150), dt=ss.days(1), unit='day', solver='ode')
+sim_explicit = ss.Sim(diseases=measles_explicit, networks=ss.MixingPool(n_contacts=1), total_pop=100_000, start=ss.days(0), stop=ss.days(150), dt=ss.days(1), unit='day', solver='ode')
 sim_explicit.run()
 print('Deaths:', round(sim_explicit.results.measles.death.sum()))
 ```
@@ -174,7 +174,7 @@ print('Deaths:', round(sim_explicit.results.measles.death.sum()))
 measles.equations()
 ```
 
-The same outcome can be written as one transition with several destinations, `outcome = I >> {ss.dead: 0.002, R: None} @ ss.days(8)`, decided as people leave `I`; its results are then `outcome.dead` and `outcome.R` (see [Building diseases](../user_guide/building_diseases.qmd#branching)). Two transitions out of a state with rates and no `p=` are instead competing risks: whichever happens first moves each person. A branch gives the fraction directly, which is how the case fatality ratio is usually known.
+There is another way to write a branch, as one transition with several destinations, which [Building diseases](../user_guide/building_diseases.qmd#branching) covers, with when the two differ; these tutorials use only the form above. Two transitions out of a state with rates and no `p=` are instead competing risks: whichever happens first moves each person. A branch gives the fraction directly, which is how the case fatality ratio is usually known.
 
 ## Naming the parameters
 
@@ -257,7 +257,7 @@ Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to 
 
 ### People who differ: superspreading
 
-For many diseases, most cases infect few others or none, and a few infect many (superspreading). This is usually described by giving each person an infectiousness drawn from a gamma distribution with mean 1 and dispersion k: the smaller k, the more concentrated transmission is. A value that each person has is an attribute, `ss.attr()`, here drawn once for each person; `ss.modify()` then multiplies each person's infectiousness (`rel_trans`) by it:
+For many diseases, most cases infect few others or none, and a few infect many (superspreading). This is usually described by giving each person an infectiousness drawn from a gamma distribution with mean 1 and dispersion k: the smaller k, the more concentrated transmission is. A distribution given as `rel_trans=`, each person's relative infectiousness, is drawn once for each person:
 
 ```{python}
 def make_sim(k=None):
@@ -266,13 +266,9 @@ def make_sim(k=None):
     infection   = S >> E @ 1.9*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)
-    if k is None: # Everyone equally infectious
-        measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=1))
-        return ss.Sim(measles, **pars)
-    infectiousness = ss.attr(ss.gamma(shape=k, scale=1/k)) # A mean of 1, and a shape (dispersion) of k
-    measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, init=dict(R=0.9), init_n=dict(I=1))
-    superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
-    return ss.Sim(measles, connectors=superspreading, **pars)
+    rel_trans = None if k is None else ss.gamma(shape=k, scale=1/k) # A mean of 1, and a shape (dispersion) of k; None for everyone equally infectious
+    measles = ss.Disease(infection, progression, recovery, rel_trans=rel_trans, init=dict(R=0.9), init_n=dict(I=1))
+    return ss.Sim(measles, **pars)
 
 for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2}.items():
     msim = ss.parallel(make_sim(k), n_runs=40)
@@ -280,20 +276,20 @@ for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2
     print(label, '- fraction that die out:', np.mean(total < 20), '- median size of the outbreaks that take off:', np.median(total[total >= 20]))
 ```
 
-Each case infects about 1.5 others on average in all three, but the more concentrated transmission is, the more often an introduction dies out: with k = 0.2, about 3 in 4 do, since the first case is most likely one who infects nobody. `ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `when=infection`); see [Diseases](../user_guide/building_diseases.qmd). Susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
+Each case infects about 1.5 others on average in all three, but the more concentrated transmission is, the more often an introduction dies out: with k = 0.2, roughly 9 in 10 do (40 runs pin a fraction down only to within about 5 points), since the first case is most likely one who infects nobody. Susceptibility can differ in the same way, with `rel_sus=`. A distribution there means variation between people, so the model runs as agents; a compartmental run would use its mean. For other values that each person has, drawn once or when something happens to them (e.g. a severity at infection), see `ss.attr()` in [Diseases](../user_guide/building_diseases.qmd).
 
 ### Counting each person's infections
 
-With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `keep_times=True` keeps each person's history, which only agents have:
+With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `ss.solvers.abm(keep_times=True)` keeps each person's history, which only agents have:
 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.4*I        # β = 0.4 per day
 recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
 waning    = R >> S @ ss.days(180) # Immune for 6 months on average
-cold = ss.Disease(infection, recovery, waning, init_prev=0.01, name='cold')
+cold = ss.Disease(infection, recovery, waning, init_prev=0.01)
 
-sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), keep_times=True, verbose=0)
+sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), solver=ss.solvers.abm(keep_times=True), verbose=0)
 sirs.run()
 sirs.plot('cold.I')
 ```

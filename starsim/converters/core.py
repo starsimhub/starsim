@@ -670,7 +670,7 @@ def disease_code(source, var, total=None):
             name = flow.rate
         guess = name is None or name in taken
         if guess: # Named from its endpoints, as Starsim would
-            base = f'{flow.src or "in"}_to_{flow.dst or "out"}'
+            base = f'{flow.src or "unborn"}_to_{flow.dst or "dead"}'
             name = base
             for i in range(2, len(source.flows) + 2):
                 if name not in taken:
@@ -791,9 +791,11 @@ def disease_code(source, var, total=None):
     kw = sc.obj(results)
     kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, default_state=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
     plain = [kwargs for kwargs in source.strats if kwargs.get('kind') != 'strain']
-    for kwargs in plain: # A multiplier by level, as a modifier of the disease
+    for kwargs in plain: # A multiplier by level of a transition, as a modifier of the disease (rel_sus and rel_trans go in ss.levels(): see strat_code())
         dim = next(k for k in kwargs if k not in strat_options)
         for key,vals in (kwargs.get('adjust') or {}).items():
+            if key in ['rel_sus', 'rel_trans']:
+                continue
             kw[f'{key.replace(".", "_")}_by_{dim}'] = f'ss.modify({f"{source.name}.{key}"!r}, multiply=ss.by({dim}={code_value(list(vals))}))'
     add(f'{var} = ss.Disease(')
     for i in range(0, len(args), 8):
@@ -812,13 +814,14 @@ strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility'] #
 
 
 def strat_code(kwargs):
-    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the fractions in each level as a dict, its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`), and any transfers along it by keyword (e.g. `aging=ss.transfer(...)`) """
+    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the fractions in each level as a dict, its other options in `ss.levels()` (a multiplier by level, `adjust`, is `rel_sus=` or `rel_trans=` there, and a modifier for a transition: see `disease_code()`), and any transfers along it by keyword (e.g. `aging=ss.transfer(...)`) """
     dim = next(k for k in kwargs if k not in strat_options)
     extra = ''.join(f', {k}={code_value(v)}' for k,v in kwargs.items() if k != dim and k not in strat_options) # Transfers, e.g. aging between populations
     levels, fractions = kwargs[dim], kwargs.get('fractions')
     if fractions is not None and not isinstance(fractions, ss.by):
         levels, fractions = dict(zip(levels, np.asarray(fractions, dtype=float).tolist())), None
-    opts = dict(states=kwargs.get('states'), kind=kwargs.get('kind'), mobility=kwargs.get('mobility'), fractions=fractions)
+    adjust = kwargs.get('adjust') or {}
+    opts = dict(states=kwargs.get('states'), kind=kwargs.get('kind'), mobility=kwargs.get('mobility'), fractions=fractions, rel_sus=adjust.get('rel_sus'), rel_trans=adjust.get('rel_trans'))
     where = kwargs.get('where')
     if where: # As a condition on the other dimensions
         conds = [f'(ss.person.{k} == {code_value(v)})' if not isinstance(v, (list, tuple)) else f'ss.person.{k}.isin({code_value(list(v))})' for k,v in where.items()]

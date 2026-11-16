@@ -407,15 +407,18 @@ class levels(sc.prettyobj):
         kind (str): 'age', 'space', or 'plain'; if not given, from the levels: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
         mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
         fractions (`ss.by`): for fractions that depend on other dimensions, the fraction of people at each combination of their levels and this dimension's, as a table over all of them, e.g. `risk=ss.levels(['low', 'high'], fractions=ss.by(np.array([[0.45, 0.05], [0.2, 0.3]]), dims=['age', 'risk']))`, a row for each level of age and a column for each level of risk (the fractions in each level, if they do not depend on anything else, are the levels as a dict)
+        rel_sus (list): the susceptibility of the people at each level, relative to the disease's own (`rel_sus`), one multiplier per level, e.g. `rel_sus=[1, 0.03]` for a vaccinated level 3% as susceptible; the same as `ss.modify(sir.rel_sus, multiply=ss.by(vaccinated=[1, 0.03]))` given to the sim. On the sim's stratification, it applies to every disease with a transmission
+        rel_trans (list): likewise, the infectiousness of the people at each level, one multiplier per level
 
     Examples:
         ```python
         sir.stratify(severity=ss.levels({'mild': 0.9, 'severe': 0.1}, states=[I]))
         sir.stratify(sex=['female', 'male'], parity=ss.levels(['0', '1-2', '3+'], who=ss.person.female)) # Only women have a parity
         sir.stratify(patch=ss.levels(geo, mobility=ss.geo.gravity(away=0.1)))
+        measles.stratify(vaccinated=ss.levels({False: 0.1, True: 0.9}, states=[S], rel_sus=[1, 0.03])) # 90% vaccinated, each 3% as susceptible
         ```
     """
-    def __init__(self, levels, states=None, who=None, kind=None, mobility=None, fractions=None):
+    def __init__(self, levels, states=None, who=None, kind=None, mobility=None, fractions=None, rel_sus=None, rel_trans=None):
         if isinstance(levels, globals()['levels']):
             errormsg = 'ss.levels() takes the levels themselves (a list, a dict of fractions, or a geography), not another ss.levels()'
             raise TypeError(errormsg)
@@ -427,12 +430,18 @@ class levels(sc.prettyobj):
             dim, level = next(iter(who.items()), ('sex', 'female'))
             errormsg = f'who= is a condition on other dimensions, e.g. who=ss.person.{dim} == {level!r}, not a dict'
             raise TypeError(errormsg)
+        adjust = {key:val for key,val in dict(rel_sus=rel_sus, rel_trans=rel_trans).items() if val is not None} # A multiplier for each level (see Strat)
+        for key,val in adjust.items():
+            if not (isinstance(val, (list, tuple, np.ndarray)) and all(sc.isnumber(v) for v in val)):
+                errormsg = f'ss.levels({key}=) is one multiplier for each level, e.g. {key}=[1, 0.03]; not {val!r}. For one that varies over time or by another dimension, use ss.modify(<disease>.{key}, multiply=...)'
+                raise TypeError(errormsg)
         self.levels = levels
-        self.options = dict(states=states, who=who, kind=kind, mobility=mobility, fractions=fractions)
+        self.options = dict(states=states, who=who, kind=kind, mobility=mobility, fractions=fractions, adjust=adjust or None)
         return
 
     def __repr__(self):
-        return f'ss.levels({self.levels!r}' + ''.join(f', {key}={val!r}' for key,val in self.options.items() if val is not None) + ')'
+        opts = {key:val for key,val in self.options.items() if key != 'adjust'} | (self.options['adjust'] or {})
+        return f'ss.levels({self.levels!r}' + ''.join(f', {key}={val!r}' for key,val in opts.items() if val is not None) + ')'
 
 
 def who_dims(who, name=None):
@@ -526,6 +535,8 @@ replaced_options = dict( # The options that stratify() took beside the dimension
     where = lambda v, n: isinstance(v, dict) and not all(sc.isnumber(x) for x in v.values()),
     states = lambda v, n: n > 0 and any(isinstance(x, ss.State) for x in sc.tolist(v)),
     mobility = lambda v, n: isinstance(v, (Mobility, gravity, radiation, np.ndarray)),
+    rel_sus = lambda v, n: True, # Never a dimension: it is the disease's own, and a multiplier for each level goes in ss.levels()
+    rel_trans = lambda v, n: True,
 )
 
 
@@ -540,9 +551,11 @@ def check_replaced(kwargs):
                 fix = f'the levels as a dict of their fractions, e.g. {dim}={{"low": 0.8, "high": 0.2}}' + (f', or ss.levels([...], fractions=ss.by(table, dims=[..., {dim!r}])) for fractions that depend on other dimensions (the fraction of people at each combination of their levels)' if isinstance(kwargs[key], by) else '')
             elif key == 'where':
                 fix = f'{dim}=ss.levels([...], who=<a condition on other dimensions>), e.g. who=ss.person.female'
+            elif key in ['rel_sus', 'rel_trans']:
+                fix = f'a multiplier for each level of a dimension, {dim}=ss.levels([...], {key}=[...]), e.g. vaccinated=ss.levels({{False: 0.1, True: 0.9}}, {key}=[1, 0.03])'
             else:
                 fix = f'{dim}=ss.levels([...], {key}=...)'
-            errormsg = f'stratify() takes only dimensions; {key}= is now {fix}'
+            errormsg = f'stratify() takes only dimensions; {key}= is given as {fix}'
             raise TypeError(errormsg)
     return
 

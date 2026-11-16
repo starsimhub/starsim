@@ -123,6 +123,7 @@ class People:
         self.version = ss.__version__
         self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
         self._age_bins = {} # The bin of each agent by age, for each set of edges: see age_bins()
+        self._births = 0 # Those born in the current step: see count_births()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
         self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
@@ -131,9 +132,9 @@ class People:
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         states = [
-            ss.BoolState('alive', default=True),  # Whether the agent is alive
+            ss.BoolArr('alive', default=True),  # Whether the agent is alive
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
+            ss.BoolArr('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.TimeArr('ti_dead'),  # The step of death
             ss.TimeArr('ti_removed'),  # The step of leaving for another reason (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
@@ -388,40 +389,45 @@ class People:
     @property
     def auto_state_list(self):
         """
-        The people's own `ss.BoolState` states (e.g. alive, female), each of which makes a result of the same name, the number of people in it
+        The people's own boolean states that are results (`ss.BoolArr` unless `result=False`, e.g. alive, female), each of which makes a result of the same name, the number of people in it
 
         Not those of modules (named like "sir.S"), which make their own results; for all states, see `People.states`.
         """
         return [state for key, state in self.states.items()
-                if isinstance(state, ss.BoolState) and '.' not in key]
+                if isinstance(state, ss.BoolArr) and state.result and '.' not in key]
 
     def init_results(self):
         """
         Make the results of the people; called by `Sim.init_results()`
 
-        Each of the people's own `ss.BoolState` states makes a result of the number in it (e.g. `alive`, the
-        number alive); for a state that makes no result, use `ss.BoolArr` instead. There are also the flows of
-        people who died and who left (`died` and `emigrated`; `results.died.cum` is the cumulative total).
+        Each of the people's own boolean states (unless `result=False`) makes a result of the number in it (e.g. `alive`, the
+        number alive); for a state that makes no result, give `result=False`. There are also the flows of
+        people born, who died, and who left (`birth`, `death`, and `emigration`; `results.death.cum` is the cumulative total),
+        and the crude birth and mortality rates (`cbr` and `cmr`, per 1,000 people per year), worked out from them when the
+        sim is finalized (see `ss.solvers.crude_rates()`).
 
-        With `sim.pars.record_people=False`, there are none of these (and `record_states()` and
+        With `ss.solvers.abm(record_people=False)` (or a compartmental run, which records them in its own way), there are none of these (and `record_states()` and
         `record_events()` are skipped in the loop), which saves a little time and memory.
         """
-        if not self.sim.pars.get('record_people', True):
+        if not getattr(self.sim.solver, 'record_people', False):
             return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = [ss.Result(state.name, label=state.label, kind='stock', **kw) for state in self.auto_state_list]
         results += [
-            ss.Result('died', label='Deaths', kind='flow', **kw),
-            ss.Result('emigrated', label='Emigrants', kind='flow', **kw),
+            ss.Result('birth', label='Births', kind='flow', **kw),
+            ss.Result('death', label='Deaths', kind='flow', **kw),
+            ss.Result('emigration', label='Emigrants', kind='flow', **kw),
+            ss.Result('cbr', label='Crude birth rate', kind='ratio', **kw | dict(dtype=float, scale=False)),
+            ss.Result('cmr', label='Crude mortality rate', kind='ratio', **kw | dict(dtype=float, scale=False)),
         ]
         self.sim.results += results
         return
 
     @classmethod
     def taken_names(cls):
-        """ The names of the attributes every People has (e.g. "age", "version"), which a module can't take from its variable """
+        """ The names of the attributes every People has (e.g. "age", "version"), and of the sim's results about people (e.g. "death"), which a module can't take from its variable """
         if cls._taken is None:
-            cls._taken = set(dir(cls)) | set(vars(cls(n_agents=1)))
+            cls._taken = set(dir(cls)) | set(vars(cls(n_agents=1))) | {'birth', 'death', 'emigration', 'cbr', 'cmr'} # See init_results()
         return cls._taken
 
     def add_module(self, module):
@@ -496,15 +502,10 @@ class People:
 
     def init_mock(self):
         """ Link the people to a mock sim and give them their values, so they can be used without a sim (for testing and debugging) """
-        sim = ss.debugtools.mock_sim(n_agents=self.n_agents)
+        sim = ss.debugtools.mock_sim(n_agents=len(self))
         self.link_sim(sim, init=True)
         self.init_vals()
         return
-
-    @property
-    def n_agents(self):
-        """ The number of active agents, as `len(people)` (for the number of people alive, see `people.n`) """
-        return len(self)
 
     @property
     def n_uids(self):
@@ -557,7 +558,7 @@ class People:
             n = len(new_slots)
 
         if n == 0:
-            return np.array([], dtype=ss.dtypes.int)
+            return ss.uids()
 
         start_uid = self.uid.len_used
         stop_uid = start_uid + n
@@ -713,7 +714,7 @@ class People:
 
     def request_removal(self, uids):
         """
-        Request that agents leave the sim at this step for a reason other than death (e.g. emigration), so they are counted as having left (`results.emigrated`) rather than as having died
+        Request that agents leave the sim at this step for a reason other than death (e.g. emigration), so they are counted as having left (`results.emigration`) rather than as having died
 
         Args:
             uids (array): the agents to remove
@@ -766,7 +767,8 @@ class People:
         return mods
 
     def born(self, children):
-        """ Tell each module that defines `on_birth()` about these newborns (see `ss.Module.on_birth()`); called wherever children are born """
+        """ Count these newborns (see `count_births()`), and tell each module that defines `on_birth()` about them (see `ss.Module.on_birth()`); called wherever children are born """
+        self.count_births(children)
         if len(children):
             parents = None
             for mod in self.sim.modules:
@@ -774,6 +776,11 @@ class People:
                     if parents is None:
                         parents = ss.uids(self.parent.raw[children])
                     mod.on_birth(parents, children)
+        return
+
+    def count_births(self, children):
+        """ Count newborns among the births of the step (`results.birth`): called by `born()`, and for births with no parents (e.g. `ss.birth()` as agents without `mother_ages`) """
+        self._births += (float(self.scale.raw[children].sum()) if self.scale.weighted else len(children))
         return
 
     def remove_dead(self, aging=False):
@@ -834,10 +841,10 @@ class People:
         return dying if dying is not None else ss.uids()
 
     def record_states(self):
-        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
+        """ Record the population counts at the start of the step (each `ss.BoolArr` unless `result=False`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
-        states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. alive, female
+        states = [getattr(self, state.name) for state in self.auto_state_list] # Each automatic result, e.g. alive, female
         counts = None
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
             w = self.scale.raw[self.auids]
@@ -856,16 +863,17 @@ class People:
             counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)]
         for i,state in enumerate(states):
             res[state.name][ti] = counts[i] if counts is not None else state.count()
+        self._births = 0 # Counted from the start of the step: see count_births()
         return
 
     def record_events(self):
-        """ Record the people who died or left in the step, at its index; they are taken out at the end of it (see `finish_step()`), whenever in the step it was requested """
+        """ Record the people born, who died, and who left in the step, at its index; those who died or left are taken out at the end of it (see `finish_step()`), whenever in the step it was requested """
         ti = self.sim.ti
         res = self.sim.results
         dying = self.dying() # Those who died or left in the step, who are all the active agents not alive
         if self.scale.weighted:
             gone = [float(self.scale.raw[dying[arr.raw[dying] <= ti]].sum()) for arr in [self.ti_dead, self.ti_removed]]
-            for key in ['died', 'emigrated']:
+            for key in ['birth', 'death', 'emigration']:
                 if res[key].values.dtype.kind in 'iu':
                     res[key]._init_values(dtype=float, force=True)
         else:
@@ -875,7 +883,8 @@ class People:
             w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
             out = ~self.alive.raw[unborn]
             gone = [gone[0] - w[out & (self.ti_dead.raw[unborn] <= ti)].sum(), gone[1] - w[out & (self.ti_removed.raw[unborn] <= ti)].sum()]
-        res.died[ti], res.emigrated[ti] = gone
+        res.death[ti], res.emigration[ti] = gone
+        res.birth[ti] = self._births
         return
 
     def unborn_uids(self):
@@ -923,8 +932,8 @@ class People:
         """
         kwargs.setdefault('figsize', figsize)
         if key is None: # What can be shown: not the solvers' own bookkeeping, or a state with no values (e.g. the time of death when nobody has died)
-            data = lambda state: state.values if alive else state.raw
-            shown = lambda state: not state.internal and (isinstance(state, ss.BoolArr) or (isinstance(state, ss.FloatArr) and not np.all(np.isnan(data(state)))))
+            values_of = lambda state: state.values if alive else state.raw
+            shown = lambda state: not state.internal and (isinstance(state, ss.BoolArr) or (isinstance(state, ss.FloatArr) and not np.all(np.isnan(values_of(state)))))
             key = [k for k,state in self.states.items() if shown(state)]
         key = sc.tolist(key)
         if max_plots:
@@ -939,12 +948,15 @@ class People:
                 data = sc.rmnans(data)
                 if not len(data):
                     print(f'Not plotting "{k}" since all values are NaN')
+                    ax.set_title(f'{state.name} (all NaN)')
+                    continue
                 ax.hist(data, bins=bins, **sc.mergedicts(hist_kw))
             elif isinstance(state, ss.BoolArr):
                 ax.bar(['False', 'True'], [(~data).sum(), data.sum()], color=['#E0D3DE', '#3C88A3'])
             else:
                 warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
                 ss.warn(warnmsg)
+                continue
             ax.set_title(f'{state.name} (mean={ss.results.format_value(data.mean())})')
             ax.set_ylabel('Count')
             sc.commaticks(ax)

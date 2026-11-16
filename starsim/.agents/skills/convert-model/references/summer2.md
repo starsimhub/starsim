@@ -25,7 +25,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. If the source builds sev
 | `TransitionFlow`, `DeathFlow` | A transition; an outflow (one for each compartment, `<flow>_<compartment>`) | yes |
 | `CrudeBirthFlow`, `ImportFlow`, `AbsoluteFlow` | An inflow (`rate * N`, or a number) | yes |
 | `stratify_with()` | `stratify(dim=ss.levels({level: fraction, ...}, states=...))`, with each flow adjustment a multiplier by level, `ss.modify('model.flow', multiply=ss.by(dim=[...]))` (`Multiply(x)` is x, `Overwrite(x)` is x/base) | yes |
-| Infectiousness adjustments | `ss.modify('model.rel_trans', multiply=ss.by(dim=[...]))` | yes |
+| Infectiousness adjustments | `rel_trans=[...]` in the dimension's `ss.levels()`, one multiplier per level | yes |
 | `AgeStratification` | Numeric levels with `kind='age'`; Starsim ages people itself, so summer2's aging flows are left out, and the unit is years | yes |
 | Mixing matrices (`Data(...)` or a plain array) | `networks=ss.contacts(age=..., location=...)` (multiplied together, as summer2's Kronecker product) | yes |
 | A flow into a stratified compartment with adjustments | The fractions as the split (an `ss.by` over an earlier dimension with `source_strata`), and the flow multiplied by their sum | yes |

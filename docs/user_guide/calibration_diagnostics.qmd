@@ -96,7 +96,7 @@ import pandas as pd
 stochastic = ss.Sim(make_seir(), data=data, solver='binomial', **pars)
 rows = []
 for seed in [1, 2]:
-    fit = stochastic.fit(rand_seed=seed, verbose=False, method=ss.fitting.method('optuna', n_trials=100))
+    fit = stochastic.fit(method='optuna', n_trials=100, rand_seed=seed, verbose=False)
     rows.append(dict(rand_seed=seed, beta=fit.pars.beta, report=fit.pars.report, converged=fit.converged))
 pd.DataFrame(rows).round(3)
 ```
@@ -173,7 +173,7 @@ A best fit is a single point; it doesn't show how far the values could move and 
 import numpy as np
 import matplotlib.pyplot as plt
 
-search = sim.fit(method=ss.fitting.method('optuna', n_trials=300), rand_seed=1, verbose=False)
+search = sim.fit(method='optuna', n_trials=300, rand_seed=1, verbose=False)
 trials = search.to_df()
 
 worse = np.log10(1 + trials.objective - trials.objective.min()) # 0 at the best trial

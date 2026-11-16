@@ -190,7 +190,7 @@ def load_memilio(source, verbose=None, **kwargs):
     if n > 1:
         src.stratify(age=[str(i) for i in range(n)], fractions=(totals.sum(1)/totals.sum()).tolist())
         matrix = np.array(d['contacts']['samples'][0]['matrix'])
-        src.config.networks = Code(f'ss.contacts({matrix.tolist()!r})')
+        src.config.networks = Code(f'ss.contacts(age={matrix.tolist()!r})')
         src.notes.append(f'contacts      the {n} age groups as labels ("0" to "{n-1}"), with MEmilio\'s contact matrix at the start (summed over its {len(d["contacts"]["matrices"])} matrices)')
     if graph:
         nodes_of(src, d, places, totals)

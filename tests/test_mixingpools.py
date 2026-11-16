@@ -169,6 +169,13 @@ def test_matrix_dist():
     assert net.contact_scale == 7 and len(net.pools) == 0
     with pytest.raises(ValueError, match='negative'):
         ss.Sim(ss.SIS(beta=ss.perday(0.05)), networks=ss.contacts(ss.normal(matrix, 2*matrix), ages=[0, 30]), n_agents=1000, stop=2, verbose=0).run()
+
+    # A matrix by position says what it is over (ages= or dims=), one by keyword is over the model's stratification of that name, and a number is a mixing pool
+    M = [[2, 1], [1, 3]]
+    for bad, match in [(lambda: ss.contacts(M), 'age=matrix'), (lambda: ss.contacts(age=M, ages=[0, 15]), 'by position'), (lambda: ss.contacts(10), r'MixingPool\(n_contacts=10\)')]:
+        with pytest.raises(TypeError, match=match):
+            bad()
+    assert np.array_equal(ss.contacts(M, ages=[0, 15], risk=M).age_edges, [0, 15]) and ss.contacts(age=M).age_edges is None
     return
 
 
@@ -212,7 +219,7 @@ def test_counts():
         nets = None
         if groups:
             d.stratify(age=['0', '1', '2'])
-            nets = ss.contacts(np.full((3, 3), 1/3))
+            nets = ss.contacts(age=np.full((3, 3), 1/3))
         return ss.Sim(d, networks=nets, total_pop=10_000, unit='day', stop=100, verbose=0).run().results.d.R[-1]
     assert np.isclose(capped(True), capped(False)) # Before, the count in the function was met, as I/3
     return

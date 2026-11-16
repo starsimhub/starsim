@@ -194,14 +194,14 @@ class Loop:
 
         # Record the state at the start of the step. A module's record_states() is skipped only when it is the inherited
         # base method and the module has no auto-generated boolean-state results to count (see _null_record())
-        if sim.pars.get('record_people', True): # People results can be opted out for lightweight sims
+        if sim.solver.record_people: # People results can be opted out for lightweight sims
             self += sim.people.record_states
         for mod in sim.modules:
             if self._keep(mod.record_states):
                 self += mod.record_states
 
         # Rescale the population if needed
-        if sim.pars.rescale:
+        if sim.solver.rescale:
             self += sim.rescale
 
         if sim.pars.step_order == 'given': # Each module steps in the order it was given in (analyzers still last, after the results)
@@ -214,7 +214,7 @@ class Loop:
             self += sim.people.step_die
 
         # Record what happened in the step
-        if sim.pars.get('record_people', True):
+        if sim.solver.record_people:
             self += sim.people.record_events
         for mod in sim.modules:
             if self._keep(mod.record_events):
@@ -690,7 +690,7 @@ class Loop:
         Return a user-friendly version of the plan, omitting object columns
 
         The `cpu_time` column is populated only if the run recorded per-entry timing
-        (i.e. `sim.profile(kind="loop")`); otherwise it is `NaN`. This is built lazily and
+        (i.e. `sim.perf_profile(kind="loop")`); otherwise it is `NaN`. This is built lazily and
         cached in `self.df`/`self.cpu_df`.
         """
         # Compute the main dataframe
@@ -780,7 +780,7 @@ class Loop:
         """
         # Assemble data
         if not len(self.cpu_time): # No per-entry timing was recorded, so there is nothing to plot
-            errormsg = 'No CPU timing was recorded: profile the sim with sim.profile(kind="loop") (or loop.run(profile=True)) first'
+            errormsg = 'No CPU timing was recorded: profile the sim with sim.perf_profile(kind="loop") (or loop.run(profile=True)) first'
             raise ValueError(errormsg)
         if self.cpu_df is None:
             self.to_df()

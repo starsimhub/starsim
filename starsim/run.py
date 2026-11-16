@@ -55,8 +55,8 @@ class MultiSim:
     `msim.init_sims()`.
 
     Args:
-        sims (Sim/list/dict): a single sim, a list/tuple of sims, a dict of sims by label, or another MultiSim (or list of MultiSims); the first is `msim.base_sim`, whose label and settings the MultiSim shows
-        label (str): the name of the multisim
+        sims (Sim/list/dict): a single sim, a list/tuple of sims, a dict of sims by label, or another MultiSim (or list of MultiSims); the first is `msim.base_sim`, whose label and settings the MultiSim shows. Several can also be given one after another, as for `ss.parallel()`, e.g. `ss.MultiSim(s1, s2)`
+        label (str): the name of the multisim (by keyword)
         n_runs (int): the number of runs of each sim, each with its own seed (by default, 1)
         pars (dict/list): sets of values of parameters to run each sim with; see `ss.parallel()`
         priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters, or the draws to run; see `ss.parallel()`
@@ -81,6 +81,7 @@ class MultiSim:
 
     Examples:
         ```python
+        import numpy as np
         import starsim as ss
 
         s1 = ss.Sim(networks='random', diseases=ss.SIS(beta=0.02), label='Low transmission')
@@ -101,9 +102,11 @@ class MultiSim:
     """
     run_options = run_options # Those of a subclass go to its make_run()
 
-    def __init__(self, sims=None, label=None, n_runs=None, pars=None, priors=False, inplace=True, **kwargs):
+    def __init__(self, sims=None, *more, label=None, n_runs=None, pars=None, priors=False, inplace=True, **kwargs):
 
-        # The sims: one, a list of them (or of MultiSims), a dict of them by label, or another MultiSim
+        # The sims: one, a list of them (or of MultiSims), a dict of them by label, or another MultiSim; or several, as ss.parallel() takes them, e.g. ss.MultiSim(s1, s2)
+        if more:
+            sims = [sim for arg in (sims, *more) for sim in (labeled(arg) if isinstance(arg, dict) else sc.tolist(arg))]
         if isinstance(sims, MultiSim):
             sims = list(sims.sims)
         elif isinstance(sims, dict):
@@ -467,7 +470,7 @@ class MultiSim:
         combined_sim.metadata = dict(parallelized=True, combined=True, n_runs=n_runs) # Store how this was parallelized
         pars = combined_sim.pars.freeze(False) # Its settings say what it combines (it is not run again)
         pops = np.array([sim.pars.total_pop for sim in self.sims]) # Used to weight the non-count results
-        pars.n_agents = sum(sim.pars.n_agents for sim in self.sims)
+        pars.n_agents = sum(sim.pars.n_agents for sim in self.sims) if all(sim.pars.n_agents is not None for sim in self.sims) else None # None for compartmental runs, which have no agents
         pars.total_pop = pops.sum()
         pars.freeze()
 
@@ -481,9 +484,6 @@ class MultiSim:
                 raise ValueError(errormsg)
             raw = np.array(vals) # Shape (n_runs, npts), or (n_runs, npts, ncols) for 2D results
             res[:] = raw.sum(axis=0) if res.scale else np.average(raw, axis=0, weights=pops)
-
-        # Compute and store final results
-        combined_sim.summarize()
         return combined_sim
 
     def summarize(self, key=None, interval=0.95, how=None, baseline=None, each=False, t=None):
@@ -495,7 +495,7 @@ class MultiSim:
         that are 0 throughout are kept, so the tables of different runs (and of `sim.summarize()`) line up row for row.
 
         Args:
-            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`), as `msim.summarize().loc[key]`: its row (or a row per scenario, if there are several)
+            key (str): if given, only this result (e.g. `'sir.infection'`, or `'sir_infection'`), as `msim.summarize().loc['sir.infection']`: its row (or a row per scenario, if there are several)
             interval (float): the fraction of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
             how (str/dict): how to summarize each result over each run: 'mean', 'median', 'sum', 'last', 'max', 'min', or a function, or a dict of these by result key, as for `sim.summarize()`
             baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
@@ -503,14 +503,15 @@ class MultiSim:
             t (int/str/date): if given, each result's value at this time point (a timestep index, or a date, the nearest time point to it) rather than over the whole run
 
         Returns:
-            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std` (or `value`, if each scenario was run once; or a column for each run, with `each=True`); with `key`, the rows of that result
+            A dataframe with a row for each result, by its module and name (e.g. `'sir.infection'`; and by scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std` (or `value`, if each scenario was run once; or a column for each run, with `each=True`); with `key`, the rows of that result
 
         Example:
             ```python
             msim = ss.parallel(sim, n_runs=20)
             msim.summarize()                     # Every result
-            msim.summarize('sir_infection')      # The total infections
-            msim.summarize(how=dict(sir_I='max')) # The peak number infectious in each run, over the runs
+            msim.summarize('sir.infection')      # The total infections
+            msim.summarize().loc['sir.infection'] # The same, as rows of the table
+            msim.summarize(how={'sir.I': 'max'}) # The peak number infectious in each run, over the runs
             msim.summarize(baseline='No intervention') # Each scenario's difference from the baseline, e.g. the infections averted (negative)
             msim.summarize(each=True)            # The scenarios side by side, a column for each run
             msim.summarize(each=True, t='2030-01-01') # The value of each result on that date, in each run
@@ -564,8 +565,9 @@ class MultiSim:
                     vals = vals - base
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
                 rows[name if n_scenarios == 1 else (name, scenario)] = {k:float(v) for k,v in stats.items()}
+        dotted = dict(zip(flat, ss.results.summary_names(self.results, flat))) # Each row by its module and name, e.g. 'sir.infection'
         if each:
-            summary = ss.results.Summary(columns, index=self._run_labels()).T
+            summary = ss.results.Summary({dotted[name]:col for name,col in columns.items()}, index=self._run_labels()).T
             summary.index.name = 'result'
             if one:
                 if not len(summary):
@@ -573,6 +575,7 @@ class MultiSim:
                     raise ValueError(errormsg)
                 return summary.iloc[0] if len(summary) == 1 else summary
             return summary
+        rows = {(dotted[row[0]], row[1]) if isinstance(row, tuple) else dotted[row]:val for row,val in rows.items()}
         several = any(isinstance(row, tuple) for row in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
         summary = ss.results.Summary(list(rows.values()), index=index)
@@ -675,11 +678,11 @@ class MultiSim:
         sims = list(self.sims)
         scenarios = list(self.runs['scenario'])
         def get(sim, res, origin=sims[0]): # The same result of another sim, or of its one disease if the origin's was named differently (see own_disease())
-            mod = sim.results.get(res.module)
+            mod = dict.get(sim.results, res.module) # By its name only: another sim's module with this as its default name is another module
             if not isinstance(mod, ss.Results) and res.module is not None and res.module == own_disease(origin):
-                mod = sim.results.get(own_disease(sim))
+                mod = dict.get(sim.results, own_disease(sim))
             found = mod.find(res.name, die=False) if isinstance(mod, ss.Results) else None
-            return found if found is not None else sim.results.get(res.name)
+            return found if found is not None else dict.get(sim.results, res.name)
         keys = list(ss.results.match_result_keys(sims[0].results, key, show_skipped=bool(key)).values())
         if key is None: # Also the results that only later sims have, e.g. of an intervention only some scenarios have
             for sim in sims[1:]:
@@ -890,7 +893,7 @@ class Branching(sc.prettyobj):
         return ss.return_fig(fig, **kw.return_fig)
 
 
-def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):
+def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None, options=None):
     """
     Run one sim, as `run_each()` does: labeled by its position if it has no label, and shrunk afterwards if `shrink`
 
@@ -904,6 +907,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.display.RunsProgress`)
         globaldict (dict): a dict shared with the other runs (given by `sc.parallelize()`, or by `run_each()` when run in a loop)
         show (func): what shows the progress, when run in this process
+        options (dict): the options of Starsim to run with (`ss.options`), e.g. those set in the process that started this worker
     """
     if copy_sim:
         sim = sim.copy()
@@ -911,7 +915,8 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         sim.label = f'Sim {ind}'
     if track:
         sim.progress = ss.display.Frac(sim, globaldict, ind, show)
-    sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
+    with ss.options.context(**(options or {})):
+        sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if track:
         globaldict[ind] = 1.0
         if show is not None:
@@ -941,9 +946,10 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
     """
     kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if workers != 1:
-        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
-        with ss.kernels.starting_workers(par_args['start_method']):
-            P = sc.Parallel(ss.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+        kwargs['options'] = {key:val for key,val in ss.options.items() if not ss.utils.same_value(val, ss.options.orig_options.get(key))} # Those set here, which a worker started afresh would not have (e.g. ss.options.crn = False)
+        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.solvers.backends.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
+        with ss.solvers.backends.kernels.starting_workers(par_args['start_method']):
+            P = sc.Parallel(ss.solvers.backends.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
                 if progress is not None:
@@ -954,7 +960,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
                 P.finalize()
             except BaseException as E:
                 P.close() # Without leaving the workers running, as sc.parallelize() does
-                ss.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
+                ss.solvers.backends.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
                 raise
         return P.results
     show = None if progress is None else progress.update
@@ -1058,6 +1064,12 @@ class MultiResults(ss.Results):
                 if modname not in out:
                     out[modname] = ss.Results(modname)
                 out[modname][key] = res
+        for (modname,key),arr in arrays.items(): # A ratio made of other results (e.g. a delivery's coverage, of its deliveries and those eligible) is made of theirs across the runs
+            parts = getattr(arr['like'], 'parts', None)
+            if parts is not None and modname is not None:
+                mod = out[modname]
+                res = mod[key]
+                res.parts = tuple(mod[part.name] for part in parts) if all(part.name in mod and mod[part.name].values.shape == res.values.shape for part in parts) else None # Without them, summarized as the mean over time
         if timevec is not None:
             out['timevec'] = timevec
         if order is not None: # The modules and the sim's own results in the sim's order
@@ -1071,11 +1083,9 @@ class MultiResults(ss.Results):
     @classmethod
     def from_sims(cls, sims, runs):
         """ Every result that every sim has (with the same shape), across the sims: one run per sim """
-        def get(sim, modname, key):
-            try:
-                return sim.results[key] if modname is None else sim.results[modname][key]
-            except (KeyError, AttributeError, TypeError):
-                return None
+        def get(sim, modname, key): # By name only: another sim's module with this as its default name is another module
+            res = sim.results if modname is None else dict.get(sim.results, modname)
+            return dict.get(res, key) if isinstance(res, dict) else None
 
         def stack(found):
             """ The same result of each run that has it, as one array across those runs """
@@ -1308,8 +1318,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
 
     With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times (as runs of their sim's scenario if they are `draws`). An ODE
-    with `sim.jax = True` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
-    the kernels for tens of thousands of runs, once JAX has started.
+    with `ss.options.backend = 'jax'` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
+    the compiled backend for tens of thousands of runs, once JAX has started.
 
     With `starts`, one for each set of values: where its runs start, by the name of the module that runs the compartments (each a `start`
     of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fitting.Fit.project()`);
@@ -1323,7 +1333,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
-        if runner._kernel_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
+        if runner._compiled_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built
@@ -1344,7 +1354,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     group_ti = dict()
     for r,sim in enumerate(runners):
         first = r*len(sets[r])*n_runs # The position of the sim's first run
-        if pars is not None and None not in sets[r] and starts is None and sim.jax is True and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+        if pars is not None and None not in sets[r] and starts is None and ss.options.backend == 'jax' and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
             outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []
@@ -1375,7 +1385,10 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
         sim.restart(pars=sets[r][-1], rand_seed=seeds[first + len(sets[r])*n_runs - 1]).run() # The sim itself is left as its last run
     arrays = {}
     join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) if len({np.shape(a)[1:] for a in arrs}) == 1 else None # Without a copy for one sim, since by group they can be large; None if the sims have different groups (e.g. a delivery that adds a group), as in MultiResults.from_sims()
+    held = {(mod.name, key) for mod in runners[0].declared for key in ss.solvers.population_flows(mod)} # Counted by the sim's own birth and death (see ss.solvers.hold_flows())
     for (modname,key),vals in values.items():
+        if (modname, key) in held:
+            continue
         res = next(sim.results[modname][key] for sim in runners if modname in sim.results) # A delivery may be in some of the sims only
         vals = join(vals)
         if len(vals) == len(runs): # A result that every sim has
@@ -1383,11 +1396,18 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
     sim = runners[0]
-    if 'alive' in sim.results: # The sim's own results (alive, died, emigrated), as one run gives them
+    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration, cbr, cmr), as one run gives them
+        def get(mod, key):
+            vals = join(values[mod.name, key]) if (mod.name, key) in values else None
+            if vals is None or len(vals) != len(runs): # A result some runs don't have
+                raise KeyError(key)
+            return np.asarray(vals, dtype=float)
         try:
-            counts = ss.solvers.people_counts(sim, lambda mod, key: np.asarray(arrays[mod.name, key]['values'], dtype=float))
-        except KeyError: # A result some runs don't have
+            counts = ss.solvers.people_counts(sim, get)
+        except KeyError:
             counts = None
+        if counts is not None and 'cbr' in sim.results:
+            counts.cbr, counts.cmr = ss.solvers.crude_rates(counts.birth, counts.death, counts.alive, ss.solvers.people_t(sim).dt_year)
         for key,vals in (counts or {}).items():
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')

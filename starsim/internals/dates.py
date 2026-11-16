@@ -730,14 +730,9 @@ class datedur(Duration):
             return next(iter(kwds)).removesuffix('s')
         return ', '.join(f'{v} {k.removesuffix("s") if abs(v) == 1 else k}' for k,v in kwds.items()) or '0 days'
 
-    def _compare_args(self, other):
-        """ Need to handle numbers differently, since self.value is not a float """
-        if isinstance(other, (ss.Duration, ss.date)):
-            return self.years, other.years, True
-        elif sc.isnumber(other) or isinstance(other, np.ndarray):
-            return self.years, other, True # self.years instead of self.value is the difference with ss.Duration
-        else:
-            return None, None, False
+    def _own_number(self):
+        """ Compared with a bare zero by its years, since its value is a date offset rather than a number """
+        return self.years
 
     def to_dur(self):
         """ As a plain duration, in the finest unit it has, e.g. datedur(years=1, days=10).to_dur() = ss.days(375) """

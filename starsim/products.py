@@ -26,6 +26,18 @@ class EventSource:
         """ The names of its outcomes, e.g. ['positive', 'negative'] for a test """
         return []
 
+    def __getattr__(self, attr):
+        """ An outcome, as an event, e.g. `screening.positive` or `hiv_rdt.positive` (over all the product's deliveries); called for an attribute that is not otherwise found """
+        out = self._outcome_attr(attr)
+        if out is not None:
+            return out
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            if not attr.startswith('_') and self.outcome_names():
+                raise self._no_outcome(attr) from None
+            raise
+
     @property
     def event(self):
         """ The event itself (the people it reached on the step), as a condition """
@@ -52,7 +64,7 @@ class EventSource:
     def __rand__(self, other): return other & self.event
     def __invert__(self): return ~self.event
 
-    def outcome_attr(self, attr):
+    def _outcome_attr(self, attr):
         """ An outcome as an event, e.g. `screening.positive`; called for an attribute that is not otherwise found """
         if attr.startswith('_'):
             return None
@@ -62,17 +74,17 @@ class EventSource:
             names = []
         return ss.conditions.Cond('event', self, attr) if attr in names else None
 
-    def no_outcome(self, attr):
+    def _no_outcome(self, attr):
         """ The error for a misspelled outcome """
         names = self.outcome_names()
         name = self.__dict__.get('name')
         return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.expressions.did_you_mean(attr, names)}')
 
-    def init_events(self, sim):
+    def _init_events(self, sim):
         """ Before a run: the people of each event on the current step, and the memory the sim needs (as agents, arrays of each person's last time and count) """
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
-        needs = ss.interventions.memory_needs(sim)
+        needs = ss.solvers.deliveries.memory_needs(sim)
         every = isinstance(sim.solver, ss.solvers.abm) and isinstance(self, ss.Event) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
         self._needs = {o:needs.get((self.name, o), set()) for o in [None] + self.outcome_names() if every or (self.name, o) in needs}
         self._mem = {}
@@ -86,7 +98,7 @@ class EventSource:
                 self._mem[o] = (getattr(self, last.name), getattr(self, count.name))
         return
 
-    def fire(self, outcome, sel, eng=None, before=None):
+    def _fire(self, outcome, sel, eng=None, before=None):
         """ Record that an event happened to some people now: a boolean per agent, or the fraction of each state and group (as they were in `before`, if given) """
         sim = self.sim
         ti = sim.ti
@@ -100,14 +112,14 @@ class EventSource:
         live.append(entry)
         if outcome in self._needs:
             self._pending.append((outcome, entry))
-        ss.interventions.trigger_moves(self, outcome, entry[1], eng, entry[2])
+        ss.solvers.deliveries.trigger_moves(self, outcome, entry[1], eng, entry[2])
         return
 
-    def current(self, outcome, selector):
+    def _current(self, outcome, selector):
         """
         The people an event happened to on this step, as a selection for a module's selector
 
-        While a delayed delivery reads its trigger (see `ss.Event.delayed_arrivals()`), `selector.reading` is (step, marks, new):
+        While a delayed delivery reads its trigger (see `ss.Event._delayed_arrivals()`), `selector.reading` is (step, marks, new):
         the people of that step (this one or the one before) that it has not read yet, as `marks` says, with what it has now read put in `new`.
         """
         reading = selector.__dict__.get('reading')
@@ -138,12 +150,12 @@ class EventSource:
         if not isinstance(self.sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
         if outcome is not None and outcome not in self.outcome_names():
-            raise self.no_outcome(outcome)
+            raise self._no_outcome(outcome)
         ti = self.__dict__.get('_ti_step') # Set by its deliveries: see ss.Event.step()
         entries = [e[1] for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == ti]
         return ss.uids.concatenate(entries).unique() if entries else ss.uids()
 
-    def flush(self, ti):
+    def _flush(self, ti):
         """ Put the people events happened to, up to and including time index ti, into the memory """
         keep = []
         for outcome,entry in self._pending:
@@ -174,18 +186,6 @@ class Product(EventSource, ss.Module):
     cost = None
     disease = None # Set by its delivery
 
-    def __getattr__(self, attr):
-        """ An outcome of the product over all its deliveries, as an event: e.g. `hiv_rdt.positive` """
-        out = self.outcome_attr(attr)
-        if out is not None:
-            return out
-        try:
-            return super().__getattr__(attr)
-        except AttributeError:
-            if not attr.startswith('_') and self.outcome_names():
-                raise self.no_outcome(attr) from None
-            raise
-
     def administer(self, uids):
         """
         The effect of a product written as code: called with the UIDs of the people a delivery gave it to on the step, after
@@ -198,11 +198,22 @@ class Product(EventSource, ss.Module):
         Args:
             uids (array): the people who were given the product
 
+        Keep what it does as a state of its own, and apply its effect with `ss.modify()`, rather than setting an array of the
+        disease directly (which would overwrite what any other module did).
+
         Examples:
             ```python
             class Bednet(ss.Product):
+                def __init__(self, **kwargs):
+                    super().__init__(**kwargs)
+                    self.define_states(ss.BoolArr('has_net'))
+
                 def administer(self, uids):
-                    self.sim.diseases.malaria.rel_sus[uids] *= 0.5
+                    self.has_net[uids] = True
+
+            net = Bednet(name='net')
+            nets = ss.Delivery(net, coverage=0.6, when=2025)
+            protection = ss.modify(malaria.rel_sus, multiply=0.5, who=net.has_net) # Half the risk for those with a net
             ```
         """
         return None
@@ -236,7 +247,7 @@ class Product(EventSource, ss.Module):
         if getattr(self, 'linked', False):
             return
         self.linked = True
-        self.init_events(sim)
+        self._init_events(sim)
         super().init_pre(sim)
         return
 
@@ -538,9 +549,9 @@ class Held(Product):
         out = super().agent_reasons(sim)
         if self.fades and self.boxcar_form is None:
             out.append(f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep' + (' (an ss.boxcar() has a compartmental form)' if not isinstance(self.waning, dict) else ' (a boxcar for each effect has a compartmental form if they are the same)'))
-        elif self.fades and sim.pars.approximations == 'error': # A boxcar: in a compartmental run its plateau is approximated by levels, with a note (see ss.Event.init_pre())
+        elif self.fades and ss.options.approximations == 'error': # A boxcar: in a compartmental run its plateau is approximated by levels, with a note (see ss.Delivery.init_pre())
             b = self.boxcar_form
-            out.append(f'the protection of "{self.name}" wanes as {b!r}, whose plateau compartments approximate by {b.stages} levels, each left at a rate, and approximations="error"')
+            out.append(f'the protection of "{self.name}" wanes as {b!r}, whose plateau compartments approximate by {b.stages} levels, each left at a rate, and ss.options.approximations="error"')
         return out
 
     def init_pre(self, sim):
@@ -555,7 +566,7 @@ class Held(Product):
         if not self.holds:
             return
         for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
-            coded = ss.interventions.coded_disease(sim, disname)
+            coded = ss.solvers.deliveries.coded_disease(sim, disname)
             if coded is not None: # Written as code: its rel_sus and rel_trans, as for ss.modify()
                 for key,eff in effects.items():
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
@@ -629,13 +640,13 @@ class Held(Product):
         self._ti_waned = sim.ti
         abm = isinstance(sim.solver, ss.solvers.abm)
         if self.during is not None:
-            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
-            selector = delivery.selector
+            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Delivery) and d.product is self)
+            selector = delivery._selector
         if not abm:
             if self.during is not None: # In a compartmental run, the fraction of each group not in those states stops holding it
                 gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
                 if np.any(gone):
-                    delivery.shift(gone, {sim.groups.dim_index(self.dim):0})
+                    delivery._shift(gone, {sim.groups.dim_index(self.dim):0})
             return
         arr = sim.people[self.dim]
         def lose(uids):
@@ -653,13 +664,13 @@ class Held(Product):
             if len(uids) and all(callable(fn) for fn in fns):
                 holds = np.zeros(len(arr.raw), dtype=bool)
                 holds[uids] = True
-                eng = (ss.interventions.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
+                eng = (ss.solvers.deliveries.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
                 left = np.max([self.remaining(fn, holds, eng)[uids] for fn in fns], axis=0)
                 lose(uids[left <= 0])
         elif self.loses:
             uids = (arr == 1).uids
             if len(uids):
-                eng = (ss.interventions.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
+                eng = (ss.solvers.deliveries.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
                 p = -np.expm1(-eng.dt/eng.convert(self.waning))
                 lose(uids[self.rng_wane.rvs(uids) < p])
         return
@@ -934,7 +945,7 @@ class Treatment(Held):
             return []
         if self.moves is None and self.members and disease in self.members: # Each disease's infected, for a delivery with disease=[...]
             return self.resolve_each(sim)
-        coded = ss.interventions.coded_disease(sim, disease) if self.moves is None else None
+        coded = ss.solvers.deliveries.coded_disease(sim, disease) if self.moves is None else None
         if coded is None and self.moves is None:
             self.along(sim._declared_module(disease).graph)
         if coded is not None: # Written as code: its infected, or the people in each state named, are cured by its clear_infection()
@@ -1044,8 +1055,8 @@ class Treatment(Held):
 
 
 def coded_states(dis):
-    """ The states of a disease written as code, by name: its boolean states (`ss.BoolState`), e.g. `cin` """
-    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolState)}
+    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolArr` unless `result=False`), e.g. `cin` """
+    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolArr) and arr.result}
 
 
 class Diagnostic(Product):
@@ -1168,7 +1179,7 @@ class Diagnostic(Product):
 
     @staticmethod
     def key_ref(key):
-        """ A key of a dict by state, as (disease name, or None for the delivery's; state name): a declared state, a state of a disease written as code (`hpv16.cin`, an `ss.BoolState`), or text (`'hpv16.cin'`) """
+        """ A key of a dict by state, as (disease name, or None for the delivery's; state name): a declared state, a state of a disease written as code (`hpv16.cin`, an `ss.BoolArr`), or text (`'hpv16.cin'`) """
         if isinstance(key, ss.State):
             return ss.conditions.modname(key.module), key.name
         if isinstance(key, ss.Arr):
@@ -1205,7 +1216,7 @@ class Diagnostic(Product):
                 name = name or home
                 if name not in sim.diseases:
                     raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.outcomes is None else "result"} for "{name}.{state}", but "{name}" is not a disease in the sim; its diseases are {sc.strjoin(sim.diseases.keys())}.')
-                coded = ss.interventions.coded_disease(sim, name)
+                coded = ss.solvers.deliveries.coded_disease(sim, name)
                 states = coded_states(coded) if coded is not None else sim._declared_module(name).graph.states # Written as code: its boolean states
                 if state not in states:
                     raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.outcomes is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
@@ -1237,7 +1248,7 @@ class Diagnostic(Product):
         for name,rows in groups.items():
             inside = 0.0
             tail = [0.0]*len(rest)
-            coded = isinstance(name, str) and name != 'detects' and ss.interventions.coded_disease(sim, name) is not None
+            coded = isinstance(name, str) and name != 'detects' and ss.solvers.deliveries.coded_disease(sim, name) is not None
             if coded: # A disease written as code, whose states need not be exclusive (e.g. infected and cin): each person in the most severe state they are in
                 rows = sorted(rows, key=lambda row: self.severity(row[1]), reverse=True)
             for state,vals in rows:

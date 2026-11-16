@@ -25,9 +25,9 @@ debug_pars = dict(
 
 @sc.timer()
 def test_profile():
-    sc.heading('Testing sim.profile()')
+    sc.heading('Testing sim.perf_profile()')
 
-    prof = ss.Sim(**debug_pars).profile() # As on the user guide page on profiling and debugging
+    prof = ss.Sim(**debug_pars).perf_profile() # As on the user guide page on profiling and debugging
     return prof
 
 

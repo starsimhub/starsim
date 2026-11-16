@@ -34,7 +34,7 @@ infection = S >> I @ ss.perday(0.5) * W.n / (W.n + K)
 recovery  = I >> R @ ss.days(5)
 shedding  = ss.outside >> W @ ss.perday(10) * I.n  # Each infectious person sheds 10 a day
 decay     = W >> ss.dead @ ss.days(30)          # Bacteria survive 30 days on average
-cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001), name='cholera')
+cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001))
 ```
 
 `W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the fraction of people infectious (`I.frac`). `ss.outside` and `ss.dead` are outside the model: shedding adds bacteria from outside it, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:

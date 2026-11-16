@@ -13,6 +13,7 @@ time, read as the start is; its length is `dur=` (the stop is then the start plu
 
 Used with: agents and compartments; declared and coded modules
 """
+import copy
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -616,9 +617,8 @@ class Timeline:
                 start = self.start
                 stop = self.stop
                 dt = self.dt
-                eps = min(1e-6, self.dt/2) # Avoid rounding errors
                 decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
-                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start + eps)/dt)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004)
+                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start)/dt + 1e-6)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004); the 1e-6 (of a step) avoids rounding errors
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
                     self.tvec = self.default_type(np.round(steps(start.value, stop.value, dt.value), decimals=decimals))
                     self.yearvec = np.round(self.tvec.years, decimals=decimals)
@@ -740,6 +740,9 @@ class schedule:
         stop (date/dur): no times after this, likewise (default: the end of the timeline)
 
     With only `start` and/or `stop`, it is due at every step between them (a window): as the `when=` of an `ss.Event`, routine delivery between those times.
+    Joined with `&` to a condition on the population, it is due only while the condition holds: `ss.schedule(every=ss.years(1)) & (sir.I.n > 1000)`
+    is yearly, skipping the years it does not hold (in parentheses, since `&` comes before `>` in Python). Joined with `|`, it is due
+    on either: `ss.schedule(every=ss.years(1)) | (sir.I.n > 1000)` is yearly, and also at every step the condition holds.
     With no arguments, it is due at every step, so code with an optional `every=`, `start=`, and `stop=` can always make one.
     A duration given as a time is that long after the sim's start in a sim with a calendar, and with none a time from 0 (the same when the start is 0).
 
@@ -780,19 +783,85 @@ class schedule:
         self.when = when
         self.start = start
         self.stop = stop
+        self.cond = None # A condition on the population joined to it with &: due only while it holds (see __and__())
+        self.either = None # A condition on the population, or an event, joined to it with |: as a when=, due on either (see __and__())
         self.t = None
+        self.sim = None
+        self.window = None
         self.counts = None # The number due in each step, by its index (ti)
         return
 
     def __repr__(self):
         what = [f'every={"ss." if isinstance(self.every, ss.Duration) else ""}{self.every!r}'] if self.every is not None else [repr(self.at)] if self.at is not None else [getattr(self.when, '__name__', 'a function')] if self.when is not None else []
         what += [f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None]
-        return f'ss.schedule({", ".join(what)})'
+        out = f'ss.schedule({", ".join(what)})'
+        if self.either is not None:
+            out = f'({out} | {self.either!r})'
+        return out if self.cond is None else f'{out} & {self.cond!r}'
+
+    def __and__(self, other):
+        """
+        A schedule joined to a condition on the population with `&`, as a `when=`: on the steps the schedule is due (or within its window), while the
+        condition holds, e.g. `when=ss.schedule(start='2025-05-05') & (sir.I.n > 1000)`, or yearly rounds while it holds,
+        `when=ss.schedule(every=ss.years(1)) & (sir.I.n > 1000)`. The condition is checked at each step it is due.
+
+        Joined with `|` to a condition on the population or to an event, it is due on either: `ss.schedule(every=ss.years(1)) | (sir.I.n > 1000)`
+        is a round each year, and also one at each step the condition holds; `ss.schedule(every=ss.years(1)) | screening.positive` is a round
+        each year, and also delivery to the people the event happens to. Its start and stop, if any, bound both.
+        """
+        return self._join(other, '&')
+
+    def __rand__(self, other):
+        return self._join(other, '&')
+
+    def __or__(self, other):
+        return self._join(other, '|')
+
+    def __ror__(self, other):
+        return self._join(other, '|')
+
+    def _join(self, other, op):
+        """ A copy, with a condition on the population joined to it with & (as `cond`), or a condition on the population or an event joined with | (as `either`): see `__and__()` """
+        example = f'when=ss.schedule(every=ss.years(1)) {op} (sir.I.n > 1000)'
+        if isinstance(other, schedule):
+            errormsg = f'A schedule cannot be joined to another schedule; give one schedule (how often, the times, or a function of the date, each with start= and stop=), joined if needed to a condition on the population, e.g. {example}'
+            raise TypeError(errormsg)
+        if isinstance(other, ss.expressions.Expr) and not isinstance(other, (ss.conditions.Cond, ss.State)) and not (isinstance(other, ss.expressions.Func) and other.name in ['less', 'less_equal', 'greater', 'greater_equal']):
+            errormsg = f'{self!r} was joined to {other!r}, a number rather than a condition; {op} comes before comparisons in Python, so put the condition in parentheses, e.g. {example}'
+            raise TypeError(errormsg)
+        is_cond = isinstance(other, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.Event, ss.Product))
+        event = isinstance(other, ss.on) or (is_cond and ss.conditions.has_event(ss.conditions.as_cond(other)))
+        population = not event and isinstance(other, (ss.conditions.Cond, ss.expressions.Expr, ss.State)) and ss.conditions.on_population(other)
+        if op == '&':
+            if not population:
+                what = 'an event, which goes in when= with start= and stop= for a window (e.g. when=screening.positive, start=2025), or joined with | for either' if event else 'a condition on people, which goes in who=' if is_cond else 'not a condition'
+                errormsg = f'A schedule is joined with & to a condition on the population (e.g. {example}); {other!r} is {what}'
+                raise TypeError(errormsg)
+            out = copy.copy(self)
+            out.cond = ss.conditions.join('&', [self.cond, other])
+            return out
+        if not (population or event):
+            what = 'a condition on people, which goes in who=' if is_cond else 'not a condition or an event'
+            errormsg = f'A schedule is joined with | to a condition on the population or an event, for either (e.g. {example}); {other!r} is {what}'
+            raise TypeError(errormsg)
+        if self.every is None and self.at is None and self.when is None:
+            errormsg = f'{self!r} is a window, every step between its start and stop, so joining it with | to {other!r} adds nothing; to act in the window only while that holds or happens, join it with & (a condition on the population), or give the window as start= and stop= (an event)'
+            raise TypeError(errormsg)
+        if self.cond is not None:
+            errormsg = f'{self!r} already has a condition joined with &, so it is not clear whether that condition is for {other!r} too: write (ss.schedule(...) | other) & condition, for both, or make two events'
+            raise TypeError(errormsg)
+        if isinstance(self.either, ss.on) or (isinstance(other, ss.on) and self.either is not None):
+            errormsg = f'An ss.on() with a delay is joined to a schedule on its own: join the other events and conditions inside it, e.g. ss.schedule(...) | ss.on(a.positive | (sir.I.n > 1000), delay=...)'
+            raise TypeError(errormsg)
+        out = copy.copy(self)
+        out.either = other if self.either is None else (self.either | other)
+        return out
 
     def init(self, obj):
         """ Link to a timeline (of a module or sim, or a `ss.Timeline` itself), and work out the number due in each of its steps """
         t = obj if isinstance(obj, Timeline) else obj.t
         self.t = t
+        self.sim = getattr(obj, 'sim', None) # For a condition joined to it (see due())
         absolute = t.is_absolute
         tvec = t.tvec
         if absolute: # Dates, compared as datetime64 (in nanoseconds), so a time on a time point is in the step that starts there
@@ -802,12 +871,13 @@ class schedule:
             points = np.asarray(t.yearvec, dtype=float)
             to_time = lambda x: t.to_time(x, name='the time').years # A bare number is a year with a calendar, else a time in the sim's unit; a duration is that long after the sim's start with a calendar, else a time from 0
         counts = np.zeros(len(points), dtype=int)
+        first = points[0] if self.start is None else to_time(self.start)
+        last = points[-1] if self.stop is None else to_time(self.stop)
+        self.window = (points >= first) & (points <= last) # The steps within its start and stop, which bound a function of the date, and a condition joined with |, too
         if self.when is not None:
             for k in range(len(points)): # Step k starts at time point k
-                counts[k] = bool(of_date(self.when, t, tvec[k]))
+                counts[k] = bool(of_date(self.when, t, tvec[k])) and self.window[k]
         else:
-            first = points[0] if self.start is None else to_time(self.start)
-            last = points[-1] if self.stop is None else to_time(self.stop)
             if self.at is None and self.every is None: # A window: every step that starts within it
                 self.counts = ((points >= first) & (points <= last)).astype(int)
                 return self
@@ -847,7 +917,19 @@ class schedule:
         """ The number of times due in this step (or step `ti`), usually 0 or 1 """
         if self.counts is None:
             raise RuntimeError(f'{self} has no timeline yet: make it an attribute of a module (linked when the sim is initialized), or call init() with a timeline')
-        return int(self.counts[self.t.ti if ti is None else ti])
+        out = int(self.counts[self.t.ti if ti is None else ti])
+        if self.cond is None and self.either is None:
+            return out
+        if ti is not None or self.sim is None:
+            raise RuntimeError(f'{self} is joined to a condition, which is known only in a running sim at the current step: make it an attribute of a module, and call due() with no step')
+        if self.either is not None: # Joined with |: also due while it holds
+            if isinstance(self.either, ss.on) or ss.conditions.has_event(ss.conditions.as_cond(self.either)):
+                raise RuntimeError(f'{self} is joined to an event, which is for the when= of an event or delivery; in code, read the event itself')
+            inside = self.window is None or self.window[self.t.ti]
+            out = max(out, int(inside and ss.conditions.holds(self.either, self.sim)))
+        if out and self.cond is not None: # Joined with &: due only while it holds
+            out *= ss.conditions.holds(self.cond, self.sim)
+        return int(out)
 
     @property
     def steps(self):

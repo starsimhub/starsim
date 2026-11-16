@@ -40,7 +40,7 @@ jobs:
       matrix:
         os: ['ubuntu-latest']
         python-version: ['3.12', '3.14']
-        kernels: ['rust', 'numba'] # Rust's run every test but those marked numba; Numba's run only those (test_kernel_sets.py compares them, bit for bit), so only they compile Numba
+        backend: ['rust', 'numba'] # Rust's run every test but those marked numba; Numba's run only those (test_kernel_sets.py compares them, bit for bit), so only they compile Numba
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
@@ -57,16 +57,16 @@ jobs:
         uses: ./.github/actions/install
         with:
           extras: '[dev]'
-          numba: ${{ matrix.kernels == 'numba' }}
+          numba: ${{ matrix.backend == 'numba' }}
       - name: Run API tests
         working-directory: ./tests
         env:
-          STARSIM_KERNELS: ${{ matrix.kernels }}
+          STARSIM_BACKEND: ${{ matrix.backend }}
           STARSIM_RUST_REQUIRED: 1 # So the comparison with Rust's kernels fails rather than skips if they weren't built
-          MARKER: ${{ matrix.kernels == 'numba' && 'numba and not slow' || 'not numba and not slow' }} # Replaces pytest.ini's "not slow", so repeats it
+          MARKER: ${{ matrix.backend == 'numba' && 'numba and not slow' || 'not numba and not slow' }} # Replaces pytest.ini's "not slow", so repeats it
         run: pytest test_*.py -m "$MARKER" -n logical --durations=0 --junitxml=test-results.xml # Run actual tests; logical since auto counts physical cores, 2 on GitHub's runners
       - name: Save Numba's cache # Even after a failure or timeout, so the next run compiles less
-        if: always() && matrix.kernels == 'numba' && github.event_name != 'schedule'
+        if: always() && matrix.backend == 'numba' && github.event_name != 'schedule'
         uses: actions/cache/save@v4
         with:
           path: ~/.numba
@@ -76,4 +76,4 @@ jobs:
         if: always()
         with:
           report_paths: './tests/test-results.xml'
-          check_name: 'Test Report (Python ${{ matrix.python-version }}, ${{ matrix.kernels }})'
+          check_name: 'Test Report (Python ${{ matrix.python-version }}, ${{ matrix.backend }})'

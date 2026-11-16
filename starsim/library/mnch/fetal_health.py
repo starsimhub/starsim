@@ -13,7 +13,7 @@ Architecture:
     - `treat_pregnant` (Delivery): treats infected pregnant women, as `ss.treat()`
       delivers a treatment, and partially reverses fetal damage.
 
-Both modules require `ssl.mnch.FetalHealth()` in the sim's `modules` and
+Both modules require `ssl.mnch.FetalHealth()` given to the sim and
 `ss.Pregnancy()` in demographics. The connector also requires the target
 disease (default: an `ssl.AgentSIR` named "sir") to be present.
 
@@ -22,12 +22,11 @@ Usage::
     import starsim as ss
     import starsim.library as ssl
 
-    sim = ss.Sim(
+    sim = ss.Sim(ssl.mnch.FetalHealth(),
         diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
         demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.03)), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2025)),
-        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
@@ -98,9 +97,8 @@ class FetalHealth(ss.Module):
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(
-            demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
-            modules=ssl.mnch.FetalHealth(),
+        sim = ss.Sim(ssl.mnch.FetalHealth(),
+            demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.01)), ss.Deaths(death_rate=ss.peryear(0.01))],
             networks=ss.PrenatalNet(),
         )
         sim.run()
@@ -139,10 +137,10 @@ class FetalHealth(ss.Module):
 
             # Birth outcomes (stored on newborns at delivery)
             ss.FloatArr('birth_weight', label='Birth weight (grams)'),
-            ss.BoolArr('lbw',  label='Low birth weight'),
-            ss.BoolArr('vlbw', label='Very low birth weight'),
-            ss.BoolArr('sga',  label='Small for gestational age'),
-            ss.BoolArr('svn',  label='Small vulnerable newborn'),
+            ss.BoolArr('lbw',  label='Low birth weight', result=False),
+            ss.BoolArr('vlbw', label='Very low birth weight', result=False),
+            ss.BoolArr('sga',  label='Small for gestational age', result=False),
+            ss.BoolArr('svn',  label='Small vulnerable newborn', result=False),
         )
         return
 
@@ -414,7 +412,7 @@ class treat_pregnant(ss.Delivery):
         if self.disease_name not in sim.diseases:
             raise ValueError(f'treat_pregnant requires disease "{self.disease_name}" but it was not found in the sim.')
         if 'fetal_health' not in sim.custom:
-            raise ValueError('treat_pregnant requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
+            raise ValueError('treat_pregnant requires a FetalHealth module. Give it to the sim, e.g. ss.Sim(ssl.mnch.FetalHealth(), ...).')
         super().init_pre(sim)
         return
 
@@ -465,7 +463,7 @@ class fetal_infection(ss.Connector):
     2. During pregnancy, when a new infection occurs (detected in `step()`
        by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
 
-    Requires `ssl.mnch.FetalHealth()` in `modules` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
+    Requires `ssl.mnch.FetalHealth()` given to the sim and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
 
     Note: CRN safe.
 
@@ -517,7 +515,7 @@ class fetal_infection(ss.Connector):
 
         # Validate that the required modules exist
         if 'fetal_health' not in sim.custom:
-            raise ValueError('fetal_infection requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
+            raise ValueError('fetal_infection requires a FetalHealth module. Give it to the sim, e.g. ss.Sim(ssl.mnch.FetalHealth(), ...).')
         if 'sir' not in sim.diseases:
             raise ValueError('fetal_infection requires an SIR disease module.')
         return

@@ -83,12 +83,12 @@ def test_priority():
         assert np.allclose(by[0:first, 2], 500) and by[0:first, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
 
-    # A score per agent: under an explicit compartmental solver it is ignored with a note; with approximations='error' it is an error; left to choose, the model runs as agents
+    # A score per agent: under an explicit compartmental solver it is ignored with a note; with ss.options.approximations='error' it is an error; left to choose, the model runs as agents
     uids = lambda sir: lambda sim, uids: -uids
     keyed = make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
     assert any('priority ignored' in note for note in keyed.notes)
-    with pytest.raises(ss.CapabilityError):
-        make(priority=uids, solver='ode', approximations='error', total_pop=50_000, stop=10, **kw).run()
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'):
+        make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
     assert isinstance(make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver, ss.solvers.abm)
     lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
     got = lowest.people.has_vaccine.raw[:10_000].astype(bool)
@@ -155,7 +155,7 @@ def test_memory():
     def rescreen(**kwargs):
         sis = make_sir()
         test = ss.Diagnostic(sensitivity=0.9)
-        screening = ss.screen(test, who=test.since >= ss.days(30), coverage=ss.peryear(4))
+        screening = ss.screen(test, who=test.since >= ss.days(30), rate=ss.peryear(4))
         recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=screening.since < ss.days(5), coverage=0.1)
         return ss.Sim(sis, interventions=[screening, recent], **kwargs)
     check_agents(rescreen, stop=120)
@@ -168,10 +168,10 @@ def test_memory():
     screened = sim.interventions.screening.last_event.raw
     assert np.nanmin(sim.ti - screened) >= 0
 
-    # Coverage as a function that gives a typed rate is a rate at every step too, as the typed rate itself is
+    # A rate given as a function is a rate at every step too, as the typed rate itself is
     def typed(func=False, **kwargs):
         rate = ss.peryear(4)
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), coverage=(lambda sim: rate) if func else rate, name='screening')
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), rate=(lambda sim: rate) if func else rate, name='screening')
         return ss.Sim(make_sir(), interventions=screening, **kwargs)
     runs = [run_both(typed, stop=60, func=f) for f in [False, True]]
     for solver in ['ode', 'abm']:
@@ -274,7 +274,7 @@ def test_clinic():
         discharge = ss.Treatment(cure={ng.cure: 0.95, ct.cure: 0.95})
         syndromic = ss.treat(discharge, who=ng.C | ct.C, capacity=ss.capacity(ss.perweek(200), queue=ss.days(28)))
         left = lambda sim: 200 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=left)
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', rate=ss.probperyear(0.5), capacity=left)
         treatment = ss.treat(discharge, when=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
     check_agents(make, stop=364, pop=20_000) # The queue

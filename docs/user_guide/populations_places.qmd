@@ -19,7 +19,7 @@ The data by place comes from the package `starsim_data`: populations by age and 
 |---|---|---|
 | Population by age and sex (UN World Population Prospects) | `ss.population('Kenya')` ([Ages and sex](populations_people.qmd#ages-and-sex)) | `ss.data.population('Kenya')`, `ss.data.age('Kenya')` |
 | Contact matrix by 5-year age group (Prem et al. 2021) | `ss.contacts('Kenya')` ([Contact matrices by setting](populations_mixing.qmd#contact-matrices-by-setting)) | `ss.data.contacts('Kenya')` |
-| Birth and death rates by year (and by age and sex, for deaths) | `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')` ([Rates from data](populations_people.qmd#rates-from-data)) | `ss.data.rates('Kenya', 'births')`, `ss.data.rates('Kenya', 'deaths')` |
+| Birth and death rates by year (and by age and sex, for deaths) | `ss.birth(rate='Kenya')`, `ss.death(rate='Kenya')` ([Rates from data](populations_people.qmd#rates-from-data)) | `ss.data.rates('Kenya', 'births')`, `ss.data.rates('Kenya', 'deaths')` |
 | Fertility rates by year and 5-year age group of the mother | `ss.Pregnancy(fertility_rate='Kenya')` | `ss.data.rates('Kenya', 'fertility')` |
 | Net migration rates by year (per 1,000 people a year) | `ss.migration(rate='Kenya')` ([Migration](populations_people.qmd#migration)) | `ss.data.rates('Kenya', 'migration')` |
 | Administrative units, with their populations and positions | `ss.geo.geography('Kenya', level=1)` ([below](#geographies)) | `ss.data.geography('Kenya', level=1)` |

@@ -474,7 +474,7 @@ def describe_graph(graph, sim=None, out=None):
         elif tr.trigger is not None:
             add(name, f'{tr._arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
         elif tr.undriven:
-            movers = ss.interventions.movers(sim, mod.name, name) if sim is not None else None
+            movers = ss.solvers.deliveries.movers(sim, mod.name, name) if sim is not None else None
             add(name, f'{tr._arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
         else:
             guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
@@ -951,10 +951,11 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', joint_states=[])
+        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, solver='ode', branching=False), unit=None, _unit_name='day', joint_states=[])
         engine = ss.solvers.Compartmental(mod, mock)
-        engine.init_dwells()
-        engine.build_layout()
+        with ss.options.context(approximations='allow'): # Only laid out, not run, so its approximations are not said
+            engine.init_dwells()
+            engine.build_layout()
 
     def comp_name(ind):
         comp = engine.comps[ind]
@@ -981,7 +982,7 @@ def flow_terms(graph, engine=None, contacts=None):
 
     out = []
     mocked = getattr(engine.mod.t, 'dt', None) is None
-    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.kernels.convey())
+    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.solvers.backends.kernels.convey())
     for cv in engine.conveyors:
         for i,(a,b) in enumerate(zip(cv.slots[:-1], cv.slots[1:])):
             term = per_step(2 if i == 0 else 1).format(comp_name(a))
@@ -1073,7 +1074,7 @@ def what_modifies(sim, target):
     if not sim.initialized:
         sim.init()
     mod, kind, name = ss.connectors.parse_target(target)
-    modname = mod if isinstance(mod, str) else mod.name
+    modname = ss.utils.own_name(sim.modules, mod) if isinstance(mod, str) else mod.name # A module by its default name too, e.g. 'sir' for an ss.SIR called measles
     coded = not any(mod.name == modname for mod in sim.declared) and isinstance(sim.diseases.get(modname), ss.Disease)
     if modname in sim.all_networks(): # The contacts of a network
         kind = 'par'
@@ -1092,6 +1093,10 @@ def what_modifies(sim, target):
     mods = sim.modifiers.get((modname, kind, name), [])
     lines = [path, '  modifiers' if mods else '  modifiers: none']
     lines += [f'    {mod.describe()}' for mod in mods]
+    if kind in ['rel_sus', 'rel_trans'] and not coded: # A multiplier for each level of a dimension, from ss.levels(rel_sus=...) (or a strain's values)
+        graph = sim._declared_module(modname).graph
+        strats = {id(s):s for s in graph.strats + sim.groups.sim_strats}.values()
+        lines += [f'  by level of {strat.name}: ' + ', '.join(f'{label} {val:.3g}' for label,val in zip(strat.labels, strat.adjust[kind])) for strat in strats if kind in strat.adjust]
     if path in sim.clipped:
         lines.append('  clipped: the modifiers made it negative during the run, so it was set to 0 where it was')
     return Text('\n'.join(lines))
@@ -1213,7 +1218,7 @@ def describe_sim(sim):
         if isinstance(sim.solver, ss.solvers.abm):
             add('Solver', f'{sc.strjoin(declared)}: as agents, each step in Python')
         else:
-            whole = sim._kernel_reason()
+            whole = sim._compiled_reason()
             joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.joint_states)
             add('Solver', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
         tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
@@ -1292,6 +1297,10 @@ def strat_rows(strat, most=6):
         rows.append(f'fractions: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
     elif strat.fractions is not None:
         rows.append('fractions: ' + short([f'{label} {frac:.3g}' for label,frac in zip(strat.labels, strat.fractions)]))
+    if strat.kind != 'strain': # A strain's values are shown with the strains
+        for key in ['rel_sus', 'rel_trans']: # From ss.levels(rel_sus=...)
+            if key in strat.adjust:
+                rows.append(f'{key}: ' + short([f'{label} {val:.3g}' for label,val in zip(strat.labels, strat.adjust[key])]))
     return rows
 
 

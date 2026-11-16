@@ -100,16 +100,16 @@ A distribution can be made, drawn from, and looked at on its own. Outside a sim,
 dist = ss.lognormal(mean=ss.days(5), std=ss.days(2))
 print(dist)
 print(dist.rvs(5)) # Five draws, in days
-print('Mean:', dist.dist.mean())
-print('95% of draws are between', dist.dist.ppf([0.025, 0.975]).round(2))
+print('Mean:', dist.mean())
+print('95% of draws are between', dist.ppf([0.025, 0.975]).round(2))
 draws = dist.plot_hist(n=1000, bins=30) # Returns the draws
 ```
 
 In a sim, the same distribution draws in steps of its module instead, and from the sim's random numbers ([Random numbers](mechanics_random.qmd)). One with no unit, such as `ss.normal(0, 1)`, draws outside a sim when made with `strict=False`, which says it need not use the sim's random numbers.
 
-`dist.dist` is the [SciPy](https://docs.scipy.org/doc/scipy/reference/stats.html) distribution with its parameters, for its mean, quantiles (`ppf`), density, and so on.
+`dist.mean()`, `dist.std()`, `dist.ppf()` (the value below which a share of draws fall) and `dist.cdf()` are in the units it draws in, as are its draws. For anything else, `dist.to_scipy()` is the distribution as a [SciPy](https://docs.scipy.org/doc/scipy/reference/stats.html) one, with its parameters (for its density, say).
 
-A distribution can round what it draws, which matters for numbers that must be whole, such as a duration in steps: `round=True` rounds each value up or down at random in proportion to how close it is (so the mean is kept), and `round='nearest'` rounds to the nearest whole number. Either can be given when the distribution is made, or when drawing. Here a duration of about 5 days, in a sim with steps of a day, drawn for 10 people three ways (`reset=True` uses the same random numbers each time):
+A distribution can round what it draws, which matters for numbers that must be whole, such as a duration in steps: `round='random'` rounds each value up or down at random in proportion to how close it is (so the mean is kept), and `round='nearest'` rounds to the nearest whole number. Either can be given when the distribution is made, or when drawing. Here a duration of about 5 days, in a sim with steps of a day, drawn for 10 people three ways (`reset=True` uses the same random numbers each time):
 
 ```{python}
 sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30), verbose=0).init()
@@ -118,7 +118,7 @@ dur.init(sim=sim)
 
 print('Not rounded:', dur.rvs(sim.people.uid, round=False, reset=True).round(2))
 print('Nearest:    ', dur.rvs(sim.people.uid, reset=True)) # As set when it was made
-print('At random:  ', dur.rvs(sim.people.uid, round=True, reset=True))
+print('At random:  ', dur.rvs(sim.people.uid, round='random', reset=True))
 ```
 
 The parameters of a distribution that is already made, such as the default of a library module, can be changed with `set()`: `ssl.Measles().pars.p_death.set(p=0.05)` (see [Library: diseases](library_diseases.qmd)).
@@ -157,18 +157,15 @@ print('Mean age of the rest:', sim.people.age[not_chosen].mean().round(1))
 
 ## Distributions in modules written as code
 
-In a module written as code, a distribution is made once, as a parameter (in `define_pars()`) or an attribute (in `__init__()`), and drawn from at each step for the people it is about: `dist.rvs(uids)` gives one value for each of them, and for a Bernoulli distribution, `dist.filter(uids)` gives the people for whom it came out true, and `dist.split(uids)` both those and the rest. A distribution's parameters can be functions of the module, the sim, and the people (`fn(self, sim, uids)`), worked out each time it is drawn from and returning one value for each person (or one for all). The rules that keep common random numbers are in [Drawing random numbers in a module](mechanics_random.qmd#drawing-random-numbers-in-a-module).
+In a module written as code, a distribution is made once, as a parameter (`ss.par` in its class body, or in `define_pars()`), and drawn from at each step for the people it is about: `dist.rvs(uids)` gives one value for each of them, and for a Bernoulli distribution, `dist.filter(uids)` gives the people for whom it came out true, and `dist.split(uids)` both those and the rest. A distribution's parameters can be functions of the module, the sim, and the people (`fn(self, sim, uids)`), worked out each time it is drawn from and returning one value for each person (or one for all). The rules that keep common random numbers are in [Drawing random numbers in a module](mechanics_random.qmd#drawing-random-numbers-in-a-module).
 
 Here an intervention vaccinates susceptible people against measles on one day, each with probability `p_vx`, a Bernoulli distribution made once, as a parameter, and moves them from `S` to `R` (a perfect vaccine). The probability is a single value, or a function of the people: 90% of children under 15 and 10% of adults, against 30% of everyone, which use about the same number of doses:
 
 ```{python}
 class Campaign(ss.Intervention):
     """ Vaccinate susceptible people against measles on one day, each with probability p_vx (a perfect vaccine) """
-    def __init__(self, p_vx=0.3, day=1, **kwargs):
-        super().__init__(**kwargs)
-        self.define_pars(p_vx=ss.bernoulli(p=p_vx), day=day) # The distribution is made once, here
-        self.update_pars(**kwargs)
-        return
+    p_vx = ss.par(ss.bernoulli(p=0.3)) # The distribution is made once, here; Campaign(p_vx=0.9) sets its p
+    day  = ss.par(ss.days(1))
 
     def init_results(self):
         super().init_results()
@@ -176,7 +173,7 @@ class Campaign(ss.Intervention):
         return
 
     def step(self):
-        if self.ti == self.pars.day:
+        if self.now == self.pars.day: # The time of this step (self.ti would be its index)
             measles = self.sim.diseases.measles
             vaccinated = self.pars.p_vx.filter(measles.S.uids) # Draw for the susceptible people only
             measles.S[vaccinated] = False
@@ -190,9 +187,9 @@ def p_by_age(self, sim, uids):
 
 def make_sim(campaign=None):
     S, I, R = ss.states('S I R')
-    measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
-    school = ss.RandomNet(name='school', n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
-    community = ss.RandomNet(name='community', n_contacts=2)
+    measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01)
+    school = ss.RandomNet(n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
+    community = ss.RandomNet(n_contacts=2)
     return ss.Sim(measles, networks=[school, community], interventions=campaign, n_agents=5000, stop=ss.days(200))
 
 scenarios = {
@@ -200,7 +197,7 @@ scenarios = {
     '30% of everyone': make_sim(Campaign(p_vx=0.3)),
     '90% of children, 10% of adults': make_sim(Campaign(p_vx=p_by_age)),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 for label, sim in zip(scenarios, msim.sims):
     doses = sim.results.campaign.n_vaccinated.sum() if 'campaign' in sim.results else 0
     print(label, '- doses:', int(doses), '- largest number infectious:', int(sim.results.measles.I.max()))
@@ -214,7 +211,7 @@ In a module, `init()` is done for each of its distributions when the sim is init
 - **A distribution as a value or as a prior.** A distribution as a parameter's value is variation between people; uncertainty about one value is a prior, used in calibration and in runs with `priors=True`.
 - **The exponential default.** A single duration is exponential, with a lot of spread. For a latent or infectious period, an Erlang or lognormal distribution is usually closer to the data.
 - **A unit given twice, or not at all.** Give a distribution's unit on its parameters or with `unit=`; a bare number takes the model's unit.
-- **Making distributions at every step** in a module written as code. One made in `step()` is not initialized, so drawing from it raises an error, and initializing it there would break common random numbers. Make them once, in `__init__()`.
+- **Making distributions at every step** in a module written as code. One made in `step()` is not initialized, so drawing from it raises an error, and initializing it there would break common random numbers. Make them once, in the class body (or in `__init__()`).
 
 ## Further reading
 

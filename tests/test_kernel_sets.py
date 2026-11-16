@@ -57,7 +57,7 @@ def same(make, kernels, seeds=(0, 1)):
     for seed in seeds:
         res = {}
         for k in kernels:
-            with ss.options.context(kernels=k):
+            with ss.options.context(backend=k):
                 res[k] = snapshot(make(seed).run())
         ref = res[kernels[0]]
         for k in kernels[1:]:
@@ -226,7 +226,7 @@ def test_twins():
     R.fell.clear()
     for kernels in ['numba', 'rust']:
         for chunks in [1, 3]: # Serial and threaded, whatever the size
-            with ss.options.context(kernels=kernels), mock.patch.object(ss.solvers.backends.passes, 'n_chunks', lambda n, width=1: chunks):
+            with ss.options.context(backend=kernels), mock.patch.object(ss.solvers.backends.passes, 'n_chunks', lambda n, width=1: chunks):
                 for m,keys in R.names.items():
                     for k in keys:
                         f = R.get(mods[m], k)
@@ -263,7 +263,7 @@ def test_no_numba():
     sc.heading('Testing that with the Rust kernels no kernel of Numba\'s runs: every one that runs a sim has a Rust copy')
     script = """
 import importlib, numba, starsim as ss, starsim.library as ssl
-ss.options(kernels='rust')
+ss.options(backend='rust')
 kw = dict(verbose=0)
 S, I, R = ss.states('S I R')
 sir = lambda: ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
@@ -318,7 +318,7 @@ def test_compartmental():
     solvers = ['rk4', 'euler', 'binomial', 'tau', 'gillespie']
     for solver in solvers: # Small enough for plain Python
         same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=s, **how(solver), **kw), compiled + ['python'], seeds=[2])
-        same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=40, rand_seed=s, branching=True, **how(solver), **kw), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.kernels.GROUP)
+        same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=40, rand_seed=s, branching=True, **how(solver), **kw), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.solvers.backends.kernels.GROUP)
     if rust:
         for key in ['sir', 'commute', 'delay', 'biting']:
             make, pars = models[key]
@@ -340,7 +340,7 @@ def test_compartmental():
 
 @sc.timer()
 def test_noise():
-    sc.heading('Testing noise on a rate (ss.kernels.NOISE): the same draws in each set of kernels, by group, in whole steps and substeps, and in each particle of a filter')
+    sc.heading('Testing noise on a rate (ss.solvers.backends.kernels.NOISE): the same draws in each set of kernels, by group, in whole steps and substeps, and in each particle of a filter')
     def make(seed, substeps=None, data=None):
         S, I, R = ss.states('S I R')
         d = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.25)*I, noise=ss.par(0.4)), recovery=I >> R @ ss.perday(0.1), init_n=dict(I=20), name='sir')
@@ -352,7 +352,7 @@ def test_noise():
         data = pd.DataFrame(dict(infection=make(5).run().results.sir.infection.values[1::7][:8]), index=np.arange(1, 57, 7))
         lls = []
         for k in compiled:
-            with ss.options.context(kernels=k):
+            with ss.options.context(backend=k):
                 sim = make(0, data=data)
                 sim.init()
                 lls.append(ss.fitting.ParticleFilter(sim, likelihood=dict(infection=ss.poisson()))(n_particles=20, rand_seed=1))
@@ -376,7 +376,7 @@ def test_full_frac():
     vals, v, out = rng.random(n*n), rng.random(n*levels), np.empty(n*levels)
     matrix = vals.reshape(n, n)
     for by_columns in [True, False]:
-        ss.kernels.frac(pairs, vals, v, n*levels, levels, out, by_columns)
+        ss.solvers.backends.kernels.frac(pairs, vals, v, n*levels, levels, out, by_columns)
         ref = (v.reshape(n, levels).T @ matrix).T if by_columns else matrix @ v.reshape(n, levels)
         assert np.allclose(out, ref.ravel(), rtol=1e-12)
     return
@@ -392,32 +392,29 @@ def test_met_counts():
         rate = 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 0.2*I.n_infectious/(S + I + R).n if weighted else 2e-6*I.n + 0.1*I.frac
         sir = ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.days(8), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
         sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4))).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-        return ss.Sim(sir, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
+        return ss.Sim(sir, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
     for weighted in [False, True]:
         for solver in ['rk4', 'binomial']:
             same(lambda s: make(s, weighted, **how(solver)), compiled + ['python'], seeds=[0])
         if importlib.util.find_spec('jax'):
             ode, ref = make(weighted=weighted, solver='ode'), make(weighted=weighted, solver='ode')
-            ode.jax, ref.jax = True, False
-            assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
+            with ss.options.context(backend='jax'):
+                ode.run()
+            assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     return
 
 
 @sc.timer()
 def test_jax():
-    sc.heading('Testing JAX: the ODE against the kernels')
+    sc.heading('Testing the JAX backend: the ODE against the compiled one')
     pytest.importorskip('jax')
     make, pars = models['towns']
-    ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
-    ode.jax = True
-    ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
-    ref.jax = False
-    assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
-    ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=True) # A branching process, by place
-    ode.jax = True
-    ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=True)
-    ref.jax = False
-    assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
+    for branching in [False, True]: # And a branching process, by place
+        ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=branching)
+        ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=branching)
+        with ss.options.context(backend='jax'):
+            ode.run()
+        assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
     return
 
 

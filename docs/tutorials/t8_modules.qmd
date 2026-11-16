@@ -34,7 +34,6 @@ cases       = ss.outcome(0.4*infection) # Reported cases: 40% of infections
 measles = ss.Disease(infection, progression, recovery, cases,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                          # 10 people infectious at the start
-    name = 'measles',
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
@@ -105,11 +104,11 @@ A module written as a class fixes all three. It inherits from one of Starsim's m
 | `ss.Intervention` | Actions that change the simulation | `interventions=` |
 | `ss.Analyzer` | Recording results without changing anything | `analyzers=` |
 | `ss.Connector` | Interactions between modules | `connectors=` |
-| `ss.Module` | Anything that doesn't fit the others | `modules=` (or as a positional argument) |
+| `ss.Module` | Anything that doesn't fit the others | `custom=` (or as an argument) |
 
 The module has:
 
-- **Parameters**, with defaults in `__init__()` via `define_pars()`, changed by name when the module is made. Rates and durations are [time parameters](../user_guide/building_time.qmd), so they mean the same whatever the step length.
+- **Parameters**, declared in the class body as `ss.par` with their defaults, and changed by name when the module is made (`VaccineDemand(half=500)`); its code reads them from `self.pars`. Rates and durations are [time parameters](../user_guide/building_time.qmd), so they mean the same whatever the step length.
 - **A state of its own**: here, one number, the cases people remember. Each step adds the new reported cases and forgets a fraction of what is remembered, so a case is remembered for `memory` (30 days) on average: a small ODE of its own, dM/dt = cases − M/memory.
 - **Results of its own**, defined in `init_results()` and filled in each step at `self.ti`: the doses given in each step (a flow), and the cases remembered (a stock).
 - **A `step()` method**, which does the work. In it, `self.sim` is the sim, `self.t.dt` the step length, and `self.pars` the parameters.
@@ -118,17 +117,14 @@ The module has:
 ```{python}
 class VaccineDemand(ss.Intervention):
     """ Unvaccinated people seek vaccination at a rate that rises with the outbreak cases they remember """
+    memory   = ss.par(ss.days(30))     # How long a reported case is remembered, on average
+    half     = ss.par(300)             # The number of cases remembered at which demand is half its highest
+    max_rate = ss.par(ss.perweek(0.1)) # The highest rate at which unvaccinated people seek vaccination
+    capacity = ss.par(None)            # The most doses the clinics can give, as a rate (None for no limit)
+    efficacy = ss.par(0.93)            # The fraction of those vaccinated who are fully protected (all or nothing)
 
-    def __init__(self, memory=ss.days(30), half=300, max_rate=ss.perweek(0.1), capacity=None, efficacy=0.93, **kwargs):
-        super().__init__()
-        self.define_pars(
-            memory   = memory,   # How long a reported case is remembered, on average
-            half     = half,     # The number of cases remembered at which demand is half its highest
-            max_rate = max_rate, # The highest rate at which unvaccinated people seek vaccination
-            capacity = capacity, # The most doses the clinics can give, as a rate (None for no limit)
-            efficacy = efficacy, # The fraction of those vaccinated who are fully protected (all or nothing)
-        )
-        self.update_pars(**kwargs)
+    def init_post(self):
+        super().init_post()
         self.remembered = 0.0 # The cases that people remember, for the whole population
         return
 
@@ -162,19 +158,19 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. (A stock is usually recorded in `record_states()`, at the start of a step; `remembered` is recorded in `step()` instead, since that is where it is updated, so each value is the memory that step used.) The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module's results are under its class name in lower case, `sim.results.vaccinedemand`. [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
+`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. (A stock is usually recorded in `record_states()`, at the start of a step; `remembered` is recorded in `step()` instead, since that is where it is updated, so each value is the memory that step used.) The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module is not assigned to a variable, so its results are under its class name in lower case, `sim.results.vaccinedemand` ([Names](../user_guide/building_writing.qmd#names)). [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
 
 With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day:
 
 ```{python}
 sims = {
-    'No response':           ss.Sim(measles, interventions=VaccineDemand(max_rate=ss.perweek(0)), **settings),
+    'No response':           ss.Sim(measles, interventions=VaccineDemand(max_rate=0), **settings),
     'Demand met in full':    ss.Sim(measles, interventions=VaccineDemand(), **settings),
     'At most 30 doses a day': ss.Sim(measles, interventions=VaccineDemand(capacity=ss.perday(30)), **settings),
 }
 msim = ss.parallel(sims)
 msim.plot(['measles.I', 'vaccinedemand.doses'])
-msim.summarize().loc[['measles_infection', 'vaccinedemand_doses']]
+msim.summarize().loc[['measles.infection', 'vaccinedemand.doses']]
 ```
 
 Met in full, demand prevents about 4,000 of 9,400 infections, but less than half, since it starts only once the outbreak is under way. With at most 30 doses a day, people waiting during the steep rise, when each dose matters most, are often infected. Its parameters can be fitted to data ([T6](t6_data.qmd#fitting-and-checking-the-fit)) if given as `ss.par` with bounds, e.g. `VaccineDemand(half=ss.par(300, bounds=[50, 2000]))`.
@@ -200,7 +196,7 @@ pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(
 
 The module holds each person's antibody level, which rises by `boost` at each recovery, up to 1, and halves every `half_life`. It is an `ss.Module`, being neither a disease nor an intervention, and reads who recovered in the last step from the declared disease (`recovery.uids`). Besides parameters, results, and `step()`, it has:
 
-- **A state for each person**, declared with `define_states()`: here `ss.FloatArr`, a number for each agent (`ss.BoolState` is true or false, and `ss.TimeArr` a time). It grows as agents are born; keep values for each person this way, never in a NumPy array of your own. [Array indexing](../user_guide/mechanics_indexing.qmd) covers reading and writing them by UID.
+- **A state for each person**, declared in the class body: here `ss.FloatArr`, a number for each agent (`ss.BoolArr` is true or false, and `ss.TimeArr` a time), named by the attribute it is assigned to. It grows as agents are born; keep values for each person this way, never in a NumPy array of your own. [Array indexing](../user_guide/mechanics_indexing.qmd) covers reading and writing them by UID.
 - **A stock recorded in `record_states()`**, at the start of each step, so that each value is the level at its time point.
 
 Anything random should come from a Starsim distribution, not `np.random`, so that results stay reproducible ([Random numbers](../user_guide/mechanics_random.qmd)); this module has nothing random.
@@ -208,18 +204,9 @@ Anything random should come from a Starsim distribution, not `np.random`, so tha
 ```{python}
 class Antibodies(ss.Module):
     """ Each person's antibody level: boosted by each recovery, up to 1, and halving every half_life in between """
-
-    def __init__(self, half_life=ss.days(90), boost=0.5, **kwargs):
-        super().__init__()
-        self.define_pars(
-            half_life = half_life, # How quickly antibodies decline
-            boost     = boost,     # The rise in the level at each recovery
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('level', default=0.0, label='Antibody level'),
-        )
-        return
+    half_life = ss.par(ss.days(90)) # How quickly antibodies decline
+    boost     = ss.par(0.5)         # The rise in the level at each recovery
+    level     = ss.FloatArr(default=0.0, label='Antibody level')
 
     def init_results(self):
         super().init_results()
@@ -275,13 +262,7 @@ An analyzer records something without changing the model; it is the kind of modu
 ```{python}
 class Reinfections(ss.Analyzer):
     """ The number of times each person is infected, and the reinfections in each step """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.define_states(
-            ss.FloatArr('times_infected', default=0, label='Times infected'),
-        )
-        return
+    times_infected = ss.FloatArr(default=0, label='Times infected')
 
     def init_results(self):
         super().init_results()
@@ -328,18 +309,8 @@ import matplotlib.pyplot as plt
 import starsim.library as ssl
 
 class SIRS(ssl.AgentSIR):
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__()
-        self.define_pars(
-            dur_imm = ss.expon(mean=ss.days(180)), # How long immunity lasts after recovery
-        )
-        self.update_pars(pars, **kwargs)
-
-        # SIR states are added automatically; here we add the time of losing immunity
-        self.define_states(
-            ss.TimeArr('ti_susceptible', label='Time of becoming susceptible again'),
-        )
-        return
+    dur_imm = ss.par(ss.expon(mean=ss.days(180))) # How long immunity lasts after recovery
+    ti_susceptible = ss.TimeArr(label='Time of becoming susceptible again') # The SIR states are inherited; this is the time of losing immunity
 
     def set_progression(self, uids):
         """ Schedule recovery and death as usual, then schedule the waning of immunity """
@@ -357,7 +328,7 @@ class SIRS(ssl.AgentSIR):
         return
 ```
 
-`__init__()` adds the extra parameter and state; `set_progression()` does the usual scheduling, then draws a waning time for everyone who will recover; and `step_state()` adds the recovered → susceptible transition. Here it is next to the declared SIRS, with the same R0 (0.4 per day × 7 days = 2.8). A disease written as code transmits over the sim's networks, so both get a mixing pool with one contact a day:
+The class body adds the extra parameter and state; `set_progression()` does the usual scheduling, then draws a waning time for everyone who will recover; and `step_state()` adds the recovered → susceptible transition. Here it is next to the declared SIRS, with the same R0 (0.4 per day × 7 days = 2.8). A disease written as code transmits over the sim's networks, so both get a mixing pool with one contact a day:
 
 ```{python}
 coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
@@ -393,20 +364,13 @@ The networks of [T4](t4_mixing.qmd#contacts-per-person) pair people at random, o
 ```{python}
 class AgeNet(ss.Network):
     """ Contacts each day with people close in age """
-
-    def __init__(self, n_contacts=4, spread=ss.years(2), **kwargs):
-        super().__init__()
-        self.define_pars(
-            n_contacts = n_contacts, # The number of contacts each person has each day (an even number)
-            spread = spread,         # How far apart in age contacts tend to be
-        )
-        self.update_pars(**kwargs)
-        self.noise = ss.normal(0, 1) # A Starsim distribution, so that the draws are reproducible
-        return
+    n_contacts = ss.par(4)             # The number of contacts each person has each day (an even number)
+    spread     = ss.par(ss.years(2))   # How far apart in age contacts tend to be
+    noise      = ss.par(ss.normal(0, 1)) # A Starsim distribution, so that the draws are reproducible
 
     def add_pairs(self):
         uids = self.sim.people.alive.uids
-        age = self.sim.people.age[uids] + self.pars.spread.years*self.noise.rvs(uids) # Each person's age, blurred a little
+        age = self.sim.people.age[uids] + self.pars.spread.years*self.pars.noise.rvs(uids) # Each person's age, blurred a little
         order = uids[np.argsort(age, kind='stable')] # Everyone, from youngest to oldest
         p1, p2 = [], []
         for k in range(1, self.pars.n_contacts//2 + 1): # Each person, with the k-th next person in the order

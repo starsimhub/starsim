@@ -30,7 +30,7 @@ from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
 from .internals import arrays
-from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, BoolState, uids
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, uids
 
 from .internals import dists
 from .internals.dists import Dist
@@ -72,8 +72,7 @@ from .connectors import Connector, modify
 #%% Declared models: conditions, expressions, transitions, and the solvers that run them
 from .internals import conditions
 from .internals.conditions import ref
-from .solvers.backends import kernels
-from .solvers.backends.kernels import compile
+from .solvers.backends.kernels import compile # The module is ss.solvers.backends.kernels
 from .internals import expressions
 from .internals.expressions import par, mother, attr
 from .internals import transitions
@@ -115,11 +114,11 @@ def __getattr__(name):
         hint = '' if name.startswith('__') else v3_deprecations.hint(names=name) # A name of Starsim 3's says what replaces it
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
-# The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)
-options.set(kernels=options.kernels)
+# The backend: Rust if it has been built (or asked for by STARSIM_BACKEND), else Numba (see ss.options.backend)
+options.set(backend=options.backend)
 
 # Say if Starsim has not been compiled yet
-kernels.note_uncompiled()
+solvers.backends.kernels.note_uncompiled()
 
 # Don't keep these in the module
 del sc

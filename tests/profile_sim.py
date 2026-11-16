@@ -19,11 +19,11 @@ to_run = [
 
 if 'profile' in to_run:
     sim = make_sim()
-    prf = sim.profile()
+    prf = sim.perf_profile()
 
 if 'cprofile' in to_run:
     sim = make_sim()
-    cprf = sim.profile(kind='function')
+    cprf = sim.perf_profile(kind='function')
 
 if 'time' in to_run:
     sim = make_sim()

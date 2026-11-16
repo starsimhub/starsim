@@ -143,6 +143,55 @@ def test_greek_letters():
 
 
 @sc.timer()
+def test_class_body_parts():
+    """ Parameters, arrays, and distributions in the class body of any module: each instance has its own, set by keyword, beside the __init__() form """
+    sc.heading('Testing parameters and arrays in the class body of a module')
+    class Decay(ss.Intervention):
+        half_life = ss.par(ss.years(2))
+        p_reset = ss.par(ss.bernoulli(p=0.1))
+        level = ss.FloatArr(default=1.0)
+        reset = ss.BoolArr()
+        noise = ss.normal(0, 1)
+        def step(self):
+            self.level[:] *= 0.5**(self.t.dt/self.pars.half_life)
+            self.reset[self.pars.p_reset.filter()] = True
+    a, b = Decay(half_life=ss.years(5)), Decay(pars=dict(half_life=ss.years(1)))
+    assert a.pars.half_life == ss.years(5) and b.pars.half_life == ss.years(1) and Decay.half_life.value == ss.years(2), 'Each instance has its own value'
+    assert a.level is not b.level and a.noise is not b.noise and a.pars.p_reset is not b.pars.p_reset, 'Each instance has its own arrays and distributions'
+    a.half_life = ss.years(3) # The attribute is the parameter, as for a declared disease
+    assert a.pars.half_life == ss.years(3)
+    with pytest.raises(TypeError, match='half_life'): # A misspelling is an error, suggesting the name
+        Decay(half_lfe=3)
+    sim = ss.Sim(n_agents=200, interventions=Decay(), pars=dict(half_life=ss.years(1)), dur=3, verbose=0).run() # Set by name from the sim
+    dec = sim.interventions.decay
+    assert dec.pars.half_life == ss.years(1) and np.isclose(dec.level.mean(), 0.5**len(sim.timevec)) and 'reset' in sim.results.decay # Halved on each step
+
+    # A subclass's default stands over its base's, and a coded disease and a declared one take them too
+    class MyNet(ss.RandomNet):
+        n_contacts = ss.par(4)
+    assert MyNet().pars.n_contacts.pars.value == 4 and MyNet(n_contacts=6).pars.n_contacts.pars.value == 6 # Numbers that set the base's distribution, as a keyword to ss.RandomNet() does
+    assert ss.Sim(diseases='sis', networks=MyNet(), n_agents=200, stop=2002, verbose=0).run().complete
+    class Boosted(ss.Vaccine): # A product's own keywords (efficacy=, waning=) go to its base, its parameters to itself
+        boost = ss.par(0.5)
+    vx = Boosted(efficacy=0.8, waning=ss.years(5), boost=0.3)
+    assert vx.waning == ss.years(5) and vx.efficacy == 0.8 and vx.pars.boost == 0.3
+    class Anemia(ss.Disease):
+        p_onset = ss.par(ss.bernoulli(0.05))
+        anemic = ss.BoolArr()
+        def step_state(self):
+            self.anemic[self.pars.p_onset.filter()] = True
+    assert Anemia(p_onset=0.1).graph is None
+    class SIRS(ss.Disease): # Parameters in the class body, states and transitions in __init__()
+        beta = ss.par(0.3)
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.states('S I R'))
+            self.define_transitions(infection=self.S >> self.I @ self.beta*self.I, recovery=self.I >> self.R @ ss.days(10), waning=self.R >> self.S @ ss.days(90))
+    sim = ss.Sim([Anemia(), SIRS(beta=0.5, init_prev=0.01)], n_agents=300, dur=ss.days(20), verbose=0).run()
+    assert sim.diseases.sirs.pars.beta.raw == 0.5 and sim.results.anemia.anemic[-1] > 0
+    return sim
+
+
 def test_migrate():
     """ Starsim 3 code rewritten by the migration script, and the warning about what it rewrites """
     sc.heading('Testing the migration script')
@@ -166,7 +215,7 @@ class Counter(ss.Module):
     assert any(line == 7 and 'should give kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which is guessed from the dtype, with a warning
     scope = {}
     exec(new.replace('update_results', 'record_events').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
-    sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
+    sim = ss.Sim(scope['Counter'](), n_agents=100, start=0, stop=10, verbose=0).run()
     assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
     # Renames, verbose, and Starsim 3's diseases written as code
@@ -179,6 +228,7 @@ class Counter(ss.Module):
     todo = migrate_text('sir = ss.SIR(beta=0.1)')[2]
     assert any('ssl.AgentSIR' in note for _,note in todo) and any('probability per step' in note for _,note in todo) # A use of ss.SIR is flagged, not rewritten, and so is its bare beta, now per day
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
+    assert migrate_text("for mod in sim.modules: sim.profile()\nprint(sys.modules)")[0] == "for mod in sim.modules: sim.perf_profile()\nprint(sys.modules)" # sim.modules is every module, as in Starsim 3
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
     path = sc.path('notes.qmd') # Only its suffix is read
@@ -186,11 +236,15 @@ class Counter(ss.Module):
     blocks = migrate.code_blocks(path, qmd)
     assert migrate.replace_blocks(path, qmd, [migrate_text(code)[0] for _,code in blocks]) == qmd.replace('x = ss.time_prob', 'x = ss.probperyear')
     assert 'sim.fit()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
-    assert migrate_text('preg = ss.demographics.Pregnancy(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)' # Starsim 3's pregnancy, by its old path
+    assert migrate_text('preg = ss.demographics.Pregnancy(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20, rate_per=1000)' # Starsim 3's pregnancy, by its old path, and its rates, per 1,000
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
     assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
-    assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net)"
+    assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net, copy_inputs=False)"
+    assert migrate_text("sim = ss.Sim(modules=[a, b], n_agents=10)")[0] == "sim = ss.Sim([a, b], n_agents=10)" # The modules are given as arguments
+    assert migrate_text("sim = ss.Sim(n_agents=10, rescale=True)")[0] == "sim = ss.Sim(n_agents=10, solver=ss.solvers.abm(rescale=True))" # An option of the agents
+    assert 'as arguments' in migrate_text("sim = ss.Sim(n_agents=10, modules=a)")[2][0][1] # Not the first argument: flagged
+    assert migrate_text("sim = ss.Sim(n_agents=10, custom=a)")[0] == "sim = ss.Sim(n_agents=10, custom=a)" # custom= is as it was
     todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
     assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
@@ -202,11 +256,11 @@ class Counter(ss.Module):
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
     assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name
     text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summarize().value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.AgentDisease
-    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summarize().value.sis_infection; data = {'hiv.infection': x}"
+    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summarize().value.sis.infection; data = {'hiv.infection': x}"
     text, changes, todo = migrate_text("df['obs_new_infections']; total_cum_infections = 3")
     assert 'obs_new_infections' in text and 'total_cum_infections' in text and len(todo) == 1 # Not the name of a disease of the file: listed
     text = migrate_text("a = sim.results.new_deaths; b = res.cum_deaths[-1]; c = res['new_deaths']; d = res['cum_deaths']; e = sim.results.hiv.new_deaths; f = results.new_emigrants; g = 'hiv.new_deaths'; h = sim.results.hiv.cum_deaths")[0]
-    assert text == "a = sim.results.died; b = res.died.cum[-1]; c = res['died']; d = res['died'].cum; e = sim.results.hiv.death; f = results.emigrated; g = 'hiv.death'; h = sim.results.hiv.death.cum"
+    assert text == "a = sim.results.death; b = res.death.cum[-1]; c = res['death']; d = res['death'].cum; e = sim.results.hiv.death; f = results.emigration; g = 'hiv.death'; h = sim.results.hiv.death.cum"
     text = migrate_text("a = sim.results.births.new; b = res.deaths.cumulative[-1]; c = sim.results.pregnancy.n_preterm; d = preg.results.neonatal_deaths; msim.plot('births.new')")[0]
     assert text == "a = sim.results.births.birth; b = res.deaths.death.cum[-1]; c = sim.results.pregnancy.preterm; d = preg.results.neonatal_death; msim.plot('births.birth')"
     mine = migrate_text("self.define_results(ss.Result('new_infections'))\nx = self.results.new_infections")
@@ -235,7 +289,8 @@ class Counter(ss.Module):
     assert 'dict(n_agents=100, start=2000, dur=20)' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
     assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, start=2001, stop=2002)' in text and [line for line,_ in todo] == [5]
 
-    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20))' # Starsim 3's typed rate per 1,000 reads the same: above 1, so per 1,000
+    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20), rate_per=1000)' # Starsim 3's rates were per 1,000 by default; Starsim 4's are per person
+    assert migrate_text("deaths = ss.Deaths(death_rate='Kenya'); births = ss.Births(birth_rate=20, rate_units=1)")[0] == "deaths = ss.Deaths(death_rate='Kenya'); births = ss.Births(birth_rate=20, rate_per=1)" # A place, or rate_units given: left as they are
 
     return new
 
@@ -489,7 +544,7 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
     monkeypatch.setattr(build.subprocess, 'run', lambda *args, **kwargs: None) # The --check after building
     monkeypatch.setattr(ss, 'compile', lambda: done.append('numba'))
     monkeypatch.setattr(sys.stdin, 'isatty', lambda: True, raising=False)
-    with ss.options.context(kernels='auto'), monkeypatch.context() as m: # 'auto', as in a clone without them, even if the suite runs with kernels='rust'; the kernels are restored after the fakes below are undone
+    with ss.options.context(backend='auto'), monkeypatch.context() as m: # 'auto', as in a clone without them, even if the suite runs with kernels='rust'; the kernels are restored after the fakes below are undone
         m.setattr(ss.solvers.backends.rust, 'built', lambda: False)
         m.setattr(ss.solvers.backends.rust, 'on', False)
         for answer, argv, expected in [('', [], 'rust'), ('n', [], 'numba'), ('y', ['--numba'], 'numba'), ('n', ['--rust'], 'rust')]:
@@ -503,25 +558,25 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
 
 
 def test_jax_platform(monkeypatch):
-    """ ss.options.jax chooses JAX's platform, also once JAX has started, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
+    """ ss.options.jax_platform chooses JAX's platform, also once JAX has started, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
     sc.heading('Testing the platform of JAX')
     with pytest.raises(ValueError, match='JAX platform'):
-        ss.options.jax = 3
-    assert ss.options.jax == 'cpu' # The default
-    with ss.options(jax='auto'):
-        assert ss.options.jax == 'auto'
-    assert ss.options.jax == 'cpu'
+        ss.options.jax_platform = 3
+    assert ss.options.jax_platform == 'cpu' # The default
+    with ss.options(jax_platform='auto'):
+        assert ss.options.jax_platform == 'auto'
+    assert ss.options.jax_platform == 'cpu'
 
     import importlib.metadata as md
     pytest.importorskip('jax')
     env = os.environ.get('JAX_PLATFORMS')
-    with ss.options(jax='auto'):
+    with ss.options(jax_platform='auto'):
         jax = ss.gradients.jax() # Started on its own platforms (the CPU in the tests: see conftest.py)
-    with ss.options(jax='cpu'): # Started again, on these
+    with ss.options(jax_platform='cpu'): # Started again, on these
         assert ss.gradients.jax().default_backend() == 'cpu'
         assert os.environ['JAX_PLATFORMS'] == 'cpu'
         assert float(jax.numpy.ones(2).sum()) == 2
-    with ss.options(jax='auto'):
+    with ss.options(jax_platform='auto'):
         ss.gradients.jax() # And back to what it had
     assert os.environ.get('JAX_PLATFORMS') == env
     assert (jax.config.jax_platforms or None) == ss.gradients.original['platforms']
@@ -531,7 +586,7 @@ def test_jax_platform(monkeypatch):
         metadata = {'Name': 'jax_cuda12_plugin'}
     monkeypatch.setattr(md, 'distributions', lambda: list(real()) + [Plugin()])
     monkeypatch.delenv('JAX_PLATFORMS', raising=False)
-    with pytest.warns(RuntimeWarning, match='STARSIM_JAX=cpu'):
+    with pytest.warns(RuntimeWarning, match='STARSIM_JAX_PLATFORM=cpu'):
         ss.gradients.check_plugins()
     monkeypatch.setenv('JAX_PLATFORMS', 'cpu') # Chosen already: nothing to say
     ss.gradients.check_plugins()
@@ -548,7 +603,7 @@ def test_no_numba_cache(tmp_path):
     shutil.copytree(ss.root/'starsim', site/'starsim', ignore=shutil.ignore_patterns('__pycache__', '*.so', 'target', 'library', 'converters'))
     subprocess.run(['chmod', '-R', 'a-w', site, home], check=True)
     try:
-        env = {k:v for k,v in os.environ.items() if k not in ['NUMBA_CACHE_DIR', 'XDG_CACHE_HOME', 'STARSIM_KERNELS']} | dict(HOME=str(home), PYTHONPATH=str(site), TMPDIR=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
+        env = {k:v for k,v in os.environ.items() if k not in ['NUMBA_CACHE_DIR', 'XDG_CACHE_HOME', 'STARSIM_BACKEND']} | dict(HOME=str(home), PYTHONPATH=str(site), TMPDIR=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
         out = subprocess.run([sys.executable, '-c', 'import starsim, numba; print(starsim.__file__, numba.config.CACHE_DIR)'], env=env, capture_output=True, text=True, cwd=tmp_path)
     finally:
         subprocess.run(['chmod', '-R', 'u+w', site, home], check=True) # So that it can be cleaned up
@@ -570,6 +625,7 @@ if __name__ == '__main__':
     sims1 = test_deepcopy()
     sims2 = test_deepcopy_until()
     mods  = test_custom_imports()
+    body  = test_class_body_parts()
     mig   = test_migrate()
 
     sc.toc(T)

@@ -13,10 +13,10 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'crude_rates', 'population_flows', 'hold_flows']
 
 
-from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
+from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.solvers.backends.kernels.step()
 
 
 def convert(val, unit, cache=None):
@@ -124,7 +124,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
     Returns the row of each time point and the time point each row starts at, or (None, None) for every time point.
     """
     columns = [] if sim.data is None else sim.data.columns
-    if npts*row_bytes <= budget or npts <= 2 or sim.pars.rescale: # With rescaling, the scale differs at each step, and is applied to each one
+    if npts*row_bytes <= budget or npts <= 2 or getattr(sim.solver, 'rescale', False): # With rescaling, the scale differs at each step, and is applied to each one
         return None, None
     elif any('[' in str(col) for col in columns): # Data by group, which are compared with the results at each step
         return None, None
@@ -146,7 +146,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
 
 
 def init_people(sim):
-    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
+    """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration, cbr, cmr), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
     if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' in sim.results or not mods:
         return
@@ -154,14 +154,17 @@ def init_people(sim):
     kw = dict(module='People', timevec=t.timevec, scale=False)
     sim.results += [
         ss.Result('alive', label='Number alive', values=np.zeros(t.npts), kind='stock', **kw),
-        ss.Result('died', label='Deaths', values=np.zeros(t.npts), kind='flow', **kw),
-        ss.Result('emigrated', label='Emigrants', values=np.zeros(t.npts), kind='flow', **kw),
+        ss.Result('birth', label='Births', values=np.zeros(t.npts), kind='flow', **kw),
+        ss.Result('death', label='Deaths', values=np.zeros(t.npts), kind='flow', **kw),
+        ss.Result('emigration', label='Emigrants', values=np.zeros(t.npts), kind='flow', **kw),
+        ss.Result('cbr', label='Crude birth rate', values=np.zeros(t.npts), kind='ratio', **kw),
+        ss.Result('cmr', label='Crude mortality rate', values=np.zeros(t.npts), kind='ratio', **kw),
     ]
     return
 
 
 def record_people(sim, ti=None, keys=None):
-    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows: at every time point, or at `ti` (only `keys`, if given) """
+    """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration), from the declared states and flows: at every time point, or at `ti` (only `keys`, if given) """
     if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' not in sim.results:
         return
     if ti is None:
@@ -170,7 +173,7 @@ def record_people(sim, ti=None, keys=None):
         return
     else:
         counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values[ti], dtype=float))
-    for key in keys or ['alive', 'died', 'emigrated']:
+    for key in keys or ['alive', 'birth', 'death', 'emigration']:
         if ti is None:
             sim.results[key][:] = counts[key]
         else:
@@ -179,20 +182,59 @@ def record_people(sim, ti=None, keys=None):
 
 
 def people_counts(sim, get):
-    """ The number alive, the deaths, and the emigrants of a compartmental sim, from the results of its declared modules, as `get(mod, key)` gives them (of one run, or of many with a run axis first); or None if it has no people """
+    """ The number alive, the births, the deaths, and the emigrants of a compartmental sim, from the results of its declared modules, as `get(mod, key)` gives them (of one run, or of many with a run axis first); or None if it has no people """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
     if not mods:
         return None
     first = mods[0] # Each disease's states hold everyone
     alive = sum(get(first, state.name) for state in first.graph.people_states)
-    gone = dict(died=0, emigrated=0)
+    gone = dict(birth=0, death=0, emigration=0)
+    has = lambda mod, key: key in mod.results or key in getattr(mod.engine, 'held_flows', {}) # Including the births and deaths of everyone, once the run is done (see hold_flows())
     for mod in mods:
         for tr in mod.graph.transitions.values():
-            if tr._deaths is not None and tr._deaths in mod.results and tr.people: # People who die, not a count leaving (bacteria in water decaying)
-                gone['died'] += get(mod, tr._deaths)
-            elif tr._outflow and tr.migration and tr.name in mod.results: # People leaving alive (ss.emigration())
-                gone['emigrated'] += get(mod, tr.name)
+            if tr._deaths is not None and has(mod, tr._deaths) and tr.people: # People who die, not a count leaving (bacteria in water decaying)
+                gone['death'] += get(mod, tr._deaths)
+            elif tr._outflow and tr.migration and has(mod, tr.name): # People leaving alive (ss.emigration())
+                gone['emigration'] += get(mod, tr.name)
+            elif tr._inflow and tr.people and not tr.migration and has(mod, tr.name): # People born (ss.birth(), or ss.unborn >> S)
+                gone['birth'] += get(mod, tr.name)
     return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
+
+
+def people_t(sim):
+    """ The timeline of the sim's results about people: as agents, the sim's; in a compartmental run, that of the first declared module whose states hold everyone (see `init_people()`) """
+    mods = [mod for mod in sim.declared if mod.graph.people_states]
+    return mods[0].t if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)) and mods else sim.t
+
+
+def crude_rates(birth, death, alive, dt_year):
+    """ The crude birth and mortality rates (`cbr`, `cmr`), per 1,000 people per year: the births and deaths of each step over the people alive at its start, the same way whatever made them """
+    per = lambda x: np.divide(x, alive, out=np.zeros(np.shape(alive)), where=np.asarray(alive)>0)*1000/dt_year
+    return per(birth), per(death)
+
+
+def population_flows(mod):
+    """
+    The results of the births and deaths of everyone that a declared module holds (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`: see
+    `ss.solvers.init_flows()`), which it keeps only during the run: once it is finalized, the sim's own (`birth`, `death`, `cbr`, `cmr`) are the
+    results to read, the same whatever form gave them; the transitions stay (e.g. `ss.modify(sir.births, ...)`)
+    """
+    graph = getattr(mod, 'graph', None)
+    trs = [] if graph is None else [tr for tr in graph.transitions.values() if tr.of_population and not tr.migration and (tr._inflow or tr.dies or tr.may_die)]
+    return [key for tr in trs for key in [tr.name] + [f'{tr.name}.{end}' for end in tr._ends]]
+
+
+def hold_flows(sim, restore=False):
+    """ Take the results of the births and deaths of everyone out of the declared modules once the sim is finalized (see `population_flows()`), kept by their engines; or (`restore=True`) put them back, for a restart """
+    for mod in sim.declared:
+        engine = mod.engine
+        if restore:
+            for key,res in getattr(engine, 'held_flows', {}).items():
+                mod.results[key] = res
+            engine.held_flows = {}
+        else:
+            engine.held_flows = {key:mod.results.pop(key) for key in population_flows(mod) if key in mod.results}
+    return
 
 
 def by_level(levels, n):
@@ -248,8 +290,8 @@ class CountState:
         return self.engine.frac([self.state])
 
     def count(self):
-        """ The number in this state, as `.n` (the same spelling as agents have, where count() is the number of agents) """
-        return self.n
+        """ The number of agents in this state, which a compartmental run does not have (as `people.alive.count()`); the number of people in it is `.n` under every solver """
+        self.no_agents('.count()')
 
     def __or__(self, other):   return ss.conditions.as_cond(self) | ss.conditions.as_cond(other) # As a condition, as agents' states are, e.g. (sir.I | sir.R).n
     def __ror__(self, other):  return ss.conditions.as_cond(other) | ss.conditions.as_cond(self)
@@ -615,9 +657,10 @@ class Engine(Telling, Effects):
         return
 
     def make_rng(self, stream=0, seed=None):
-        """ The random numbers of the engine: stream 0 for draws made in Python, 1 for the kernels, 2 for the events of a register at the start; from the sim's seed (or the one given) and the module's name, so no two modules share them """
+        """ The random numbers of the engine: stream 0 for draws made in Python, 1 for the kernels, 2 for the events of a register at the start; from the sim's seed (or the one given) and the name that seeds the module (see `ss.dists.seed_names()`), so no two modules share them """
         seed = self.sim.pars.rand_seed if seed is None else seed
-        return np.random.default_rng([int(seed or 0), zlib.crc32(self.mod.name.encode()), stream])
+        name = ss.dists.seed_names(self.sim).get(self.mod.name, self.mod.name)
+        return np.random.default_rng([int(seed or 0), zlib.crc32(name.encode()), stream])
 
     #%% Dimensions
 
@@ -1590,9 +1633,9 @@ class Engine(Telling, Effects):
         if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth: # Exact only for rates that are constant within a step
             what = 'solver="gillespie"' if isinstance(sim.solver, ss.solvers.gillespie) else 'Tau-leaping'
             msg = f'{what} holds values that vary in time for each step, at its middle'
-            if sim.pars.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
-            ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None)
+            if ss.options.approximations == 'error':
+                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
+            ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
         euler = isinstance(sim.solver, ss.solvers.ode) and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
@@ -1629,7 +1672,7 @@ class Engine(Telling, Effects):
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
             if isinstance(sim.solver, ss.solvers.abm) and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
                 continue
-            if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
+            if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.solvers.backends.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 frac = min(x, 1) if euler else -np.expm1(-x)
                 leave = 'almost everyone leaves' if frac > 0.99 else f'{frac:.0%} leave'
@@ -2231,7 +2274,7 @@ class Engine(Telling, Effects):
 
     def with_unrepresented(self):
         """
-        The number in each state (and by group), as the results count them: with dynamic rescaling (rescale=True), including the people no agent stands for yet
+        The number in each state (and by group), as the results count them: with dynamic rescaling (`ss.solvers.abm(rescale=True)`), including the people no agent stands for yet
 
         Each agent stands for `scale` people; the people no agent stands for (`sim.results.unrepresented`, see `ss.Sim.rescale()`) are
         like the agents, and are shared out as the agents alive are, in agents (as the other counts are, before they are scaled). For a
@@ -2239,7 +2282,7 @@ class Engine(Telling, Effects):
         module (e.g. `ss.Pregnancy`), each state has its fraction. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
-        if not isinstance(sim.solver, ss.solvers.abm) or not sim.pars.rescale or 'unrepresented' not in sim.results:
+        if not isinstance(sim.solver, ss.solvers.abm) or not sim.solver.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
         n_alive = sim.people._n_agents_alive()
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
@@ -2316,7 +2359,7 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in self.stock_people:
                 r[ti] = r[ti]*scale
-        if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
+        if self.coded: # The module's own results of boolean states (`ss.BoolArr` unless `result=False`, and derived states), counted as for a module written as code
             ss.Module.record_states(mod, names=self.coded)
         if mod is self.sim.declared[-1]: # Once every declared module has its states for the step: the number alive, as agents record it at the start of the step
             record_people(self.sim, ti, keys=['alive'])
@@ -2364,7 +2407,7 @@ class Engine(Telling, Effects):
             for r in self.flow_people: # The values written this step
                 r[ti] = r[ti]*scale
         if mod is self.sim.declared[-1]: # Once every declared module has its flows for the step
-            record_people(self.sim, ti, keys=['died', 'emigrated'])
+            record_people(self.sim, ti, keys=['birth', 'death', 'emigration'])
         return
 
     def row_stocks(self, stock_groups, ti):
@@ -2421,7 +2464,7 @@ class Engine(Telling, Effects):
         res = self.mod.results
         n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)
         name = self.mod.name
-        if 0 < self.n_start < 10:
+        if 0 < self.n_start < 10 - 1e-6: # Allowing for rounding, e.g. 10 split over strata
             ss.note(f'"{name}" starts with {self.n_start:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
                     f'solver="gillespie" with ss.parallel(n_runs=...) does', sim=sim)
         low = np.flatnonzero((n > 0) & (n < 1))

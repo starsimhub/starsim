@@ -34,7 +34,7 @@ def test_hpv_algorithm():
         ).stratify(age=[0, 30, 50])
         women = (ss.person.age >= 30) & (ss.person.age < 50)
         hpv_dna = ss.Diagnostic(sensitivity=dict(I=0.9, CIN=0.95), specificity=0.97)
-        primary = ss.screen(hpv_dna, who=women & (hpv_dna.since >= ss.years(5)), when=ss.schedule(start=2020), coverage=ss.probperyear(0.3))
+        primary = ss.screen(hpv_dna, who=women & (hpv_dna.since >= ss.years(5)), when=ss.schedule(start=2020), rate=ss.probperyear(0.3))
         tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~hpv.CA), when=primary.positive, coverage=0.8, capacity=ss.capacity(ss.perweek(10), queue=ss.months(6)))
         ablate = ss.treat(ss.Treatment(cure={hpv.excised: 0.85}, name='ablation'), when=tx_visit.positive)
         excise = ss.treat(ss.Treatment(cure={hpv.excised: 0.95}, name='excision'), when=tx_visit.negative)
@@ -63,13 +63,13 @@ def test_rescreen():
     def make(**kwargs):
         sir = make_sir()
         test = ss.Diagnostic()
-        primary = ss.screen(test, who=test.since >= ss.years(5), coverage=ss.probperyear(0.3))
+        primary = ss.screen(test, who=test.since >= ss.years(5), rate=ss.probperyear(0.3))
         return ss.Sim(sir, interventions=primary, start=2020, stop=2040, dt=ss.months(3), **kwargs)
     with pytest.raises(ss.CapabilityError): # test.since
         make(solver='ode', total_pop=10_000, verbose=0).init()
     sim = make(total_pop=10_000, n_agents=10_000, verbose=0).run()
     d, e = sim.results.primary.delivered, sim.results.primary.eligible
-    assert np.isclose(d[1], 10_000*(1 - 0.7**0.25), rtol=0.05)
+    assert np.isclose(d[:4].sum()/e[:4].sum(), 1 - 0.7**0.25, rtol=0.05) # 30% a year of those eligible, over the first year (the eligible fall as they are screened)
     assert np.isclose(e[20], 10_000 - d[1:20].sum()) and np.isclose(e[21], 10_000 - d[2:21].sum()) # Those screened first are due again after exactly 5 years
     return sim
 
@@ -81,7 +81,7 @@ def test_two_doses():
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.5) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
         vx = ss.Vaccine(efficacy=0.9, doses=[0.6, 1.0])
         girls = (ss.person.age >= 9) & (ss.person.age < 15)
-        first = ss.vaccinate(vx, who=girls & ~vx.ever, when=ss.schedule(start=2020), coverage=ss.probperyear(0.5))
+        first = ss.vaccinate(vx, who=girls & ~vx.ever, when=ss.schedule(start=2020), rate=ss.probperyear(0.5))
         second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.months(6)), coverage=0.9) # The next dose, for those who had the first
         return ss.Sim(sir, interventions=[first, second], start=2019, stop=2026, dt=ss.months(1), aging=False, **kwargs)
     with pytest.raises(ss.CapabilityError): # vx.since

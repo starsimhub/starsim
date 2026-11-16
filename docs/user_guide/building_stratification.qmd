@@ -138,6 +138,8 @@ riskier = ss.modify(measles.rel_sus, multiply=ss.by(risk=[1, 3]))         # High
 sim = ss.Sim(measles, connectors=[slower, riskier])
 ```
 
+For `rel_sus` and `rel_trans`, the multipliers can also go with the levels, so the dimension carries its own effect and needs no modifier: `measles.stratify(risk=ss.levels({'low': 0.8, 'high': 0.2}, rel_sus=[1, 3]))` is the same as `riskier` above.
+
 ### Several dimensions
 
 A model can be stratified by several properties, in one call or several. Here 90% of people are vaccinated, with a vaccine that is 97% protective, as a second dimension with susceptibility by level. The "Explicit" tab gives each dimension with `ss.levels()` and the kind that Starsim takes from its name and levels:
@@ -151,7 +153,7 @@ def make_measles(vaccinated):
     beta = 0.14*ss.by(vaccinated=[1, 0.03]) if vaccinated else 0.14 # The vaccinated are 3% as susceptible
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+    measles = ss.Disease(infection, recovery, init_prev=0.001)
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     if vaccinated:
         measles.stratify(vaccinated={False: 0.1, True: 0.9})
@@ -177,7 +179,7 @@ def make_measles_explicit(vaccinated):
     beta = 0.14*ss.by(vaccinated=[1, 0.03]) if vaccinated else 0.14 # The vaccinated are 3% as susceptible
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+    measles = ss.Disease(infection, recovery, init_prev=0.001)
     measles.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people age through
     if vaccinated:
         measles.stratify(vaccinated=ss.levels({False: 0.1, True: 0.9}, kind='plain')) # Plain groups, which people stay in
@@ -210,7 +212,7 @@ measles.stratify(vaccinated=[False, True], campaign=ss.transfer(dict(vaccinated=
 S, I = ss.states('S I')
 tppi = ss.par(0.5) # Protection per past infection
 infection = ss.Transition(S, I, rate=(1 - tppi)**ss.person.infections*ss.perday(0.3)*I, increment='infections')
-sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
+sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01))
 sis.stratify(infections=[0, 1, 2, 3, 4]) # 0, 1, 2, 3, 4+
 ```
 
@@ -231,13 +233,13 @@ res.I.select(age=[1, 2])               # Everyone 15 and over in I: the levels l
 res.infection.by('age')                # New infections, one series per age group
 ```
 
-A list of levels gives their total, so coarser groups don't need a model stratified more coarsely. A ratio, such as prevalence, is never averaged over groups: its numerator and denominator are each summed over the groups selected, and then divided. See [Results](building_results.qmd#results-by-group).
+A list of levels gives their total, so coarser groups don't need a model stratified more coarsely. A ratio, such as prevalence, is a ratio of the sums over the groups selected, not an average of the groups' ratios: see [Results](building_results.qmd#results-by-group).
 
 ## Pitfalls and further reading
 
 - **`stratify()` changes the model it is called on**, and returns it. To keep the original as well, use `inplace=False`, which returns a stratified copy. Running the same cell twice in a notebook is safe: stratifying again in the same way does nothing, with a note. Stratifying by a dimension the model already has, in another way, is an error; build the model again.
 - **Contacts by other age groups.** A contact matrix by age groups that differ from the model's is converted to the model's, with a note. Check it in `describe()`.
-- **R0 without the contacts.** `measles.R0()` on the disease alone assumes homogeneous mixing; `sim.diseases.measles.R0()` uses the sim's contacts and groups.
+- **R0 without the contacts.** Use `sim.diseases.measles.R0()`, not `measles.R0()` ([why](building_writing.qmd#the-reproduction-number)).
 - **A closed population doesn't age.** Over a long run without births or deaths, the age groups stay as they started.
 
 Further reading:
@@ -258,6 +260,7 @@ Further reading:
 | `kind` | `'age'`, `'space'`, or `'plain'`, if not as its name and levels say |
 | `mobility` | For places, the movement between them: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix ([Places and data](populations_places.qmd)) |
 | `fractions` | Fractions that depend on the levels of other dimensions, as an `ss.by()` over both, e.g. a fraction severe by age |
+| `rel_sus`, `rel_trans` | The susceptibility or infectiousness of the people at each level, one multiplier per level, e.g. `rel_sus=[1, 0.03]`; on a sim's stratification, of every disease |
 
 ### Names that mean something
 

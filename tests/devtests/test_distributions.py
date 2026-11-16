@@ -60,7 +60,7 @@ def test_dist_default_warnings():
     defaults = dict(dur=ss.lognormal(mean=ss.days(200), std=ss.days(200)))
     with pytest.warns(RuntimeWarning, match='set only the mean'):
         p = ss.pars(defaults, dur=ss.days(100))
-    assert isinstance(p.dur.raw, ss.lognormal) and p.dur.raw.pars.mean == 100
+    assert isinstance(p.dur.raw, ss.lognormal) and p.dur.raw.pars.mean == ss.days(100)
     class M(ss.Disease):
         S, I = ss.states('S I')
         dur = ss.par(ss.lognormal(ss.days(5), ss.days(5)))

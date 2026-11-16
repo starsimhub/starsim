@@ -34,7 +34,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.05*I
 recovery  = I >> R @ ss.days(10)
-sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
+sir = ss.Disease(infection, recovery, init=dict(I=0.001))
 sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its fraction of people
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]])
@@ -115,7 +115,7 @@ msim.plot('flu_I')
 The closure doesn't prevent the epidemic. It delays the peak by about six weeks and lowers it by about a fifth, which could matter for hospitals, but most of those it spares are infected after schools reopen, since the epidemic resumes among people who are still susceptible: the number infected in all is only about 3% lower.
 
 ```{python}
-msim.summarize().loc['flu_infection']
+msim.summarize().loc['flu.infection']
 ```
 
 By age, the number infectious falls in every group while schools are closed, and most among children, who make most of the contacts at school:

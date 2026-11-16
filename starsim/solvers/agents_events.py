@@ -436,7 +436,7 @@ class Events(Agents):
                 if dst is not None:
                     self.stamp(dst.name, uids, mod.ti + 1) # Dated at the end of the step it happened in, as an infection is
                 else: # Died: at the end of the step, as by the agent engine's own outflows (see send())
-                    people.request_death(uids, cause=mod)
+                    people.request_death(uids, cause=self.cause_of(tr))
                     srcs = sorted(set(e_src[lo:hi]))
                     self._died.append((tr, [self.graph.people_states[k] for k in srcs], [uids[e_src[lo:hi] == k] for k in srcs]))
         if self.triggers: # Who ss.on() moves, by the events of the step: at its end, as the agent engine's sweep takes them (see finish_moves())

@@ -982,6 +982,46 @@ def test_who_compartmental():
     return sim
 
 
+@sc.timer()
+def test_network_args():
+    """ A subclass that wraps step() keeps its parameters, and one with a step() of its own forms its own partnerships; an unknown keyword raises, naming the valid ones; a bare number is a duration on every network """
+    sc.heading('Testing network arguments')
+    class Wrapped(ss.SexualNet):
+        def step(self):
+            return super().step()
+    net = Wrapped(n_contacts=0.5, dur=ss.years(2))
+    assert net.pars.n_contacts == 0.5 and 'match' in net.pars
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, n_agents=300, stop=2002, verbose=0).run()
+    assert len(sim.networks[0])
+
+    # A subclass with a step() of its own forms its own partnerships: the base forms none, not even those it starts with, unless it calls super().step()
+    class Own(ss.SexualNet):
+        def step(self):
+            self.end_pairs()
+            if not len(self):
+                n = 10
+                self.append(p1=np.arange(n), p2=np.arange(n, 2*n), weight=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
+    kw = dict(diseases=ss.SIS(beta=ss.peract(0.01)), n_agents=300, verbose=0)
+    for cls, n_start in [(Own, 0), (Wrapped, 0), (ss.SexualNet, None)]:
+        sim = ss.Sim(networks=cls(n_contacts=0.5, dur=ss.years(2)), **kw, stop=2001).init()
+        assert (len(sim.networks[0]) == 0) == (n_start == 0), f'{cls.__name__} should start with partnerships only from DegreeNet.step(), if it calls it'
+        sim.run()
+        net = sim.networks[0]
+        if cls is Own:
+            assert len(net) == 10 and set(net.p1) == set(range(10)), 'Only its own partnerships'
+        else:
+            assert np.isclose(net.results.mean_degree[0], 0.5, rtol=0.25), f'{cls.__name__} starts at the target'
+    with pytest.raises(ss.CapabilityError, match='step'): # Compartments can't follow a step() of its own
+        ss.Sim(networks=Own(n_contacts=0.5, dur=ss.years(2)), solver='binomial', diseases=ss.SIS(beta=ss.peract(0.01)), total_pop=1000, verbose=0).init()
+    with pytest.raises(ValueError, match='n_contacts'): # A typo is not an edge column
+        ss.RandomNet(n_contact=5)
+    with pytest.raises(ValueError, match='edges=dict'):
+        ss.Network(p1=[0], p2=[1], n_contact=5)
+    assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
+    sim = ss.Sim(networks=ss.PostnatalNet(dur=2), demographics=ss.Pregnancy(), n_agents=300, dur=2, verbose=0).run() # A bare number, in the sim's unit
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1022,5 +1062,6 @@ if __name__ == '__main__':
     certain = test_certain_transmission()
     sat = test_network_saturation()
     test_who_compartmental()
+    args = test_network_args()
 
     T.toc()

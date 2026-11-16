@@ -222,7 +222,7 @@ class Moving:
                 if tr.migration:
                     self.sim.people.request_removal(uids)
                 else:
-                    self.sim.people.request_death(uids, cause=mod)
+                    self.sim.people.request_death(uids, cause=self.cause_of(tr))
                     self._died.append((tr, srcs, uidlist)) # Counted once each death has one cause: see uncount_deaths()
                 continue
             entering = ng > 1 and any(self.enters(tr, src) for src in srcs) # Into a dimension: recorded at the level they arrive at
@@ -787,7 +787,7 @@ class Moving:
                 dist._pars = type(dist.pars)(pick(pars))
                 if kwds is not None:
                     dist.dist.kwds = pick(kwds)
-            return dist.ppf(rvs)
+            return dist._ppf(rvs)
         ind, seed = dist.ind, dist.seed
         dist.jump(to=self.draw_ind(), force=True)
         dist.seed = self.round_seed(seed)
@@ -905,7 +905,7 @@ class Moving:
         name = state.name
         self.put(name, uids, True)
         self.stamp(name, uids, ti)
-        if self.lefts and not np.isscalar(srcs): # Dated as leaving the states they came from, for their stays (see ss.BoolState.stays)
+        if self.lefts and not np.isscalar(srcs): # Dated as leaving the states they came from, for their stays (see ss.BoolArr.stays)
             for i,arr in self.lefts.items():
                 came = srcs == i
                 if came.any():

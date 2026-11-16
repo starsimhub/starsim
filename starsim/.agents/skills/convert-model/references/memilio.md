@@ -42,7 +42,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | `TransmissionProbabilityOnContact` × contacts, with `RelativeTransmissionNoSymptoms` | `infection = S >> E @ beta * contacts * (0.7*INS + risk*ISy)` | Exact |
 | `RiskOfInfectionFromSymptomatic` rising to `Max...` with `TestAndTraceCapacity` | An expression of counts: `excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1)`, `risk = 0.35 - 0.1*np.cos(np.pi*excess)` | Exact |
 | `Seasonality` with `StartDay` | `ss.seasonal(mean=beta, amplitude=0.2, peak=(-StartDay/365) % 1)` (or a start date and `peak=0`) | Exact |
-| `ContactMatrix` by age | `dis.stratify(age=['0', '1', '2'])` and `networks=ss.contacts(matrix)` | Exact |
+| `ContactMatrix` by age | `dis.stratify(age=['0', '1', '2'])` and `networks=ss.contacts(age=matrix)` | Exact |
 | `Damping(coeffs, t, ...)` (a cut in contacts, smoothed over the day before) | `ss.timeseries({0: 1.0, t-1: 1.0, t: 1 - coeff}, interpolation='cosine')` as a factor of the rate | Exact |
 | Populations by age and state | `init_n=dict(E=100, INS=50, ...)` (split evenly over groups by default) and `total_pop=` | Exact |
 | `...Confirmed` states that nothing flows into | Leave out | Exact |
@@ -55,7 +55,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 - **The equations are not in the script.** Read the model's `get_derivatives()` in the C++ source for the exact flows (e.g. the flow from `INS` to `ISy` is `(1 - mu_CR)/TimeInfectedNoSymptoms * INS`). The rates are per day.
 - **The threshold is on a flow.** Test-and-trace capacity compares the number becoming symptomatic each day with the capacity; Starsim cannot name a transition's current flow in a rate, so write the flow as a count expression (`0.91/2*INS.n`, repeating the probability and the time), with a comment.
-- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in the kernels; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
+- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in compiled code; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
 - **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `interpolation='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `(-StartDay/365) % 1` (the peak is a fraction of the year from 0 to 1, or a time of year such as `ss.days(305)`).
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.
@@ -86,7 +86,7 @@ secir = ss.Disease(
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2'])
-sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_000, dur=ss.days(50))
+sim = ss.Sim(secir, networks=ss.contacts(age=np.full((3, 3), 10/3)), total_pop=10_000, dur=ss.days(50))
 ```
 
 ## Running the original

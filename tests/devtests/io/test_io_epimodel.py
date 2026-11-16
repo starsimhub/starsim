@@ -164,7 +164,7 @@ def test_epimodel_new_mod():
     sim = load_epimodel(seir, verbose=0)
     assert not sim.imported.incomplete, "the tutorial's SEIR should import completely"
     sim.run()
-    assert list(sim.diseases.seir.graph.transitions) == ['s_to_e', 'e_to_i', 'i_to_r', 'i_to_out'], 'the death of a share cfr of the infectious should be an outflow'
+    assert list(sim.diseases.seir.graph.transitions) == ['s_to_e', 'e_to_i', 'i_to_r', 'i_to_dead'], 'the death of a share cfr of the infectious should be an outflow'
     I = sim.results.seir.i.values
     assert np.isclose(I.max(), 99388.06, rtol=1e-6) and I.argmax() == 362, "the peak should be EpiModel's"
     return sim

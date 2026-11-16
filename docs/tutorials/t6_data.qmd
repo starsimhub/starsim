@@ -54,12 +54,14 @@ states("S E I R")
 beta     <- par(0.14, bounds = c(0.05, 0.5)) # The rate of infection per contact with an infectious person, per day
 reported <- par(0.5, bounds = c(0.05, 1), prior = ss$beta_dist(mean = 0.35, std = 0.1)) # The fraction of infections that are reported
 
-infection <- Transition(S, E, rate = beta * I)
+infection   <- Transition(S, E, rate = beta * I)
+progression <- Transition(E, I, dur = days(10)) # Latent for 10 days on average
+recovery    <- Transition(I, R, dur = days(8))  # Infectious for 8 days on average
 measles <- Disease(
   infection   = infection,
-  progression = Transition(E, I, dur = days(10)), # Latent for 10 days on average
-  recovery    = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  cases       = outcome(reported * infection),    # Reported cases: a fraction of new infections
+  progression = progression,
+  recovery    = recovery,
+  cases       = outcome(reported * infection), # Reported cases: a fraction of new infections
   init        = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n      = list(I = 10)
 )
@@ -231,7 +233,7 @@ scenarios = {
 }
 proj = fit.project(scenarios)
 proj.plot('measles.cases')
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
 ## R
@@ -247,7 +249,7 @@ scenarios <- list(
 )
 proj <- fit$project(scenarios)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles_cases"]
+proj$summarize()$loc["measles.cases"]
 ```
 :::
 
@@ -287,7 +289,7 @@ The table gives each parameter's posterior median and 95% interval, and `rhat`, 
 ```{python}
 proj = post.project(scenarios, n_runs=100)
 proj.plot('measles.cases')
-proj.summarize().loc['measles_cases']
+proj.summarize().loc['measles.cases']
 ```
 
 ## R
@@ -295,7 +297,7 @@ proj.summarize().loc['measles_cases']
 ```r
 proj <- post$project(scenarios, n_runs = 100)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles_cases"]
+proj$summarize()$loc["measles.cases"]
 ```
 :::
 
@@ -373,7 +375,7 @@ Over decades, children are born susceptible, which is what makes measles come ba
 ## Python
 
 ```{python}
-measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
+measles = ss.Disease(infection, progression, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # The made-up town's age groups
 demographics = [
     ss.birth(rate=ss.peryear(0.03)), # 30 births a year per 1,000 people
@@ -412,7 +414,7 @@ The birth and death rates are per year and β per day, so `unit='day'` says whic
 
 Without births, there is one outbreak, and then measles is gone. With births, smaller outbreaks follow a year or two apart: the classic pattern of measles where too few children are vaccinated. In the troughs, only a handful of people are infectious, and in reality measles would often die out; an ODE can't show this, but a stochastic run can ([Solvers and backends](../user_guide/running_solvers.qmd#fade-out-between-epidemics)).
 
-Real birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN's for 187 countries and territories: `ss.population('Nigeria')` gives the ages, sex ratio, and size of Nigeria's population in the start year, `ss.Births(birth_rate='Nigeria')` its births, and `ss.Deaths(death_rate='Nigeria')` its deaths by year, age, and sex. [People and demographics](../user_guide/populations_people.qmd#rates-from-data) shows how to check such a model against the UN's estimates.
+Real birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN's for 187 countries and territories: `ss.population('Nigeria')` gives the ages, sex ratio, and size of Nigeria's population in the start year, `ss.birth(rate='Nigeria')` its births, and `ss.death(rate='Nigeria')` its deaths by year, age, and sex. [People and demographics](../user_guide/populations_people.qmd#rates-from-data) shows how to check such a model against the UN's estimates.
 
 ## Exercises
 
@@ -430,5 +432,5 @@ Real birth and death rates change from year to year, and death rates differ by a
 - [Stan: Bayesian workflow for disease transmission modeling](https://mc-stan.org/learn-stan/case-studies/boarding_school_case_study.html): fitting an SIR model to an outbreak, with checks of the fit and of its identifiability
 - [epydemix: Calibration of epidemic models to data](https://epydemix.readthedocs.io/en/latest/tutorials/04_Model_Calibration_part1.html): fitting a compartmental model to case data by approximate Bayesian computation
 - [Prem et al. (2021): Projecting contact matrices in 177 geographical regions](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1009098): the source of `ss.contacts('Kenya')`
-- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.population()`, `ss.Births()`, and `ss.Deaths()`
+- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.population()`, `ss.birth()`, and `ss.death()`
 

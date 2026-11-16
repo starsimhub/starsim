@@ -1,10 +1,10 @@
 """
-Not for the user: the ODE in NumPy: the RK4 and Euler step of `ss.kernels.step()` (and Dormand-Prince, on a fast step), vectorized over groups (and over the flows whose
+Not for the user: the ODE in NumPy: the RK4 and Euler step of `ss.solvers.backends.kernels.step()` (and Dormand-Prince, on a fast step), vectorized over groups (and over the flows whose
 rates have the same operations), so that a deterministic run needs no compiling
 
 It takes the same program, and gives the same results to rounding. Anything else (the stochastic solvers, the
 entry points other than `run()` and `one_step()`, and a step with an infinite rate) is passed to the kernels as
-plain Python (`ss.kernels.uncompiled()`).
+plain Python (`ss.solvers.backends.kernels.uncompiled()`).
 
 Used with: compartments; declared modules
 """
@@ -26,14 +26,14 @@ def wanted(solver, p=None, y=None):
     Whether a run of this solver is taken here: by default (mode='auto'), for the ODE when the kernels are not compiled
     and the program is large enough that NumPy is faster than the kernels as plain Python. Each time the rates are worked
     out, NumPy takes about 40 µs whatever the size, and plain Python about 10 µs plus 0.6 µs for each operation of
-    `ss.kernels.work()` (an SIR in one group: 0.55 s against 0.22 s; in 20 places: 0.60 s against 2.8 s)
+    `ss.solvers.backends.kernels.work()` (an SIR in one group: 0.55 s against 0.22 s; in 20 places: 0.60 s against 2.8 s)
     """
     import starsim as ss
     if not isinstance(solver, ss.solvers.ode) or mode == 'never':
         return False
     if mode == 'always':
         return True
-    return ss.options.kernels != 'numba' and not K.chosen and not K.is_compiled() and (p is None or K.work(p, y) > 50)
+    return ss.options.backend != 'numba' and not K.chosen and not K.is_compiled() and (p is None or K.work(p, y) > 50)
 
 
 def matrix(rows, cols, shape):
@@ -86,7 +86,7 @@ class Layout:
             mm.append(np.full(len(comps)*len(ents), p.n_trans + m))
         cat = lambda x: np.concatenate(x).astype(int) if x else np.zeros(0, dtype=int)
         self.mov_c, self.mov_e, self.mov_m = cat(cc), cat(ee), cat(mm)
-        # Conveyors: the flow out of each, its slots, and the flows that are exits of its last slot (see ss.kernels.release_rates())
+        # Conveyors: the flow out of each, its slots, and the flows that are exits of its last slot (see ss.solvers.backends.kernels.release_rates())
         self.conveyors = []
         for i in range(len(p.starts) - nf - 1):
             a, b = p.starts[nf+i], p.starts[nf+i+1]
@@ -116,7 +116,7 @@ class Layout:
                 level.append(lev)
             return nodes[key]
         self.rate_fs, self.rate_nodes = [], []
-        shared = {} # The parts several rates share, which come first (see ss.kernels.LOAD)
+        shared = {} # The parts several rates share, which come first (see ss.solvers.backends.kernels.LOAD)
         for f in range(-1, self.nf):
             stack, regs = [], dict(shared)
             for k in range(0 if f < 0 else p.starts[f], p.starts[f+1]):
@@ -182,7 +182,7 @@ def binary(op, a, b):
 
 
 def members(ys, p, s):
-    """ The compartments of set s, by group, each times its weight if it has one (as `ss.kernels.member()`) """
+    """ The compartments of set s, by group, each times its weight if it has one (as `ss.solvers.backends.kernels.member()`) """
     a, b = p.set_starts[s], p.set_starts[s+1]
     rows = p.set_w[a:b]
     out = ys[p.set_comps[a:b]]
@@ -190,7 +190,7 @@ def members(ys, p, s):
 
 
 def rates_of(ys, p, L):
-    """ The rate of every flow, by group, as `ss.kernels.step()` works them out (not by place: that is only for the exact solver) """
+    """ The rate of every flow, by group, as `ss.solvers.backends.kernels.step()` works them out (not by place: that is only for the exact solver) """
     rates = p.fixed.copy()
     if not len(L.rate_fs):
         return rates
@@ -291,7 +291,7 @@ def set_movers(p):
 
 
 def step(rng, y, p, dt, n_sub, solver, flows):
-    """ One step of the ODE, as `ss.kernels.step()` takes it (y and flows changed in place), with NumPy's warnings of division by zero off, as compiled code has them """
+    """ One step of the ODE, as `ss.solvers.backends.kernels.step()` takes it (y and flows changed in place), with NumPy's warnings of division by zero off, as compiled code has them """
     with np.errstate(divide='ignore', invalid='ignore'):
         return _step(rng, y, p, dt, n_sub, solver, flows)
 
@@ -305,7 +305,7 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
     stages = 1 if euler else 4
     auto = n_sub <= 0
     rates = rates_of(y, p, L)
-    if np.isinf(rates).any(): # Everyone in a compartment moves at once: as the kernels do it (see ss.kernels.certain())
+    if np.isinf(rates).any(): # Everyone in a compartment moves at once: as the kernels do it (see ss.solvers.backends.kernels.certain())
         return K.uncompiled().step(rng, y, p, K.uncompiled().workspace(y, p), dt, n_sub, solver, flows, False)
     for f_out,slots in L.conveyors: # step_start(): those due to leave each conveyor leave at a constant rate over the step
         p.inflow[f_out] = y[slots[-1]]/dt
@@ -343,7 +343,7 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
                 if more > n_sub:
                     n_sub = more
                     h = dt/n_sub
-                if not euler and max(fastest, growing)*dt/n_sub > K.FAST: # Too fast for RK4 (see ss.kernels.FAST)
+                if not euler and max(fastest, growing)*dt/n_sub > K.FAST: # Too fast for RK4 (see ss.solvers.backends.kernels.FAST)
                     dp = True
                     break
             if stage < stages - 1:
@@ -370,7 +370,7 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
 
 
 def dormand_prince(y, p, L, dt, h, dy0, df0, flows, least):
-    """ A step too fast for RK4, by Dormand-Prince, from its first stage and the quarter rule's substep h, as `ss.kernels.step()` takes it (y and flows changed in place) """
+    """ A step too fast for RK4, by Dormand-Prince, from its first stage and the quarter rule's substep h, as `ss.solvers.backends.kernels.step()` takes it (y and flows changed in place) """
     A, B, E = K.DP_A, K.DP_B, K.DP_E
     dys, dfs = [dy0] + [None]*6, [df0] + [None]*6
     elapsed = 0.0
@@ -379,7 +379,7 @@ def dormand_prince(y, p, L, dt, h, dy0, df0, flows, least):
             ys = y + h*sum(A[stage, j]*dys[j] for j in range(stage))
             dys[stage], dfs[stage], _ = derivs(ys, p, L, rates_of(ys, p, L), h, False)
         err = np.abs(h*sum(E[j]*dys[j] for j in range(7)))/(least + K.TOL*np.maximum(np.abs(y), np.abs(ys)))
-        worst = np.max(err, where=err > 0, initial=0.0) # (Not a NaN: see ss.kernels.step())
+        worst = np.max(err, where=err > 0, initial=0.0) # (Not a NaN: see ss.solvers.backends.kernels.step())
         if worst <= 1 or h < 1e-6*dt:
             y[:] = ys
             flows += h*sum(B[j]*dfs[j] for j in range(7))
@@ -393,7 +393,7 @@ def dormand_prince(y, p, L, dt, h, dy0, df0, flows, least):
 
 
 def one_step(rng, y, p, dt, solver, n_sub, tables, row):
-    """ As `ss.kernels.one_step()` """
+    """ As `ss.solvers.backends.kernels.one_step()` """
     y = y.copy()
     flows = np.empty((p.n_trans + p.n_movers, y.shape[1]))
     if row >= 0:
@@ -406,7 +406,7 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 
 def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start):
-    """ As `ss.kernels.run()` """
+    """ As `ss.solvers.backends.kernels.run()` """
     if solver >= 2:
         return K.uncompiled().run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start)
     plain = K.uncompiled()

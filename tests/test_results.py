@@ -61,7 +61,7 @@ def test_export():
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
-    assert res_df.value.sum() == rs1.infection.cum.values[-1] == sim.summarize().value.sis1_infection
+    assert res_df.value.sum() == rs1.infection.cum.values[-1] == sim.summarize().value.sis1.infection
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
@@ -127,7 +127,7 @@ def test_2d_results():
     assert res.to_df().columns.tolist() == ['time', 'female', 'male']
     assert 'by female, male' in repr(res) # Each column labeled (it was an unlabeled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
-    assert sim.summarize().value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
+    assert sim.summarize().value.bysex.infected.male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
@@ -166,7 +166,7 @@ def test_flow_ratios():
                 weekly = res.infection.resample('week') # Resampled from the start, by group too
                 assert np.allclose(weekly.select(age='0-49') + weekly.select(age='50+'), weekly) and np.isclose(weekly[1], res.infection[7:14].sum())
                 assert res.S.resample('week')[1] == res.S[7] # A stock at the start of each week
-                assert np.isclose(res.incidence.resample('week')[1], res.infection[7:14].sum()/res.S[7:14].sum()) # A ratio of the sums of its parts
+                assert np.isclose(res.incidence.resample('week')[1], res.incidence[7:14].mean()) # A ratio: its mean over the period, as summarize() takes it over the run
 
     # A ratio with nobody in its denominator is 0 (nothing divided by anything), not an error
     for solver in ['ode', 'abm']:
@@ -224,7 +224,7 @@ def test_summarize_by():
             self.define_results(ss.Result('by_age', dtype=int, kind='flow', shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
             self.results['log'] = dict(net=[[0, None]])
     sim = ss.Sim(ss.SIS(), analyzers=Odd(name='odd'), n_agents=small, stop=5, verbose=0).run()
-    assert 'sis_I' in sim.summarize().index and not any(k.startswith('odd') for k in sim.summarize().index)
+    assert 'sis.I' in sim.summarize().index and not any(k.startswith('odd') for k in sim.summarize().index)
     assert len(sim.summarize('odd.by_age')) == 3 # Asked for by key, it is one number per column
     return res
 
@@ -281,7 +281,7 @@ def test_results_by_group():
             self.results.prevalence.set_groups(self.ti, infected, groups.count())
 
     # Alongside a declared disease, whose results are kept by group already; agents of different weights, and people born and dying
-    kw = dict(networks='random', demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=15)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
+    kw = dict(networks='random', demographics=[ss.Births(birth_rate=0.02), ss.Deaths(death_rate=0.015)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
     sim = ss.Sim(ss.SIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male'], age=edges), **kw).init()
     sim.people.scale[sim.people.auids[::3]] = 3
     sim.run()
@@ -310,7 +310,7 @@ def test_time_points():
     dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init_n=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
     assert np.array_equal(res.alive, [1000, 998, 996, 994, 992])
-    assert np.array_equal(res.died, [2, 2, 2, 2, 2]) # A step from each time point, the last included
+    assert np.array_equal(res.death, [2, 2, 2, 2, 2]) # A step from each time point, the last included
 
     # Weekly data is matched to the total of a flow over each week, whatever the rounding of the sim's times, and whatever the flow is called
     S, I, R = ss.states(3)
@@ -479,6 +479,30 @@ def test_axes():
         res.by('scenario') # Runs are selected, not split
     assert msim.to_df().columns.tolist() == msim.results.to_df().columns.tolist() and 'quantile' in msim.to_df(quantiles=[0.5]) # One default
     return
+
+
+@sc.timer()
+def test_resample_ratios():
+    """ resample() takes a ratio as summarize() does: its mean over each period, with or without groups; a ratio of two flows, the total of one over the total of the other """
+    sc.heading('Testing that resample() and summarize() agree for ratios')
+    S, I = ss.states(2)
+    sis = ss.Disease(S >> I @ ss.perday(0.2)*I, I >> S @ ss.days(10), init_prev=0.05, name='sis')
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0.5), when=ss.schedule(every=ss.days(10)), coverage=0.3, name='vx')
+    for stratify in [None, dict(age=[0, 15])]:
+        sim = ss.Sim(sis, interventions=vx, unit='day', stop=28, total_pop=2000, solver='binomial', stratify=stratify, verbose=0).run()
+        prev = sim.results.sis.prevalence
+        weekly = prev.resample('week')
+        assert np.allclose(weekly, [prev[7*w:7*w+7].mean() for w in range(4)]) # The mean over each week
+        assert np.isclose(prev[:28].mean(), weekly.mean()) # Over four whole weeks, the mean of the weekly means is the mean over the run
+        cov = sim.results.vx.coverage
+        num, den = [part.resample('week') for part in cov.parts]
+        assert np.allclose(cov.resample('week'), np.divide(num, den, out=np.zeros(len(num)), where=den.values!=0)) # A ratio of flows: total over total
+        if stratify:
+            young = prev.select(age='0-14') # Groups are added up, then divided, at each time point; then averaged over each period
+            assert np.allclose(young.resample('week'), [young[7*w:7*w+7].mean() for w in range(4)])
+            with pytest.raises(ValueError, match='select the groups first'):
+                weekly.select(age='0-14')
+    return sim
 
 
 @sc.timer()

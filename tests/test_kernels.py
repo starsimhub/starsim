@@ -78,9 +78,9 @@ def make_biting(w=(0.5, 2.0)):
 models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
-    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
@@ -93,8 +93,8 @@ def run(key, how, **kwargs):
     make, pars = models[key]
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
-        assert sim._kernel_reason() is None
-    return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
+        assert sim._compiled_reason() is None
+    return sim.perf_profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
 def largest_diff(sim1, sim2):
@@ -196,10 +196,10 @@ def test_seasonal_steps():
         out[solver] = np.mean([run[0] for run in runs])
         assert str(runs[0][1]) == solver
         assert np.isclose(out[solver], ode, rtol=0.04), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
-    with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within a step
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'): # Exact only for rates that are constant within a step
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
-        ss.Sim(sis, solver='gillespie', approximations='error', unit='day', stop=100, **kw).init()
+        ss.Sim(sis, solver='gillespie', unit='day', stop=100, **kw).init()
 
     # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]
@@ -237,7 +237,7 @@ def test_module_beside_kernels():
         stepped = make(solver=solver, analyzers=Counts()).run()
         assert np.array_equal(whole.results.sis.I, stepped.results.sis.I), f'{solver}: a module that does nothing changed the run'
         assert stepped.analyzers[0].last == whole.results.sis.I[-1]
-    assert make(analyzers=Quiet()).init()._kernel_reason() is None, 'an analyzer with an empty step needs no step of its own'
+    assert make(analyzers=Quiet()).init()._compiled_reason() is None, 'an analyzer with an empty step needs no step of its own'
 
     plain = lambda **kwargs: make(beta=ss.perday(0.2), **kwargs)
     halved = plain(interventions=Halves()).run()
@@ -272,15 +272,15 @@ def test_plain_estimate():
 
 
 @sc.timer()
-def test_engine_choice():
-    sc.heading('Testing that a run is taken by the kernels, whatever its size, unless JAX is asked for')
+def test_backend_choice():
+    sc.heading('Testing that a run is taken by the compiled backend, whatever its size, unless JAX is asked for')
     choices = []
     for compiled in [True, False]:
         clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
-        with mock.patch.object(ss.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
+        with mock.patch.object(ss.solvers.backends.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
             sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', dur=ss.days(3650), solver='ode', **kw).init() # A long run, once taken by JAX
-            choices.append(ss.solvers.choose_engine(sim))
-    assert choices[0] == choices[1] == (False, 'kernels'), f'The engine was not the kernels, or changed with the cache or the clock: {choices}'
+            choices.append(ss.solvers.choose_backend(sim))
+    assert choices[0][0] is choices[1][0] is False and choices[0] == choices[1], f'The backend was JAX, or changed with the cache or the clock: {choices}'
     return choices
 
 
@@ -299,27 +299,28 @@ def test_worker_threads():
     sc.heading('Testing the threads of the workers of ss.parallel(): forkserver only for threads unsafe to fork, and a clear error if they run the script again')
     import sys
     with mock.patch.dict(sys.modules, {'jax': mock.MagicMock()}):
-        assert 'JAX' in ss.kernels.fork_unsafe()
+        assert 'JAX' in ss.solvers.backends.kernels.fork_unsafe()
     with mock.patch.dict(sys.modules): # Without JAX, which another test may have imported
         sys.modules.pop('jax', None)
-        with mock.patch.object(ss.kernels.nb, 'threading_layer', lambda: 'tbb'):
-            assert ss.kernels.fork_unsafe() is None # TBB is safe to fork, so a large sim no longer makes ss.parallel() start its workers by forkserver
-        with mock.patch.object(ss.kernels.nb, 'threading_layer', lambda: 'omp'):
-            assert 'omp' in ss.kernels.fork_unsafe()
-    ss.kernels.workers_failed(EOFError(), 'fork') # By fork: not this
+        with mock.patch.object(ss.solvers.backends.kernels.nb, 'threading_layer', lambda: 'tbb'):
+            assert ss.solvers.backends.kernels.fork_unsafe() is None # TBB is safe to fork, so a large sim no longer makes ss.parallel() start its workers by forkserver
+        with mock.patch.object(ss.solvers.backends.kernels.nb, 'threading_layer', lambda: 'omp'):
+            assert 'omp' in ss.solvers.backends.kernels.fork_unsafe()
+    ss.solvers.backends.kernels.workers_failed(EOFError(), 'fork') # By fork: not this
     with pytest.raises(RuntimeError, match='__main__'):
-        ss.kernels.workers_failed(EOFError('unexpected EOF'), 'forkserver')
+        ss.solvers.backends.kernels.workers_failed(EOFError('unexpected EOF'), 'forkserver')
     return
 
 
 def test_compile_status():
     sc.heading('Testing that it is clear whether the kernels are compiled')
-    status = ss.kernels.compile_status()
+    status = ss.compile(check=True, verbose=False) # The same as ss.solvers.backends.kernels.compile_status()
+    assert status == ss.solvers.backends.kernels.compile_status()
     assert status.compiled == (not status.missing)
-    assert ('compiled' if status.compiled else 'NOT COMPILED' if status.engine != 'rust' else 'OUT OF DATE') in status.summary
-    with ss.options.context(kernels='python'):
-        status = ss.kernels.compile_status()
-    assert status.engine == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
+    assert ('compiled' if status.compiled else 'NOT COMPILED' if status.backend != 'rust' else 'OUT OF DATE') in status.summary
+    with ss.options.context(backend='python'):
+        status = ss.solvers.backends.kernels.compile_status()
+    assert status.backend == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
     return status
 
 
@@ -340,7 +341,7 @@ def test_blas_threads():
 
 def test_typical_sims():
     sc.heading('Testing that the sims ss.compile() runs are valid, without compiling')
-    for sim in ss.kernels.typical_sims():
+    for sim in ss.solvers.backends.kernels.typical_sims():
         sim.init()
     return
 

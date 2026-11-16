@@ -1,6 +1,7 @@
 """
 Test the People object
 """
+import warnings
 import numpy as np
 import pytest
 import sciris as sc
@@ -36,7 +37,7 @@ def test_people():
     sim = ss.Sim(n_agents=small, diseases=dict(type='sir', init_prev=0.2, p_death=0.5), networks='random', verbose=0).run()
     dead = sim.people.dead
     assert len(dead) == sim.people.n_uids > len(sim.people)
-    assert dead.sum() == sim.results.died.cum[-1] > 0
+    assert dead.sum() == sim.results.death.cum[-1] > 0
     assert not np.isin(dead.uids, sim.people.auids).any()
 
     # Agents that stand for fewer people (people.scale, as HPVsim's finer agents) count for less in the results (before, every agent counted as one)
@@ -123,6 +124,28 @@ def test_groups_are_not_agents():
     return sim
 
 
+def test_people_fixes():
+    """ People.grow(0) gives UIDs like any other number, People.plot() skips a state that is all NaN, and ss.utils.time_str() with no sim """
+    sc.heading('Testing People.grow(0), People.plot(), and time_str()')
+    sim = ss.Sim(diseases='sis', networks='random', n_agents=100, verbose=0).init()
+    assert isinstance(sim.people.grow(0), ss.uids) and isinstance(sim.people.grow(2), ss.uids)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning) # The mean of an empty slice warned
+        sim.people.plot(key=['age', 'ti_dead'])
+    plt.close('all')
+    assert ss.utils.time_str(5) == 'step 5' # It raised with no sim
+    S, I, R = ss.states('S I R') # Counting in a compartmental run, and a ratio summarized the same way with groups as without
+    sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir').stratify(age={0: 0.3, 15: 0.7})
+    comp = ss.Sim(sir, total_pop=1000, unit='day', stop=60, verbose=0).run()
+    assert comp.pars.n_agents is None and len(comp.people) == 2 # It was the number of groups
+    for state in [comp.people.alive, comp.sir.I]: # count() is the number of agents: sir.I.count() gave people, alive.count() raised
+        with pytest.raises(ss.CapabilityError, match='agents'):
+            state.count()
+    prev = comp.results.sir.prevalence
+    assert np.isclose(prev.summarize(), prev.values.mean()) # It was the total infected over the total people, by group only
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -134,6 +157,7 @@ if __name__ == '__main__':
     # Run tests
     ppl   = test_people()
     sim   = test_ppl_construction(do_plot)
+    sim2  = test_people_fixes()
 
     sc.toc(T)
     plt.show()

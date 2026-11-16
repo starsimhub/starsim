@@ -8,7 +8,7 @@ Each is one pass (or two) in place of several NumPy passes and their temporaries
 a large network or population (see `ss.options.threads`; one thread in the workers of `ss.parallel()`). Lists are kept in
 order, and random numbers come from counters, so the results do not depend on the number of threads. Called by `ss.People`, `ss.Network`, `ss.RandomNet`, `ss.SexualNet`,
 `ss.Births`, `ss.solvers.Agents` and the groups of `ss.dimensions`. They are kept apart from the
-compartmental kernels (`ss.kernels`), so a change to either does not make Numba compile the other again.
+compartmental kernels (`ss.solvers.backends.kernels`), so a change to either does not make Numba compile the other again.
 
 Used with: agents; declared and coded modules
 """
@@ -19,7 +19,7 @@ from . import draws, cache as _cache
 
 _cache.depends(__file__, draws.__file__) # The uniforms come from the draws
 
-jit = nb.jit(nopython=True, cache=True, error_model='numpy') # As ss.kernels compiles its kernels
+jit = nb.jit(nopython=True, cache=True, error_model='numpy') # As ss.solvers.backends.kernels compiles its kernels
 pjit = nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
 
 

@@ -86,7 +86,7 @@ def test_offspring():
     sc.heading('As agents: a gamma-distributed infectiousness gives negative binomial offspring, and each case has an infector and a generation')
     k = 0.5
     S, I, R = ss.states(3)
-    dis = ss.Disease(S >> I @ ss.perday(0.15)*I, I >> R @ ss.constant(ss.days(8)), init_n=dict(I=300), rel_trans=ss.attr(ss.gamma(shape=k, scale=1/k)), name='sir')
+    dis = ss.Disease(S >> I @ ss.perday(0.15)*I, I >> R @ ss.constant(ss.days(8)), init_n=dict(I=300), rel_trans=ss.gamma(shape=k, scale=1/k), name='sir')
     sim = ss.Sim(dis, total_pop=1e7, branching=True, solver='abm', unit='day', stop=100, **kw).run()
     b = sim.branching
     R0, kfit = ss.run.Branching.fit_offspring(b.offspring[b.complete])

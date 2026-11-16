@@ -226,11 +226,11 @@ def test_vaccinate():
 
     # A typed probability as coverage: over the interval between rounds
     def typed_cov(**kwargs):
-        rounds = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.schedule(every=ss.days(91)), coverage=ss.probperyear(0.5))
+        rounds = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.schedule(every=ss.days(91)), rate=ss.probperyear(0.5))
         return ss.Sim(make_sir(), interventions=rounds, **kwargs)
     sims = run_each(typed_cov, stop=100)
     for sim in sims.values():
-        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.05)
+        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.1) # About 2% noise as agents (10,000 by default)
     return sims
 
 
@@ -498,7 +498,7 @@ def test_memory():
     # A declared transition as an event (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(0.5) * I), recovery=ss.Transition(I, S, dur=ss.years(2)), init_prev=0.1, name='sis')
-    preg = ss.Pregnancy(fertility_rate=50)
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.05))
     anc_visit = ss.Event(when=preg.conception, p=0.85) # No product: a visit, whose attendees other steps take
     anc_a = ss.screen(ss.Diagnostic(sensitivity=0.9, name='rdt'), when=anc_visit)
     anc_b = ss.screen(ss.Diagnostic(sensitivity=0.8, name='rpr'), when=anc_visit)
@@ -553,7 +553,7 @@ def test_coinfection_compartments():
         for key in ['hiv', 'syph']:
             assert np.isclose(sims[solver].results[key].I[-1], res[key].I[-1], rtol=0.15) # As agents, syphilis is about 5% above the ODE on average, and varies by about 3% between runs
     stepped = make('binomial').run(until=2030) # The stochastic run takes the diseases together, by one program, whole or step by step
-    assert sims.binomial._kernel_reason() is None and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
+    assert sims.binomial._compiled_reason() is None and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
 
     # Each disease's moves are drawn as they would be for it alone, so two diseases with dwell times in stages, tracked jointly but not changing each other, peak as they do alone (drawn as one compartment's competing exits, they would be 7% and 31% too high at daily steps)
     def staged(crossed=True, which=None, seed=0):
@@ -657,7 +657,7 @@ def test_hold_by_place():
         sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init_n=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
         sir.stratify(patch=ss.levels(['a', 'b', 'c'], mobility=ss.geo.Mobility(matrix=0.01*(1 - np.eye(3))))) # The other places are infected later
         cond = sir.infection.incidence(over=ss.days(7), by=by) > 0.02 # A week's infections in each place, as a share of its people
-        rule = ss.modify(beta, multiply=0.3, who=cond, until=hold) if npi else None
+        rule = ss.modify(beta, multiply=0.3, **{'who' if by is not None else 'when': cond}, until=hold) if npi else None # By place it is on people; for everyone at once it says when
         sim = ss.Sim(sir, interventions=rule, unit='day', stop=200, solver=solver, n_agents=20_000, total_pop=20_000, verbose=0, rand_seed=1).run()
         return sim.results.sir.I.strata.max(axis=0)
     for solver in ['ode', 'abm']:
@@ -668,7 +668,7 @@ def test_hold_by_place():
     assert np.all(run('ode', hold=None) > local) # And the hold keeps it down longer
     for solver in ['ode', 'abm']: # On a model without groups (it was an AttributeError on the results' strata)
         flu = ss.SIR(beta=0.3, name='flu')
-        rule = ss.modify(flu.pars.beta, multiply=0.3, who=flu.infection.incidence(over=ss.days(7)) > 0.01)
+        rule = ss.modify(flu.pars.beta, multiply=0.3, when=flu.infection.incidence(over=ss.days(7)) > 0.01)
         peak = lambda rule: ss.Sim(flu, interventions=rule, unit='day', stop=100, solver=solver, n_agents=5000, total_pop=5000, verbose=0).run().results.flu.I.max()
         assert peak(rule) < peak(None)
 
@@ -824,10 +824,10 @@ def test_whole_run():
         seed = ss.Event(sir.S >> sir.I, when=[25], p=0.01, name='seed') # Between states
         return ss.Sim(sir, interventions=[offer, rounds, rollout, seed], connectors=halved, stop=100, **kw, **kwargs)
     whole = make(solver='ode').init()
-    assert whole._kernel_reason() is None, whole._kernel_reason()
+    assert whole._compiled_reason() is None, whole._compiled_reason()
     whole.run()
     stepped = make(solver='ode').init()
-    stepped._kernel_reason = lambda: 'stepped' # As the loop takes it, one step at a time
+    stepped._compiled_reason = lambda: 'stepped' # As the loop takes it, one step at a time
     stepped.run()
     for mod,key in [('sir', 'S'), ('sir', 'I'), ('sir', 'R'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered'), ('seed', 'delivered')]:
         a, b = whole.results[mod][key], stepped.results[mod][key]
@@ -845,16 +845,16 @@ def test_whole_run():
         sims = [make(solver='binomial', rand_seed=seed).init() for seed in range(16)]
         for sim in sims:
             if not whole_run:
-                sim._kernel_reason = lambda: 'stepped'
+                sim._compiled_reason = lambda: 'stepped'
             sim.run()
         jumps.append(np.array([sim.results.sir.I.values[26] - sim.results.sir.I.values[25] for sim in sims]))
     se = np.sqrt(sum(j.var()/len(j) for j in jumps))
     assert abs(jumps[0].mean() - jumps[1].mean()) < 4*se + 1, f'The seed moved {jumps[0].mean():.1f} people in a whole run, but {jumps[1].mean():.1f} step by step'
 
     # And in JAX, with gradients
-    jax = make(solver='ode').init()
-    jax.jax = True # A whole run in JAX, as ss.parallel() takes many
-    jax.run()
+    jax = make(solver='ode')
+    with ss.options.context(backend='jax'): # A whole run in JAX, as ss.parallel() takes many
+        jax.run()
     assert np.allclose(jax.results.sir.I.values, whole.results.sir.I.values, rtol=1e-10)
     assert np.allclose(jax.results.offer.delivered.values, whole.results.offer.delivered.values, rtol=1e-10)
     grad = make(solver='ode').gradient('I', pars='beta').beta.sir.I
@@ -896,7 +896,7 @@ def test_waning_as_states():
     # A product that fades by a function is given again to those who hold it, which restarts it (agents only)
     S, I = ss.states('S I')
     mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
-    vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=lambda t: (np.asarray(t) < 100).astype(float))
+    vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=lambda t: (t.days < 100).astype(float))
     sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=[10, 60], coverage=1.0, name='rounds'), n_agents=2000, unit='day', stop=200, verbose=0).run()
     inf = sim.results.mal.infection
     assert sim.results.rounds.delivered[60] == 2000 and inf[11:158].sum() == 0 and inf[161:].sum() > 0 # Protected until day 160, not 110
@@ -952,7 +952,7 @@ class Lesions(ssl.AgentSIS):
     """ A disease written as code with a boolean state beyond infected (a lesion), cleared on cure """
     def __init__(self, **kwargs):
         super().__init__(beta=ss.peryear(2), init_prev=0.3, dur_inf=ss.years(3), waning=ss.peryear(0), imm_boost=0, **kwargs)
-        self.define_states(ss.BoolState('cin', label='Lesion'))
+        self.define_states(ss.BoolArr('cin', label='Lesion'))
         self.rng_cin = ss.bernoulli(p=0.05)
         return
 
@@ -1053,7 +1053,7 @@ def test_waning_functions():
     drug = ss.Treatment(efficacy=dict(transmission=0.9), during=sir.I, name='drug')
     for solver in ['abm', 'ode']:
         size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
-        sim = ss.Sim(sir, interventions=ss.treat(drug, who=sir.I, coverage=ss.perday(0.2), name='tx'), unit='day', stop=50, solver=solver, verbose=0, **size).run() # Treated, it dies out, often by day 100, but not by 50
+        sim = ss.Sim(sir, interventions=ss.treat(drug, who=sir.I, rate=ss.perday(0.2), name='tx'), unit='day', stop=50, solver=solver, verbose=0, **size).run() # Treated, it dies out, often by day 100, but not by 50
         if solver == 'abm':
             held = sim.people['has_drug'].raw > 0
             left = held & ~sim.diseases.sir.I.raw[:len(held)]

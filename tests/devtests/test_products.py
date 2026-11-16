@@ -263,7 +263,7 @@ def test_hpv_vaccines():
         progs = []
         if product:
             vx = hpv_vaccine(product, genos) # The only change between the scenarios
-            progs = [ss.vaccinate(vx, who=~vx.ever, when=ss.schedule(start=2002), coverage=ss.probperyear(0.5), name='dose1'),
+            progs = [ss.vaccinate(vx, who=~vx.ever, when=ss.schedule(start=2002), rate=ss.probperyear(0.5), name='dose1'),
                      ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.months(6)), coverage=0.9, name='dose2')]
         return ss.Sim(genos, interventions=progs, **kwargs)
     inf = lambda sim, g: sim.results[g].infection[sim.t.yearvec >= 2002].sum()
@@ -285,7 +285,7 @@ def test_hpv_screen_treat():
         tx = lambda name, eff: ss.Treatment(cure={g.excised: eff for g in genos}, name=name) # One treatment over all the genotypes
         hpv_dna = ss.Diagnostic(sensitivity={g[x]:p for g in genos for x,p in dict(I=0.9, CIN=0.95).items()}, specificity=0.97)
         any_ca = genos[0].CA | genos[1].CA
-        primary = ss.screen(hpv_dna, who=hpv_dna.since >= ss.years(5), when=ss.schedule(start=2005), coverage=ss.probperyear(0.3), name='primary')
+        primary = ss.screen(hpv_dna, who=hpv_dna.since >= ss.years(5), when=ss.schedule(start=2005), rate=ss.probperyear(0.3), name='primary')
         tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~any_ca), when=primary.positive, coverage=0.8, capacity=ss.capacity(ss.perweek(10), queue=ss.months(6)), name='tx_visit')
         ablate = ss.treat(tx('ablation', 0.936), when=tx_visit.positive, name='ablate')
         excise = ss.treat(tx('excision', 0.81), when=tx_visit.negative, name='excise')

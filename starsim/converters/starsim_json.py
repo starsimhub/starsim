@@ -49,7 +49,7 @@ from .core import code_value, time_names, func_names
 __all__ = ['to_json', 'load_json']
 
 # The settings of a sim that the file carries, as they were given
-settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'aging']
+settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'aging']
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
 values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'dur', 'ode', 'binomial', 'abm', 'levels'] # Starsim's values that can be written as calls, besides typed quantities and distributions (a solver with options, e.g. ode(integrator='euler'), is ss.solvers')
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')
@@ -171,6 +171,8 @@ class Writer:
         g = mod.graph
         pars = g.pars
         out = sc.objdict(name=mod.name)
+        if getattr(mod, '_name_source', None) == 'variable': # Named from its variable, which the code written from this assigns it to, so its random numbers stay the same (see ss.dists.seed_names())
+            out.named_by = 'variable'
         if g.pars:
             out.pars = {name:self.par(p, pars) for name,p in pars.items() if p is not g.init_prev}
         out.states = []
@@ -232,6 +234,8 @@ class Writer:
                 out[key] = mine
         if default is not None and mod.name != default.name:
             out['name'] = mod.name
+            if getattr(mod, '_name_source', None) == 'variable': # As for a disease
+                out['named_by'] = 'variable'
         return out
 
 
@@ -446,7 +450,7 @@ class Reader:
         """ The lines of code of a declared disease, as the variable var """
         name = d.get('name', var)
         where = f'disease "{name}"'
-        unknown = set(d) - {'name', 'label', 'pars', 'states', 'transitions', 'results', 'init', 'init_n', 'init_prev', 'default_state', 'stratify'}
+        unknown = set(d) - {'name', 'named_by', 'label', 'pars', 'states', 'transitions', 'results', 'init', 'init_n', 'init_prev', 'default_state', 'stratify'}
         if unknown:
             self.error(where, f'{sc.strjoin(sorted(unknown))} is not part of a disease; its parts are name, pars, states, transitions, results, init, init_n, init_prev, default_state, and stratify')
         states = [s if isinstance(s, str) else s['name'] for s in d.get('states', [])]
@@ -512,7 +516,8 @@ class Reader:
         for key in ['default_state', 'label']:
             if d.get(key) is not None:
                 kw[key] = repr(d[key])
-        kw.name = repr(name)
+        if not (d.get('named_by') == 'variable' and var == name): # Named from the variable it is assigned to, as when it was exported
+            kw.name = repr(name)
         lines.append(f'{var} = ss.Disease(')
         for i in range(0, len(args), 8):
             lines.append(f'    {", ".join(args[i:i+8])},')
@@ -529,6 +534,7 @@ class Reader:
     def module(self, m, key):
         """ The code of another module, from its type and parameters """
         m = dict(m)
+        m.pop('named_by', None) # Used by code()
         typename = m.pop('type', None)
         where = f'{key}, "{typename}"'
         lib, _, name = typename.rpartition('.') if typename else ('', '', '')
@@ -537,6 +543,15 @@ class Reader:
         if not (isinstance(cls, type) and issubclass(cls, ss.Module)):
             self.error(where, f'"{typename}" is not a module of Starsim (e.g. "RandomNet") or of its library (e.g. "ssl.HouseholdNet")')
         return f'{"ssl" if lib else "ss"}.{name}({kwargs(m, lambda x: self.value(x, set(), where))})'
+
+
+def variable(m, taken, var=None):
+    """ The variable a module is assigned to: its name, if it was named from its variable (`named_by`) and the name is free, which then names it, else var (or None) """
+    name = m.get('name')
+    if m.get('named_by') == 'variable' and isinstance(name, str) and name.isidentifier() and not keyword.iskeyword(name) and name not in taken:
+        taken.add(name)
+        return name, {k:v for k,v in m.items() if k not in ['name', 'named_by']}
+    return var, m
 
 
 def check_name(name, where, reader):
@@ -562,7 +577,7 @@ def code(model, file=None):
     taken = {'ss', 'ssl', 'np', 'sim'}
     for d in model.get('diseases', []):
         if 'type' in d: # A disease written as code, by its type and parameters
-            var = f'disease{len(diseases) + 1}'
+            var, d = variable(d, taken, f'disease{len(diseases) + 1}')
             lines += [f'{var} = {r.module(d, "diseases")}', '']
             diseases.append(var)
             continue
@@ -577,7 +592,12 @@ def code(model, file=None):
         diseases.append(var)
     args = [f'diseases=[{", ".join(diseases)}]'] if diseases else []
     for key in module_keys:
-        mods = [r.module(m, key) for m in model.get(key, [])]
+        mods = []
+        for m in model.get(key, []):
+            var, m = variable(m, taken)
+            if var: # Assigned to a variable of its name, which names it
+                lines += [f'{var} = {r.module(m, key)}', '']
+            mods.append(var or r.module(m, key))
         if mods:
             args.append(f'{key}=[{", ".join(mods)}]')
     for key in settings:

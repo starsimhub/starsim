@@ -17,7 +17,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.3*I      # From S to I, at a rate of 0.3 per day times the fraction infectious
 recovery = I >> R @ ss.days(10) # From I to R, after 10 days on average
-sir = ss.Disease(infection, recovery, init=dict(I=0.01), name='sir')
+sir = ss.Disease(infection, recovery, init=dict(I=0.01))
 sim = ss.Sim(sir, total_pop=10_000, dur=ss.days(100))
 sim.run()
 sim.plot()
@@ -31,7 +31,7 @@ Comparing scenarios is a matter of changing the base sim. `sim.new()` makes a ne
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
+measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001)
 base = ss.Sim(measles, total_pop=20_000, dur=ss.days(120), verbose=0)
 vaccination = ss.vaccinate(efficacy=0.9, when=ss.days(5), coverage=0.7)
 msim = ss.parallel({'No vaccine': base, 'Vaccine': base.new(interventions=vaccination)})
@@ -62,11 +62,11 @@ Ask the user, rather than choosing, when a value would change the answer and has
 - With a contact matrix or network, β is per contact, so adding one multiplies R0 by the number of contacts: rescale β.
 - `init_prev` seeds the first infected state, so in an SEIR model nobody starts infectious. Use `init=dict(I=...)` to start people in a named state.
 - The population is `total_pop=` under every solver; `n_agents=` is the number of agents, and giving it means a run as agents.
-- Use real data by name where it exists: `ss.population('Kenya')`, `ss.contacts('Kenya')`, `ss.Births(birth_rate='Kenya')`.
+- Use real data by name where it exists: `ss.population('Kenya')`, `ss.contacts('Kenya')`, `ss.birth(rate='Kenya')`, `ss.death(rate='Kenya')`.
 - Use `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` for programs, rather than writing an intervention as code.
 - Use `sim.fit()` to fit: it fits each parameter that has bounds (`ss.par(0.5, bounds=[0.1, 1])`) to each result that has data, with no objective function to write.
 - After a run, read `sim.diseases.x`, not the object you made: the sim copies its modules.
-- In a module written as code, keep per-person values in `define_states()`, make distributions once in `__init__()` and draw from them rather than from `np.random`, and call `super()` in each method you override.
+- In a module written as code, declare its parameters (`ss.par`), per-person arrays (`ss.FloatArr`, `ss.BoolArr`), and distributions in the class body, with no `__init__()` needed; draw from those distributions rather than from `np.random`; and call `super()` in each method you override. The "Custom modules" page of the user guide shows the pattern.
 - Plot with `sim.plot()` and `msim.plot()` before writing plots of your own.
 
 ## Where to read
@@ -96,7 +96,7 @@ Errors from Starsim say what to change; read the whole message before changing c
 
 ## Performance
 
-Starsim's numerical code is in Rust kernels, already compiled in the wheels on PyPI, or otherwise Numba kernels, compiled once per install. If `import starsim` prints a note that the kernels are not compiled yet, suggest that the user run `starsim init compile` once (it takes a few minutes); don't run it yourself unprompted.
+Starsim's numerical code (its backend) is in Rust, already compiled in the wheels on PyPI, or otherwise in Numba, compiled once per install. If `import starsim` prints a note that it is not compiled yet, suggest that the user run `starsim init compile` once (it takes a few minutes); don't run it yourself unprompted.
 
 ## Skills
 

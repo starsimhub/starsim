@@ -37,7 +37,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 | A parameter by time since infection (`inf.prob` as a vector), `inter.eff`, `inter.start` | Listed; the first value is used | no |
 | A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
 | A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=ss.levels([...], states=[A, C, D]))` with `ss.transfer(dict(care=('undx', 'dx')), rate=...)` | no |
-| An attribute's effect on a rate (`rel_trans` on ART) | A value by level: `ss.modify(hiv.rel_trans, multiply=ss.by(care=[...]))` (likewise for a transition, e.g. `hiv.aids`), or `rel_trans=` on a state | no |
+| An attribute's effect on a rate (`rel_trans` on ART) | A value by level: `rel_trans=[...]` in the dimension's `ss.levels()`, or `ss.modify(hiv.rel_trans, multiply=ss.by(care=[...]))` (likewise for a transition, e.g. `hiv.aids`), or `rel_trans=` on a state | no |
 | A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(efficacy=..., who=..., coverage=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
 | `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
 

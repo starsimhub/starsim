@@ -14,6 +14,7 @@ This page covers the population at the start, births and deaths, pregnancy, and,
 The examples use the measles model from the tutorials:
 
 ```{python}
+import sciris as sc
 import starsim as ss
 
 S, I, R = ss.states('S I R')
@@ -82,7 +83,7 @@ ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.days(10), coverage=0.8
 A property of your own is given to `ss.People` as a state, with a value for each agent, which can be drawn from a distribution, and can be used in a rate as well as in a condition. Here 30% of people live in towns, where the rate of infection is doubled; two campaigns give the same number of doses, one to anyone and one to people in towns:
 
 ```{python}
-urban = ss.BoolState('urban', default=ss.bernoulli(p=0.3))
+urban = ss.BoolArr('urban', default=ss.bernoulli(p=0.3))
 ppl = ss.People(10_000, extra_states=urban)
 
 infection = S >> I @ 1.9*(1 + ss.person.urban)*I # Twice the rate in towns
@@ -173,7 +174,7 @@ fig
 ```
 :::
 
-The births and deaths are transitions of the disease, so they are among its results (`sim.results.measles.births`) and in `describe()`. In an ODE, a fraction of an infectious person is enough for the epidemics to recur, and the sim warns when the number infectious falls below one; a stochastic solver shows whether the infection would have died out (see [Solvers and backends](running_solvers.qmd)).
+However they are given, the sim counts the births and deaths: `sim.results.birth` and `sim.results.death`, with the crude birth and mortality rates, `sim.results.cbr` and `sim.results.cmr` (per 1,000 people per year), the same for every form and solver. Births and deaths given in `demographics=` are transitions of the disease, so they are in `describe()` and can be changed with `ss.modify()` (e.g. `ss.modify('measles.births', multiply=2)`), but they are not among its results, so that its deaths (`measles.death`, if it has them) are only those from the disease; ones written in the disease, as above, are its own transitions, with results of their own (`sim.results.measles.births`). In an ODE, a fraction of an infectious person is enough for the epidemics to recur, and the sim warns when the number infectious falls below one; a stochastic solver shows whether the infection would have died out (see [Solvers and backends](running_solvers.qmd)).
 
 A death from a disease alone is a transition of the disease: `ss.death(I, rate=ss.peryear(0.1))` (see [Diseases](building_diseases.qmd)). `demographics=True` adds births and deaths at default rates (20 and 10 per 1,000 people a year). Instead of a rate, `ss.birth()` can take `when=`, a transition whose flow drives the births: `ss.birth(when=pregnancy.delivery, children=2)` gives twins at each delivery.
 
@@ -224,45 +225,48 @@ msim$plot(c("alive", "measles.I"))
 
 ### Rates from data
 
-Birth and death rates usually come as data: crude birth rates by year, and death rates by year, sex, and age. The modules `ss.Births` and `ss.Deaths` take these, or a country by name for the UN's rates. Here is the population of Kenya from 2000, checked against the UN's own estimates:
+Birth and death rates usually come as data: crude birth rates by year, and death rates by year, sex, and age. `ss.birth()` and `ss.death()` take these too, or a country by name for the UN's rates. Here is the population of Kenya from 2000, checked against the UN's own estimates:
 
 ```{python}
 kenya = dict(
     people = ss.population('Kenya', year=2000, n_agents=20_000),
-    demographics = [ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')],
+    demographics = [ss.birth(rate='Kenya'), ss.death(rate='Kenya')],
     start = 2000,
     stop = 2030,
-    dt = ss.years(1),
+    dt = ss.months(1),
 )
 sim = ss.Sim(**kenya)
 sim.run()
 sim.results.alive.plot()
 for year in [2010, 2020, 2030]:
-    print(year, 'model:', round(sim.results.alive[year - 2000]), 'UN:', round(ss.population('Kenya', year=year).named.total))
+    ti = sc.findnearest(sim.t.yearvec, year)
+    print(year, 'model:', round(sim.results.alive[ti]), 'UN:', round(ss.population('Kenya', year=year).named.total))
 ```
 
-These modules run as agents. They give each newborn a mother (`people.parent`), and can run on a step of their own (e.g. `dt=ss.years(1)` in a model whose diseases step daily). `rel_birth=` and `rel_death=` multiply all the rates. The UN's totals include migration, which this model leaves out (see [Migration](#migration)).
+**Steps of a month or less for projections.** Births each step are worked out from the population at the step's start, so with long steps a growing population is undercounted: Kenya by 2030 comes out about 0.8 million low with yearly steps, and less than 0.1 million low with monthly ones. For projections compared with data, use `dt=ss.months(1)` or shorter.
+
+Crude birth rates by year are a time series, so births from data run under every solver, like any other rate. Death rates by age and sex need each person's age and sex, so `ss.death()` given them makes the module `ss.Deaths`, which runs as agents, and whose own results are `deaths.death` and `deaths.cmr` (the crude mortality rate); the sim's `death` and `cmr` count them too. As agents, each newborn has a mother (`people.parent`), a woman aged 15 to 50 (`min_age=` and `max_age=` of `ss.birth()`), in the same place if the model has places. `rel_birth=` and `rel_death=` multiply all the rates. The UN's totals include migration, which this model leaves out (see [Migration](#migration)).
 
 ### Data of your own
 
-Rates of your own are given as a table: crude birth rates with columns `Year` and `CBR` (`ss.Births(birth_rate=df)`), and death rates with columns `Time`, `Sex` (`Male` or `Female`), `AgeGrpStart`, and `mx` (`ss.Deaths(death_rate=df)`). For other column names, give `columns=`. Each rate holds from its year until the next.
+Rates of your own are given as a table: crude birth rates with columns `Year` and `CBR` (`ss.birth(rate=df)`), and death rates with columns `Time`, `Sex` (`Male` or `Female`), `AgeGrpStart`, and `mx` (`ss.death(rate=df)`). For other column names, give `columns=`. Each rate holds from its year until the next.
 
-**Per person or per 1,000.** For births, deaths, conceptions, and migration, a rate's size says what it is per: a rate above 1 a year is per 1,000 people, and one of 1 or below is per person (for a table, judged by its median). So `ss.Births(birth_rate=35)` and `ss.peryear(0.035)` are both 35 per 1,000 people a year. `rate_per=1000` or `rate_per=1` says which, for rates whose size could mislead (such as net migration of under 1 per 1,000).
+**Per person or per 1,000.** For births, deaths, conceptions, and migration, a rate (a bare number per year, a typed rate, or a table) is per person, unless `rate_per=` says otherwise: `ss.birth(rate=0.035)` and `ss.birth(rate=35, rate_per=1000)` are both 35 per 1,000 people a year. Data are often per 1,000 (the UN's crude birth rates and fertility rates are), so a rate above 1 a year (for a table, its median) with no `rate_per=` gives a warning: give `rate_per=1000` if it is per 1,000, or `rate_per=1` if per person is meant. A place by name needs neither, since Starsim knows what its UN rates are per.
 
 ### Life tables
 
-A life table says how many of a cohort die at each age. `ss.death(lifetable=ss.lifetable(ages=ages, deaths=dx))` takes one and runs under every solver, as a death rate for each of its age bands; `ss.Deaths(lifetable=...)` also takes a table for each sex and year. The UN's complete life tables come from `starsim_data` (`ssd.download('Kenya', which='life_table')`). Death rates by age, or a life table, keep the population from growing implausibly old, as it does with a constant death rate.
+A life table says how many of a cohort die at each age. `ss.death(lifetable=ss.lifetable(ages=ages, deaths=dx))` takes one and runs under every solver, as a death rate for each of its age bands; it also takes a table for each sex (`dict(female=..., male=...)`) or year (`{2000: ..., 2010: ...}`), which needs agents. The UN's complete life tables come from `starsim_data` (`ssd.download('Kenya', which='life_table')`). Death rates by age, or a life table, keep the population from growing implausibly old, as it does with a constant death rate.
 
 ### Migration
 
-Net migration (arrivals less departures) is `ss.migration(rate=r)`, a rate of either sign: a positive rate brings people in, at the population's ages, and a negative one takes them out (as agents, recorded as `emigrated`, not as dead). `ss.migration(rate='Albania')` takes the UN's rates for a country. Arrivals and departures can also be given alone, as `ss.immigration(n=n)` (people per unit time) and `ss.emigration(rate=r)`; in a disease, they can be for one state, e.g. `ss.immigration(I, n=ss.peryear(2))` for two imported infections a year.
+Net migration (arrivals less departures) is `ss.migration(rate=r)`, a rate of either sign: a positive rate brings people in, at the population's ages, and a negative one takes them out (as agents, recorded as `emigration`, not as dead). `ss.migration(rate='Albania')` takes the UN's rates for a country. Arrivals and departures can also be given alone, as `ss.immigration(n=n)` (people per unit time) and `ss.emigration(rate=r)`; in a disease, they can be for one state, e.g. `ss.immigration(I, n=ss.peryear(2))` for two imported infections a year.
 
 Here is Albania from 2000, with and without the UN's rates of net migration:
 
 ```{python}
 def make_albania(migration):
     """ Albania's population from 2000, with or without migration """
-    demographics = [ss.Births(birth_rate='Albania'), ss.Deaths(death_rate='Albania')] + migration
+    demographics = [ss.birth(rate='Albania'), ss.death(rate='Albania')] + migration
     return ss.Sim(people=ss.population('Albania', year=2000, n_agents=10_000), demographics=demographics, start=2000, stop=2030, dt=ss.years(1), verbose=0)
 
 msim = ss.parallel({'Births and deaths': make_albania([]), 'With emigration': make_albania([ss.migration(rate='Albania')])})
@@ -279,17 +283,17 @@ People age if the model has births or deaths (or with `aging=True` in the sim). 
 
 ## Pregnancy
 
-`ss.Pregnancy` models pregnancy itself, for models where it matters: mother-to-child transmission, maternal health, or contraception. Women conceive at age-specific fertility rates; a pregnancy ends in a delivery, a loss, or a maternal death; and each delivery adds a child, whose mother is known. It runs as agents, and takes the place of `ss.Births` (given both, their births add up, with a warning). Fertility rates come from the UN for a place by name (`fertility_rate='Nigeria'`), or as a table (columns `Time`, `AgeGrp` or `AgeGrpStart`, and `ASFR`):
+`ss.Pregnancy` models pregnancy itself, for models where it matters: mother-to-child transmission, maternal health, or contraception. Women conceive at age-specific fertility rates; a pregnancy ends in a delivery, a loss, or a maternal death; and each delivery adds a child, whose mother is known. It runs as agents, and takes the place of `ss.birth()` (given both, their births add up, with a warning). Fertility rates come from the UN for a place by name (`fertility_rate='Nigeria'`), or as a table (columns `Time`, `AgeGrp` or `AgeGrpStart`, and `ASFR`):
 
 ```{python}
 import pandas as pd
 
 fertility = pd.read_csv('test_data/nigeria_asfr.csv') # Age-specific fertility rates by year and single year of age
-pregnancy = ss.Pregnancy(fertility_rate=fertility) # Per 1,000 women per year, as the UN's; or fertility_rate='Nigeria'
+pregnancy = ss.Pregnancy(fertility_rate=fertility, rate_per=1000) # Per 1,000 women per year, as the UN's; or fertility_rate='Nigeria'
 
 nigeria = dict(
     people = ss.population('Nigeria', year=2000, n_agents=5000),
-    demographics = [pregnancy, ss.Deaths(death_rate='Nigeria')],
+    demographics = [pregnancy, ss.death(rate='Nigeria')],
     start = 2000,
     stop = 2020,
     dt = ss.months(1),
@@ -336,8 +340,8 @@ As agents, `sim.people` holds every agent: its properties, and the states of eve
 | `people.parent` | The UID of each agent's mother, for agents born in the run (-1 for none) |
 | `people.scale` | The number of people the agent stands for, relative to the others (1 unless set) |
 | `people.causes`, `people.cause_of_death` | The causes of death by name, and the cause of each agent's death (its position in `causes`; -1 for none) |
-| `people.n` | The number of people alive, under every solver: as agents, the people the agents stand for |
-| `len(people)`, `people.auids` | The number of agents taking part (alive and not removed), and their UIDs |
+| `people.n` | The number of people alive, under every solver: as agents, the people the agents stand for ([How many?](mechanics_indexing.qmd#how-many)) |
+| `len(people)`, `people.auids` | The number of agents taking part (those alive, and any who died during the current step, who are removed at its end), and their UIDs |
 | `people.died_of(module)` | The agents who died of a module in the step just finished, for code in a module |
 | `people.keys()`, `people.brief()` | The names of the states, and a one-line summary |
 | `people.to_df()`, `people.get_person(uid)` | A table with a row for each agent and a column for each state; everything about one agent |
@@ -366,11 +370,11 @@ sim.people.get_person(10)
 
 ### Deaths by cause
 
-Each agent who dies has one cause, the module whose death it was: its name is in `people.causes`, and its position in that list in `people.cause_of_death`:
+Each agent who dies has one cause, the module whose death it was (for deaths of everyone given in `demographics=`, the name of the `ss.death()`, by default `deaths`): its name is in `people.causes`, and its position in that list in `people.cause_of_death`:
 
 ```{python}
 measles_deaths = ss.Disease(S >> I @ ss.perday(1.9)*I, I >> R @ ss.days(8), ss.death(I, rate=ss.perday(0.002)), init_prev=0.001, name='measles')
-deaths = ss.Deaths(death_rate=ss.peryear(0.01), name='other') # Deaths from other causes, 10 per 1,000 people a year
+deaths = ss.death(rate=ss.peryear(0.01), name='other') # Deaths from other causes, 10 per 1,000 people a year
 sim = ss.Sim(measles_deaths, demographics=deaths, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.run()
 
@@ -386,26 +390,25 @@ In a compartmental run there are no agents: `sim.people` has one row for each gr
 
 ## Further reading
 
-- The API reference: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd), and [ss.Births, ss.Deaths, and ss.Pregnancy](../api/demographics.qmd)
+- The API reference: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd), [ss.birth() and ss.death()](../api/internals.transitions.qmd), and [ss.Pregnancy](../api/demographics.qmd)
 - [UN World Population Prospects](https://population.un.org/wpp/): the source of the birth rates, death rates, and age structures that come with Starsim
 - [EpiModel: Demography in network models](https://epimodel.github.io/sismid/7_open_pop/mod7-demog.html): births, deaths, and aging in open-population network models
 - [Mesa: AgentSet](https://mesa.readthedocs.io/latest/apis/agent.html): agents as Python objects, the alternative to keeping agents in arrays
 
 ## Appendix: the demographic building blocks
 
-Starsim has two kinds of demographics: declared transitions (lower case), which work under every solver, and modules (capitalized), which run as agents and take data by place.
+Births and deaths of the whole population are given with `ss.birth()` and `ss.death()`. Most of what they take is declared, as transitions, and works under every solver; death rates by age and sex (a table, or a place by name) make the module `ss.Deaths`, which runs as agents. The classes `ss.Births` and `ss.Deaths` are there to subclass, for births or deaths written as code (see the [API reference](../api/demographics.qmd)).
 
 | Building block | What it does | Data by place | Runs under | Results |
 |---|---|---|---|---|
-| `ss.birth(rate=)` | Births at a crude rate (or a time series of rates), into each disease's first state; `rate='Kenya'` is `ss.Births(birth_rate='Kenya')` | No (a place by name is `ss.Births`) | Every solver (agents, for a place) | Each disease's `births` |
+| `ss.birth(rate=)` | Births at a crude rate (a number, a typed rate, a time series, or a table by year), into each disease's first state; as agents, each child has a mother aged `min_age` to `max_age` | `rate='Kenya'` | Every solver | `birth`, `cbr` |
 | `ss.birth(when=, children=)` | `children` for each person who goes through a transition (e.g. a delivery) | No | Agents (for now) | The transition's |
-| `ss.death(rate=)` | Deaths at a rate from every state (or, in a disease, from one state); `rate='Kenya'` is `ss.Deaths(death_rate='Kenya')` | No (a place by name is `ss.Deaths`) | Every solver (agents, for a place) | Each disease's `deaths` |
-| `ss.death(lifetable=)` | Deaths at a rate for each age band of a life table (`ss.lifetable`) | No | Every solver (by age group, in a compartmental model stratified by age) | Each disease's `deaths` |
-| `ss.migration(rate=)` | Net migration: a rate of either sign, arrivals at the population's ages | `rate='Albania'` | Every solver | Each disease's `immigration` and `emigration`, and `emigrated` |
+| `ss.death(rate=)` | Deaths at a rate (a number, a typed rate, or a time series) from every state (or, in a disease, from one state) | No | Every solver | `death`, `cmr` |
+| `ss.death(rate=df)` | Deaths at rates by year, age, and sex (`Time`, `Sex`, `AgeGrpStart`, `mx`), as `ss.Deaths` | `rate='Kenya'` | Agents | `death`, `cmr` (and `deaths.death`, `deaths.cmr`) |
+| `ss.death(lifetable=)` | Deaths at a rate for each age band of a life table (`ss.lifetable`); one for each sex or year is `ss.Deaths` | No | Every solver (by age group, in a compartmental model stratified by age); agents, for a table by sex or year | `death`, `cmr` (and `deaths.death`, as `ss.Deaths`) |
+| `ss.migration(rate=)` | Net migration: a rate of either sign, arrivals at the population's ages | `rate='Albania'` | Every solver | Each disease's `immigration` and `emigration`, and the sim's `emigration` |
 | `ss.immigration(n=)` | Arrivals: a number of people per unit time, at the population's ages | No | Every solver | Each disease's `immigration` |
-| `ss.emigration(rate=)` | Departures: a rate per person | No | Every solver | Each disease's `emigration`, and `emigrated` |
-| `ss.Births` | Births at crude birth rates by year (`Year`, `CBR`), each with a mother | `birth_rate='Kenya'` | Agents | `births.birth`, `births.cbr` |
-| `ss.Deaths` | Deaths at rates by year, age, and sex (`Time`, `Sex`, `AgeGrpStart`, `mx`), or from life tables (by year and sex as well) | `death_rate='Kenya'` | Agents | `deaths.death`, `deaths.cmr` |
+| `ss.emigration(rate=)` | Departures: a rate per person | No | Every solver | Each disease's `emigration`, and the sim's |
 | `ss.Pregnancy` | Pregnancies at age-specific fertility rates (`Time`, `AgeGrp` or `AgeGrpStart`, `ASFR`), each ending in a delivery or a loss | `fertility_rate='Kenya'` | Agents; a compartmental solver, if named, runs an approximate form (with no links between mother and child) | See below |
 
 ## Appendix: pregnancy
@@ -415,7 +418,7 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 | Parameter | What it is | Default |
 |---|---|---|
 | `fertility_rate` | Age-specific fertility rates: a table, a place by name, or one rate; or the hazard of conception itself, as a function of `(sim, uids)` | `ss.peryear(0.1)`: 100 per 1,000 women a year |
-| `rate_per` | How many women the rates are per: 1000 or 1 | None: from their size |
+| `rate_per` | How many women the rates are per, e.g. 1000 (not needed for a place by name) | None: per woman, with a warning if the rates are above 1 a year |
 | `rel_fertility` | A multiplier on the fertility rates | 1 |
 | `min_age`, `max_age` | The ages at which women can conceive | 15 and 50 |
 | `p_infertile` | The fraction of women with primary infertility | 0 |

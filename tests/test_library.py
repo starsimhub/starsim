@@ -273,7 +273,7 @@ def measles(): # R0 is beta times the infectious period; as agents and as compar
 def cholera(): # The water carries the epidemic: without it, transmission from person to person alone dies out
     pars = dict(total_pop=10_000, start='2025-01-01', stop='2026-01-01', verbose=0)
     water = ss.Sim(diseases=ssl.Cholera(), **pars).run().results.cholera
-    direct = ss.Sim(diseases=ssl.Cholera(beta_env=ss.perday(0)), **pars).run().results.cholera
+    direct = ss.Sim(diseases=ssl.Cholera(beta_env=0), **pars).run().results.cholera
     assert water.infection.sum() > 5000 and direct.infection.sum() < 100 and water.W.max() > 1000 and water.env_conc.max() > 0.01
 
 

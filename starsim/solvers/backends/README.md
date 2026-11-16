@@ -1,8 +1,8 @@
 # Backends
 
-The kernels that the solvers run, and what they share. None of this is needed to use Starsim, but it is where most of the time of a run goes. The same kernels come in several sets, which give the same numbers: Numba's (here, the reference), Rust's (built from `../rust/`), plain Python's, and, where it applies, JAX's. `ss.options.kernels` chooses between them.
+The kernels that the solvers run, and what they share. None of this is needed to use Starsim, but it is where most of the time of a run goes. The same kernels come in several sets, which give the same numbers: Numba's (here, the reference), Rust's (built from `../rust/`), plain Python's, and, where it applies, JAX's. `ss.options.backend` chooses between them.
 
-- `kernels.py`: the compartmental kernels (`ss.kernels`), and `ss.compile()`, which compiles them ahead of time
+- `kernels.py`: the compartmental kernels (`ss.solvers.backends.kernels`), and `ss.compile()`, which compiles them ahead of time
 - `ode.py`: the ODE's steps in NumPy, vectorized over groups
 - `passes.py`: compiled passes over the agents and a network's edges, for the agent solver
 - `events.py`: the compiled pass of agents taken event by event within a step (`solver=ss.solvers.abm(step='events')`), with its Rust copy in `../rust/src/events.rs`

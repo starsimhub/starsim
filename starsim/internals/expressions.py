@@ -181,10 +181,10 @@ class Expr:
     def __pow__(self, other):      return binop('**', self, other)
     def __rpow__(self, other):     return binop('**', other, self)
     def __neg__(self):             return binop('*', -1, self)
-    def __and__(self, other):      return ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time_in >= ss.months(6))
-    def __rand__(self, other):     return ss.conditions.Cond('&', other, self)
-    def __or__(self, other):       return ss.conditions.Cond('|', self, other)
-    def __ror__(self, other):      return ss.conditions.Cond('|', other, self)
+    def __and__(self, other):      return NotImplemented if ss.conditions.defers(other) else ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time_in >= ss.months(6))
+    def __rand__(self, other):     return NotImplemented if ss.conditions.defers(other) else ss.conditions.Cond('&', other, self)
+    def __or__(self, other):       return NotImplemented if ss.conditions.defers(other) else ss.conditions.Cond('|', self, other)
+    def __ror__(self, other):      return NotImplemented if ss.conditions.defers(other) else ss.conditions.Cond('|', other, self)
     def __invert__(self):          return ss.conditions.Cond('~', self)
     def __rmatmul__(self, other):    return ss.transitions.split_at(other, self) # A split with its driver, e.g. {D: p_death, R: None} @ ss.days(8)
     def __lt__(self, other):       return compare('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
@@ -293,6 +293,19 @@ class par(Nameable, Expr):
             low, high = bounds
             self.value = self.midpoint = float(np.sqrt(low*high) if low > 0 and high >= 10*low else (low + high)/2)
         return
+
+    def __set_name__(self, owner, name):
+        super().__set_name__(owner, name)
+        self.attr_name = name # The attribute of the class it was declared as, by which a module written as code finds its own copy (see __get__())
+        return
+
+    def __get__(self, obj, objtype=None):
+        """ Declared in the class body of a module written as code: read from an instance, the instance's own copy, which holds its value (see `ss.Module.define_class_parts()`) """
+        pars = getattr(obj, '__dict__', {}).get('pars')
+        bounded = getattr(pars, '_bounded', None) if isinstance(pars, ss.Pars) else None
+        if bounded:
+            return bounded.get(self.__dict__.get('attr_name'), self)
+        return self
 
     @classmethod
     def inline(cls, value, name=None):

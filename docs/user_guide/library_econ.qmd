@@ -91,7 +91,7 @@ Here routine vaccination costs about $6 per infection averted, and adding the ca
 S, I = ss.states('S I')
 infection = S >> I @ ss.peryear(2)*I  # β = 2 per year
 recovery  = I >> S @ ss.years(1)      # Infected for a year on average, then susceptible again
-sis = ss.Disease(infection, recovery, deaths=ss.death(I, rate=ss.peryear(0.01)), init_prev=0.1, name='sis')
+sis = ss.Disease(infection, recovery, deaths=ss.death(I, rate=ss.peryear(0.01)), init_prev=0.1)
 
 screening = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5, cost=4.0)
 treatment = ss.treat(cure=0.95, when=screening.positive, coverage=0.8, cost=20.0)
@@ -175,6 +175,8 @@ The API reference for this page: [Products](../api/products.qmd), [Economics](..
 The tools in `ssl.econ`, with the first line of each one's documentation (see the API reference, [Economics](../api/library.econ.qmd)):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 
 for module in [ssl.econ.costs, ssl.econ.dalys]:

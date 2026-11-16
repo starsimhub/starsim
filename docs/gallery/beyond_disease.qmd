@@ -32,17 +32,9 @@ import starsim as ss
 class Wealth(ss.Module):
     """ Each person starts with 1 unit of wealth; each step, a tenth of those with any give 1 unit to someone chosen at random """
 
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            p_give = ss.bernoulli(p=0.1), # The chance that a person who has any wealth gives a unit in a step
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('wealth', default=1.0, label='Wealth'),
-        )
-        self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to: a position, the same as a UID only since nobody is born or dies here
-        return
+    p_give    = ss.par(ss.bernoulli(p=0.1)) # The chance that a person who has any wealth gives a unit in a step
+    recipient = ss.par(ss.randint(low=0, high=lambda self, sim, uids: len(sim.people))) # Whom each giver gives to: a position, the same as a UID only since nobody is born or dies here
+    wealth    = ss.FloatArr(default=1.0, label='Wealth')
 
     def init_results(self):
         super().init_results()
@@ -53,7 +45,7 @@ class Wealth(ss.Module):
 
     def step(self):
         givers = self.pars.p_give.filter((self.wealth > 0).uids)
-        recipients = self.recipient.rvs(givers)
+        recipients = self.pars.recipient.rvs(givers)
         self.wealth[givers] = self.wealth[givers] - 1
         self.wealth[:] = self.wealth + np.bincount(recipients, minlength=len(self.wealth)) # Each recipient gets 1 unit for each giver who chose them
         return
@@ -104,24 +96,16 @@ In Starsim, each boid's position (`x`, `y`) and velocity (`vx`, `vy`) are states
 class Boids(ss.Module):
     """ Flocking: each boid steers towards the heading and center of the boids it can see, and away from those too close """
 
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            radius     = 0.1,    # How far a boid can see (the world is a unit square)
-            too_close  = 0.03,   # How close is too close
-            alignment  = 0.1,    # How strongly a boid steers towards its neighbors' heading
-            cohesion   = 0.005,  # ... towards its neighbors' center
-            separation = 3e-5,   # ... away from those too close
-            speed      = [0.005, 0.01], # The minimum and maximum distance moved in a step
-        )
-        self.update_pars(**kwargs)
-        self.define_states(
-            ss.FloatArr('x',  default=ss.random(), label='Position (x)'),
-            ss.FloatArr('y',  default=ss.random(), label='Position (y)'),
-            ss.FloatArr('vx', default=ss.uniform(-0.01, 0.01), label='Velocity (x)'),
-            ss.FloatArr('vy', default=ss.uniform(-0.01, 0.01), label='Velocity (y)'),
-        )
-        return
+    radius     = ss.par(0.1)    # How far a boid can see (the world is a unit square)
+    too_close  = ss.par(0.03)   # How close is too close
+    alignment  = ss.par(0.1)    # How strongly a boid steers towards its neighbors' heading
+    cohesion   = ss.par(0.005)  # ... towards its neighbors' center
+    separation = ss.par(3e-5)   # ... away from those too close
+    speed      = ss.par([0.005, 0.01]) # The minimum and maximum distance moved in a step
+    x  = ss.FloatArr(default=ss.random(), label='Position (x)')
+    y  = ss.FloatArr(default=ss.random(), label='Position (y)')
+    vx = ss.FloatArr(default=ss.uniform(-0.01, 0.01), label='Velocity (x)')
+    vy = ss.FloatArr(default=ss.uniform(-0.01, 0.01), label='Velocity (y)')
 
     def init_results(self):
         super().init_results()
@@ -179,7 +163,7 @@ scenarios = {
     'Flocking': ss.Sim(Boids(), n_agents=200, stop=200),
     'No alignment': ss.Sim(Boids(alignment=0), n_agents=200, stop=200),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 msim.plot('boids.aligned')
 ```
 
@@ -195,7 +179,7 @@ from IPython.display import HTML
 
 sim = ss.Sim(Boids(), n_agents=200, stop=200)
 sim.init()
-boids = sim.custom.boids # The module is given as `custom`: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
+boids = sim.custom.boids # A module of no standard kind, kept in sim.custom: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
 frames = []
 for step in range(0, 201, 3):
     sim.run(until=step)

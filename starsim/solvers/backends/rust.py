@@ -1,8 +1,8 @@
 """
-Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they are there (in
-the wheels, or built), or `'rust'` (or `STARSIM_KERNELS=rust`), the
+Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.backend = 'auto'` (the default) when they are there (in
+the wheels, or built), or `'rust'` (or `STARSIM_BACKEND=rust`), the
 serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the pass of `solver=ss.solvers.abm(step='events')` (`ss.solvers.backends.events`), the small kernels of `ss.arrays`, `ss.networks`,
-`ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.kernels`: see
+`ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.solvers.backends.kernels`: see
 `compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and
 they run at least as fast as Numba's in nearly every case. A threaded pass takes as many threads as Numba has (see `ss.options.threads`),
@@ -27,7 +27,7 @@ from . import draws
 
 __all__ = ['use', 'built', 'on', 'fell', 'compartmental']
 
-on = False # Whether the Rust kernels are in use (see use()): with ss.options.kernels = 'rust', or 'auto' when they have been built
+on = False # Whether the Rust kernels are in use (see use()): with ss.options.backend = 'rust', or 'auto' when they have been built
 fell = collections.Counter() # How often each kernel has gone to Numba, by kernel, error, and the types of its arrays
 
 def built():
@@ -92,14 +92,14 @@ def load():
         from . import _rs
     except ImportError as e:
         if built():
-            errormsg = f'The Rust kernels (ss.options.kernels="rust") have been built but cannot be loaded: rebuild them with "./build" in the starsim/solvers/rust/ folder of the Starsim repository ({e})'
+            errormsg = f'The Rust kernels (ss.options.backend="rust") have been built but cannot be loaded: rebuild them with "./build" in the starsim/solvers/rust/ folder of the Starsim repository ({e})'
         else:
-            errormsg = f'The Rust kernels (ss.options.kernels="rust") have not been built: run "./build" in the starsim/solvers/rust/ folder of the Starsim repository, which needs a Rust toolchain (https://rustup.rs), or use kernels="auto" ({e})'
+            errormsg = f'The Rust kernels (ss.options.backend="rust") have not been built: run "./build" in the starsim/solvers/rust/ folder of the Starsim repository, which needs a Rust toolchain (https://rustup.rs), or use ss.options.backend="auto" ({e})'
         raise ImportError(errormsg) from e
     return _rs
 
 def auto():
-    """ For ss.options.kernels = 'auto': the Rust kernels if they have been built, else Numba's, also with a warning if a build cannot be used (e.g. one older than the Python that calls it, or than its source) """
+    """ For ss.options.backend = 'auto': the Rust kernels if they have been built, else Numba's, also with a warning if a build cannot be used (e.g. one older than the Python that calls it, or than its source) """
     if built():
         try:
             return use(True)
@@ -108,14 +108,14 @@ def auto():
     return use(False)
 
 def use(rust=True):
-    """ Run the Rust kernels (True) or the Numba ones (False); called by `ss.options(kernels=...)` """
+    """ Run the Rust kernels (True) or the Numba ones (False); called by `ss.options(backend=...)` """
     global numba, on
     mods = modules()
     if numba is None:
         numba = {(m, k): get(mods[m], k) for m, ks in names.items() for k in ks}
     if rust:
         rs = load()
-        missing = [k for k in ss.kernels.entries + ['evaluate'] if not hasattr(rs.kernels, k)]
+        missing = [k for k in ss.solvers.backends.kernels.entries + ['evaluate'] if not hasattr(rs.kernels, k)]
         if missing: # Checked now rather than at the first run that needs them, as for every other kernel
             errormsg = f'The Rust kernels are older than the Python that calls them (missing {sc.strjoin(missing)}): rebuild them with "./build" in the starsim/solvers/rust/ folder'
             raise AttributeError(errormsg)
@@ -153,19 +153,19 @@ def use(rust=True):
 
 class Compartmental:
     """
-    The compartmental kernels in Rust (`ss.kernels` when the Rust kernels are in use): the entries that the engines call
+    The compartmental kernels in Rust (`ss.solvers.backends.kernels` when the Rust kernels are in use): the entries that the engines call
     (`run()`, `run_many()`, `one_step()`, `advance()`, `advance_threads()`, `apply_events()`, `apply_shifts()`,
-    `settle_places()`, `evaluate()`), with the same arguments and results as Numba's; every other name is ss.kernels' own
+    `settle_places()`, `evaluate()`), with the same arguments and results as Numba's; every other name is ss.solvers.backends.kernels' own
 
     It exists so that the engine can call the Rust kernels and the Numba ones alike.
     """
     def __init__(self, rs):
-        for name in ss.kernels.entries + ['evaluate']:
+        for name in ss.solvers.backends.kernels.entries + ['evaluate']:
             setattr(self, name, getattr(rs.kernels, name))
         return
 
     def __getattr__(self, name):
-        return getattr(ss.kernels, name)
+        return getattr(ss.solvers.backends.kernels, name)
 
 compartmental_set = None # The compartmental kernels in Rust, once loaded
 

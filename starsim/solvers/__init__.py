@@ -11,7 +11,9 @@ compartmental run), `compartmental` and `agents` (the two engines; `agents_expre
 `deliveries` (what a delivery does differently in a compartmental run), and
 `particles` (many runs of a program stepped together, for a particle filter).
 Their names are all found here, e.g. `ss.solvers.Compartmental`. The kernels they run
-are in `backends` (`ss.solvers.backends`, and `ss.kernels`), with a copy in Rust in `rust/`.
+are in `backends` (`ss.solvers.backends`), with a copy in Rust in `rust/`. A *solver* is the method (e.g. `ode`), and a
+*backend* how its numbers are computed (`ss.options.backend`: Rust, Numba, plain Python, or JAX); an *engine* is the
+object that runs one module under the solver, which a modeler never needs.
 
 Used with: agents and compartments; declared and coded modules
 """

@@ -43,9 +43,8 @@ def test_fetal_health(do_plot=do_plot):
         return np.nanmean(bw) # NaN on steps with no births
 
     # -- 1. Baseline (no disease) --
-    sim_baseline = ss.Sim(
+    sim_baseline = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
-        modules=ssl.mnch.FetalHealth(),
         networks=ss.PrenatalNet(),
         **sim_kw,
     )
@@ -70,11 +69,10 @@ def test_fetal_health(do_plot=do_plot):
     assert not np.isnan(res_fh.mean_birth_weight.resample('year').values).any() # And left out of a mean over time
 
     # -- 2. Disease only (no treatment) --
-    sim_disease = ss.Sim(
+    sim_disease = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
-        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -90,12 +88,11 @@ def test_fetal_health(do_plot=do_plot):
     assert ptb_disease > 3*ptb_baseline, f'Disease scenario should have several times the preterm births ({ptb_disease} against {ptb_baseline})' # About 5×; about 1.7× if the infection's shift of delivery is lost
 
     # -- 3. Disease + treatment --
-    sim_treated = ss.Sim(
+    sim_treated = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir'),
-        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -254,7 +251,7 @@ def test_coded_modifiers():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.probperyear(0.2))
-            self.define_states(ss.BoolState('affected', label='Affected'), ss.FloatArr('rel_sus', default=1.0))
+            self.define_states(ss.BoolArr('affected', label='Affected'), ss.FloatArr('rel_sus', default=1.0))
             self.update_pars(**kwargs)
         def init_pre(self, sim):
             super().init_pre(sim)

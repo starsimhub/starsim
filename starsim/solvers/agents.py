@@ -312,7 +312,7 @@ class RateNoise(sc.prettyobj):
     """
     Gamma white noise on a transition's rate as agents (`ss.Transition(noise=)`), as a modifier of it: a multiplier with
     mean 1 and variance sigma²/dt, drawn once a step for each group, as the chain binomial draws it in each of its steps
-    (see `ss.kernels.noise()`; Bretó et al. 2009)
+    (see `ss.solvers.backends.kernels.noise()`; Bretó et al. 2009)
 
     Args:
         tr (Transition): the transition
@@ -397,7 +397,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
         self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
-        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
+        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
         self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
@@ -438,7 +438,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
-        read = None if self.sim.pars.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have min_stay=
+        read = None if self.sim.solver.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have min_stay=
         clocks = [tuple(clock.names) for m in list(self.sim.declared) + list(self.sim.connectors()) + list(self.sim.interventions()) for clock in ss.solvers.choose.clocks_of(m)] # The clocks the sim's modules read (of this module's states or another's)
         clocks += ss.expressions.Clock.sets_of(mod) # And those made of this module's states for code to read, but no one else's: the names of states alone would match another module's, or one of an earlier sim
         clocked = {name for names in clocks for name in names} # The states a clock reads, whose times of entering are kept
@@ -455,10 +455,10 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'min_stay', None) is not None for tr in graph.exits[state.name].hazards)]
         exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dest or [])) for s in (tr.source or []) if getattr(s, 'people', False)}
-        self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolState.stays
+        self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolArr.stays
         for state in graph.people_states:
             name = state.name
-            arrs += [ss.BoolState(name, label=state.label or name)]
+            arrs += [ss.BoolArr(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
                 arrs.append(internal(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index'))) # See stamp()
@@ -482,7 +482,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for a in self.attrs.values():
             arrs.append(ss.FloatArr(a.name, default=None if a.kind == 'derived' else a.default, label=a.label or a.name))
             if a.combine == 'first':
-                arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set'))
+                arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set', result=False))
         self.sets = sc.obj() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
         for names in dict.fromkeys(clocks): # Each set of more than one state once, in the order found
@@ -554,7 +554,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for name,tr in graph.transitions.items():
             add(f'dst_{name}', ss.random())
             if tr.trigger is not None and tr.trigger.outcome:
-                add(f'trig_{name}', ss.random()) # Who of the people of the outcome move: see ss.interventions.trigger_moves()
+                add(f'trig_{name}', ss.random()) # Who of the people of the outcome move: see ss.solvers.deliveries.trigger_moves()
             add(f'mix_{name}', ss.random())
             if carriage and tr.contact:
                 add(f'pass_{name}', ss.random()) # Which strain someone who carries several passes on
@@ -586,6 +586,9 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             if strat.name in [own.name for own in graph.strats] and strat.states is not None:
                 add(f'enter_{strat.name}', ss.random())
                 self.entered_dims.append((d, strat, f'enter_{strat.name}'))
+        for tr in graph.inflows: # Births at a crude rate: which woman is each child's mother (see step_births())
+            if getattr(tr, 'mother_ages', None) is not None and tr.people and not tr.migration:
+                add(f'mother_{tr.name}', ss.random())
         for tr in graph.inflows: # Births driven by a flow: the number of children of each parent, and their sex (see step_per())
             if getattr(tr, 'birth_on', None) is not None and tr.people:
                 if isinstance(tr.n_born, ss.Dist):
@@ -828,7 +831,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     @property
     def total_pop(self):
-        """ The number of people the agents stand for now: with dynamic rescaling (rescale=True), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
+        """ The number of people the agents stand for now: with dynamic rescaling (`ss.solvers.abm(rescale=True)`), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
         return self.sim.pars.total_pop*self.scale/self.sim.pop_scale
 
     def init_post(self):
@@ -1156,7 +1159,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return {name:ss.uids(found[offsets[k]:offsets[k+1]]) for name,k in order.items()}
 
     def wrote(self, name, entered, left):
-        """ Some agents have been put in a state of people, or taken out of it, by anything (see `ss.BoolState`): keep its count by group (each counted once) """
+        """ Some agents have been put in a state of people, or taken out of it, by anything (see `ss.BoolArr`): keep its count by group (each counted once) """
         if not len(entered) and not len(left):
             return
         unique = lambda u: u if len(u) < 2 or (u[1:] > u[:-1]).all() else np.unique(u)
@@ -1363,7 +1366,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         nets = [net for net in self.sim.networks.values() if isinstance(net, ss.networks.MixingPools)]
         other = next((net for net in nets if net.name not in mixing.pool_terms), None)
         if other is not None:
-            errormsg = f'"{self.mod.name}" has a count in a rate ({self.graph.met_counts[0]}) that the contact matrix "{other.name}" acts on, which as agents it does only over the model\'s own groups, not age groups of its own; stratify by them, e.g. ss.contacts(matrix) with sim.stratify(age=[...]), or run as compartments'
+            errormsg = f'"{self.mod.name}" has a count in a rate ({self.graph.met_counts[0]}) that the contact matrix "{other.name}" acts on, which as agents it does only over the model\'s own groups, not age groups of its own; stratify by them, e.g. ss.contacts(age=matrix) with sim.stratify(age=[...]), or run as compartments'
             raise ss.CapabilityError(errormsg)
         return mixing.count_terms([mixing.pool_terms[net.name] for net in nets])
 

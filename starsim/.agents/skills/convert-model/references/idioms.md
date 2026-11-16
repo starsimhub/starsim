@@ -59,7 +59,7 @@ class Life(ss.Disease):
 
 ## Variables of individuals
 
-A numeric variable that only gates transitions (age, a counter) is either a stratification (for a compartmental run) or a state array declared in a subclass (`self.define_states(ss.FloatArr('nb_abortions', default=0.0))`), updated in `step_state()`. A variable that is a property of people (age, sex) belongs on `ss.People`.
+A numeric variable that only gates transitions (age, a counter) is either a stratification (for a compartmental run) or a state array declared in the class body of a subclass (`nb_abortions = ss.FloatArr(default=0.0)`), updated in `step_state()`. A variable that is a property of people (age, sex) belongs on `ss.People`.
 
 ## Contacts
 
@@ -80,7 +80,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A change for some people or under a condition | `ss.modify(sir.rel_sus, multiply=0.6, who=..., when=ss.schedule(start=, stop=))`, or `when=` a function of the date |
 | Vaccination as a move between strata | `sir.stratify(vaccinated=[False, True])` with `ss.modify(sir.infection, multiply=ss.by(vaccinated=[1, 0.15]))`, and `ss.Event(dict(vaccinated=True), p=, when=)` (or `ss.Delivery(dict(vaccinated=True), coverage=, when=)`) |
 | A product delivered to people | `ss.vaccinate(efficacy=0.85, who=..., when=[...], coverage=0.7)`, `ss.screen(...)`, `ss.treat(...)` |
-| A trigger (start when prevalence passes a threshold) | `who=` a function of the sim (`who=lambda sim: ...`) or a condition on the population (`who=sis.I.n > 1000`) on a modifier or delivery (no memory); `until=ss.days(30)` on a modifier keeps it on that long once triggered |
+| A trigger (start when prevalence passes a threshold) | `who=` a function of the sim (`who=lambda sim: ...`) on a modifier or delivery, or `when=` a condition on the population (`when=sis.I.n > 1000`; no memory); `until=ss.days(30)` on a modifier keeps it on that long once triggered |
 | Scenarios | One sim per scenario, run together with `ss.parallel({'baseline': sim, 'vaccine': sim2})` |
 
 ## Outputs

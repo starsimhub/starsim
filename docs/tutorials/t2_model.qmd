@@ -42,7 +42,7 @@ This is *frequency-dependent* transmission: what matters is the fraction infecti
 
 **Durations.** `I >> R @ ss.days(8)` gives a duration instead of a rate: 8 days in `I` on average, or a recovery rate of 1/8 per day, exponentially distributed as in the standard SIR model ([Tutorial 3](t3_disease.qmd) shows other distributions).
 
-**The disease.** `ss.Disease` puts the transitions together, with how the outbreak starts. It is named `measles` after its variable, as the transitions (`infection`, `recovery`) are, which names their results.
+**The disease.** `ss.Disease` puts the transitions together, with how the outbreak starts. It is named `measles` after its variable, as the transitions (`infection`, `recovery`) are, which names their results. Everything in Starsim is named this way: after its variable, else by a default for its kind ([Names](../user_guide/building_writing.qmd#names) has the rule).
 
 ## How the outbreak starts
 
@@ -96,7 +96,7 @@ transitions = [infection_explicit, recovery_explicit]
 nobody_immune = ss.Disease(transitions=transitions, init=dict(S=0.999, I=0.001), name='measles')        # The fraction of people in each state at the start
 some_immune   = ss.Disease(transitions=transitions, init=dict(S=0.099, I=0.001, R=0.9), name='measles')
 
-settings = dict(networks=ss.contacts(1), total_pop=100_000, start=ss.days(0), stop=ss.days(365), dt=ss.days(1), unit='day', solver='ode')
+settings = dict(networks=ss.MixingPool(n_contacts=1), total_pop=100_000, start=ss.days(0), stop=ss.days(365), dt=ss.days(1), unit='day', solver='ode')
 msim_explicit = ss.parallel({
     'Nobody immune': ss.Sim(diseases=nobody_immune, **settings),
     '90% immune':    ss.Sim(diseases=some_immune, **settings),
@@ -211,6 +211,11 @@ See [Results](../user_guide/building_results.qmd) in the user guide for more.
 **Units.** Every run has a unit of time, here a day, taken from the typed values in the model (`ss.days(8)`). A bare number, such as β = 1.9, is in the same unit: 1.9 per day, the same as `ss.perday(1.9)` (and nearly `ss.perweek(13.3)`). Durations can be in any unit (`ss.days()`, `ss.weeks()`, `ss.months()`, `ss.years()`), converted to the model's.
 
 If a model mixes units, such as days and years ([Tutorial 3](t3_disease.qmd#waning-immunity)), give its bare numbers units (`ss.perday(1.9)`), or give the sim its unit (`ss.Sim(..., unit='day')`); [Time](../user_guide/building_time.qmd#units) has the rules.
+
+::: {.callout-note}
+## A rate, or a probability per time?
+`ss.peryear(0.8)` is a **rate** (a hazard): 0.8 events per person per year, so the chance of the event within a year is 1 − exp(−0.8) ≈ 55%. `ss.probperyear(0.8)` is a **probability per time**: an 80% chance within a year. Both are converted to the probability for each step (for a day, 0.22% and 0.44%). Use a rate when a source gives one (β, 1/duration, incidence per person-year), and a probability per time when it gives a chance over a period (e.g. "80% are vaccinated within a year"). The two are close only when the value is small.
+:::
 
 **Start and stop.** `stop=ss.days(50)` runs from day 0 to day 50 (as does `dur=ss.days(50)`). A run can also start and stop on dates:
 

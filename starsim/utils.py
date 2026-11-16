@@ -71,6 +71,11 @@ class ndict(sc.obj):
     Each item is added under its `name` (or the key given), and a key can be added only once, so that two modules
     can't silently take the same name.
 
+    A module can also be found by its default name (see `ss.Module.default_name`), if no other module here has the same one:
+    `sim.diseases.sir` (or `sim.diseases['sir']`, or `.get('sir')`) is the only `ss.SIR`, even if it is called `measles`.
+    This is only a way to find it: it is stored, listed, and iterated under its name. A name that is neither raises an
+    error that lists the names there are, and where each came from (see `ss.Module.name_origin()`).
+
     Args:
         type (type): the type each item must be (a module of any type is also accepted)
         args (list): the items to add, each a named item, or a list or dict of them
@@ -83,13 +88,26 @@ class ndict(sc.obj):
         networks = ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
-    __slots__ = ('_type',) # Since otherwise treated as keys
+    __slots__ = ('_type', '_kind') # Since otherwise treated as keys
 
     def __init__(self, *args, type=None, **kwargs):
         super().__init__()
         self.setattribute('_type', type)
+        self.setattribute('_kind', None) # What the items are, for messages, e.g. "diseases"
         self.extend(*args, **kwargs)
         return
+
+    def __getattr__(self, attr):
+        """ Only for a key that is not here: a module by its default name, e.g. `sim.diseases.sir` (see `ss.utils.find_module()`) """
+        if attr.startswith('_'):
+            raise AttributeError(attr)
+        return find_module(self.values(), attr, kind=getattr(self, '_kind', None) or 'items', error=AttributeError, own=False)
+
+    def __missing__(self, key):
+        """ As `__getattr__()`, for `ndict[key]`; an index or slice as for any `sc.obj` """
+        if isinstance(key, str):
+            return find_module(self.values(), key, kind=getattr(self, '_kind', None) or 'items', error=sc.KeyNotFoundError, own=False)
+        return super().__missing__(key)
 
     def __call__(self):
         """ The values, e.g. `for disease in sim.diseases():` """
@@ -160,15 +178,17 @@ class ndict(sc.obj):
             # All return sim.diseases.MySIR
             sim.diseases.get('MySIR')
             sim.diseases.get('mysir')
+            sim.diseases.get('sir') # Its default name, since it is the only ss.SIR
             sim.diseases.get(ss.SIR)
             ```
         """
         if isinstance(key, str):
             if key in self:
                 return self[key]
-            elif not match_case:
-                return next((v for k, v in self.items() if k.lower() == key.lower()), default)
-            return default
+            elif not match_case and (found := next((v for k, v in self.items() if k.lower() == key.lower()), None)) is not None:
+                return found
+            found = find_module(self.values(), key, own=False)
+            return default if found is None else found
         elif isinstance(key, type):
             return next((v for v in self.values() if isinstance(v, key)), default)
         errormsg = f'Key must be a str or type, not {key}'
@@ -200,6 +220,7 @@ class ndict(sc.obj):
     def copy(self):
         """ Shallow copy """
         new = self.__class__(type=self._type)
+        new.setattribute('_kind', getattr(self, '_kind', None))
         new.update(self)
         return new
 
@@ -211,6 +232,49 @@ class ndict(sc.obj):
         """ Allow a += b, where b is an item or a list of them """
         self.extend(other) if isinstance(other, list) else self.append(other) # Not returned, since a subclass's may return something else
         return self
+
+
+def find_module(mods, name, kind='modules', error=None, own=True):
+    """
+    The module called `name`, else the only one whose default name is `name` (e.g. `'sir'` for an `ss.SIR` called `measles`; see `ss.Module.default_name`)
+
+    Every lookup of a module by a name the user gives goes through this: `sim.diseases.sir`, `sim.sir`, `sim.pars.sir`, `sim.results.sir`, and paths
+    such as `'sir.beta'` (in `pars=`) and `'sir.I'` (in a condition; see `own_name()`).
+
+    Args:
+        mods (list): the modules to look in (or anything with `name`, `default_name`, and `name_origin()`)
+        name (str): the name
+        kind (str): what the modules are, for messages, e.g. "diseases"
+        error (type): if given, the error to raise if no module, or several, have the name, listing the names there are and where each came from; otherwise, None
+        own (bool): whether to look for a module by its own name first (False if that has been done, e.g. by a dict's keys)
+    """
+    mods = list(mods)
+    if own and (found := next((mod for mod in mods if getattr(mod, 'name', None) == name), None)) is not None:
+        return found
+    found = [mod for mod in mods if getattr(mod, 'default_name', None) == name]
+    if len(found) == 1 or error is None:
+        return found[0] if len(found) == 1 else None
+    origins = lambda mods: ', '.join(f'`{mod.name}` ({mod.name_origin()})' if hasattr(mod, 'name_origin') else f'`{getattr(mod, "name", mod)}`' for mod in mods)
+    if found:
+        errormsg = f'"{name}" is the default name of {len(found)} {kind}, {origins(found)}, so it does not say which: use one of their names'
+    elif len(mods):
+        errormsg = f'"{name}" not found; the {kind} are: {origins(mods)}'
+    else:
+        errormsg = f'"{name}" not found: there are no {kind}'
+    raise error(errormsg)
+
+
+def own_name(mods, name):
+    """
+    A module's name, or a path that starts with one (`'sir'`, `'sir.beta'`), with the name of the module it finds (see `find_module()`), e.g. `'measles'`, `'measles.beta'`; else as it is
+
+    Raises a `KeyError` if it is the default name of several modules, and none is called it.
+    """
+    head, dot, rest = name.partition('.') if isinstance(name, str) else ('', '', '')
+    mods = list(mods)
+    if not head or any(mod.name == head for mod in mods) or not any(mod.default_name == head for mod in mods):
+        return name
+    return find_module(mods, head, error=sc.KeyNotFoundError).name + dot + rest
 
 
 def nlist_to_dict(nlist, die=True):
@@ -266,7 +330,8 @@ def getframe(depth=1):
 def assigned_name(obj):
     """
     The name of the variable an object being made is assigned to, e.g. "campaign" in `campaign = ss.vaccinate(...)`,
-    read from the code that made it (the frame above its constructors) as the instruction after the call; None if the
+    and the name of the function whose variable it is (e.g. "make_sim", or "<module>" at the top level of a script), as a pair,
+    read from the code that made it (the frame above its constructors) as the instruction after the call; (None, None) if the
     result is not stored straight in a variable (e.g. it is returned, put in a list, or passed on). It is read when the
     object is made, so the name is that of its first variable, whatever variable holds it later (e.g. in a loop)
     """
@@ -275,14 +340,21 @@ def assigned_name(obj):
     while frame is not None and frame.f_locals.get('self') is obj: # Out of its constructors (__init__ and super().__init__())
         frame = frame.f_back
     if frame is None or frame.f_code.co_filename.startswith(os.path.dirname(ss.__file__)): # Made by Starsim itself (e.g. a disease the sim makes from transitions), not by the user's code
-        return None
+        return None, None
     try:
         after = next((ins for ins in dis.get_instructions(frame.f_code) if ins.offset > frame.f_lasti), None)
     except Exception: # Code that cannot be read, e.g. compiled
-        return None
-    if after is not None and after.opname in ['STORE_NAME', 'STORE_FAST', 'STORE_GLOBAL', 'STORE_DEREF'] and not after.argval.startswith('_'):
-        return after.argval
-    return None
+        return None, None
+    if after is not None and after.opname in ['STORE_NAME', 'STORE_FAST', 'STORE_GLOBAL', 'STORE_DEREF', 'STORE_FAST_LOAD_FAST', 'STORE_FAST_STORE_FAST']:
+        name = after.argval[0] if isinstance(after.argval, tuple) else after.argval # E.g. STORE_FAST_LOAD_FAST, which stores the first
+        if isinstance(name, str) and not name.startswith('_'):
+            return name, frame.f_code.co_name
+    return None, None
+
+
+class CallerNames(dict):
+    """ The names of the variables of the code that called something, by the id of what they hold (see `caller_names()`), and the name of its function as `where` """
+    where = None
 
 
 def caller_names(depth=1, skip=None):
@@ -297,8 +369,10 @@ def caller_names(depth=1, skip=None):
     if frame is not None and skip is not None and frame.f_code is skip.__code__:
         frame = frame.f_back
     if frame is None:
-        return dict(given_names or {})
-    return names_of(frame.f_globals, frame.f_locals)
+        return CallerNames(given_names or {})
+    out = CallerNames(names_of(frame.f_globals, frame.f_locals))
+    out.where = frame.f_code.co_name
+    return out
 
 
 def names_of(*spaces):
@@ -579,13 +653,13 @@ def make_disease(arg, names):
     return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
 
 
-def copy_given(*inputs, copy_modules=True):
-    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given; with `copy_modules=False`, the rest is copied, but not the modules """
-    if not copy_modules: # The sim's own, as given
+def copy_given(*inputs, copy_inputs=True):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given; with `copy_inputs=False`, the rest is copied, but not the modules """
+    if not copy_inputs: # The sim's own, as given
         given = given_modules(*inputs)
         for mod in given:
             if mod.__dict__.get('sim') is not None or getattr(mod, '_given', False):
-                errormsg = f'"{mod.name}" was already given to a sim, so it can\'t be given to another with copy_modules=False, which runs the modules themselves: make it again, or give a copy (e.g. mod.copy())'
+                errormsg = f'"{mod.name}" was already given to a sim, so it can\'t be given to another with copy_inputs=False, which runs the modules themselves: make it again, or give a copy (e.g. mod.copy())'
                 raise ValueError(errormsg)
         memo = {id(mod):mod for mod in given} # Shared, so what refers to a module refers to the module itself
         return sc.mergedicts(*[sc.dcp(inp, memo=memo) for inp in inputs])
@@ -626,11 +700,14 @@ def num_str(x):
 
 
 def time_str(x, sim=None, plural=False):
-    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath) """
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath, or with no sim) """
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
     unitless = sim is not None and sim.t.unitless
-    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.Duration) and not unitless else sim._unit_name
+    if isinstance(x, ss.Duration) and not unitless:
+        unit_name = type(x).base.removesuffix('s')
+    else:
+        unit_name = sim._unit_name if sim is not None else 'step' # With no sim, a bare number is a step
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 

@@ -5,6 +5,7 @@ It exists so that a model need not say how it runs: the choice is made from what
 
 Used with: agents and compartments; declared and coded modules
 """
+import importlib.util
 import re
 import inspect
 import itertools
@@ -19,7 +20,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_backend', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
 
 
 
@@ -40,6 +41,7 @@ class Solver:
     name = None # e.g. 'ode'
     options = {} # Each option's default, and the values it can take (None for any)
     example = None # e.g. "ss.solvers.ode(integrator='euler')"
+    rescale = even_draws = keep_times = record_people = False # The options of agents (see abm), which a compartmental run doesn't have (it records the results about people in its own way)
 
     def __init__(self, **kwargs):
         for key,(default, choices) in self.options.items():
@@ -128,14 +130,39 @@ class abm(Solver):
             - 'midstep' (the default): by steps, with those who arrive in a state during a step facing its rates for the rest of it, which is the more exact at a coarse step
             - 'wholestep': by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step; use it to match a model written as code
             - 'events': event by event in continuous time within each step (a prototype)
+
+        rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the fraction of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
+        even_draws (bool): space each call's random numbers evenly rather than independently (default False), for less variable runs; needs common random numbers (`ss.options.crn`)
+        keep_times (bool): for a declared disease, keep the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.n_times`, `.since`, and `.ever`), to read after the run (default False, to save memory: only those that the solver or the model needs are kept, and reading another raises an error)
+        record_people (bool): record the results about people (alive, female, birth, death, emigration, cbr, cmr, etc.) every step (default True); False saves a little time in a sim that doesn't need them
     """
     name = 'abm'
-    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
-    example = "ss.solvers.abm(step='events')"
+    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
+    example = "ss.solvers.abm(step='events', rescale=True)"
 
-    def __init__(self, *, step=None):
-        super().__init__(step=sc.ifelse(step, 'midstep'))
+    def __init__(self, *, step=None, rescale=False, even_draws=False, keep_times=False, record_people=True):
+        super().__init__(step=sc.ifelse(step, 'midstep'), rescale=rescale, even_draws=even_draws, keep_times=keep_times, record_people=record_people)
         self.named = step is not None # Whether the step was asked for, which overrides what a module's class suggests (see agent_solver())
+        check_rescale(rescale)
+
+
+rescale_options = dict(threshold=0.05, factor=1.2) # The options of dynamic rescaling, and their defaults: see ss.solvers.abm(rescale=)
+
+def check_rescale(val):
+    """ Dynamic rescaling is True, False, or a dict of its options (see `rescale_options`) """
+    if isinstance(val, (bool, np.bool_)):
+        return
+    if not isinstance(val, dict):
+        raise TypeError(f'ss.solvers.abm(rescale=) is True, False, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2), not {val!r}')
+    unknown = [key for key in val if key not in rescale_options]
+    if unknown:
+        raise TypeError(f'ss.solvers.abm(rescale=) has no option {sc.strjoin(unknown)}; its options are {sc.strjoin(rescale_options)}')
+    threshold, factor = val.get('threshold', rescale_options['threshold']), val.get('factor', rescale_options['factor'])
+    if not (0 < threshold < 1):
+        raise ValueError(f'ss.solvers.abm(rescale=dict(threshold={threshold})) is a fraction of the agents, between 0 and 1')
+    if not factor > 1:
+        raise ValueError(f'ss.solvers.abm(rescale=dict(factor={factor})) is the least factor the scale grows by, more than 1')
+    return
 
 
 def as_solver(solver):
@@ -189,7 +216,7 @@ class Undeclared(Transmission):
         return
 
     def record_states(self):
-        """ The count of each `ss.BoolState`, as for any module """
+        """ The count of each `ss.BoolArr` unless `result=False`, as for any module """
         ss.Module.record_states(self.mod)
         return
 
@@ -210,7 +237,7 @@ class Undeclared(Transmission):
         return ss.expressions.evaluate(expr, self)
 
     def force(self, uids, tr, dst, srcs=None):
-        """ A cure by a delivery (see `ss.Event.cure()`): the disease's own `clear_infection()` """
+        """ A cure by a delivery (see `ss.Delivery._cure()`): the disease's own `clear_infection()` """
         if len(uids):
             self.mod.clear_infection(uids)
         return len(uids)
@@ -279,9 +306,9 @@ def choose_solver(sim):
     Agents are made only when something needs them, whether the model is declared or
     written as code: a sim of modules written as code with nothing per person (e.g. an
     ODE of its own in NumPy) has no agents, and one with per-person arrays (e.g. a
-    disease written as code) runs as agents. Which engine then takes a whole
-    compartmental run, the kernels or (with `sim.jax = True`) JAX, is chosen when the sim is
-    run, by `choose_engine()`.
+    disease written as code) runs as agents. Which backend then takes a whole
+    compartmental run, the compiled one or (with `ss.options.backend = 'jax'`) JAX, is chosen when the sim is
+    run, by `choose_backend()`.
 
     The steps: the modules are gathered and the declared model is built (`init_model()`); what
     matters to the choice is recorded (`init_capabilities()`), with what the layout of the
@@ -340,14 +367,14 @@ def check_solver_options(sim):
     (see `init_compartments()`), so one sim can be run both ways
     """
     if isinstance(sim.solver, ss.solvers.abm):
+        if sim.solver.even_draws and not ss.options.crn:
+            raise ValueError('ss.solvers.abm(even_draws=True) needs common random numbers, but ss.options.crn is False')
         return
     how = f'solver={sim.pars.solver!r}' if sim.pars.solver != 'auto' else f'solver="auto" chose "{sim.solver}", since {sim.solver_reason}'
     pars = sim.pars
-    for key,given in [('n_agents', 'n_agents' in sim.given and 'total_pop' not in sim.given and getattr(sim, 'pop_from', None) is None and not isinstance(pars.n_agents, ss.par)), ('rescale', bool(pars.rescale)), ('even_draws', bool(pars.even_draws))]:
-        if given:
-            what = dict(n_agents='the number of agents; for the number of people, give total_pop=', rescale='dynamic rescaling, which changes how many people each agent stands for', even_draws='how the random numbers of agents are drawn')[key]
-            errormsg = f'{key}= is for agents ({what}), but this sim runs as compartments ({how}); give solver="abm" to run it as agents, or leave {key}= out'
-            raise ValueError(errormsg)
+    if 'n_agents' in sim.given and 'total_pop' not in sim.given and getattr(sim, 'pop_from', None) is None and not isinstance(pars.n_agents, ss.par):
+        errormsg = f'n_agents= is for agents (the number of agents; for the number of people, give total_pop=), but this sim runs as compartments ({how}); give solver="abm" to run it as agents, or leave n_agents= out'
+        raise ValueError(errormsg)
     return
 
 
@@ -377,7 +404,7 @@ def init_model(sim):
     sim.groups = ss.dimensions.Groups(sim) # The groups of people that the stratifications give: see ss.dimensions.Groups
     for key in [key for key in pars.keys() if key not in ss.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
         if any(key in mod.pars for mod in sim.declared):
-            sim.par_values = sc.mergedicts(sim.par_values, {key:pars.pop(key)})
+            sim._par_values = sc.mergedicts(sim._par_values, {key:pars.pop(key)})
     set_par_values(sim)
     for mod in sim.declared: # A level left out of a starting value by label starts at 0
         mod.graph.resolve_starting()
@@ -460,13 +487,13 @@ def init_compartments(sim, joints=None, mixing=None):
         spread = [(p.name, p.raw) for p in mod.graph.spread_pars()] + [(name, a.value) for name,a in mod.graph.attrs.items()] # Parameters, and traits (ss.attr), that are distributions
         for name,raw in spread:
             msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
-            if pars.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({name}=[...]).')
+            binned = f'{mod.name}.stratify({name}_group=ss.levels({{"low": 0.5, "high": 0.5}}, {name}=[0.5, 1.5]))' if name in ['rel_sus', 'rel_trans'] else f'a value by level, ss.by(group=[0.5, 1.5]), in place of the distribution, with {mod.name}.stratify(group={{"low": 0.5, "high": 0.5}})' # A multiplier for each level
+            if ss.options.approximations == 'error':
+                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {binned}.')
             else:
-                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approximations == 'allow' else None)
-    pars.record_people = False
+                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
-    boxed = any(mod.boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
+    boxed = any(mod._boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
     if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)): # Levels that the deliveries and transfers need now the solver is known: see ss.Event.dims()
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
@@ -476,10 +503,10 @@ def init_compartments(sim, joints=None, mixing=None):
         sim.mixing = mixing
         mixing.say()
     else:
-        sim.mixing.init(approximations=pars.approximations)
+        sim.mixing.init(approximations=ss.options.approximations)
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
-    pars.n_agents = sim.groups.n_groups
+    pars.n_agents = None # No agents: the people are one row for each group (sim.groups.n_groups); the number of people is total_pop
     return
 
 
@@ -497,33 +524,35 @@ def check_model(sim):
     return
 
 
-def choose_engine(sim):
+def choose_backend(sim):
     """
-    Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the kernels, and why
+    Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the compiled backend (Rust or Numba), and why
 
-    By `sim.jax`: True for JAX, and otherwise (False, or None, the default) the kernels. JAX is never chosen for a run by
+    By `ss.options.backend`: 'jax' for JAX, and otherwise the compiled backend. JAX is never chosen for a run by
     itself: it is chosen where it is needed, for gradients and the fits and log-densities that use them (`sim.gradient()`,
     `sim.log_density()`, `sim.fit()`), and is worth asking for only for a long run over many groups (it takes about half a
-    second to start in a session, and compiles each model; an ODE run in JAX agrees with the kernels to about 1e-14). The
-    other solvers are run by the kernels, as is a model JAX does not cover (see `why_not()`), with a note.
+    second to start in a session, and compiles each model; an ODE run in JAX agrees with the compiled backend to about 1e-14).
+    With `backend='jax'`, the other solvers are run as under 'auto', since JAX runs only the ODE; an ODE that JAX cannot run
+    (see `why_not()`) is too, with a note.
 
-    Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
+    Returns whether to use JAX, and the reason.
     """
     use, why = False, None
-    if not sim.jax:
-        why = 'kernels' + (', as asked (sim.jax = False)' if sim.jax is False else '')
+    if ss.options.backend != 'jax':
+        why = f'ss.options.backend="{ss.options.backend}"'
     elif not isinstance(sim.solver, ss.solvers.ode):
-        why = f'kernels: JAX does not run solver="{sim.solver}"'
-        ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
+        why = f'not JAX, which runs only solver="ode", not solver="{sim.solver}"'
+    elif importlib.util.find_spec('jax') is None: # Asked for by name, so an error rather than another backend
+        errormsg = 'ss.options.backend="jax" runs the ODE in JAX, which is not installed: use pip install "starsim[jax]", or ss.options.backend="auto"'
+        raise ImportError(errormsg)
     else:
         no = why_not(sim, 'jax')
         if no is not None:
-            why = f'kernels: JAX cannot run this sim, since {no}'
-            ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
+            why = f'not JAX, which cannot run this sim, since {no}'
+            ss.note(f'JAX cannot run this sim, since {no}, so it is run as with ss.options.backend="auto"', sim=sim)
         else:
             use = True
-            why = 'JAX, as asked (sim.jax = True)'
-    sim.engine_reason = why
+            why = 'JAX, as asked (ss.options.backend="jax")'
     return use, why
 
 
@@ -572,6 +601,7 @@ def init_flows(sim):
             named = tr.dest[0] if tr._inflow and tr.state_given else None # A state of one of the diseases
             holder = next((mod for mod in sim.declared if named is None or any(st is named for st in mod.graph.states.values())), sim.declared[0])
             tr = sc.dcp(tr, memo={} if named is None else {id(named):named}) # The sim's own, so the module is unchanged if it is built again
+            tr.of_population = True
             holder.graph.add_flow(tr)
     holders = [mod.name for mod in sim.declared if flows_of(mod)]
     if len(holders) > 1:
@@ -609,7 +639,8 @@ def set_par_values(sim):
                 mod.setattribute(key, val.value)
     values = {}
     levels = sc.ddict(dict)
-    for key,val in (sim.par_values or {}).items():
+    for key,val in (sim._par_values or {}).items():
+        key = ss.utils.own_name(list(sim.declared) + coded, key) # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
         base, bracket, label = key.partition('[')
         if bracket and key.endswith(']'):
             levels[base][label[:-1]] = val
@@ -635,7 +666,13 @@ def set_par_values(sim):
             listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
             if key in ss.SimPars.names(): # A sim setting, given by value
                 listed += f' "{key}" is also a setting of the sim: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
-            raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. {listed}')
+            if not mods and key in abm.options: # An option of the agents
+                listed += f' "{key}" is an option of the agents: solver=ss.solvers.abm({key}=...).'
+            elif not mods and key in ss.options: # An option of Starsim, for every sim
+                listed += f' "{key}" is an option of Starsim: ss.options.{key} = ..., or for one sim, with ss.options.context({key}=...): sim.run().'
+            elif not mods and (near := ss.expressions.did_you_mean(key, sorted(ss.SimPars.names()))) != '.': # Perhaps a setting of the sim, misspelled
+                listed += f' Of the settings of the sim, {near[2:]}'
+            raise sc.KeyNotFoundError(f'"{key}" (given by keyword, or in pars=) {"is no setting of the sim or parameter of the model" if not mods else "is a parameter of more than one module"}. {listed}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
         if attrs is None:
             mods[0].pars.update({name:val})
@@ -702,7 +739,7 @@ def init_named_people(sim):
         counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
         sim.given_pyramid = (edges, counts)
         if 'total_pop' not in sim.given:
-            pars.total_pop = pars.people.n_agents
+            pars.total_pop = len(pars.people)
             sim.pop_from = 'people'
     sim.named_people = None
     sim.named_unsized = False # A named population with no number of agents of its own does not make the model agent-based
@@ -899,6 +936,10 @@ def init_where(sim):
             if where is not None and key not in sim.pars.connectors and tr.trigger is None: # A trigger takes who= into its condition
                 if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
                     sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
+                    sim.pars.connectors[key].on_rate = True
+                    continue
+                if isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(where): # Counts joined together, e.g. (Q.n < 20) & (I.n > 5): the rate is 0 while it does not hold
+                    sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, when=~ss.conditions.as_cond(where), name=key)
                     sim.pars.connectors[key].on_rate = True
                     continue
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
@@ -1260,16 +1301,19 @@ def findings(sim, rows, mods=None):
     return
 
 
-def why_not(sim, engine, mods=None):
+def why_not(sim, kind, mods=None):
     """
-    Why an engine (`'kernels'`, a whole run in one call; or `'jax'`, the ODE in JAX, as for gradients) cannot run the sim, in a few words, or None if it can
+    Why a sim cannot be run in one of two ways (`'compiled'`, the whole run in one compiled call; or `'jax'`, the ODE in JAX, as for gradients), in a few words, or None if it can
 
     Args:
         sim (`ss.Sim`): the sim
-        engine (str): the engine
-        mods (list): for the kernels, only these declared modules' rules
+        kind (str): 'compiled' or 'jax'
+        mods (list): for 'compiled', only these declared modules' rules
     """
-    rows = kernels if engine == 'kernels' else [rule for rule in jax if engine not in rule.engines]
+    if kind not in ['compiled', 'jax']:
+        errormsg = f'ss.solvers.why_not() asks about "compiled" or "jax", not {kind!r}'
+        raise ValueError(errormsg)
+    rows = compiled if kind == 'compiled' else [rule for rule in jax if kind not in rule.engines]
     rows = [rule for rule in rows if rule.scope == 'declared'] if mods else rows
     for rule,_,values in findings(sim, rows, mods):
         return rule.message.format(**values)
@@ -1278,8 +1322,8 @@ def why_not(sim, engine, mods=None):
 
 def solver_table():
     """
-    What decides which engine runs a model, as a dataframe: a row for each rule, in the order they are read, with a column for each
-    engine: `agents`, `compartments` (one step at a time), `kernels` (the whole run in one call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
+    What decides how a model can be run, as a dataframe: a row for each rule, in the order they are read, with a column for each
+    way: `agents`, `compartments` (one step at a time), `compiled` (the whole run in one compiled call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
     a compartmental solver that was asked for runs, approximating it.
 
     Example:
@@ -1301,19 +1345,19 @@ def solver_table():
 
 Rule = collections.namedtuple('Rule', ['scope', 'test', 'engines', 'message', 'ingredient'], defaults=[None]) # What it reads ('sim'; 'module', every module; 'graph', a module with a graph; 'transition', each of its transitions; 'declared', every declared module); what it looks for: truthy, or a dict of values for the message, or several; the engines that can run a model with it; why not; and for a capability record, the ingredient
 
-engine_names = ['agents', 'compartments', 'kernels', 'jax'] # Each needs what the one before it does
+engine_names = ['agents', 'compartments', 'compiled', 'jax'] # Each needs what the one before it does
 AGENTS = ('agents',) # A compartmental solver is refused, and solver='auto' runs as agents
 ASKED = ('agents', 'asked') # A compartmental solver that was asked for runs it, approximately, or with a note; solver='auto' runs as agents
 RAISES = ('agents', 'raises') # A compartmental solver is refused, as is solver='auto', with what to do, unless something else needs agents
 STEPPED = ('agents', 'compartments') # In compartments, a step at a time
-KERNELS = STEPPED + ('kernels',) # A whole run in the kernels, not in JAX
+COMPILED = STEPPED + ('compiled',) # A whole run in one compiled call, not in JAX
 
 said_of = lambda e: str(e).split('\n')[0] # A CapabilityError's reason
 
 
 def memory_read(sim):
     """ How often or how long ago an event happened, which are each person's own (whether it happened, `.ever`, is a level of people) """
-    for (name,outcome),need in ss.interventions.memory_needs(sim).items():
+    for (name,outcome),need in ss.solvers.deliveries.memory_needs(sim).items():
         for kind in sorted(need - {'ever'})[:1]:
             yield dict(event=name if outcome is None else f'{name}.{outcome}', kind=kind)
 
@@ -1336,8 +1380,8 @@ def says_itself(sim, mod):
 
 
 def bad_age(sim, mod):
-    """ `at_age=` with no age group starting at the age (see `ss.Event.age_reason()`) """
-    reason = mod.age_reason(sim) if isinstance(mod, ss.Event) and mod.at_age is not None else None
+    """ `at_age=` with no age group starting at the age (see `ss.Event._age_reason()`) """
+    reason = mod._age_reason(sim) if isinstance(mod, ss.Event) and mod.at_age is not None else None
     return dict(reason=reason) if reason else None
 
 
@@ -1434,18 +1478,18 @@ def split_bins(sim, mod):
 def beyond_stages(raw, exact, sim):
     """ Why Erlang stages cannot follow a time drawn from a distribution, as the end of a sentence, or None """
     cv = np.nan if exact else dwell_cv(raw, sim)
-    if sim.pars.approximations == 'error' and not exact:
-        return ', and approximations="error"'
+    if ss.options.approximations == 'error' and not exact:
+        return ', and ss.options.approximations="error"'
     return f' whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow' if cv > max_cv else None
 
 
 def far_dwell(sim, mod, tr):
-    """ A dwell time that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
+    """ A dwell time that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     raw = None if tr.dur is None else tr.dur.raw
     if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
         return None
     shape = raw.pars.get('shape')
-    fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.kernels.convey())
+    fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.solvers.backends.kernels.convey())
     exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
     how = beyond_stages(raw, exact, sim)
     return dict(kind=type(raw).__name__, how=how) if how else None
@@ -1506,7 +1550,7 @@ def varying_transfers(sim, mod):
 
 
 def far_transfers(sim, mod):
-    """ A transfer's `dur=` that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
+    """ A transfer's `dur=` that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     for name,raw in timed_transfers(mod):
         shape = raw.pars.get('shape')
         how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape), sim)
@@ -1569,7 +1613,7 @@ def refused_mixing(sim):
     try:
         mixing = ss.solvers.Mixing(sim)
         mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approximations=sim.pars.approximations, solver=ode())
+        mixing.init(approximations=ss.options.approximations, solver=ode())
         sim.laid.mixing = mixing
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
@@ -1675,7 +1719,7 @@ def fixed_reason(sim, mod):
     return dict(reason=engine.whole) if engine.whole else None
 
 
-kernels = [ # What stops the kernels taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
+compiled = [ # What stops the compiled backend taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
     Rule('sim', lambda sim: isinstance(sim.solver, ss.solvers.abm), STEPPED, 'it runs as agents'),
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), STEPPED, 'it has no declared model'),
     Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
@@ -1740,7 +1784,7 @@ fixed = [ # The same, for what cannot change once the sim is initialized
 
 def not_whole(sim):
     """ Whatever stops the kernels taking the whole run """
-    return dict(reason=sim._kernel_reason()) if sim._kernel_reason() is not None else None
+    return dict(reason=sim._compiled_reason()) if sim._compiled_reason() is not None else None
 
 
 def certain_rate(sim, mod):
@@ -1750,15 +1794,15 @@ def certain_rate(sim, mod):
 
 
 jax = [ # What stops JAX taking a whole run of the ODE
-    Rule('sim', lambda sim: not getattr(sim, 'declared', None), KERNELS, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
-    Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
-    Rule('sim', not_whole, KERNELS, '{reason}'),
-    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), KERNELS, '"{mod.name}" has a movement register'),
-    Rule('declared', certain_rate, KERNELS, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'),
-    Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], KERNELS, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
+    Rule('sim', lambda sim: not getattr(sim, 'declared', None), COMPILED, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
+    Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), COMPILED, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
+    Rule('sim', not_whole, COMPILED, '{reason}'),
+    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), COMPILED, '"{mod.name}" has a movement register'),
+    Rule('declared', certain_rate, COMPILED, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which a whole compiled run takes as everyone moving at once'),
+    Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], COMPILED, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
 ]
 
-rules = capabilities + layouts + kernels + fixed + jax # The whole table, as solver_table() shows it
+rules = capabilities + layouts + compiled + fixed + jax # The whole table, as solver_table() shows it
 
 
 def auto_reasons(sim):
@@ -1767,11 +1811,10 @@ def auto_reasons(sim):
 
 
 def as_ode(sim, **kwargs):
-    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population; the settings of agents only (`rescale=`, `even_draws=`) are dropped too, since `sim.new(solver='ode')` would refuse them """
+    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population (the options of agents go with their solver) """
     if 'n_agents' in sim.given:
         kwargs = dict(n_agents=None, total_pop=sim.pars.total_pop) | kwargs
-    agents_only = {key:None for key in ['rescale', 'even_draws'] if key in sim.given or sim.pars.get(key)} # Settings of agents only (see ss.solvers.check_solver_options()), which an ODE would refuse
-    return sim.new(solver='ode', **(agents_only | kwargs))
+    return sim.new(solver='ode', **kwargs)
 
 
 def in_proportions(sim):

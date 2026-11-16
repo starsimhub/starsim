@@ -70,7 +70,7 @@ def test_run_options():
 @sc.timer()
 def test_loop_plotting():
     sc.heading('Testing loop plotting...')
-    sim = ss.Sim(pars).profile(kind='loop', plot=False).sim # Profiling the loop populates cpu_time for plot_cpu
+    sim = ss.Sim(pars).perf_profile(kind='loop', plot=False).sim # Profiling the loop populates cpu_time for plot_cpu
     assert len(sim.loop.cpu_time), 'Profiling should record per-entry CPU times'
     sim.loop.plot()
     sim.loop.plot_cpu()
@@ -194,7 +194,7 @@ def test_coded_alone():
             self.y = 1.0
         def step(self):
             self.y *= np.exp(-0.1)
-    sim = ss.Sim(modules=Decay(), stop=10, verbose=0).run()
+    sim = ss.Sim(Decay(), stop=10, verbose=0).run()
     assert not isinstance(sim.solver, ss.solvers.abm) and len(sim.people.uid) == 1, 'Code with nothing per person should not make agents'
     assert sim.people.n == sim.pars.total_pop == 10_000 # What describe() says it runs with
     assert np.isclose(sim.custom.decay.y, np.exp(-1.1)) # A step from each of the 11 time points, so the state after the run is that of the step from 10

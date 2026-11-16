@@ -72,13 +72,13 @@ def make_met():
 models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
-    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
-    met     = (make_met,     dict(unit='day', stop=150, total_pop=100_000, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    met     = (make_met,     dict(unit='day', stop=150, total_pop=100_000, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
 )
 
 
@@ -87,8 +87,8 @@ def run(key, how, **kwargs):
     make, pars = models[key]
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
-        assert sim._kernel_reason() is None
-    return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
+        assert sim._compiled_reason() is None
+    return sim.perf_profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
 def largest_diff(sim1, sim2):
@@ -119,14 +119,14 @@ def test_stochastic():
     # Many places, most of which have no events (skipped until something changes them): the same run as step by step
     herds = make_plain(0.3, init_n=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=ss.levels([str(i) for i in range(600)], kind='space'))
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
-    assert largest_diff(base.new().run(), base.new().profile(kind='loop', plot=False).sim) == 0
+    assert largest_diff(base.new().run(), base.new().perf_profile(kind='loop', plot=False).sim) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
     lognormal = [ss.SIR(dur_inf=ss.lognormal(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
     sim = ss.Sim(lognormal, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
     for ti in range(5):
         sim.run_one_step()
-    kn, joint = ss.kernels, sim.joint_states[0]
+    kn, joint = ss.solvers.backends.kernels, sim.joint_states[0]
     p, places = joint.program, np.arange(joint.program.n_places)
     out = sc.obj()
     for how in ['sparse', 'dense']:
@@ -258,9 +258,9 @@ def test_restart():
     # A sim that needs the loop (here, a modifier with a function of the sim: masks once there are more than 10 infectious) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.results.sir.I[sim.ti] > 10)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
-    assert 'masks' in (sim._kernel_reason() or '')
+    assert 'masks' in (sim._compiled_reason() or '')
     assert sim.run().results.sir.I.max() < new[1]
-    assert base.new().init()._kernel_reason() is None
+    assert base.new().init()._compiled_reason() is None
     return msim
 
 
@@ -268,7 +268,7 @@ def test_restart():
 def test_compile():
     sc.heading('Testing that the kernels can be compiled ahead of time')
     ss.compile(verbose=False)
-    assert ss.kernels.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
+    assert ss.solvers.backends.kernels.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
     return
 
 
@@ -282,7 +282,7 @@ def test_numpy_ode():
                 for how in hows:
                     sims = []
                     for ode.mode in ['always', 'never']:
-                        with ss.options.context(kernels='numba'):
+                        with ss.options.context(backend='numba'):
                             sims.append(run(key, how, solver=ss.solvers.ode(integrator=integrator)))
                     diff = largest_diff(*sims)
                     assert diff < 1e-10, f'{key} ({integrator}, {how}): the ODE in NumPy differs from the kernels by {diff:.3g}'

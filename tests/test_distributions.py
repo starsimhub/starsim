@@ -277,7 +277,6 @@ def test_poisson_ppf():
     u = np.linspace(1e-4, 1-1e-4, 5000) # Deterministic grid of uniforms spanning (0, 1)
     for lam in [0.5, 3.7, 10, 50, 200]:
         d = ss.poisson(mean=lam, strict=False).init(slots=np.arange(10))
-        d.process_pars() # Populate _pars so ppf() can read lam
         fast = d.ppf(u)
         ref = sps.poisson.ppf(u, mu=lam)
         assert np.array_equal(fast, ref), f'Fast Poisson ppf does not match SciPy for lam={lam}'
@@ -584,8 +583,10 @@ def test_round():
     d = ss.normal(5.3, 2, round='nearest', strict=False)
     assert d.rvs(10).dtype == ss.dtypes.int # Rounded at creation
     assert d.rvs(10, round=False).dtype != ss.dtypes.int # Not rounded if overridden
-    d = ss.constant(2.3, round=True, strict=False).init(slots=np.arange(10_000))
+    d = ss.constant(2.3, round='random', strict=False).init(slots=np.arange(10_000))
     assert np.isclose(d.rvs(ss.uids(np.arange(10_000))).mean(), 2.3, atol=0.03) # Stochastic rounding is unbiased
+    with pytest.raises(ValueError, match="round='random'"): # Starsim 3's spelling says what to use
+        d.rvs(10, round=True)
 
     # Durations are rounded to whole timesteps
     steps = ss.lognormal(ss.days(4.5), ss.days(1.5), round='nearest').mock(dt=ss.days(0.5)).rvs(uids)
@@ -643,6 +644,16 @@ def test_own_unit():
     assert np.isclose(ss.normal(3, 0.1, unit='weeks').rvs(n).mean(), 3, rtol=0.01)
     with pytest.raises(ss.errors.DistNotInitializedError): # One with no unit still needs a sim, or strict=False
         ss.normal(0, 1).rvs(5)
+
+    # Its mean, spread, and quantiles, in the units it draws in, with no SciPy needed
+    assert np.isclose(dist.mean(), 10) and np.isclose(dist.std(), 5)
+    lo, hi = dist.ppf([0.025, 0.975])
+    assert np.isclose(dist.cdf(lo), 0.025) and np.isclose(dist.cdf(hi), 0.975)
+    assert np.isclose(ss.uniform(1, 3, strict=False).mean(), 2) and ss.constant(ss.days(3)).std() == 0 # Drawn by NumPy, or not at all
+    assert np.isclose(ss.normal(3, 0.1, unit='weeks').mock(dt=ss.days(1)).mean(), 21) # In steps, in a sim
+    with pytest.raises(NotImplementedError, match='no SciPy form'):
+        ss.choice([1, 2, 3], strict=False).mean()
+
     dist.set(shape=3)
     assert repr(dist).startswith('ss.gamma(shape=3') # Changed, so shown by its parameters
     return vals
@@ -668,7 +679,7 @@ def test_engine_copy():
     h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', default_state='A')
-    ppl = ss.People(1000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(p=0.5))])
+    ppl = ss.People(1000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(p=0.5))])
     sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
     u = sim.people.auids
     urban, obj, went = sim.people.urban[u], sim.diseases.m.obj[u], sim.diseases.m.B[u]
@@ -685,10 +696,10 @@ def test_even_draws():
     assert np.allclose(np.diff(np.sort(even)), 1/1000)
     assert 0 < even.min() < 1/1000 and even.max() < 1
 
-    def final_size(seed, **kwargs):
-        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver='abm', diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02), **kwargs).run()
+    def final_size(seed, even):
+        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver=ss.solvers.abm(even_draws=even), diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02)).run()
         return sim.results.sir.S[-1]
-    plain, spaced = [np.std([final_size(seed, even_draws=even) for seed in range(8)]) for even in [False, True]]
+    plain, spaced = [np.std([final_size(seed, even) for seed in range(8)]) for even in [False, True]]
     assert spaced < plain, f'Evenly spaced draws should reduce the spread of final sizes, but it went from {plain} to {spaced}'
     return
 

@@ -83,7 +83,7 @@ A result's `kind` decides how it is added up over time (its `summarize_by`), whe
 |---|---|---|---|---|
 | `'stock'` | `'last'` | A number at each time point | `S`, `I`, `R` | Resampled, the value at the start (a running total, `.cum`, at the end); over the whole run, the last value |
 | `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
-| `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
+| `'ratio'` | `'mean'` | One number divided by another | `prevalence` | The mean (for a ratio of two flows, such as a delivery's coverage, the total of one over the total of the other) |
 
 A result of your own gives it as `ss.Result('protected', kind='stock')`, or by its name ([appendix](building_writing.qmd#appendix-what-starsim-names-and-fills-in)). `scale=` overrides whether it is scaled, and `kind=None` is for a result with no meaning over time, which isn't summarized. `summarize_by=` summarizes it another way without changing what it is: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is still a flow, whose summary over the run is its mean per step.
 
@@ -114,7 +114,7 @@ print('Peak infectious, aged 0-14:', round(sres.I.select(age='0-14').max()))
 sres.prevalence.by('age').plot()
 ```
 
-A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. A module written as code can keep its results by group too: stratify the sim (`stratify=dict(sex=['female', 'male'])`), make the result with `ss.Result(..., groups=True)`, and set it at each step with `set_groups()` from `sim.groups.count()`, which counts the people in each group for whom a condition holds. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone.
+A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. Over time it is different, with one rule for `summarize()` (over the run) and `resample()` (over each period): a ratio is the mean of its value over the steps, with or without groups, except a ratio of two flows, such as a delivery's coverage, whose parts are each summed and then divided. So select a ratio's groups before resampling it (`res.prevalence.select(sex='female').resample('year')`), since the mean of a ratio over a period is not a ratio of its groups' means. A module written as code can keep its results by group too: stratify the sim (`stratify=dict(sex=['female', 'male'])`), make the result with `ss.Result(..., groups=True)`, and set it at each step with `set_groups()` from `sim.groups.count()`, which counts the people in each group for whom a condition holds. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone.
 
 ### Results with several columns
 
@@ -148,7 +148,7 @@ Each column is a result of its own, as `infs.adults`, `infs['adults']`, or `infs
 
 Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data; it is the data that [calibration](calibration_fitting.qmd) fits to.
 
-`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow, the final value of a stock, and the mean of a ratio. It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs, so the two read the same way. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak.
+`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow, the final value of a stock, and the mean of a ratio over time. It is a table with a row for each result, by its module and name (`summary.loc['measles.infection']`), and one column, `value`, as `msim.summarize()` gives for many runs, so the two read the same way. `sim.summarize('measles.infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles.I', how='max')` for the peak.
 
 `to_df()` gives results as a table (a pandas dataframe), for the whole sim, one module (`sim.results.measles.to_df()`), or one result (`res.I.to_df()`), to save with `df.to_csv()` or `df.to_excel()`. `sim.results.flatten()` gives them as a flat dict, keyed like the columns (`measles_I`).
 

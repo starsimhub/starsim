@@ -1,11 +1,12 @@
 """
-Tools for debugging and profiling Starsim runs: `sim.profile()`, detailed diagnostics, and mock objects for testing a module without a sim
+Tools for debugging and profiling Starsim runs: `sim.perf_profile()`, detailed diagnostics, and mock objects for testing a module without a sim
 
 They exist so that a slow or surprising run can be looked into without changing the model.
 
 Used with: agents and compartments; declared and coded modules
 """
 import sys
+import inspect
 import platform
 import numpy as np
 import numba as nb
@@ -19,7 +20,7 @@ class Profile(sc.profile):
     """
     Class to profile the performance of a simulation
 
-    Typically invoked via `sim.profile()` (`kind='line'`, the default).
+    Typically invoked via `sim.perf_profile()` (`kind='line'`, the default).
 
     Args:
         sim (`ss.Sim`): the sim to profile
@@ -37,7 +38,7 @@ class Profile(sc.profile):
         net = ss.RandomNet()
         hiv = ssl.HIV() # A disease written as code
         sim = ss.Sim(networks=net, diseases=hiv)
-        prof = sim.profile(follow=[net.add_pairs, hiv.transmit])
+        prof = sim.perf_profile(follow=[net.add_pairs, hiv.transmit])
         prof.disp()
         ```
     """
@@ -52,7 +53,7 @@ class Profile(sc.profile):
         # Initialize: copy the sim and time initialization
         sim = self.orig_sim.copy() # Copy so the sim can be reused
         self.sim = sim
-        self.run_func = sim._run # This is used internally by sc.profile.run()
+        self.run_func = self.unwrapped('_run') # Used internally by sc.profile.run()
         self.kwargs = sc.mergedicts(self.kwargs, dict(profile=True)) # A step at a time, recording the time of each call of the loop too (for plot_cpu())
         self.init_prof = None # Profiling the initialization
 
@@ -64,10 +65,14 @@ class Profile(sc.profile):
                 self.plot_cpu()
         return
 
+    def unwrapped(self, name):
+        """ The sim's method itself, not its wrappers (e.g. `ss.utils.outermost()`), which line_profiler would warn about """
+        return inspect.unwrap(getattr(type(self.sim), name)).__get__(self.sim)
+
     def profile_init(self):
         """ Handle sim init -- both run it and profile it """
         if not self.sim.initialized:
-            self.init_prof = sc.profile(self.sim.init, follow=self.ss_follow, verbose=False, skipzero=True)
+            self.init_prof = sc.profile(self.unwrapped('init'), follow=self.ss_follow, verbose=False, skipzero=True)
         else:
             errormsg = 'Cannot profile initialization of already initialized sim'
             raise RuntimeError(errormsg)
@@ -87,7 +92,7 @@ class Profile(sc.profile):
         # Get the functions from the initialized sim
         if self.ss_follow is None:
             loop_funcs = [e['func'] for e in sim.loop.funcs]
-            self.follow = [sim._run] + loop_funcs
+            self.follow = [self.run_func] + loop_funcs
         else:
             self.follow = self.ss_follow
 

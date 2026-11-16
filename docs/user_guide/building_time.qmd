@@ -29,7 +29,7 @@ Although time seems intuitive, there are many corners where intuition breaks dow
 3. **A year is 365 days** (with some stretching where needed to make whole years and calendar dates line up).
 4. **Whether a sim has a calendar is decided once, from its start.** A start that is a date (`'2025-01-01'`) or a year (a number from 1800 on) gives it one; then every bare number given as a time (`stop=2030`, `when=2030`) is a calendar year. Any other start (`0`, or none in a model not in years) means no calendar: a bare time is in the sim's unit from 0. A duration given as a time is that long after the start (`when=ss.days(10)`), which is how a reusable intervention says "5 years into the run".
 5. **Dates are whole days**, unless a smaller step is asked for explicitly (`dt=ss.days(0.25)`).
-6. **Units are loose when compared with plain numbers** (`ss.days(5) == 5` is true), **and compared by value between units** (`ss.years(1) == ss.days(365)` is true, and `ss.years(1) == 1` is true too).
+6. **Units are strict when compared with plain numbers, and compared by value between units.** `ss.years(1) == ss.days(365)` is true, but `ss.days(5) == 5` is false (a plain number has no unit, so `ss.years(1) == 1` would otherwise be true too), and `ss.days(5) < 10` is an error. Zero is the same in every unit, so `dur > 0` works, and a rate or a duration of zero needs no unit (`beta=0`). To compare with a number, say which unit: `dur.days < 10`.
 7. **A rate is per person-time**: of 1,000 people with a death rate of `ss.peryear(0.1)`, about 95 die in a year (1,000 × (1 − exp(−0.1))), since the dead stop contributing person-years. If 100 is what the data means, it is a probability, `ss.prob(0.1, 'year')`. (Starsim 2 chose 100; by Starsim 3 we had decided that was wrong.)
 8. **A probability stays between 0 and 1**: `ss.prob(0.5)*2` is 0.75 (the chance of at least one of two events), which also means that `ss.prob(0.1)*2` is 0.19, not 0.2.
 
@@ -82,7 +82,7 @@ sim$plot("measles")
 ```
 :::
 
-The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, and a step is taken from each, the last included, so this run has 60 time points and 60 daily steps, the last of them 1 March. Each time point is a period: a stock, such as the number infectious, at a time point is the state at its start, and a flow, such as infections, the number during the step that starts there. The state after the last step is not recorded, so after a run `sim.people` is one step past the last time point.
+The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, and a step is taken from each, the last included, so this run has 60 time points and 60 daily steps, the last of them 1 March. Each time point is a period: a stock, such as the number infectious, at a time point is the state at its start, and a flow, such as infections, the number during the step that starts there. So with yearly steps, the row for 2020 holds the prevalence on 1 January 2020 and the infections during 2020, which is how data labeled "2020" are usually meant; and a run with `stop='2030'` simulates 2030 too. The state after the last step is not recorded, so after a run `sim.people` is one step past the last time point.
 
 Any two of the start, the stop, and the length define the third: `start=2000, dur=20` (or `dur=ss.years(20)`) is the same as `start=2000, stop=2020`, and `stop=2020, dur=20` starts in 2000. A run shorter than one step is an error. With no stop, the run is 50 of the sim's unit (50 years for a model in years, 50 days for one in days), whatever the step. The final time point is the last one *at or before* `stop` (see [On the philosophy of time](#on-the-philosophy-of-time) for why the stop is included).
 
@@ -110,10 +110,10 @@ A bare number is also accepted. The slot says what it is (after `@`, it is a rat
 3. `start` or `stop` given as dates: days.
 4. A typed `dt` (`dt=ss.weeks(1)`), or else a typed `start`, `stop`, or `dur` (`dur=ss.days(50)`).
 5. `start` or `stop` given as years: years.
-6. The typed values of the networks, demographics, and interventions given to the sim, such as the yearly rates of `ss.Births()` or of `ss.birth()` given as `demographics=`. These never decide the unit when anything above does.
+6. The typed values of the networks, demographics, and interventions given to the sim, such as the yearly rates of `ss.birth()` and `ss.death()` given as `demographics=`. These never decide the unit when anything above does.
 7. None of these: time is counted in steps ([below](#time-in-steps)).
 
-So in `S >> I @ 1.9*I` beside `I >> R @ ss.days(8)`, the 1.9 is per day, and adding `ss.birth(S, rate=ss.peryear(0.02))` to the disease, or `ss.Births()` to the sim, leaves it per day. The unit is never guessed from the size of a number, since 0.05 is plausible per day and per year. `sim.describe()` says where the unit came from, and the sim says so in a note when it came from anything other than the diseases' typed values or dates.
+So in `S >> I @ 1.9*I` beside `I >> R @ ss.days(8)`, the 1.9 is per day, and adding `ss.birth(S, rate=ss.peryear(0.02))` to the disease, or `ss.birth(rate=ss.peryear(0.02))` to the sim's demographics, leaves it per day. The unit is never guessed from the size of a number, since 0.05 is plausible per day and per year. Nor is how many people a rate of births, deaths, or migration is per: it is per person unless `rate_per=` says otherwise (e.g. `rate_per=1000`; see [Data of your own](populations_people.qmd#data-of-your-own)). `sim.describe()` says where the unit came from, and the sim says so in a note when it came from anything other than the diseases' typed values or dates.
 
 When the typed values of rule 2 have different units (days in one disease, years in another, say):
 

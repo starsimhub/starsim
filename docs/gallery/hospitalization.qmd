@@ -95,7 +95,7 @@ msim.plot('covid')
 The two agree, apart from chance in the agent run. Of about 8,800 infections, about 1,500 people are admitted to hospital (`covid_course.H`): about one in six, between the 10% of those under 50 and the 40% of those over, since about a quarter of people are 50 or over (the population's ages are guessed as the world's in 2024, as `describe()` says). Of those admitted, one in six die, as before, since the competing hazards out of H haven't changed:
 
 ```{python}
-msim.summarize().loc[['covid_infection', 'covid_course.H', 'covid_death']]
+msim.summarize().loc[['covid.infection', 'covid.course.H', 'covid.death']]
 ```
 
 A function that needs each person (one that takes `uids`, the people it applies to, as well as the sim) can't be run as compartments, so Starsim runs a model with one as agents, and `describe()` says why.

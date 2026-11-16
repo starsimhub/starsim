@@ -36,7 +36,7 @@ flowchart LR
 - **Interventions** act on the model: vaccinating, testing, and treating people, or changing a parameter from a date (closing schools, say). See [Interventions](interventions_interventions.qmd) and [Products](interventions_products.qmd).
 - **Connectors** link modules, such as one disease making another more likely. See [Connectors](interventions_connectors.qmd).
 - **Analyzers** record results that the other modules don't keep, without changing anything. See [Analyzers](interventions_analyzers.qmd).
-- **Custom modules** (given as `modules=`, and kept in `sim.custom`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Beyond disease](../gallery/beyond_disease.qmd).
+- **Custom modules** (given as `custom=`, and kept in `sim.custom`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Beyond disease](../gallery/beyond_disease.qmd).
 
 Most models need only a disease and a sim; the other kinds are added as the question needs them. The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for agents), the time span and step (`start=`, `stop=`, `dt=`), the random seed, and the solver.
 
@@ -103,16 +103,9 @@ Every rate is per some unit of time and every duration is in some unit, so value
 
 ## How a run proceeds
 
-`sim.run()` first builds the sim (`sim.init()`): it chooses the unit of time and the solver, creates the people in their starting states, and prints a line saying what it will run and how. Then it takes the steps from `start` to `stop`, calling the modules in a fixed order, so that each sees what the modules before it did:
+`sim.run()` first builds the sim (`sim.init()`): it chooses the unit of time and the solver, creates the people in their starting states, and prints a line saying what it will run and how. Then it takes the steps from `start` to `stop`, calling the modules in a fixed order, so that each sees what the modules before it did: in short, **demographics** (births, and deaths requested), then **connectors**, **networks**, and **interventions** (so that someone vaccinated today is protected from today's transmission), then **diseases** (transmission, and every other transition); then deaths take effect, the **results** of the step are recorded, and **analyzers** read the finished step. [The order of each step](running_sim.qmd#the-order-of-a-step) gives it in full.
 
-1. Time moves on, and so do the random number streams.
-2. **Demographics**: people are born, and deaths are requested.
-3. **Connectors**, **networks** (contacts form and dissolve), then **interventions** (so that someone vaccinated today is protected from today's transmission).
-4. **Diseases**: transmission, and every other transition.
-5. Deaths take effect, and the **results** of the step are recorded.
-6. **Analyzers** read the finished step.
-
-Within a disease, the transitions have no order: transitions out of the same state compete, as they do in an ODE. A module can have a step of its own (yearly births with daily transmission). [From declaration to run](architecture_run.qmd#the-order-of-a-step) gives the full order.
+Within a disease, the transitions have no order: transitions out of the same state compete, as they do in an ODE. A module can have a step of its own (yearly births with daily transmission).
 
 After the run, the **results** are in `sim.results`, by module: for each disease, a result for each state (a **stock**: how many people are in it at each time point) and each transition (a **flow**: how many made it in each step), plus any other quantity the model declares, such as prevalence, or reported cases worked out from the flows (an **outcome**). Data attached to the sim is matched to the results by name, for plotting and fitting. See [Results](building_results.qmd), [Outcomes](building_outcomes.qmd), and [Plotting](building_results.qmd#plotting-a-sim).
 

@@ -117,8 +117,8 @@ def test_partners():
     # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
         ss.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approximations='error', verbose=0).run()
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'):
+        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
     ring = ss.Sim(sis, networks=ssl.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
@@ -177,7 +177,7 @@ def test_partner_targets():
 
     # In an open population with long partnerships, newcomers join and the target holds (before, 0.65 against 0.87, and nobody born in the run took part)
     mf = ss.SexualNet(n_contacts=0.87, dur=ss.lognormal(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=0.035), ss.Deaths(death_rate=0.015)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
     ppl, mf = sim.people, sim.networks.mf
     born = (ppl.alive & (ppl.age >= 18) & (ppl.age < 40)).uids # All born during the run, when the probability at birth was 0
     assert np.isclose(mf.participant[born].mean(), 0.9, atol=0.04)
@@ -347,13 +347,13 @@ def test_partnership_approx():
         ratio = prev('ode')/np.mean([prev('abm', seed) for seed in range(1 if name == 'gono' else 4)], axis=0) # One run is enough for the weekly gono, whose ratios are far from its bounds (0.18-0.26 and 0.11-0.13 over 8 seeds)
         assert at10[0] < ratio[0] < at10[1] and at20[0] < ratio[1] < at20[1], f'{name}: {ratio}'
 
-    # The other compartmental solvers use the same force of infection; approximations='error' raises, sides need a dimension, and 'auto' keeps agents
+    # The other compartmental solvers use the same force of infection; ss.options.approximations='error' raises, sides need a dimension, and 'auto' keeps agents
     hiv = cases['hiv'][2]
     ode = run('ode', **sc.dcp(hiv)).run().results.d.I[-1]
     for solver in ['binomial', 'gillespie']: # Stochastic, in 5,000 people
         assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.I[-1], ode, rtol=0.1), solver
-    with pytest.raises(ss.CapabilityError, match='abm'):
-        run('ode', approximations='error', **sc.dcp(hiv)).init()
+    with pytest.raises(ss.CapabilityError, match='abm'), ss.options.context(approximations='error'):
+        run('ode', **sc.dcp(hiv)).init()
     with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
         ss.Sim(sis(0.01), networks=ss.SexualNet(), solver='ode', verbose=0).init()
     assert isinstance(run('auto', **sc.dcp(hiv)).init().solver, ss.solvers.abm)
@@ -386,7 +386,7 @@ def test_between():
     res = sim.networks[0].results
     assert np.isclose(res.match[-24:].mean(), 0.8, atol=0.05) and np.isclose(res.mean_degree[-1], 0.8, rtol=0.1), (res.match[-24:].mean(), res.mean_degree[-1])
 
-    # A subclass that forms its own partnerships gets none from the base, and only between= of its parameters; between men, its error suggests between='mm'
+    # A subclass that forms its own partnerships (its own step()) gets none from the base; between men, its error suggests between='mm'
     class OwnMSM(ss.SexualNet):
         def step(self):
             self.end_pairs()
@@ -394,7 +394,6 @@ def test_between():
                 men = self.sim.people.male.uids
                 n = len(men)//2
                 self.append(p1=men[:n], p2=men[n:2*n], weight=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
-    assert list(OwnMSM().pars.keys()) == ['memory', 'between'] # And memory=, of every dynamic network
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm'), n_agents=500, verbose=0).init()
     assert len(sim.networks.msm) == 0
     with pytest.raises(ValueError, match="between='mm'"):

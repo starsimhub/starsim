@@ -79,7 +79,7 @@ contact_matrix = np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]]) # Contacts per day 
 def ages(**kwargs):
     """ 6. An age-stratified SIR with a contact matrix """
     sir = make_sir(beta=0.05).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(contact_matrix))
+    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(age=contact_matrix))
 
 
 def patches(mobility=True, **kwargs):
@@ -251,7 +251,7 @@ def age_vaccine(**kwargs):
     sir = make_sir(beta=0.05).stratify(age={0: 0.15, 5: 0.3, 20: 0.45, 65: 0.1})
     vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=ss.person.age < 5, when=[10], coverage=0.8, name='vaccinate')
     contacts = np.array([[6, 3, 2, 1], [3, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]])
-    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(contacts), interventions=vaccine)
+    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(age=contacts), interventions=vaccine)
 
 
 def patch_matrix(dim='patch', **kwargs):

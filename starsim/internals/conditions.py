@@ -111,7 +111,7 @@ class Cond:
         return Cond(op, self, other)
     def __eq__(self, other): return Cond('==', self, other)
     def __ne__(self, other): return Cond('!=', self, other)
-    def __and__(self, other): return Cond('&', self, other)
+    def __and__(self, other): return NotImplemented if defers(other) else Cond('&', self, other)
     @property
     def time_in(self):
         """ For a set of states (`A | B`): the time since entering it from outside it, in the sim's unit (moves within the set do not reset it; NaN outside it) """
@@ -138,9 +138,9 @@ class Cond:
             raise TypeError(errormsg)
         return Event(kind, states)
 
-    def __or__(self, other):  return Cond('|', self, unbracketed(self, other))
-    def __rand__(self, other): return Cond('&', other, self)
-    def __ror__(self, other):  return Cond('|', unbracketed(self, other), self)
+    def __or__(self, other):  return NotImplemented if defers(other) else Cond('|', self, unbracketed(self, other))
+    def __rand__(self, other): return NotImplemented if defers(other) else Cond('&', other, self)
+    def __ror__(self, other):  return NotImplemented if defers(other) else Cond('|', unbracketed(self, other), self)
     def __invert__(self):     return Cond('~', self)
 
     @property
@@ -277,7 +277,7 @@ class Cond:
         sim = getattr(mod, 'sim', None)
         if sim is None and getattr(mod, '_given', False):
             errormsg = (f'{self!r} has no values: "{mod.name}" was given to a sim, which runs a copy of each module it is given (so it can be given to other sims). '
-                        f'Read the one that ran from the sim, e.g. sim.{mod.name}, or make the sim with copy_modules=False to run the modules themselves')
+                        f'Read the one that ran from the sim, e.g. sim.{mod.name}, or make the sim with copy_inputs=False to run the modules themselves')
             raise ValueError(errormsg)
         if sim is None or not sim.initialized:
             errormsg = f'{self!r} has no values yet: cond[uids] and cond.values are for a condition on a module in a sim that has been initialized'
@@ -290,7 +290,7 @@ class Cond:
         try:
             out = self.eval(selector)
         except (KeyError, AttributeError) as e: # E.g. the memory of a declared transition that nothing in the model reads (tb.diagnosis.since), which is not kept
-            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); make the sim with ss.Sim(..., keep_times=True) to keep it') from e
+            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); make the sim with ss.Sim(..., solver=ss.solvers.abm(keep_times=True)) to keep it') from e
         out = np.asarray(out)
         if out.ndim == 0:
             out = np.full(sim.people.uid.len_tot, out[()])
@@ -591,9 +591,9 @@ def check_clocks(amount, where, what):
 
 
 def check_when(when):
-    """ A function in when= is of the date alone, so anything else (e.g. d.I.n > 1000, or sir.I) goes in who= """
+    """ A function in when= is of the date alone; a condition on people (e.g. sir.I) goes in who=, and one on the population (d.I.n > 1000) is when= itself """
     if when is not None and (isinstance(when, (Cond, ss.expressions.Expr, ss.State, ss.Arr)) or not callable(when)):
-        errormsg = f'when= as a function is of the date of each step, true on the steps it happens (e.g. when=lambda now: now.month == 1); for {when}, a condition, use who='
+        errormsg = f'when= as a function is of the date of each step, true on the steps it happens (e.g. when=lambda now: now.month == 1); for {when}, a condition on people, use who='
         raise TypeError(errormsg)
     return when
 
@@ -610,6 +610,100 @@ def on_people(cond):
             return cond.args[2] is not None # By group (see ss.Transition.incidence()), or else one number
         return cond.op in leaves or any(on_people(arg) for arg in cond.args)
     return isinstance(cond, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop, ss.expressions.Clock, ss.expressions.attr, ss.expressions.mother)) for leaf in cond.leaves)
+
+
+def on_population(cond):
+    """ Whether a condition is on the population as a whole (a count, a fraction, or a parameter, e.g. `sir.I.n > 1000`), and not on people or an event: it says when, not who """
+    cond = as_cond(cond)
+    return isinstance(cond, (Cond, ss.expressions.Expr)) and not has_event(cond) and not on_people(cond)
+
+
+def split_population(cond):
+    """ A condition joined with & split into its part on people and its part on the population, as (people, population), either None if it has none """
+    cond = as_cond(cond)
+    if isinstance(cond, Cond) and cond.op == '&':
+        parts = [split_population(arg) for arg in cond.args]
+        return join('&', [p[0] for p in parts]), join('&', [p[1] for p in parts])
+    return (None, cond) if on_population(cond) else (cond, None)
+
+
+def has_population(cond):
+    """ Whether a condition has a part on the population anywhere in it (e.g. `(ss.person.age < 5) | (sir.I.n > 10)`) """
+    cond = as_cond(cond)
+    if on_population(cond):
+        return True
+    return isinstance(cond, Cond) and cond.op in ['&', '|', '~'] and any(has_population(arg) for arg in cond.args)
+
+
+def check_who_people(who, what):
+    """
+    who= says who something applies to, a condition on people; a condition on the population (a count, e.g. `sir.I.n > 1000`) says
+    when, decided for everyone at once, so it goes in when=. One in who= raises, as does one joined to a condition on people, showing the split
+    """
+    if not isinstance(who, (Cond, ss.expressions.Expr, ss.State)) or has_event(as_cond(who)): # An event in who= has its own error
+        return who
+    if on_population(who):
+        errormsg = f'who= of {what} is who it applies to, a condition on people; {who!r} is a condition on the population, which says when, decided for everyone at once: give it as when={who!r} (joined with & to anything else in when=)'
+        raise TypeError(errormsg)
+    people, population = split_population(who)
+    if population is not None:
+        errormsg = f'who= of {what} joins a condition on people to one on the population, {population!r}, which says when, decided for everyone at once: split them, as who={people!r}, when={population!r}'
+        raise TypeError(errormsg)
+    if has_population(who):
+        errormsg = f'who= of {what} is a condition on people, but {who!r} has a condition on the population joined with | or ~, which cannot be split into who= and when=: give who= as a function of the sim instead (e.g. who=lambda sim: ...)'
+        raise TypeError(errormsg)
+    return who
+
+
+def holds(cond, sim, selector=None):
+    """ Whether a condition on the population holds now, in a running sim (as agents or compartments) """
+    selector = Selector(sim) if selector is None else selector
+    return bool(np.any(np.asarray(selector.select(resolve_paths(cond, sim))) > 0))
+
+
+def disjuncts(cond):
+    """ The parts of a condition joined with | at its top level """
+    cond = as_cond(cond)
+    if isinstance(cond, Cond) and cond.op == '|':
+        return disjuncts(cond.args[0]) + disjuncts(cond.args[1])
+    return [cond]
+
+
+def split_either(cond):
+    """
+    A when= of events joined with | to conditions on the population (`screening.positive | (sir.I.n > 1000)`), as (events, population,
+    gate): what acts on the people an event happened to, what acts on everyone while it holds, and a condition on the population joined
+    to the whole with & (`(screening.positive | (sir.I.n > 1000)) & (sir.I.n < 5000)`), which all of it needs; (cond, None, None) for
+    anything else, which is read as before
+    """
+    cond = as_cond(cond)
+    gate, rest = None, cond
+    if isinstance(cond, Cond) and cond.op == '&': # A condition on the population joined to the whole with &
+        parts = [cond.args[0], cond.args[1]]
+        pops = [p for p in parts if on_population(p)]
+        if len(pops) == 1:
+            gate, rest = pops[0], next(p for p in parts if p is not pops[0])
+    parts = disjuncts(rest)
+    events = [p for p in parts if has_event(as_cond(p))]
+    pops = [p for p in parts if on_population(p)]
+    if not events or not pops or len(events) + len(pops) < len(parts): # Not an event or a condition on the population on either side: as before (an error, if a condition on people)
+        return cond, None, None
+    for ev in events:
+        _, inner = split_events(as_cond(ev))
+        if inner is not None and on_population(inner):
+            errormsg = f'{cond} joins an event that has a condition on the population of its own ({inner}) to something else with |, so it is not clear what that condition is for. Give the condition to the whole, ((event | other) & condition), or make two events'
+            raise TypeError(errormsg)
+    return join('|', events), join('|', pops), gate
+
+
+def defers(other):
+    """ For Cond & other: whether `other` is a when= that takes a condition (`ss.schedule()`, `ss.on()`), which makes the join; times joined to a condition are an error, since they need ss.schedule() """
+    if isinstance(other, (ss.schedule, ss.on)):
+        return True
+    if isinstance(other, (list, tuple, ss.date, ss.Duration)) or (isinstance(other, str) and other[:1].isdigit()):
+        errormsg = f'{other!r} is a time (or times), which cannot be joined to a condition with & or |; for times while a condition on the population holds, use ss.schedule(): e.g. when=ss.schedule({other!r}) & (sir.I.n > 1000)'
+        raise TypeError(errormsg)
+    return False
 
 
 def modname(mod):
@@ -854,6 +948,7 @@ def check_path_events(sim, cond, owner):
         if path is None:
             continue
         modname, name = path.args
+        modname = ss.utils.own_name(sim._named_modules(), modname) # A module by its default name, e.g. 'sir' for an ss.SIR called measles
         mod = next((m for m in sim.declared if m.name == modname), None)
         if mod is not None and name in mod.graph.states:
             errormsg = f'when="{modname}.{name}" of "{owner}" is a state, a condition on people, which says who it reaches: give it as who="{modname}.{name}", or for entering it, when=ss.ref("{modname}.{name}").enter'
@@ -875,6 +970,7 @@ def resolve_paths(cond, sim):
     if isinstance(cond, StatePath) or getattr(cond, 'path', None) is not None:
         path = cond if isinstance(cond, StatePath) else cond.path
         modname, name = path.args
+        modname = ss.utils.own_name(sim._named_modules(), modname) # A module by its default name, e.g. 'sir' for an ss.SIR called measles
         mod = next((m for m in sim.declared if m.name == modname), None)
         graph = getattr(mod, 'graph', None)
         if graph is not None and (name in graph.transitions or name in graph.transfers):
@@ -904,8 +1000,9 @@ def split_events(cond):
         (ta, ca), (tb, cb) = split_events(cond.args[0]), split_events(cond.args[1])
         return join('&', [ta, tb]), join('&', [ca, cb])
     elif cond.op == '|':
-        errormsg = (f'{cond} joins an event and a condition with |, so it is neither triggered (by an event) nor a condition: '
-                    f'give the event as when= and the condition as who=, e.g. when=screening.positive, who=ss.person.female; or make two steps')
+        errormsg = (f'{cond} joins an event and a condition with |. A condition on people says who, so give the event as when= and the condition as who= '
+                    f'(e.g. when=screening.positive, who=ss.person.female); an event or delivery also takes an event joined with | to a condition on the population, '
+                    f'acting on either (when=screening.positive | (sir.I.n > 1000)), but a transition\'s when= takes only &')
         raise TypeError(errormsg)
     errormsg = f'{cond} applies "{cond.op}" to an event; an event is the people something happened to on this step, so it can be joined to others with | and &, and narrowed with & a condition, but not negated or compared'
     raise TypeError(errormsg)
@@ -927,7 +1024,7 @@ def check_not_time(who, what):
     if isinstance(who, (bool, int, float, np.bool_, np.number)):
         errormsg = f'who= of {what} says who it applies to (a condition, a state, agents, or a function of the sim), not {who!r}; leave it out for everyone'
         raise TypeError(errormsg)
-    names = getattr(getattr(who, '__code__', None), 'co_names', None)
+    names = None if isinstance(who, ss.Arr) else getattr(getattr(who, '__code__', None), 'co_names', None) # An array forwards attributes to its values, so is not asked
     if callable(who) and names and set(names) <= time_names:
         errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give the window as start= and stop= (which go with any when=, e.g. when=screening.positive, start=2001), or when= as a function of the date, e.g. when=lambda now: now.month == 1'
         raise TypeError(errormsg)
@@ -961,8 +1058,10 @@ def split_delivery(on=None, who=None, where=None):
             trigger, rest = split_events(cond)
         if trigger is None or rest is not None:
             what = 'a condition' if trigger is None else f'an event joined to a condition ({rest})'
-            errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who='
-            raise TypeError(errormsg)
+            if trigger is None or on_people(as_cond(rest)):
+                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who='
+                raise TypeError(errormsg)
+            where = join('&', [where, rest]) # An event joined to a condition on the population (when=screening.positive & (sir.I.n > 1000)): while it holds
     for key,val in [('who', who), ('where', where)]:
         if isinstance(val, str) and (len(val.split('.')) != 2 or not all(val.split('.'))):
             errormsg = f'{key}= of a delivery as a string is a state by its path, "module.state", e.g. {key}="sir.I" (as ss.ref("sir.I")), or the state itself ({key}=sir.I); not {val!r}'
@@ -978,7 +1077,7 @@ def split_delivery(on=None, who=None, where=None):
     if where is not None:
         cond = as_cond(where)
         if not isinstance(cond, (Cond, ss.expressions.Expr)) and not callable(cond):
-            errormsg = f'who= of an event takes a condition (e.g. who=d.I.n > 1000) or a function of the sim; not {where!r}'
+            errormsg = f'who= of an event takes a condition on people or a function of the sim, and when= a condition on the population (e.g. when=d.I.n > 1000); not {where!r}'
             raise TypeError(errormsg)
     return trigger, join('&', [who, where])
 
@@ -1038,12 +1137,9 @@ class Selector(sc.prettyobj):
         sim = self.sim
         if name is None:
             return self.mod
-        mods = sim.__dict__.get('_modules_by_name') # Kept on the sim (each leaf of each condition asks, every step), and made again if a name is not in it
-        if mods is None or name not in mods:
-            mods = sim.__dict__['_modules_by_name'] = {mod.name:mod for mod in sim.modules}
-        if name not in mods:
-            errormsg = f'A condition refers to the module "{name}", which is not in the sim; the modules are {sc.strjoin(mods.keys())}'
-            raise KeyError(errormsg)
+        mods = sim.__dict__.setdefault('_modules_by_name', {}) # Kept on the sim (each leaf of each condition asks, every step)
+        if name not in mods: # By its name, else its default name (see ss.utils.find_module())
+            mods[name] = ss.utils.find_module(sim.modules, name, error=sc.KeyNotFoundError)
         return mods[name]
 
     def in_states(self, names):
@@ -1089,11 +1185,11 @@ class Selector(sc.prettyobj):
         elif op == 'incidence':
             return self.incidence(cond)
         elif op == 'event':
-            return ss.interventions.fired(self, cond)
+            return ss.solvers.deliveries.fired(self, cond)
         elif op == 'memory':
-            return ss.interventions.remembered(self, cond)
+            return ss.solvers.deliveries.remembered(self, cond)
         elif op == 'move':
-            reading = self.__dict__.get('reading') # A delayed delivery reading the events of the step before, which this reads only in this step (see ss.Event.delayed_arrivals())
+            reading = self.__dict__.get('reading') # A delayed delivery reading the events of the step before, which this reads only in this step (see ss.Event._delayed_arrivals())
             return self.nobody() if reading is not None and reading[0] != sim.ti else self.event_of(cond)
         elif op == 'people':
             name = args[0]
@@ -1366,9 +1462,10 @@ class Selector(sc.prettyobj):
         if isinstance(val, ss.expressions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
             val = self.expr(val, mask) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
+            typed = None if convert is None else lambda v: convert(v) if isinstance(v, ss.TimePar) else v # Its typed values converted, as one given alone is (below)
             if self.abm and val.on_people(sim): # Read from each person
-                return val.lookup(sim)
-            ds, grid = val.grid(sim)
+                return val.lookup(sim, convert=typed)
+            ds, grid = val.grid(sim, convert=typed)
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
             val = ss.utils.call_fn(val, self=self.mod if owner is None else owner, sim=sim)

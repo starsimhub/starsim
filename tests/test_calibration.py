@@ -50,7 +50,7 @@ def test_best_trial():
 
 @sc.timer()
 def test_fit_keywords():
-    sc.heading('Testing a method with its settings, likelihoods for every series or none, and sim.optimize()')
+    sc.heading('Testing a method with its settings as keywords, likelihoods for every series or none, fit.loglik() and fit.mismatch(), and sim.optimize()')
     beta = ss.par(0.3, bounds=[0.1, 1])
     S, I, R = ss.states(3)
     infection = S >> I @ beta*I
@@ -58,8 +58,15 @@ def test_fit_keywords():
     pars = dict(total_pop=10_000, unit='day', stop=40, verbose=0)
     data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data(['cases', 'I'], resample='week', rand_seed=1)
     sim = ss.Sim(sir, data=data, **pars)
-    fit = sim.fit(likelihood=ss.poisson(), method=ss.fitting.method('nelder-mead', scan=2)) # One likelihood for every series
+    fit = sim.fit(likelihood=ss.poisson(), method='nelder-mead', scan=2) # One likelihood for every series; a setting of the method as a keyword
     assert fit.measure == 'negative log-likelihood' and np.isclose(fit.pars.beta, 0.5, rtol=0.05) and fit.objective < fit.objective_before
+    assert np.isclose(fit.loglik(), -fit.objective) and fit.loglik() == ss.fitting.loglik(fit.sim, likelihood=ss.poisson()) # By the fit's own likelihood
+    assert fit.mismatch() == ss.fitting.mismatch(fit.sim) and set(fit.loglik(by_series=True).keys()) == {'cases', 'I'}
+    dispersion = ss.par(5, bounds=[1, 100], name='dispersion')
+    with pytest.warns(ss.errors.AtBound): # The data are Poisson, so as little dispersion as the bounds allow
+        nb = sim.fit(likelihood=dict(cases=ss.nbinom(n=dispersion), I=ss.poisson()), method='nelder-mead', scan=2)
+    dispersion.value = 99 # As a later fit would leave it
+    assert nb.loglik() == ss.fitting.loglik(nb.sim, likelihood=dict(cases=ss.nbinom(n=nb.pars.dispersion), I=ss.poisson())) # At its best value
     with pytest.raises(ValueError, match='but I does not'): # Some series with a likelihood and some without (it silently minimized the loss)
         sim.fit(likelihood=dict(cases=ss.poisson()))
     with pytest.raises(ValueError, match='loss= is the measure of a fit without likelihoods'):
@@ -71,10 +78,12 @@ def test_fit_keywords():
     assert dsim.fit(loss='rmse', method=quick).measure == 'loss' == dsim.fit(likelihood=False, method=quick).measure # loss= in its place (with a note), or none
     with pytest.raises(ValueError, match='likelihood=False'): # Some series with a likelihood and some without
         ss.Sim(declared, data=data, **pars).fit(method=quick)
-    with pytest.raises(TypeError, match='ss.fitting.method'): # A setting of a method is not a keyword of sim.fit()
-        sim.fit(**dict(method='optuna', n_trials=5)) # As a dict, so the rewrite script leaves the old spelling
+    with pytest.raises(TypeError, match='name the method too'): # A setting of a method needs the method named
+        sim.fit(n_trials=5)
+    with pytest.raises(TypeError, match="each stage's settings are given with it"):
+        sim.fit(method=['optuna', 'nelder-mead'], n_trials=5)
     with pytest.raises(TypeError, match='takes draws=, warmup=, chains=, scan=, ess=, rhat=, max_draws=, batch=, require_jax=, not particles='):
-        ss.fitting.method('nuts', particles=100)
+        sim.fit(method='nuts', particles=100)
 
     # Spending allocated to reach a goal
     S, I, R = ss.states(3)
@@ -163,6 +172,8 @@ def test_pmcmc():
     draws = np.stack([auto.samples[auto.samples.chain == c][['beta']].to_numpy() for c in range(3)])
     rhat, ess = ss.fitting.diagnose(draws[:, :n - 100]) # One batch fewer was not yet enough
     assert not (np.all(rhat <= 1.01) and np.all(ess >= 400)), (rhat, ess)
+    loose = sim.fit(method='pmcmc', warmup=300, chains=3, parallel=False, batch=100, rhat=1.1, ess=50, verbose=False) # Converged by the R-hat it stopped at, not the default's
+    assert loose.converged and loose.diagnostics.rhat_target == 1.1, loose.table
     with pytest.raises(ValueError, match='its likelihood is exact'):
         sim.fit(method=ss.fitting.method('pmcmc', particles=100))
 

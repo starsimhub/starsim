@@ -10,12 +10,8 @@ import starsim as ss
 
 
 class SIRModel(ss.Module):
-    def __init__(self):
-        super().__init__()
-        self.define_states(
-            ss.Arr('disease_state', dtype=np.int32, default=0),
-            ss.Arr('recovery_timer', dtype=np.int32, default=0),
-        )
+    disease_state  = ss.Arr(dtype=np.int32, default=0)
+    recovery_timer = ss.Arr(dtype=np.int32, default=0)
 
     def init_results(self):
         super().init_results()
@@ -81,9 +77,7 @@ class IntrahostProgression(ss.Module):
 
 
 class Transmission(ss.Module):
-    def __init__(self, infection_rate):
-        super().__init__()
-        self.infection_rate = infection_rate
+    infection_rate = ss.par(0.3)
 
     def step(self):
         sir = self.sim.people.sirmodel
@@ -98,7 +92,7 @@ class Transmission(ss.Module):
         fraction_infected = num_infected / population_size
 
         # Transmission logic: Probability of infection per susceptible individual
-        infection_probability = self.infection_rate * fraction_infected
+        infection_probability = self.pars.infection_rate * fraction_infected
 
         # Apply infection probability to all susceptible individuals
         new_infections = np.random.rand(num_susceptible) < infection_probability
@@ -120,11 +114,11 @@ def run_sim(run=True, plot=False):
     infection_rate = 0.3
 
     intrahost = IntrahostProgression()
-    transmission = Transmission(infection_rate)
+    transmission = Transmission(infection_rate=infection_rate)
     sir_model = SIRModel()
 
     # Initialize the model
-    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model])
+    sim = ss.Sim(pars, [intrahost, transmission, sir_model])
 
     # Run the simulation
     if run:

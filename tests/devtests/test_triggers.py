@@ -26,7 +26,7 @@ def test_bv_debut():
         u = bv.U.uids
         assert not np.any(ppl.female[u] & (ppl.age[u] >= 15)), f'step {sim.ti}: women 15+ still in U'
         checked.n += 1
-    demog = lambda: [ss.Births(birth_rate=20), ss.Deaths(death_rate=10)]
+    demog = lambda: [ss.Births(birth_rate=0.02), ss.Deaths(death_rate=0.01)]
     sim = ss.Sim(make(), analyzers=check, demographics=demog(), n_agents=5000, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
     res = sim.results.bv
     assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100

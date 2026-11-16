@@ -34,8 +34,8 @@ class NCD(ss.Disease):
         self.update_pars(pars, **kwargs)
 
         self.define_states(
-            ss.BoolState('at_risk', label='At risk'),
-            ss.BoolState('affected', label='Affected'),
+            ss.BoolArr('at_risk', label='At risk'),
+            ss.BoolArr('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
             ss.FloatArr('ti_dead', label='Time of death'),
         )
@@ -56,7 +56,7 @@ class NCD(ss.Disease):
         super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = self.ti + self.pars['dur_risk'].rvs(initial_risk, round=True)
+        self.ti_affected[initial_risk] = self.ti + self.pars['dur_risk'].rvs(initial_risk, round='random')
         return initial_risk
 
     def step_state(self):
@@ -71,7 +71,7 @@ class NCD(ss.Disease):
         ti = self.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
-        dur_prog = self.pars.prognosis.rvs(new_cases, round=True)
+        dur_prog = self.pars.prognosis.rvs(new_cases, round='random')
         self.ti_dead[new_cases] = ti + dur_prog
         if self.infection_log:
             self.infection_log.add_entries(new_cases, None, self.now)

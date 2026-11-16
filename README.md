@@ -18,7 +18,7 @@ For more information, see the [documentation](https://docs.starsim.org) or the [
 Starsim includes an extensive library of features aimed to support a broad diversity of disease modeling needs. The full set is covered in the [documentation](https://docs.starsim.org/user_guide.html). Because the features are modular and written in Python, you can mix-and-match Starsim features with custom-written code, and you only use what you need. Highlights include:
 
 - **Modeling modalities:** Switch between compartmental, stochastic compartmental, metapopulation, and agent-based modeling using a flag (`solver='abm'`) without needing to rewrite any code ([solvers](https://starsim.org/v4/user_guide/running_solvers.html));
-- **Performance:** Numeric kernels are heavily optimized, with Numba and Rust kernels that give the same numbers, plus GPU support (via JAX) ([performance](https://starsim.org/v4/user_guide/running_performance.html));
+- **Performance:** Numeric code is heavily optimized, with Numba and Rust backends that give the same numbers, plus GPU support (via JAX) ([performance](https://starsim.org/v4/user_guide/running_performance.html));
 - **Diseases:** A large library of already-implemented diseases including COVID, flu, measles, malaria, syphilis, gonorrhea, cholera, Ebola and many others (plus HIV, TB, COVID, HPV, chlamydia, typhoid, and others in the models below); diseases support coinfection between different diseases, as well as multiple strains of a single disease ([library diseases](https://starsim.org/v4/user_guide/library_diseases.html), [diseases](https://starsim.org/v4/user_guide/building_diseases.html));
 - **Networks:** Contact networks including age-stratified contact matrices, sexual (including male-female, male-male, and commercial), respiratory (household/workplace/school); also supports other forms of disease transmission including environmental and vector-borne ([networks](https://starsim.org/v4/user_guide/populations_mixing.html), [library networks](https://starsim.org/v4/user_guide/library_networks.html));
 - **Interventions:** Flexible options for representing interventions, including screening, diagnostics, treatments, vaccination, and care cascades; health system considerations such as prioritization, capacity constraints, and clinic visits ([interventions](https://starsim.org/v4/user_guide/interventions_interventions.html), [products](https://starsim.org/v4/user_guide/interventions_products.html));
@@ -73,7 +73,7 @@ starsim init
 
 JAX is recommended if you'll be calibrating compartmental models -- otherwise you can skip it, i.e. `pip install starsim`.
 
-`starsim init` compiles numeric kernels if needed (usually it's not). It also asks if you want to install Starsim's AI skills (so you can type `/starsim` in your agent to use them). To do either the compile or the AI install, run `starsim init compile` or `starsim init ai`.
+`starsim init` compiles Starsim's numeric code if needed (usually it's not). It also asks if you want to install Starsim's AI skills (so you can type `/starsim` in your agent to use them). To do either the compile or the AI install, run `starsim init compile` or `starsim init ai`.
 
 You can also of course install with [uv](https://github.com/astral-sh/uv):
 ```sh
@@ -88,7 +88,7 @@ pip install -e .
 starsim init dev
 ```
 
-This installs the optional dependencies for testing and documentation, and JAX; installs Rust if it is missing; and builds Starsim's kernels. See the [developer guide](https://docs.starsim.org/contributing/developer.html) for details.
+This installs the optional dependencies for testing and documentation, and JAX; installs Rust if it is missing; and builds Starsim's Rust and Numba backends. See the [developer guide](https://docs.starsim.org/contributing/developer.html) for details.
 
 ### R
 

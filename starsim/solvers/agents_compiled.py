@@ -24,8 +24,8 @@ def compiled_reasons(engine):
     out = []
     if not ss.options.crn: # The agent engine then draws from each distribution in turn (dist.rvs()), as its other compiled passes do (see Agents.crn_key())
         out.append('no common random numbers (ss.options.crn=False)')
-    if sim.pars.get('even_draws'):
-        out.append('evenly spaced draws (even_draws=True)')
+    if sim.solver.even_draws:
+        out.append('evenly spaced draws (ss.solvers.abm(even_draws=True))')
     if sim.groups.n_groups > 1:
         out.append('groups')
     if engine.held is not None or sim.pars.branching:
@@ -343,7 +343,7 @@ class Compiled(Agents):
             if spec[0] == 'dist':
                 srcs = self.dist_pars(spec[1], spec[2])
                 dist = spec[2]
-                if type(dist) is ss.uniform and dist.ppf(np.full(1, 0.5, dtype=dist.hash_dtype or ss.dtypes.float)).dtype == np.float32: # Parameters that are plain numbers, which NumPy takes in single precision with the uniforms
+                if type(dist) is ss.uniform and dist._ppf(np.full(1, 0.5, dtype=dist.hash_dtype or ss.dtypes.float)).dtype == np.float32: # Parameters that are plain numbers, which NumPy takes in single precision with the uniforms
                     self.kplan.fam[d] = kernel.FAMILIES['uniform32']
             elif spec[1] == 'adjust':
                 name, changes = spec[2], spec[3]
@@ -706,7 +706,7 @@ class Compiled(Agents):
             if ev_d[lo] < 0: # Deaths, requested as the agent engine does (see send()), and counted once each has one cause (see uncount_deaths())
                 srcs = ev_s[lo:hi]
                 self.record(tr, uids, srcs, -1)
-                self.sim.people.request_death(uids, cause=self.mod)
+                self.sim.people.request_death(uids, cause=self.cause_of(tr))
                 states = np.unique(srcs).tolist()
                 self._died.append((tr, [self.graph.people_states[i] for i in states], [uids[srcs == i] for i in states]))
                 events[name] = uids if name not in events else ss.uids.concatenate([events[name], uids])
@@ -853,6 +853,7 @@ class Compiled(Agents):
         finally:
             collected, self._collect = self._collect, None
         self._drawn_ti = self.ti
+        self._members = None # Counts read from now on are live, as in Agents.step_state(), not those of the start of the step (which an intervention in the next step would otherwise read)
         for nm in self.krescaled: # What is left of the dwell times whose speed has changed, rescaled (those with competing rates too, by leave())
             if not self.competing.get(nm):
                 uids = ss.uids(np.flatnonzero(self.mod[nm].raw))

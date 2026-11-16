@@ -180,32 +180,166 @@ def test_lazy_arrays():
 
 @sc.timer()
 def test_where_count():
-    sc.heading('A condition on a count in where= is worked out at each step, under every solver; in when=, a clear error')
+    sc.heading('A condition on a count in when= is worked out at each step, under every solver; in who=, a clear error')
     def make():
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
     def peak(solver, thresh):
         d = make()
-        npi = ss.modify(d.infection, multiply=0.5, who=d.I.n > thresh)
+        npi = ss.modify(d.infection, multiply=0.5, when=d.I.n > thresh)
         return ss.Sim(d, connectors=npi, n_agents=2000, total_pop=2000, stop=100, solver=solver, rand_seed=1, verbose=0).run().results.d.I.max()
     for solver in ['ode', 'binomial', 'tau', 'gillespie', 'abm']:
         never, once = peak(solver, 2000), peak(solver, 200)
         assert 200 < once < 0.6*never, f'Under {solver}, the peak is {once:n} with a threshold of 200, and {never:n} without one reached'
     d = make()
-    vaccinate = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 200, coverage=0.1) # A delivery takes one too
+    vaccinate = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 200, coverage=0.1) # A delivery takes one too
     assert ss.Sim(d, interventions=vaccinate, n_agents=2000, stop=100, verbose=0).run().results.d.I.max() > 200
-    for make_when in [lambda d: ss.modify(d.infection, multiply=0.5, when=d.I.n > 200), lambda d: ss.modify(d.infection, multiply=0.5, when=d.I)]:
-        with pytest.raises(TypeError, match='goes in who='):
-            make_when(make())
-    with pytest.raises(TypeError, match='as who='): # For an event, a condition goes in who=, whether on people or on the population
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), when=make().I.n > 200)
+    with pytest.raises(TypeError, match='goes in who='): # A condition on people is not when
+        ss.modify(make().infection, multiply=0.5, when=make().I)
+    for make_who in [lambda d: ss.modify(d.infection, multiply=0.5, who=d.I.n > 200), lambda d: ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 200), lambda d: ss.Event(d.S >> d.R, who=d.I.frac > 0.1)]:
+        with pytest.raises(TypeError, match='give it as when='): # A count says when, for everyone at once
+            make_who(make())
+    return
+
+
+def test_count_is_when():
+    sc.heading('A condition on the population is when= everywhere; one joined to a condition on people in who= raises, showing the split')
+    S, I, Q = ss.states('S I Q')
+    for make_who in [lambda: ss.Transition(I, Q, rate=ss.peryear(5), who=Q.n < 20), lambda: ss.move(I, Q, who=Q.n < 20), lambda: ss.Intervention(who=I.n > 5)]:
+        with pytest.raises(TypeError, match='give it as when='):
+            make_who()
+    for make_who in [lambda: ss.Event(S >> Q, who=(ss.person.age < 5) & (I.n > 10)), lambda: ss.modify('d.infection', multiply=0.5, who=(ss.person.age < 5) & (I.n > 10)), lambda: ss.Transition(I, Q, rate=1, who=(ss.person.age < 5) & (I.n > 10))]:
+        with pytest.raises(TypeError, match=r'who=\(people.age < 5\), when=\(I.n > 10\)'):
+            make_who()
+    with pytest.raises(TypeError, match='cannot be split'): # Joined with |, there is no split
+        ss.Event(S >> Q, who=(ss.person.age < 5) | (I.n > 10))
+
+    # On a transition with a rate, a count in when= says when the rate applies (here, while there are beds); with no rate, it still moves everyone at once
+    gated = ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20)
+    assert gated.trigger is None and gated.where is not None
+    assert ss.Transition(I, Q, when=Q.n < 20).trigger is not None
+    for solver in ['ode', 'abm']:
+        S, I, Q = ss.states('S I Q')
+        d = ss.Disease(S, I, Q, infection=S >> I @ ss.peryear(2)*I, q=ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20), init_prev=0.1, name='d')
+        size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
+        assert ss.Sim(d, solver=solver, start=2000, stop=2003, dt=ss.years(0.25), verbose=0, **size).run().results.d.Q[-1] < 100 # Without the gate, about 800
+
+    # An intervention written as code takes a count, a schedule, or both as when=
+    class Count(ss.Intervention):
+        def init_pre(self, sim):
+            super().init_pre(sim)
+            self.n = []
+        def step(self):
+            self.n.append(len(self.check_eligibility()))
+    sir = ss.SIR(beta=ss.perday(0.1), init_prev=0.01, name='sir')
+    count = Count(who=ss.person.age < 30, when=ss.schedule(every=ss.days(10)) & (sir.I.n > 100), name='count')
+    sim = ss.Sim(diseases=sir, networks='random', interventions=count, n_agents=1000, unit='day', dt=1, stop=60, rand_seed=1, verbose=0).run()
+    I, n = sim.results.sir.I, np.array(sim.interventions.count.n)
+    due = np.arange(len(n)) % 10 == 0
+    assert np.all(n[~due] == 0) and np.all((n[due] > 0) == (I[:len(n)][due] > 100)) and (n > 0).sum() >= 2
+    with pytest.raises(TypeError, match='when= of Count'):
+        Count(when=ss.person.age > 10)
+
+    # A transition gated by counts joined together, as by one: here the second always holds, so the same numbers
+    for solver in ['ode', 'abm']:
+        maxq = []
+        for gate in [lambda Q, I: Q.n < 20, lambda Q, I: (Q.n < 20) & (I.n >= 0), lambda Q, I: (Q.n < 20) | (I.n > 1e9)]:
+            S, I, Q, R = ss.states('S I Q R')
+            dis = ss.Disease(S, I, Q, R, infection=S >> I @ ss.perday(0.3)*I, iso=ss.Transition(I, Q, rate=ss.peryear(50), when=gate(Q, I)), rec=I >> R @ ss.days(10), out=Q >> R @ ss.days(5), init_prev=0.01, name='d')
+            maxq.append(ss.Sim(dis, n_agents=1000, total_pop=1000, unit='day', stop=60, solver=solver, verbose=0).run().results.d.Q.max())
+        assert np.allclose(maxq, maxq[0]), (solver, maxq)
+    return
+
+
+def test_when_joined():
+    sc.heading('when= joins a schedule, or an event, to a condition on the population with & (both) or | (either)')
+    d = ss.SIR(name='d')
+    assert repr(ss.schedule(start=2025) & (d.I.n > 1000)) == 'ss.schedule(start=2025) & (I.n > 1000)'
+    assert (d.I.n > 1000) & ss.schedule(every=ss.years(1)) is not None # Either way round
+    assert ss.on(d.infection, delay=ss.days(5)) & (d.I.n > 10) is not None
+    for bad, match in [(lambda: ss.schedule(start=2025) & d.I.n > 1000, 'in parentheses'), (lambda: ss.schedule() | (d.I.n > 10), 'adds nothing'),
+                       (lambda: ss.schedule(every=ss.days(10)) | d.I, 'goes in who='), (lambda: ss.schedule(every=ss.days(10)) & (d.I.n > 5) | (d.I.n > 9), 'not clear'),
+                       (lambda: ss.schedule() & d.I, 'goes in who='), (lambda: [2025, 2030] & (d.I.n > 10), r'ss.schedule\(\[2025, 2030\]\) &'),
+                       (lambda: ss.schedule() & d.infection, 'is an event')]:
+        with pytest.raises(TypeError, match=match):
+            bad()
+
+    # Rounds every 10 days, each only if the count holds then, as compartments and as agents
+    for solver in ['ode', 'abm']:
+        d = ss.SIR(beta=ss.perday(0.1), init_prev=0.02, name='d')
+        ev = ss.Event(d.S >> d.R, p=0.5, when=ss.schedule(every=ss.days(10)) & (d.I.n > 50), name='ev')
+        size = dict(n_agents=2000, networks='random') if solver == 'abm' else dict(total_pop=10_000)
+        sim = ss.Sim(diseases=d, interventions=ev, solver=solver, unit='day', dt=1, stop=60, rand_seed=1, verbose=0, **size).run()
+        I, reached = sim.results.d.I, sim.results.ev.delivered
+        ran = reached > 0
+        assert np.all(~ran[np.arange(len(ran)) % 10 != 0]) # Only on the schedule
+        assert np.any(ran) and np.all(I[ran] > 50) and not np.all(ran[::10]) # Only while the count holds, which it stops doing
+
+    # A modifier from a date, while a count holds
+    d = ss.SIR(beta=ss.perday(0.3), init_prev=0.001, name='d')
+    npi = ss.modify(d.pars.beta, multiply=0.0, when=ss.schedule(start=ss.days(20)) & (d.I.n > 100))
+    assert 'when=ss.schedule(start=days(20)) & (I.n > 100)' in npi.describe()
+    inf = ss.Sim(diseases=d, connectors=npi, solver='ode', total_pop=10_000, unit='day', dt=1, stop=60, verbose=0).run().results.d.infection
+    assert np.all(inf[:20] > 0) and inf[20:].min() == 0 and inf[20:].max() > 0 # Off once it holds after day 20, on again while it does not
+
+    # After an event and a delay, the count is checked when it acts
+    for op, acts in [('<', False), ('>', True)]:
+        d = ss.SIR(beta=ss.perday(0.3), init_prev=0.01, name='d')
+        count = (d.I.n < 300) if op == '<' else (d.I.n > 300)
+        ev = ss.Event(when=ss.on(d.infection, delay=ss.days(10)) & count, name='ev')
+        sim = ss.Sim(diseases=d, networks='random', interventions=ev, n_agents=2000, unit='day', dt=1, stop=20, rand_seed=1, verbose=0).run()
+        assert (sim.results.ev.delivered[10:].sum() > 0) == acts # Infected while fewer than 300 were infectious, and acted on when more were
+
+    # Joined with |, on either: a round on the schedule's steps, and everyone eligible at each step the count holds; or, with an event, those it happens to
+    def run(solver, when):
+        d = ss.SIR(beta=ss.perday(0.2), init_prev=0.01, name='d')
+        size = dict(n_agents=2000, networks='random') if solver == 'abm' else dict(total_pop=2000)
+        sim = ss.Sim(diseases=d, interventions=ss.Event(when=when(d), p=0.1, name='ev'), solver=solver, unit='day', dt=1, stop=50, rand_seed=1, verbose=0, **size).run()
+        return np.asarray(sim.results.ev.delivered), np.asarray(sim.results.d.I)
+    rounds = np.arange(51) % 10 == 0
+    for solver in ['ode', 'abm']:
+        event, I = run(solver, lambda d: d.infection) # The event changes nothing, so the epidemic is the same in each run
+        thresh = I.max()/2 # Held for some steps, not all
+        either, I = run(solver, lambda d: ss.schedule(every=ss.days(10)) | (d.I.n > thresh))
+        held = I > thresh
+        assert held.any() and not held.all() and np.array_equal(either > 0, rounds | held), f'Under {solver}, a round every 10 days, and one at each step the count holds'
+        either, I = run(solver, lambda d: d.infection | (d.I.n > thresh))
+        held = I > thresh
+        assert np.allclose(either[~held], event[~held]) and np.all(either[held] > event[held]) # The event, and everyone while the count holds
+        either, _ = run(solver, lambda d: ss.schedule(every=ss.days(10)) | d.infection)
+        assert np.allclose(either[~rounds], event[~rounds]) and np.all(either[rounds] > event[rounds]) # The event, and a round every 10 days
+    delayed, _ = run('abm', lambda d: ss.on(d.infection, delay=ss.days(3)))
+    either, I = run('abm', lambda d: ss.on(d.infection, delay=ss.days(3)) | (d.I.n > 300))
+    held = I > 300
+    assert np.array_equal(either[~held], delayed[~held]) and np.all(either[held] > delayed[held]) # The count acts at once; the delay is the event's
+
+    # A modifier on a schedule, or while a count holds
+    d = ss.SIR(beta=ss.perday(0.3), init_prev=0.001, name='d')
+    npi = ss.modify(d.pars.beta, multiply=0.0, when=ss.schedule(every=ss.days(10)) | (d.I.n > 100))
+    assert 'when=(ss.schedule(every=ss.days(10)) | (I.n > 100))' in npi.describe()
+    res = ss.Sim(diseases=d, connectors=npi, solver='ode', total_pop=10_000, unit='day', dt=1, stop=60, verbose=0).run().results.d
+    off = np.arange(61) % 10 == 0
+    off = off | (np.asarray(res.I) > 100)
+    inf = np.asarray(res.infection)
+    assert np.all(inf[off] == 0) and np.all(inf[~off][1:] > 0) and off.sum() > 6 # Off on the schedule and while the count holds (the first step has no infections yet)
+    with pytest.raises(TypeError, match='an event, which a modifier does not take'):
+        ss.modify(d.pars.beta, multiply=0.5, when=ss.schedule(every=ss.days(10)) | d.infection)
+    with pytest.raises(TypeError, match='wait for the delay'): # The other event would wait for the delay too
+        d.recovery | ss.on(d.infection, delay=ss.days(20))
+
+    # A schedule given as a function of the date is bounded by its start and stop, and so is a condition joined to it
+    t = ss.Timeline(start='2020-01-01', stop='2020-06-01', dt=ss.days(1))
+    t.init()
+    sched = ss.schedule(lambda now: now.day == 1, start='2020-02-01', stop='2020-03-01').init(t)
+    assert sched.counts.sum() == 2 and sched.window.sum() == 30
     return
 
 
 def test_keywords():
-    sc.heading('who= chooses people (or decides for everyone at once), and when= is an event or a time')
+    sc.heading('who= chooses people, and when= is an event, a time, or a condition on the population')
     d = ss.SIR(beta=ss.perday(0.1), name='d')
-    assert ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 5).eligible is not None # A count decides for everyone at once, so it is a condition on the population
+    assert ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 5).eligible is not None # A count decides for everyone at once, so it is when
+    assert ss.screen(ss.Diagnostic(), when=d.infection & (d.I.n > 5)).eligible is not None # Joined to an event, while it holds
     with pytest.raises(TypeError, match='give the event as when='): # An event triggers, so it is not who=
         ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.infection)
     with pytest.raises(TypeError, match='give it as who='): # A condition on people is not when
@@ -304,12 +438,12 @@ def test_coded():
         pass
     for solver in ['abm', 'ode']:
         mods = [ss.modify('wealth.pars.rate', multiply=2, when=ss.schedule(start=2)), ss.modify('wealth.pars.rate', add=1, when=ss.schedule(start=4)), ss.modify('link.pars.rate', set=ss.timeseries({1: 3, 3: 4}), when=ss.schedule(start=1))]
-        sim = ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=[Link(name='link'), *mods], n_agents=100, total_pop=100, unit='year', stop=5, solver=solver, verbose=0).run()
+        sim = ss.Sim(Wealth(name='wealth'), diseases=ss.SIR(beta=ss.perday(0.1)), connectors=[Link(name='link'), *mods], n_agents=100, total_pop=100, unit='year', stop=5, solver=solver, verbose=0).run()
         wealth, link = sim.get_module('wealth'), sim.get_module('link')
         assert wealth.seen == [1, 1, 2, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4, 4], f'{solver}: {wealth.seen} and {link.seen}' # A step from each year 0 to 5
         assert wealth.pars.rate == 1
     with pytest.raises(ValueError, match='cannot differ between people'):
-        ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=ss.modify('wealth.pars.rate', multiply=2, who=ss.person.age > 5), n_agents=100, verbose=0).init()
+        ss.Sim(Wealth(name='wealth'), diseases=ss.SIR(beta=ss.perday(0.1)), connectors=ss.modify('wealth.pars.rate', multiply=2, who=ss.person.age > 5), n_agents=100, verbose=0).init()
     return
 
 
@@ -328,7 +462,7 @@ def test_modifier_tables():
     I = lambda sim: sim.results.d.I.values.copy()
     sim = make().run()
     ref = I(sim)
-    assert sim._kernel_reason() is None
+    assert sim._compiled_reason() is None
     assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
     assert np.allclose(I(make().run(until=200)), ref, rtol=1e-12), 'A run a step at a time gives the same'
     assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
@@ -367,6 +501,8 @@ if __name__ == '__main__':
     sims = test_connectors(do_plot=do_plot)
     lazy = test_lazy_arrays()
     test_where_count()
+    test_count_is_when()
+    test_when_joined()
     test_modifier_tables()
     test_sim_diagram()
 

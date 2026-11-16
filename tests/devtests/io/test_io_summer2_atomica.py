@@ -101,11 +101,10 @@ def test_summer2():
         incidence       = ss.Transition(E, I, rate=0.5*ss.by(age=[1, 1.1])),
         recovery        = ss.Transition(I, R, rate=0.3),
         infection_death = ss.death(I, rate=0.05*ss.by(clinical=[0, 1, 1, 2])),
-        rel_trans_by_clinical = ss.modify('seir.rel_trans', multiply=ss.by(clinical=[0.5, 1, 0.2, 0.1])),
         init_n          = dict(I=ss.by([[5, 0, 0, 0], [5, 0, 0, 0]], dims=['age', 'clinical'])),
         name            = 'seir',
     )
-    seir.stratify(age=['young', 'old'], clinical=ss.levels(['asymptomatic', 'symptomatic', 'isolated', 'hospital'], fractions=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']), states=['I']))
+    seir.stratify(age=['young', 'old'], clinical=ss.levels(['asymptomatic', 'symptomatic', 'isolated', 'hospital'], fractions=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']), states=['I'], rel_trans=[0.5, 1, 0.2, 0.1]))
     hand = ss.Sim(seir, total_pop=1000, dt=0.1, stop=20, verbose=0).run().results.seir
     for state in 'SEIR':
         assert np.allclose(res[state].values, hand[state].values, atol=1e-6), f'{state} should match the hand translation'
@@ -243,7 +242,7 @@ def test_atomica_junction():
     assert '\nch_prev = ' in code and code.count('ch_prev') > code.count('\nch_prev = ') + 1, 'The characteristic should be written once and used by name'
     assert 'sus_to_jn_inf' in code and 'sus_to_jn_rec' in code, 'A junction whose shares change should be a transition to each destination, with its share in the rate'
     sim.init()
-    assert sim._kernel_reason() is None, 'The whole run should be taken in one call to the kernels'
+    assert sim._compiled_reason() is None, 'The whole run should be taken in one call to the kernels'
     sim.run()
     res = sim.results.tiny
 

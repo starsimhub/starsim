@@ -16,7 +16,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Strains**: `ss.Strains`, with immunity between them (`ss.immunity()`), also for diseases written as code.
 - **Partnerships**: `ss.DegreeNet` and `ss.SexualNet`, with target numbers of partners, matching and acts.
 - **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age or on events (`who=`, `when=`), with priorities, queues and delays; `ss.modify()` changes any named quantity.
-- **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`; UN data by country (`ss.population('Kenya')`, `birth_rate='Kenya'`).
+- **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`, the one way to give births and deaths; UN data by country (`ss.population('Kenya')`, `ss.birth(rate='Kenya')`).
 - **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC (keeping a run with each draw, which `fit.project()` continues), iterated filtering or ABC-SMC; process noise on a rate (`noise=`); `sim.sensitivity()` and `sim.optimize()`.
 - **Runs**: `ss.parallel()` returns a MultiSim with summaries, bands and comparisons by scenario.
 - **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 13 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
@@ -27,20 +27,21 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: a stock at `ti` is the state at the start of the step that starts there, and a flow at `ti` the number during that step; diseases written as code record their stocks one step later than in Starsim 3.
 - *Regression*: `ss.SIR`, `ss.SIS` and `ss.SEIR` are the textbook models, with defaults in days.
 - *Regression*: a bare number given as a time is a calendar year from 1800 on, else a time from 0 in the sim's unit.
-- *Regression*: a birth, death or fertility rate (bare, typed, or a table) is per 1,000 people if above 1 per year, as in Starsim 3, but per person if 1 or below; `rate_per=` (was `rate_units=`) overrides.
+- *Regression*: a birth, death or fertility rate (bare, typed, or a table) is per person unless `rate_per=` (was `rate_units=`) says otherwise; Starsim 3's were per 1,000, so give `rate_per=1000`.
 - *Regression*: `ss.Births` and `ss.Deaths` hold each period's rate until the next.
 - *Regression*: a number in an `ss.MixingPools` matrix is the same for everyone in the group.
 - *Regression*: results have a `kind=` (flow, stock or ratio), which sets their scaling and summaries; one whose kind can't be told from its name warns.
 - *Regression*: `prevalence` comes from the infected states.
 - *Regression*: over a network, every factor of a contact's hazard is in the exponent (`rel_trans`, `rel_sus`, edge weight, modifiers), so a contact infects with chance 1 − (1 − p)^(factors) rather than p × factors; an ODE on a network gives each transmission its own saturation factor.
 - *Regression*: as agents, draws are keyed by stream, step and round, so runs don't depend on batching.
+- *Regression*: a module's random numbers are seeded by the name given (`name=`), else its default name, numbered within its kind in the order given (`sir`, `sir2`), never by its variable, so renaming a variable doesn't change a run, and scenarios keep common random numbers however their variables are named.
 - *Regression*: fixes to delays under the chain binomial, outcomes of fractional agents, and smooth time-varying values, among others.
 
 ### Changes that may require migration
 - *Migration*: removed Starsim 3 names have no aliases, only errors naming the replacement; the [migration guide](https://starsim.org/v4/migration/v3_v4.html) and `python -m starsim.converters.migrate` cover them.
 - *Migration*: `ss.Infection` is `ss.AgentDisease`, which transmits in `transmit()`; new infections are counted by `infect()`.
-- *Migration*: `sim.calibrate()` is `sim.fit()`, with a method's settings in `ss.fitting.method()`.
-- *Migration*: results are named after states and transitions (`sim.results.sir.I`, `infection`, `infection.cum`); `ss.Births` and `ss.Deaths` give `birth` and `death`.
+- *Migration*: `sim.calibrate()` is `sim.fit()`, with a method's settings as keywords (`sim.fit(method='nuts', draws=1000)`).
+- *Migration*: results are named after states and transitions (`sim.results.sir.I`, `infection`, `infection.cum`); `ss.Births` and `ss.Deaths` give `birth` and `death`, and the sim gives `birth`, `death`, `cbr`, and `cmr` however births and deaths are given (Starsim 3's `new_deaths` and `new_emigrants` are `death` and `emigration`).
 - *Migration*: interventions are deliveries of products (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`; were `ss.routine_vx()` etc.), with `who=` (was `eligibility=`) and `when=`, `start=` and `stop=` (were `years=`, `start_year=` and `end_year=`).
 - *Migration*: distributions take their means by name: `ss.normal(mean=, std=)` and `ss.poisson(mean=)` (were `loc=`, `scale=`, `lam=`).
 - *Migration*: a network's edge weight is `weight` (was `beta`); a route's transmissibility is the disease's.

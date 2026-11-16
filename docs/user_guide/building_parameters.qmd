@@ -110,7 +110,7 @@ measles$pars
 - `prior=` gives a distribution of belief about the value: its uncertainty, not variation between people. It is used in calibration ([Fitting a model](calibration_fitting.qmd)), and to carry that uncertainty into projections, with runs that draw the value from its prior (`ss.parallel(sim, priors=True, n_runs=...)`; [Scenarios](running_scenarios.qmd)).
 - `label=` is a human-readable name, for plots and tables.
 
-`ss.pars(defaults, **kwargs)` makes several named parameters at once, for a disease declared in `__init__()` ([Diseases](building_diseases.qmd#declaring-in-__init__)). A module written as code gives its parameters with `define_pars()` ([Custom modules](building_modules.qmd#parameters)).
+`ss.pars(defaults, **kwargs)` makes several named parameters at once, for a disease declared in `__init__()` ([Diseases](building_diseases.qmd#declaring-in-__init__)): each is an `ss.par` named after its key, with the value given if there is one (keeping the default's bounds and unit), and a name that is not a default is an error. (It is not `ss.Pars`, the container that holds a module's parameters as `module.pars`.) A module written as code declares its parameters as `ss.par` in its class body, as a declared disease does ([Custom modules](building_modules.qmd#parameters)).
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
@@ -183,7 +183,7 @@ def make_measles(beta):
     S, I, R = ss.states('S I R')
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
+    measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction in each
     return measles
 
@@ -262,6 +262,8 @@ Contact patterns, reporting, and treatment change over time, and so do the param
 
 A distribution, given as a value, gives each person their own value: `recovery = I >> R @ ss.lognormal(mean=ss.days(8), std=ss.days(2))` gives each person their own infectious period. For durations, a compartmental run represents the distribution with stages; see [Durations](building_diseases.qmd#durations) and [Distributions](mechanics_distributions.qmd).
 
+Likewise, a distribution given to a disease as `rel_sus=` or `rel_trans=` gives each person their own susceptibility or infectiousness, drawn once: `ss.SIR(rel_trans=ss.gamma(shape=0.2, scale=5))` (a mean of 1) makes transmission concentrated in a few (superspreading). This needs individuals, so the model runs as agents; a compartmental solver, if asked for, uses the mean, with a note. To keep variation in a compartmental run, split people into groups with their own values instead, e.g. `sir.stratify(risk=ss.levels({'low': 0.8, 'high': 0.2}, rel_sus=[0.5, 3]))` (see [Stratification](building_stratification.qmd)).
+
 A function of the sim and the people, `fn(sim, uids)`, returns one value for each person it is given, and can use anything about them. Here the infectious period is longer for children under 5:
 
 ```{python}
@@ -292,7 +294,7 @@ A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma
 ## Pitfalls
 
 - **A bare number in the wrong unit.** A bare number is in the model's unit of time: in a model whose unit is years, `I >> R @ 0.125` is 0.125 per year. Typed values (`ss.perday(0.125)`, `ss.days(8)`) don't depend on it.
-- **Changing the disease after the sim is made.** A sim runs its own copy of each module, made when the sim is made, so changing `measles` afterwards doesn't change that sim, and changing `sim.diseases.measles` doesn't change `measles`. To try another value, give it by name to a new sim (`ss.Sim(measles, pars=dict(beta=1.5))`, or `sim.new(pars=dict(beta=1.5))`), and read a run's values from the sim's copy ([Writing models](building_writing.qmd#where-the-parts-of-a-sim-go)).
+- **Changing the disease after the sim is made** has no effect on that sim, which runs its own copy ([Writing models](building_writing.qmd#where-the-parts-of-a-sim-go)): give the value by name to a new sim (`ss.Sim(measles, pars=dict(beta=1.5))`, or `sim.new(pars=dict(beta=1.5))`).
 - **A distribution as a value or as a prior.** A distribution as a value is variation between people. Uncertainty about a single value is a prior, `ss.par(1.9, prior=...)`, used in calibration and in runs with `priors=True`.
 - **A function where a time series would do.** A function can't be printed by `describe()`, exported to another framework, or written out as equations.
 

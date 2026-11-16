@@ -24,7 +24,7 @@ import starsim as ss
 import starsim.library as ssl
 
 mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
-demographics = lambda: [ss.Pregnancy(fertility_rate=ss.peryear(0.1), burnin=True), ss.Deaths()]
+demographics = lambda: [ss.Pregnancy(fertility_rate=ss.peryear(0.1), burnin=True), ss.death(rate=ss.peryear(0.01))]
 networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
 ```
 
@@ -34,8 +34,8 @@ networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
 
 ```{python}
 def congenital(beta):
-    disease = ssl.mnch.CongenitalDisease(beta=beta, init_prev=0.2)
-    return ss.Sim(diseases=disease, demographics=demographics(), networks=networks(), **mnch_pars)
+    congenital = ssl.mnch.CongenitalDisease(beta=beta, init_prev=0.2)
+    return ss.Sim(diseases=congenital, demographics=demographics(), networks=networks(), **mnch_pars)
 
 for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items():
     sim = congenital(beta).run()
@@ -43,7 +43,7 @@ for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items(
     print(label)
     print('  Births:', int(preg.birth.sum()))
     print('  Stillbirths:', int(preg.stillbirth.sum()))
-    print('  Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
+    print('  Congenital infections:', sim.diseases.congenital.congenital.sum())
 ```
 
 To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease`, or copy its methods into any `ss.AgentDisease`:
@@ -94,7 +94,7 @@ scenarios = {
     'Infection, untreated': fetal(beta=ss.peryear(20)),
     'Infection, treated from 2001': fetal(beta=ss.peryear(20), treat=True),
 }
-msim = ss.parallel(scenarios, workers=1)
+msim = ss.parallel(scenarios)
 for label, sim in zip(scenarios, msim.sims):
     res = sim.results.fetal_health
     births = int(res.birth.sum())

@@ -65,7 +65,7 @@ sim.run()
 sim.results.ageatinfection.new_infections.plot()
 ```
 
-The analyzer's results are under its name in lower case, `sim.results.ageatinfection`. A result with columns has each as a result of its own (`res.new_infections.children`), and each is a column of `sim.to_df()`:
+The analyzer is not assigned to a variable, so its results are under its class name in lower case, `sim.results.ageatinfection` ([Names](building_writing.qmd#names)). A result with columns has each as a result of its own (`res.new_infections.children`), and each is a column of `sim.to_df()`:
 
 ```{python}
 sim.to_df().columns.tolist()
@@ -103,7 +103,7 @@ The infection log records each infection: when it happened, who was infected, an
 
 ```{python}
 S, I, R = ss.states('S I R')
-flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.002, name='flu')
+flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.002)
 
 sim = ss.Sim(flu, networks=ss.RandomNet(n_contacts=8), n_agents=5_000, stop=ss.days(100), analyzers='infection_log', verbose=0)
 sim.run()
@@ -137,17 +137,13 @@ For a disease with [strains](building_diseases.qmd#strains), each row also has t
 
 ## Following agents from step to step
 
-An analyzer can keep a value for each agent, declared with `define_states()` as a module's states are, and seeded in `init_post()`. To follow transmission as the sim runs, it reads the infections of each step from the infection log, `disease.infection_log.to_df(ti=self.ti)`, which needs an `ss.infection_log` analyzer in the sim. This analyzer counts each step's new infections in two ways, from the log and from the people who are infected now but were not at the previous time point, and counts how many times each person is infected:
+An analyzer can keep a value for each agent, declared in its class body as a module's states are, and seeded in `init_post()`. To follow transmission as the sim runs, it reads the infections of each step from the infection log, `disease.infection_log.to_df(ti=self.ti)`, which needs an `ss.infection_log` analyzer in the sim. This analyzer counts each step's new infections in two ways, from the log and from the people who are infected now but were not at the previous time point, and counts how many times each person is infected:
 
 ```{python}
 class Reinfections(ss.Analyzer):
     """ New infections each step, from the infection log and from the states, and the number of times each person is infected """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.define_states(
-            ss.BoolArr('was_infected'),           # Infected at the previous time point
-            ss.FloatArr('infections', default=0), # The times each person has been infected
-        )
+    was_infected = ss.BoolArr(result=False) # Infected at the previous time point (a flag, not a result)
+    infections   = ss.FloatArr(default=0)   # The times each person has been infected
 
     def init_results(self):
         super().init_results()
@@ -170,7 +166,7 @@ class Reinfections(ss.Analyzer):
         self.was_infected[:] = sis.I
 
 S, I = ss.states('S I')
-sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.months(3), init_prev=0.05, name='sis')
+sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.months(3), init_prev=0.05)
 sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), demographics=True, n_agents=5_000, start=2000, stop=2010, dt=ss.months(1),
              analyzers=[ss.infection_log(), Reinfections()], verbose=0)
 sim.run()
@@ -212,6 +208,8 @@ The API reference for this page: [Analyzers](../api/analyzers.qmd).
 The analyzers in Starsim and its library, with the first line of each one's documentation (see the API reference, [Analyzers](../api/analyzers.qmd), [Economics](../api/library.econ.qmd), and [Diseases in the library](../api/library.diseases.qmd)):
 
 ```{python}
+#| code-fold: true
+#| code-summary: "The code that makes this list from the docstrings"
 import inspect
 import starsim.library as ssl
 

@@ -100,7 +100,7 @@ def test_streams(solver):
         for key in ['cases', 'hosp', 'n_hosp', 'deaths']:
             assert np.array_equal(plain[key].values, counted[key].values), f'An analyzer changed the draws of the outcome "{key}" by up to {np.abs(plain[key].values - counted[key].values).max():n}'
     for profile in [False, True]: # Profiling makes the run step from Python
-        both = (two_sirs('sir', 'other').profile(kind='loop', plot=False).sim if profile else two_sirs('sir', 'other').run()).results.sir.I.values
+        both = (two_sirs('sir', 'other').perf_profile(kind='loop', plot=False).sim if profile else two_sirs('sir', 'other').run()).results.sir.I.values
         assert np.array_equal(alone, both), f'Another disease changed the draws (profile={profile}): max difference {np.abs(alone - both).max():n}'
 
     # Two identical diseases whose names are anagrams have their own streams
@@ -123,7 +123,7 @@ def test_streams(solver):
             sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
             return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=ss.solvers.binomial(substeps=1) if solver == 'binomial' else solver, rand_seed=587, verbose=0) # With 2 substeps, a whole binomial run and a stepped one differ
         for s in [solver, 'ode']:
-            whole, stepped = [seasonal(s).run().results.sir.vax.values, seasonal(s).profile(kind='loop', plot=False).sim.results.sir.vax.values]
+            whole, stepped = [seasonal(s).run().results.sir.vax.values, seasonal(s).perf_profile(kind='loop', plot=False).sim.results.sir.vax.values]
             if s == 'ode': # With more than one substep, the kernel compiled into a whole run and the one called from Python round differently, by about 1e-16
                 assert np.allclose(whole, stepped, rtol=1e-12, atol=0), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}'
             else:
@@ -353,9 +353,9 @@ def test_empty_place():
         return ss.Sim(sir, solver=solver, total_pop=10_000, unit='day', stop=60, verbose=0)
     one = make('ode', places=False).run().results.sir.R.values
     for solver in ['ode', 'jax', 'binomial', 'tau', 'gillespie']:
-        sim = make('ode' if solver == 'jax' else solver).init()
-        sim.jax = solver == 'jax'
-        res = sim.run().results.sir
+        sim = make('ode' if solver == 'jax' else solver)
+        with ss.options.context(backend='jax' if solver == 'jax' else ss.options.backend):
+            res = sim.run().results.sir
         assert np.all(np.isfinite(res.I.values)) and res.I.select(place='b').values.max() == 0, solver
         if solver in ['ode', 'jax']:
             assert np.allclose(res.R.values, one, rtol=1e-9), f'{solver}: an empty place changes the epidemic'
