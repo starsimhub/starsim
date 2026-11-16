@@ -5,16 +5,8 @@ A simple SIR-like disease that infects newborns at birth and kills a fraction
 shortly after, producing neonatal deaths that the Pregnancy module passively
 detects and classifies.
 
-This demonstrates:
-    - How a disease can cause neonatal deaths via `request_death` on newborns
-    - How the Pregnancy module passively detects deaths of agents aged 0-28 days
-      and classifies them as neonatal deaths (no special hookup needed)
-    - How to use `set_prognoses` to apply lethal outcomes only to neonates
-
-The key insight is that neonatal death detection is passive: any mechanism that
-kills an agent aged 0-28 days (disease, congenital outcomes, background
-mortality) is automatically classified as a neonatal death by the Pregnancy
-module. No registration or callback is needed.
+Neonatal death detection is passive: any death of an agent aged 0-28 days (disease, congenital outcomes, background
+mortality) is classified as a neonatal death by the Pregnancy module, with no registration or callback.
 
 Usage::
 
@@ -83,12 +75,7 @@ class NeonatalSepsis(AgentSIR):
         return out
 
     def step(self):
-        """
-        Infect newly born agents.
-
-        Newborns are infected explicitly, each with `p_at_birth`. Each agent is screened once, the first timestep
-        after they are born.
-        """
+        """ Infect each newborn with `p_at_birth`, screening each agent once, the first step after they are born """
         out = super().step()
         newborns = (~self.screened & (self.sim.people.age >= 0)).uids
         if len(newborns):
@@ -98,10 +85,7 @@ class NeonatalSepsis(AgentSIR):
 
     def set_prognoses(self, uids, sources=None):
         """
-        Set prognoses — only apply lethal outcomes to neonates (age < 28 days).
-
-        Non-neonates who get infected (e.g. via init_prev at sim start) just recover
-        normally via the base SIR logic.
+        Set prognoses: only neonates (aged up to 28 days) can die, and others (e.g. infected at the start) recover
 
         Args:
             uids (array): the agents infected
@@ -109,7 +93,6 @@ class NeonatalSepsis(AgentSIR):
         """
         super().set_prognoses(uids, sources) # Schedules death for a fraction p_death, and recovery for everyone else
 
-        # Only neonates can die from this disease, so non-neonates recover instead
         age_days = ss.years(self.sim.people.age[uids]).days
         non_neonates = uids[age_days > 28]
         self.ti_recovered[non_neonates] = np.fmin(self.ti_recovered[non_neonates], self.ti_dead[non_neonates])

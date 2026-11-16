@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, as_frac, BinOp, Count, count_power, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
+from .expressions import as_expr, as_frac, BinOp, Count, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
 from .parameters import by, TimeValue
 from .transitions import FlowSum, outcome, State, Transition
 
@@ -59,6 +59,9 @@ class TransitionTable(sc.obj):
     def __repr__(self):
         if not len(self):
             return 'No transitions'
+        def table(rows): # Each column as wide as its widest cell
+            widths = [max(len(row[i]) for row in rows) + 2 for i in range(len(rows[0]))]
+            return '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)
         rows = [['name', 'from', 'to', 'driven by', 'kind']]
         for name,tr in self.items():
             src = ' | '.join(s.name for s in tr.source) or '(outside)'
@@ -66,8 +69,6 @@ class TransitionTable(sc.obj):
             counted = tr.module.graph.counted(tr) if getattr(getattr(tr, 'module', None), 'graph', None) is not None else []
             kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else f'transmission, from {" + ".join(s.name for s in counted)} ({tr.module.graph.dependence(tr)}-dependent)' if counted else 'spontaneous'
             rows.append([name, src, dst, tr._driver_str, kind])
-        widths = [max(len(row[i]) for row in rows) + 2 for i in range(5)]
-        out = '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)
 
         # The matrix
         names = list(dict.fromkeys(s.name for tr in self.values() for s in tr.source + tr.dest))
@@ -77,9 +78,7 @@ class TransitionTable(sc.obj):
                 for b in tr.dest:
                     grid[(a.name, b.name)].append(name)
         cells = [[''] + names] + [[a] + [', '.join(grid[(a,b)]) or '.' for b in names] for a in names]
-        widths = [max(len(row[i]) for row in cells) + 2 for i in range(len(names) + 1)]
-        out += '\n\n' + '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in cells)
-        return out
+        return table(rows) + '\n\n' + table(cells)
 
 
 def is_zero(rate):
@@ -157,19 +156,20 @@ class Graph:
         self.check()
         return
 
+    @property
+    def containers(self):
+        """ Where each kind of member is kept, by name """
+        return [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers]
+
     def taken(self, name):
         """ Whether a member of the module has this name """
-        return any(name in other for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers])
+        return any(name in other for other in self.containers)
 
     def resolve_derived(self):
         """
-        Which states are infected, and their results. The infected states are those the model says are infected (marked
-        `ss.State(infected=True)`, or in its own result `infected = E + I`), exactly; or, if it says none are, those of a
-        force of infection: the states people are infected into, and the sources (`E` and `I` in `S >> E @ beta*I`). With
-        neither, as in a staged condition such as a cancer, no state is infected. Each state's `infected` is set to match,
-        and the infected states give the results `infected`, the number in them, and `prevalence`, their fraction of the
-        people in every state, unless the module defines its own of that name, or has a state called `infected` (whose
-        count has the name: it can define its own prevalence)
+        Which states are infected: those the model says are (see `marked`), exactly; else those of a force of infection (see `infected`);
+        else none (e.g. a cancer). Each state's `infected` is set to match, and the infected states give the results `infected` and
+        `prevalence`, unless the module defines its own, or has a state called `infected`
         """
         if self.marked:
             found = {id(s) for s in self.marked if s.people} # As the model says, and nothing else
@@ -211,7 +211,7 @@ class Graph:
         for name,obj in named:
             if isinstance(obj, FlowSum): # A sum or a fraction of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
-            if isinstance(obj, ss.modify): # Part of the model, given to the sim with it (see ss.solvers.choose.init_where())
+            if isinstance(obj, ss.modify): # Part of the model, given to the sim with it (see ss.solvers.build.init_where())
                 self.add(self.modifiers, name or self.names.get(id(obj)) or obj.name, obj)
                 continue
             if isinstance(obj, ss.expressions.attr):
@@ -283,19 +283,21 @@ class Graph:
             reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
         if name in reserved:
             raise ValueError(f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
-        for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers]:
+        for other in self.containers:
             if name in other and other[name] is not obj:
                 raise ValueError(f'two members of "{self.module.name}" are both named "{name}"; names must be unique within a module.')
         container[name] = obj
         return
 
-    def _add_par(self, obj, name):
-        """ Register a parameter with the module """
+    def _add_par(self, obj, name, define=False):
+        """ Register a parameter with the module; with `define`, also in its parameters (for one added after the module is made) """
         obj.name = name
         obj.literal = False
         if obj.module is None: # A parameter shared by several modules belongs to the first, and is registered with each
             obj.module = self.module
         self.add(self.pars, name, obj)
+        if define:
+            self.module.define_pars(**{name:obj})
         return
 
     @staticmethod
@@ -987,8 +989,7 @@ class Graph:
             self.strats.append(strat)
             for key,leaf in ({} if strat.mobility is None else strat.mobility.fitted()).items(): # A parameter of the movement between places, e.g. ss.geo.Mobility(..., away=ss.par(0.1, bounds=[0.01, 0.5])), so it can be fitted
                 if not any(p is leaf for p in self.pars.values()):
-                    self._add_par(leaf, name=leaf.name or key)
-                    self.module.define_pars(**{leaf.name:leaf})
+                    self._add_par(leaf, name=leaf.name or key, define=True)
         for name,tf in transfers.items():
             tf.name = name
             tf.module = self.module
@@ -997,12 +998,11 @@ class Graph:
             for expr in [tf.rate, tf.dur]: # Register its parameters, as for those of the transitions
                 for leaf in [] if expr is None else expr.leaves:
                     if isinstance(leaf, par) and not leaf.literal and not any(p is leaf for p in self.pars.values()):
-                        self._add_par(leaf, name=leaf.name or f'rate_{name}')
-                        self.module.define_pars(**{leaf.name:leaf})
+                        self._add_par(leaf, name=leaf.name or f'rate_{name}', define=True)
         return self.module
 
     def add_flow(self, tr):
-        """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.solvers.choose.init_flows()` """
+        """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.solvers.build.init_flows()` """
         name = tr.name or ('births' if tr.per_capita else 'immigration' if tr._inflow else 'emigration' if tr.migration else 'deaths')
         if name in self.transitions:
             raise ValueError(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
@@ -1029,8 +1029,7 @@ class Graph:
                     continue
                 if leaf.literal and id(leaf) not in slots: # A value inside a rate (e.g. the trend in ss.peryear(0.01) * ts), which stays a number, as in a transition (see resolve_pars())
                     continue
-                self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}')
-                self.module.define_pars(**{leaf.name:leaf})
+                self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}', define=True)
         self.resolve_exits()
         return tr
 

@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
+from .expressions import as_expr, BinOp, dists_in, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, Shared, value_str
 from .parameters import by, TimeValue
 
 __all__ = ['pars', 'State', 'states', 'unborn', 'dead', 'outside',
@@ -33,7 +33,20 @@ __all__ = ['pars', 'State', 'states', 'unborn', 'dead', 'outside',
 
 #%% States
 
-class State(Nameable, Expr):
+class Endpoint:
+    """ A source or destination of a transition, which the operators build transitions from (a state, or outside the model) """
+    def __rshift__(self, other):
+        """ S >> I, or S >> (a transition into I) """
+        if isinstance(other, Transition):
+            return other._copy()._set_source(self)
+        return Transition(source=self, dest=other)
+
+    def __matmul__(self, driver):
+        """ I @ rate: a transition into I, with no source yet """
+        return Transition(dest=self) @ driver
+
+
+class State(Nameable, Endpoint, Expr):
     """
     Something a person can be in, or a count of something that is not people
 
@@ -99,16 +112,6 @@ class State(Nameable, Expr):
         """ Whether a starting value is given (`init=` or `init_n=`) """
         return self.init is not None or self.init_n is not None
 
-    def __rshift__(self, other):
-        """ S >> I, or S >> (a transition into I) """
-        if isinstance(other, Transition):
-            return other._copy()._set_source(self)
-        return Transition(source=self, dest=other)
-
-    def __matmul__(self, driver):
-        """ I @ rate: a transition into I, with no source yet """
-        return Transition(dest=self) @ driver
-
     @property
     def time_in(self):
         """ Time since this person last entered the state, in the sim's unit (NaN outside it) """
@@ -143,19 +146,6 @@ class State(Nameable, Expr):
 
     def __invert__(self):
         return ~ss.conditions.as_cond(self)
-
-    @property
-    def n(self):
-        return Count([self], kind='n')
-
-    @property
-    def frac(self):
-        return Count([self], kind='frac')
-
-    @property
-    def total(self):
-        """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
-        return Count([self], kind='total')
 
 
 def states(arg=None, infected=False, include_sum=False, **kwargs):
@@ -277,7 +267,7 @@ def pars(defaults, **kwargs):
     return out
 
 
-class Outside:
+class Outside(Endpoint, Shared):
     """
     Outside the model, as a source or destination of a transition: where births come from (`ss.unborn >> S`), where deaths go (`I >> ss.dead`),
     and where people arrive from and leave to without being born or dying (`ss.outside >> S`, `S >> ss.outside`: migration)
@@ -293,19 +283,8 @@ class Outside:
     def __init__(self, kind):
         self.kind = kind
 
-    def __rshift__(self, other):
-        if isinstance(other, Transition):
-            return other._copy()._set_source(self)
-        return Transition(source=self, dest=other)
-
-    def __matmul__(self, driver):
-        return Transition(dest=self) @ driver
-
     def __repr__(self):
         return f'ss.{self.kind}'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
 
 unborn  = Outside('unborn') # Where births come from: ss.unborn >> S
@@ -329,13 +308,10 @@ def check_outside(end, side):
     return end
 
 
-class Stay:
+class Stay(Shared):
     """ A destination that cancels the move: in a split, the people who take it stay where they are, and never take this transition again in this stay """
     def __repr__(self):
         return 'ss.stay'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
 stay = Stay()
 
@@ -427,17 +403,19 @@ def check_who(who, what):
     return who
 
 
-def check_renamed(kwargs, what, renamed):
-    """ An error for a keyword that is now called something else (`renamed`: old name, and what replaces it), or any other unknown keyword """
-    for key in kwargs:
-        if key in renamed:
-            raise TypeError(f'{what} takes no {key}=; use {renamed[key]}')
+def check_kwargs(kwargs, what, takes, renamed=None):
+    """ An error for an unknown keyword of `what`: one that is now something else (`renamed`: the keyword, and the message), or any other, with the keywords it takes (`takes`; 'state' is its first argument) """
+    for key,msg in (renamed or {}).items():
+        if key in kwargs:
+            raise TypeError(msg)
     if kwargs:
-        raise TypeError(f'{what} got an unexpected keyword argument {next(iter(kwargs))!r}')
+        key = next(iter(kwargs))
+        words = ['a state' if k == 'state' else f'{k}=' for k in takes]
+        raise TypeError(f'{what} takes {sc.strjoin(words)}, not {key}={did_you_mean(key, takes)}')
     return
 
 
-class on:
+class on(Shared):
     """
     A trigger, as the driver of a transition: people move as soon as a condition holds, or when an event happens to them
 
@@ -511,9 +489,6 @@ class on:
 
     def __repr__(self):
         return f'ss.on({getattr(self.x, "__name__", self.x)}' + (f', delay={self.delay!r}' if self.delay is not None else '') + ')'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
 
 class Transition(Nameable):
@@ -634,7 +609,7 @@ class Transition(Nameable):
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
         self.noise = None if noise is None else as_expr(noise) # Sigma of gamma white noise on the rate, drawn each step by the chain binomial (see ss.solvers.Compartmental.flatten_rates())
-        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.solvers.backends.kernels.NOISE)
+        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.solvers.numba.compartmental.NOISE)
             errormsg = f'noise= takes sigma as a number or a parameter (e.g. noise=ss.par(0.1, bounds=[0, 0.3])), not an expression ({self.noise}); to fit a function of sigma, fit sigma itself'
             raise ValueError(errormsg)
         self.move = None # A change of level in some dimensions: {dim: level}
@@ -1273,17 +1248,9 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
         ss.birth(rate=pd.read_csv('cbr.csv'), rate_per=1000) # Crude birth rates per 1,000 by year, columns Year and CBR
         ```
     """
-    names = ['rate', 'when', 'children', 'p_female', 'rate_per', 'rel_birth', 'min_age', 'max_age', 'columns', 'name', 'label']
-    if 'n' in kwargs:
-        errormsg = f'ss.birth() takes children= for the number of children each time (e.g. children=2 for twins), not n=; n= is a number of people'
-        raise TypeError(errormsg)
-    elif 'birth_rate' in kwargs:
-        errormsg = 'ss.birth() takes rate=, not birth_rate= (which is the keyword of the class ss.Births)'
-        raise TypeError(errormsg)
-    elif kwargs:
-        key = list(kwargs)[0]
-        errormsg = f'ss.birth() takes a state, {sc.strjoin([f"{k}=" for k in names])}, not {key}={did_you_mean(key, names)}'
-        raise TypeError(errormsg)
+    check_kwargs(kwargs, 'ss.birth()', ['state', 'rate', 'when', 'children', 'p_female', 'rate_per', 'rel_birth', 'min_age', 'max_age', 'columns', 'name', 'label'], renamed=dict(
+        n='ss.birth() takes children= for the number of children each time (e.g. children=2 for twins), not n=; n= is a number of people',
+        birth_rate='ss.birth() takes rate=, not birth_rate= (which is the keyword of the class ss.Births)'))
     on = when.x if isinstance(when, ss.on) and when.delay is None else when
     if isinstance(rate, (str, pd.DataFrame, pd.Series)): # A place by name, or a table of rates by year: crude birth rates by year
         if state is not None or on is not None:
@@ -1435,18 +1402,9 @@ def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, rel_de
         ss.death(lifetable=ss.lifetable(ages=ages, deaths=dx)) # From a life table
         ```
     """
-    names = ['rate', 'dur', 'lifetable', 'rate_per', 'rel_death', 'columns', 'name', 'label']
-    if 'p' in kwargs: # A fraction who die is a branch of the way out of a state, not a death rate
-        errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a fraction of the people leaving a state who die, make it a branch of that exit, e.g. '
-                    f'ss.Transition(I, {{R: None, ss.dead: {kwargs["p"]}}}, dur=ss.days(10))')
-        raise TypeError(errormsg)
-    elif 'death_rate' in kwargs:
-        errormsg = 'ss.death() takes rate=, not death_rate= (which is the keyword of the class ss.Deaths)'
-        raise TypeError(errormsg)
-    elif kwargs:
-        key = list(kwargs)[0]
-        errormsg = f'ss.death() takes a state, {sc.strjoin([f"{k}=" for k in names])}, not {key}={did_you_mean(key, names)}'
-        raise TypeError(errormsg)
+    check_kwargs(kwargs, 'ss.death()', ['state', 'rate', 'dur', 'lifetable', 'rate_per', 'rel_death', 'columns', 'name', 'label'], renamed=dict( # A fraction who die is a branch of the way out of a state, not a death rate
+        p=f'ss.death() takes a rate (rate= or dur=), not p=. For a fraction of the people leaving a state who die, make it a branch of that exit, e.g. ss.Transition(I, {{R: None, ss.dead: {kwargs.get("p")}}}, dur=ss.days(10))',
+        death_rate='ss.death() takes rate=, not death_rate= (which is the keyword of the class ss.Deaths)'))
     if (rate_per is not None or rel_death is not None or columns is not None) and (state is not None or dur is not None):
         errormsg = 'rate_per=, rel_death=, and columns= of ss.death() are for a death rate of everyone (rate= or lifetable=, with no state); a rate of deaths from a state, or a duration, is per person'
         raise ValueError(errormsg)
@@ -1499,13 +1457,8 @@ def immigration(state=None, n=None, name=None, label=None, **kwargs):
         name (str): the name of the transition
         label (str): a human-readable name
     """
-    if 'rate' in kwargs:
-        errormsg = 'ss.immigration() takes n=, the number of people arriving per unit time (e.g. n=ss.peryear(100)), not rate=; for a rate per person, or net migration of either sign, use ss.migration(rate=...)'
-        raise TypeError(errormsg)
-    elif kwargs:
-        key = list(kwargs)[0]
-        errormsg = f'ss.immigration() takes a state, n=, name=, and label=, not {key}={did_you_mean(key, ["n", "name", "label"])}'
-        raise TypeError(errormsg)
+    check_kwargs(kwargs, 'ss.immigration()', ['state', 'n', 'name', 'label'], renamed=dict(
+        rate='ss.immigration() takes n=, the number of people arriving per unit time (e.g. n=ss.peryear(100)), not rate=; for a rate per person, or net migration of either sign, use ss.migration(rate=...)'))
     out = Transition(outside, state, rate=n, name=name, label=label)
     out.migration = True
     out.state_given = state is not None

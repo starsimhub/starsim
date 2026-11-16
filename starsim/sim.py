@@ -104,48 +104,40 @@ class Sim(ss.modules.Base):
                 errormsg = f'ss.Sim() takes the model (modules, their classes, functions of the sim, or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
         mods = dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=None) # modules: those of a whole ss.SimPars to sort by kind
-        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters are named and ordered as if given by keyword
-            mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()}
-        demographics, connectors, networks, diseases, interventions, analyzers, custom, modules = mods.values()
+        mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()} # Modules given in a dict of parameters are named and ordered as if given by keyword
         model = [key for key in kwargs if key not in self.pars and key not in ss.v3_deprecations.keys('Sim')] # A parameter of the model by keyword, e.g. ss.Sim(sir, beta=0.1), as in pars= (a setting of the sim of the same name wins)
         if model:
             pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in model})
         names = ss.utils.caller_names(1)
         models = ss.utils.make_disease(models, names)
-        diseases = ss.utils.make_disease(diseases, names)
-        kinds = dict(demographics=demographics, networks=networks, diseases=diseases, connectors=connectors, interventions=interventions, analyzers=analyzers)
+        mods['diseases'] = ss.utils.make_disease(mods['diseases'], names)
         given_order = sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)])
         for i,mod in enumerate(given_order): # Its place among the model's, for step_order='given' (see ss.SimPars.validate_modules())
             if isinstance(mod, ss.Module):
                 mod._model_index = i
         for mod in given_order: # The model's modules, sorted into their kinds now (after those given by keyword, as init() would), so that e.g. sim.pars.diseases has them before init() as after
-            key = next((key for key,cls in ss.modules.module_map().items() if isinstance(mod, cls)), 'custom')
-            if key not in kinds or isinstance(kinds[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.SimPars.validate_modules())
-                modules = sc.mergelists(modules, mod)
+            key = ss.simpars.module_kind(mod)
+            if key == 'custom' or isinstance(mods[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.SimPars.validate_modules())
+                mods['modules'] = sc.mergelists(mods['modules'], mod)
             else:
-                kinds[key] = sc.mergelists(kinds[key], mod)
-        demographics, networks, diseases, connectors, interventions, analyzers = kinds.values()
-        self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
-        interventions = self._order_steps(interventions)
+                mods[key] = sc.mergelists(mods[key], mod)
+        self._name_modules(names, *mods.values())
+        mods['interventions'] = self._order_steps(mods['interventions'])
         self._par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a setting of the sim given as ss.par too (e.g. n_agents=ss.par(...), when it is fitted: pars=fit.pars)
             pars = dict(pars)
             kwargs |= {key:pars.pop(key) for key in list(pars) if isinstance(kwargs.get(key), ss.par)}
-            mods = ss.utils.given_modules(dict(enumerate(models)), dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=modules))
-            names = {name for mod in mods for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())} # Those pars= can set (see ss.solvers.set_values())
+            names = {name for mod in ss.utils.given_modules(dict(enumerate(models)), mods) for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())} # Those pars= can set (see ss.solvers.set_values())
             settings = {key:pars.pop(key) for key in list(pars) if (key in self.pars or key in ss.v3_deprecations.keys('Sim')) and key not in names} # A setting of the sim by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
             kwargs = sc.mergedicts({k:v for k,v in settings.items() if given.get(k) is None}, kwargs) # A keyword given outright wins
             self._par_values = pars or None # A name that is neither raises a KeyError when the sim is initialized
         pars = None
-        args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
-                    networks=networks, interventions=interventions, diseases=diseases, 
-                    analyzers=analyzers, custom=custom, modules=modules)
-        args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
+        args = {key:val for key,val in dict(label=label, people=people, **mods).items() if val is not None} # Remove None inputs
         input_pars = ss.utils.copy_given(pars, args, kwargs, copy_inputs=copy_inputs)
         if copy_inputs: # Only the sim's copies keep their place, so the modules given can be given to another sim in another order
             for mod in given_order:
                 vars(mod).pop('_model_index', None) if isinstance(mod, ss.Module) else None
-        if not copy_inputs: # Nothing to start again from, since the modules given are the ones that run
+        else: # Nothing to start again from, since the modules given are the ones that run
             self._before_init = 'This sim was made with copy_inputs=False, so it runs the modules it was given themselves, and can\'t be run again or copied with sim.new(): make it again instead (with new modules)'
         self.pars.update(input_pars)  # Update the parameters
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -354,10 +346,10 @@ class Sim(ss.modules.Base):
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
 
         # Final initializations -- this is "post"
-        if getattr(self.solver or self.pars.solver, 'rescale', False):
+        if self._rescaling:
             self._init_rescale()
         self._init_dists()
-        self._init_people_vals() # Initialize the values in all the states and networks
+        self.people.init_vals() # Initialize the values in all the states and networks
         ss.solvers.init_group_values(self) # The people's levels of each dimension, or each group's age and sex
         self._valued = True # From here, arithmetic on a parameter is on its value (see ss.expressions.has_values())
         self._init_modules_post() # Initialize the module values
@@ -733,15 +725,9 @@ class Sim(ss.modules.Base):
             raise ss.AlreadyRunError(errormsg)
 
         # Figure out the type of module, and make sure the name is unique
-        if key is None:
-            key = 'custom'
-            for modkey, modclass in ss.modules.module_map().items():
-                if isinstance(module, modclass):
-                    key = modkey
-                    break
+        key = key or ss.simpars.module_kind(module)
         names = {mod.name:None for mod in self.modules}
         ss.SimPars.validate_name(module, key, names)
-        modules = [module]
         if module.has_product:
             same = [p for p in self.products() if p is module.product or p.name == module.product.name]
             if same: # The sim's copy of a product it already has
@@ -753,14 +739,12 @@ class Sim(ss.modules.Base):
         getattr(self, key).append(module) # Not self[key], since subclasses may override __getitem__
         self.pars[key][module.name] = module.pars
 
-        # Initialize the module(s), as in sim.init()
-        for mod in modules:
-            mod.init_pre(self)
+        # Initialize the module, as in sim.init()
+        module.init_pre(self)
         self.dists.init(obj=self) # Only initializes the new distributions
-        for mod in modules:
-            self.dists.copy_to_module(mod)
-            mod.init_post()
-            mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.yearvec[self.ti]) # Start the module at the current time point
+        self.dists.copy_to_module(module)
+        module.init_post()
+        module.t.ti = np.searchsorted(module.t.yearvec, self.t.yearvec[self.ti]) # Start the module at the current time point
         for mod in self.declared: # What the engines keep for the run can depend on the other modules (e.g. a modifier of a beta)
             if hasattr(mod.engine, 'modules_changed'):
                 mod.engine.modules_changed()
@@ -954,11 +938,6 @@ class Sim(ss.modules.Base):
             self.dists.copy_to_module(mod)
         return
 
-    def _init_people_vals(self):
-        """ Initialize the People states with actual values """
-        self.people.init_vals()
-        return
-
     def _init_modules_post(self):
         """ Initialize values in other modules, including networks and time parameters, and do any other post-processing: the diseases first, after the demographics (whose unborn people they leave out), so that any other module's `init_post()` sees who starts infected """
         order = lambda mod: 0 if mod.name in self.demographics else 1 if mod.name in self.diseases else 2
@@ -972,7 +951,7 @@ class Sim(ss.modules.Base):
         ss.solvers.init_people(self) # In a compartmental run, the same results, from the declared modules
 
         # With dynamic rescaling, store the scale factor for each timestep, and the people no agent stands for yet (see rescale())
-        if getattr(self.solver or self.pars.solver, 'rescale', False):
+        if self._rescaling:
             self.results += ss.Result('pop_scale', label='Population scale factor', kind='ratio', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
             self.results += ss.Result('unrepresented', label='People no agent stands for yet', kind='stock', scale=False, auto_plot=False, timevec=self.timevec, values=np.full(self.t.npts, (self.pop_scale - 1)*self.people._n_agents_alive(), dtype=float))
 
@@ -1004,9 +983,14 @@ class Sim(ss.modules.Base):
         return pars.total_pop/pars.n_agents
 
     @property
+    def _rescaling(self):
+        """ Whether the population is rescaled dynamically (`ss.solvers.abm(rescale=True)`) """
+        return getattr(self.solver or self.pars.solver, 'rescale', False)
+
+    @property
     def current_scale(self):
         """ The number of people each agent represents on the current timestep; varies over time if `ss.solvers.abm(rescale=True)` """
-        if not getattr(self.solver or self.pars.solver, 'rescale', False):
+        if not self._rescaling:
             return self.pop_scale
         elif 'pop_scale' not in self.results: # The results aren't initialized yet, e.g. during a module's init_post()
             return 1.0 # With rescaling, the scale starts at 1
@@ -1019,7 +1003,7 @@ class Sim(ss.modules.Base):
         Args:
             module (`ss.Module`): if provided, map the scale onto the module's timevec (if different from the sim's)
         """
-        if not getattr(self.solver or self.pars.solver, 'rescale', False):
+        if not self._rescaling:
             return self.pop_scale
         scale = self.results.pop_scale.values
         if module is not None and not np.array_equal(module.t.yearvec, self.t.yearvec):
@@ -1091,12 +1075,11 @@ class Sim(ss.modules.Base):
         source = self.__dict__.pop('_simdata', None)
         if self.data is not None and source is not None and source.ignore_extra:
             self.data = source.drop_extra(self, self.data)
-        if self.data is not None and ss.results.by_year(self.data):
-            ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=self)
         if self.data is not None:
+            ss.results.note_by_year(self, self.data)
             self.data = ss.results.widen_data(self, self.data)
-        if self.data is not None and getattr(self, 'declared', None):
-            ss.results.check_data(self, self.data)
+            if getattr(self, 'declared', None):
+                ss.results.check_data(self, self.data)
         return
 
     def set_diagnostics(self, rvs=True, states=True, detailed=False):
@@ -1134,12 +1117,11 @@ class Sim(ss.modules.Base):
             sim.diagnostics.export()
             ```
         """
-        if rvs or states:
-            print('Enabling sim diagnostics ...') # Always print regardless of verbosity
-            self.diagnostics = ss.debugtools.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
-        else:
+        if not (rvs or states):
             errormsg = 'sim.set_diagnostics() was invoked, but nothing is being tracked'
             raise ValueError(errormsg)
+        print('Enabling sim diagnostics ...') # Always print regardless of verbosity
+        self.diagnostics = ss.debugtools.Diagnostics(sim=self, rvs=rvs, states=states, detailed=detailed)
         return
 
     def start_step(self):
@@ -1546,7 +1528,7 @@ class Sim(ss.modules.Base):
             raise ss.AlreadyRunError('Simulation has already been finalized')
 
         scale = stock_scale = self.result_scale()
-        if getattr(self.solver or self.pars.solver, 'rescale', False) and 'alive' in self.results: # With dynamic rescaling, a count of people (e.g. alive) includes those no agent stands for yet, who are like the agents, shared out as the agents alive are
+        if self._rescaling and 'alive' in self.results: # With dynamic rescaling, a count of people (e.g. alive) includes those no agent stands for yet, who are like the agents, shared out as the agents alive are
             n = np.asarray(self.results.alive.values, dtype=float)
             stock_scale = scale + np.divide(self.results.unrepresented.values, n, out=np.zeros(len(n)), where=n>0)
         for reskey, res in self.results.items():
@@ -1843,16 +1825,10 @@ class Sim(ss.modules.Base):
             if key in ['pars', 'parameters']:
                 d.pars = self.pars.to_json()
             elif key == 'summary':
-                if self.results_ready:
-                    d.summary = self.summarize().value.to_dict()
-                else:
-                    d.summary = 'Summary not available (Sim has not yet been run)'
+                d.summary = self.summarize().value.to_dict() if self.results_ready else 'Summary not available (Sim has not yet been run)'
             elif key == 'results':
-                df = self.to_df()
-                if isinstance(df, dict):  # For sims with heterogeneous timelines, to_df() returns a dict of dataframes rather than a single dataframe
-                    d.results = {k:v.to_dict() for k,v in df.items()}
-                else:
-                    d.results = df.to_dict()
+                df = self.to_df() # For sims with heterogeneous timelines, a dict of dataframes rather than a single dataframe
+                d.results = {k:v.to_dict() for k,v in df.items()} if isinstance(df, dict) else df.to_dict()
             else:
                 errormsg = f'keys="{key}" is not something sim.to_json() writes; the choices are "pars", "summary", and "results"'
                 raise ValueError(errormsg)

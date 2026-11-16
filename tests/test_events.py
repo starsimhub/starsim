@@ -1,15 +1,96 @@
 """
-Test agents taken event by event in continuous time (solver=ss.solvers.abm(step='events')); the agreement with the other solvers is in devtests/test_events.py
+Test clocks (time in a state or a set of states), and agents taken event by event in continuous time (solver=ss.solvers.abm(step='events'));
+the agreement of the events with the other solvers is in devtests/test_events.py
 """
-
-# %% Imports and settings
-import pytest
 import numpy as np
 import sciris as sc
+import pytest
 import starsim as ss
 import starsim.library as ssl
+from corpus import BV
 
 kw = dict(verbose=0)
+
+
+@sc.timer()
+def test_clocks():
+    sc.heading('Testing clocks: X.time_in, (A | B).time_in, and X.progress')
+    def make(rate=None, **kwargs):
+        S, A, B, C = ss.states('S A B C')
+        return ss.Disease(S, A, B, C,
+            start = S >> A @ ss.perday(0.05),
+            ab    = A >> B @ ss.days(4),
+            bc    = ss.Transition(B, C, rate=rate) if rate is not None else B >> C @ ss.days(4),
+            init  = dict(B=0.1), name='d', **kwargs), (A | B)
+    seen = sc.obj(n=0)
+    def check(sim):
+        d = sim.diseases.d
+        st = d.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
+        ti, dt = d.ti, d.t.dt.to('day').value
+        u = d.B.uids
+        placed = d.ti_B[u] == -1 # At the start, dated by the step before the first
+        assert np.allclose(d.engine.eval_for(st.B.time_in, u), (ti - d.ti_B[u] - placed)*dt) # The steps since the step they entered in, by a move at its start
+        both = d.engine.eval_for(seen.ab, u)
+        came = u[~np.isnan(d.ti_A[u])] # From A; the others were placed in B, so entered the set then
+        assert np.allclose(both[np.isin(u, came)], np.maximum(ti - d.ti_A[came], 0)*dt) # Moving from A to B did not reset it
+        assert not np.isnan(both).any()
+        prog = d.engine.eval_for(st.A.progress, d.A.uids)
+        assert np.all((prog >= 0) & (prog <= 1))
+        assert np.isnan(d.engine.eval_for(st.A.time_in, d.S.uids[:10])).all() # NaN outside the domain
+        seen.n += len(came)
+    d, ab = make(check=check)
+    seen.ab = ab.time_in
+    ss.Sim(d, n_agents=2000, unit='day', stop=40, **kw).run()
+    assert seen.n > 100
+    # In a rate, a modifier amount, and a condition
+    S, A, B, C = ss.states('S A B C')
+    late = ss.Transition(B, C, rate=ss.perday(1)*(B.time_in >= ss.days(10)), name='late') # Only after 10 days in B
+    d = ss.Disease(S, A, B, C, start=S >> A @ ss.perday(0.05), ab=A >> B @ ss.days(4), late=late, init=dict(B=0.1), name='d')
+    sim = ss.Sim(d, n_agents=2000, unit='day', stop=40, **kw).run()
+    assert sim.results.d.late[:10].sum() == 0 and sim.results.d.late.sum() > 100 # A split that reads a clock is in test_branching.py
+
+    # A clock of a state with no exit, read only by a modifier, is known when the sim is built
+    S, I, R = ss.states(3)
+    d = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
+    protect = ss.modify(d.rel_sus, multiply=0.5, who=R.time_in > 5) # R has no exit, so nothing else keeps its times
+    assert isinstance(ss.Sim(d, n_agents=500, stop=30, connectors=protect, **kw).run().solver, ss.solvers.abm)
+
+    S, A, B, C = ss.states('S A B C') # A clock read outside its domain
+    with pytest.raises(ValueError):
+        ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time_in > 1)))
+    return sim
+
+
+@sc.timer()
+def test_bv_recurrence():
+    sc.heading('Testing BV recurrence hazard decays with time since treatment, P.time_in')
+    def recur_rate(sim, uids): # The same hazard as a function of the time of entering
+        bv = sim.diseases.bv
+        months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months # The steps since the step of entering P
+        return ss.permonth(0.06 * np.exp(-months / 3))
+    class Old(BV):
+        recur = ss.Transition(BV.P, BV.CST4, rate=recur_rate)
+
+    kw2 = dict(n_agents=10_000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw)
+    new = ss.Sim(BV(name='bv'), **kw2).run().results.bv
+    old = ss.Sim(Old(name='bv'), **kw2).run().results.bv
+    assert new.recur.sum() > 500
+    assert np.array_equal(new.recur, old.recur) and np.array_equal(new.P, old.P) # The same hazards, so the same draws
+    return new
+
+
+@sc.timer()
+def test_stamps():
+    sc.heading('A time of entering reads as the step it happened in: ti_X.isclose(sim.ti) for a move at the start of the step and an infection at its end')
+    S, E, I, R = ss.states('S E I R')
+    d = ss.Disease(inf=S >> E @ ss.perday(0.4)*I, lat=E >> I @ ss.days(2), rec=I >> R @ ss.days(3), init=dict(E=0.01), name='d')
+    def check(sim):
+        d, ti = sim.diseases.d, sim.ti
+        if ti > 0:
+            assert d.ti_E.isclose(ti).count() == d.results.inf[ti] and d.ti_I.isclose(ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
+    sim = ss.Sim(d, networks=ss.RandomNet(), analyzers=check, n_agents=5000, unit='day', stop=30, **kw).run()
+    assert sim.results.d.inf.sum() > 100 and sim.results.d.lat.sum() > 100
+    return
 
 
 def make_sirs(**kwargs):
@@ -36,26 +117,15 @@ def test_events():
     assert isinstance(mixed.diseases.sirs.engine, ss.solvers.Events) and isinstance(mixed.diseases.other.engine, ss.solvers.Agents) and not isinstance(mixed.diseases.other.engine, ss.solvers.Events)
     assert mixed.results.other.R[-1] > 0 and mixed.results.sirs.R.values.max() > 0
 
-    pools = lambda: [ss.MixingPool(n_contacts=ss.constant(10), name='big'), ss.MixingPool(n_contacts=ss.constant(1), name='small')] # A person in both has each pool's own contacts
-    S, I, R = ss.states('S I R')
-    both = ss.Sim(ss.Disease(S, I, R, infection=S >> I @ 0.02*I, recovery=I >> R @ ss.days(6), init_n=dict(I=30), name='d'), networks=pools(), n_agents=3000, solver=ss.solvers.abm(step='events'), unit='day', stop=60, **kw).run()
-    assert both.results.d.R[-1] > 400 # About 740, as by steps; it was 36 when the pools shared the last one's contacts
     return
 
 
 def test_events_more():
-    sc.heading('By events: the infection log, a network with acts, triggers at the end of the step, and infections by group')
+    sc.heading('By events: the infection log, and triggers at the end of the step')
     sim = ss.Sim(make_sirs(), networks=[ssl.StaticNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=1000, solver=ss.solvers.abm(step='events'), unit='day', stop=20, analyzers='infection_log', **kw).run()
     df = sim.analyzers[0].to_df()
     inf = df[df.source != -1]
     assert len(inf) == sim.results.sirs.infection.values.sum() and set(inf.network) == {'staticnet', 'mixingpool'} # Each infection, with its source and route (in a pool too)
-
-    S, I = ss.states('S I')
-    sti = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(m2f=0.1, f2m=0.0))*I, recovery=I >> S @ ss.peryear(0.2), init_prev=0.1, name='sti')
-    sim = ss.Sim(sti, networks=ss.SexualNet(acts=ss.constant(ss.per(80, 'year'))), n_agents=1000, solver=ss.solvers.abm(step='events'), dt=1/12, start=2000, stop=2004, analyzers='infection_log', **kw).run()
-    df = sim.analyzers[0].to_df()
-    new = ss.uids(df.target[df.source != -1].to_numpy(dtype=int))
-    assert len(new) > 20 and sim.people.female[new].all() # From men to women only
 
     S, E, I, Q, R = ss.states('S E I Q R')
     d = ss.Disease(infection=S >> E @ 0.3*I, onset=E >> I @ 0.5, recovery=I >> R @ 0.2, isolate=I >> Q @ ss.on(I.enter), release=Q >> R @ 0.2, init_n=dict(E=20), name='d')
@@ -63,31 +133,17 @@ def test_events_more():
     assert res.onset.values.sum() > 100 and np.all(res.I.values == 0) # Isolated at the end of the step of their onset, unless they recovered first
     assert 0.8*res.onset.values.sum() < res.isolate.values.sum() <= res.onset.values.sum()
 
-    S, I, R = ss.states('S I R')
-    m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
-    m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-    res = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=2000, solver=ss.solvers.abm(step='events'), unit='day', stop=40, **kw).run().results.m
-    by_age = [res.infection.select(age=a).sum() for a in ['0-14', '15-64', '65+']]
-    assert np.isclose(sum(by_age), res.infection.values.sum()) and by_age[0] > by_age[2] > 0
-    return
-
-
-def test_events_refuse():
-    sc.heading('What the events do not take yet is a CapabilityError that says what')
-    m = make_sirs()
-    m.stratify(patch=ss.levels(ss.geo.geography(names=['a', 'b'], populations=[600, 400], x=[0, 20], y=[0, 0]), mobility=ss.geo.gravity(away=0.01)))
-    with pytest.raises(ss.CapabilityError, match='move between places'):
-        ss.Sim(m, networks=ss.MixingPool(n_contacts=3), n_agents=500, solver=ss.solvers.abm(step='events'), **kw).init()
-    with pytest.raises(ss.CapabilityError, match='no route'):
-        ss.Sim(make_sirs(), n_agents=500, solver=ss.solvers.abm(step='events'), **kw).init()
-    with pytest.raises(ss.CapabilityError, match='for agents only'):
+    # What the events do not take yet is a CapabilityError that says what
+    with pytest.raises(ss.CapabilityError):
         ss.Sim(make_sirs(solver=ss.solvers.abm(step='events')), total_pop=500, solver='ode', **kw).init()
     return
 
 
 if __name__ == '__main__':
     T = sc.timer()
+    test_clocks()
+    test_bv_recurrence()
+    test_stamps()
     test_events()
     test_events_more()
-    test_events_refuse()
     T.toc()

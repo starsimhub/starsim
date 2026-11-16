@@ -301,7 +301,7 @@ class JointStates:
         probability changes); the numbers, which can change from step to step or run to run, are taken from the
         engines' by `numbers()`, from where each is in an engine's program (`self.pieces`). Returns the program.
         """
-        kn = ss.solvers.backends.kernels
+        kn = ss.solvers.numba.compartmental
         progs = programs or [engine.program for engine in self.engines]
         if self.program is not None and self.built == [id(p) for p in progs]: # Built from these already
             return self.program
@@ -314,7 +314,7 @@ class JointStates:
         tgt_rec = []
         mov_comps, mov_pair, mov_cstarts, mov_estarts = [], [[], []], [0], [0]
         sets, exposures, maps = dict(), dict(), dict()
-        groups, chain = [], [] # The flows out of each compartment, for the stochastic solvers: for each disease in turn, each disease's ended by an empty set (see ss.solvers.backends.kernels.draw())
+        groups, chain = [], [] # The flows out of each compartment, for the stochastic solvers: for each disease in turn, each disease's ended by an empty set (see ss.solvers.numba.compartmental.draw())
         conveyors = [] # The flow out of the last slot of each conveyor, then its slots
         for key in ['flows', 'consts', 'rel_trans', 'contacts', 'tgt', 'crd', 'maps', 'movers']:
             self.pieces[key] = []
@@ -372,7 +372,7 @@ class JointStates:
                 return positions[id(exposures)][key]
 
             def exposure_sum(e, o_sus):
-                """ The exposure from the infectious in every combination of the others' compartments, added up: an exposure whose set is minus the number of those before it that it adds up (see `ss.solvers.backends.kernels.Program`), so each flow takes it once """
+                """ The exposure from the infectious in every combination of the others' compartments, added up: an exposure whose set is minus the number of those before it that it adds up (see `ss.solvers.numba.compartmental.Program`), so each flow takes it once """
                 key = (k, int(e), 'sum', o_sus if split else None)
                 if key not in exposures:
                     for j in range(O):
@@ -451,7 +451,7 @@ class JointStates:
             if groups and len(groups[-1]): # Followed by the next disease's (an empty set is never last, so the kernels can read the next one's first flow)
                 groups.append([])
                 chain.append((0, -1, -1))
-            for i in range(len(p.starts) - len(p.src) - 1): # Each conveyor, for each combination of the others' compartments (see ss.solvers.backends.kernels.convey())
+            for i in range(len(p.starts) - len(p.src) - 1): # Each conveyor, for each combination of the others' compartments (see ss.solvers.numba.compartmental.convey())
                 a, b = p.starts[len(p.src)+i], p.starts[len(p.src)+i+1]
                 for o in range(O):
                     conveyors.append([n_flows + p.args[a]*O + o] + list(L.rowmap[p.args[a+1:b], o]))
@@ -557,12 +557,12 @@ class JointStates:
         return self.program
 
     def join_register(self, reg):
-        """ The movement register of the lead engine (see `lead`) for the program: see `ss.solvers.backends.kernels.Register` """
+        """ The movement register of the lead engine (see `lead`) for the program: see `ss.solvers.numba.compartmental.Register` """
         ints = lambda vals: np.array(vals, dtype=np.int64)
         L = self.layout[self.names.index(self.lead)]
         R = self.n_cols
         if reg is None or not len(reg.src):
-            return ss.solvers.backends.kernels.Register(starts=ints([0]), src=ints([]), dst=ints([]), n=np.zeros(0), sel=ints([]), sel_starts=ints([0]), sel_comps=ints([]), sel_to=ints([]),
+            return ss.solvers.numba.compartmental.Register(starts=ints([0]), src=ints([]), dst=ints([]), n=np.zeros(0), sel=ints([]), sel_starts=ints([0]), sel_comps=ints([]), sel_to=ints([]),
                                        ent_starts=ints([0]), ent_comps=ints([]), ent_w=np.zeros((0, R)), pg_starts=ints([0]), pg_groups=ints([]), step=0)
         sel_comps, sel_to, sel_starts = [], [], [0]
         ent_comps, ent_w, ent_starts = [], [], [0]
@@ -592,13 +592,13 @@ class JointStates:
         if any(getattr(engine, 'deliveries', None) for engine in self.engines):
             errormsg = 'The deliveries of diseases tracked jointly are not taken in a whole compiled run'
             raise RuntimeError(errormsg)
-        return ss.solvers.backends.kernels.Shifts(due=np.zeros((0, npts), dtype=np.bool_), sel=np.zeros((0, self.n_rows, self.n_cols)), cov=np.zeros((0, self.n_rows, self.n_cols)),
+        return ss.solvers.numba.compartmental.Shifts(due=np.zeros((0, npts), dtype=np.bool_), sel=np.zeros((0, self.n_rows, self.n_cols)), cov=np.zeros((0, self.n_rows, self.n_cols)),
                                  to=np.zeros((0, self.n_cols), dtype=np.int64), rest=np.zeros((0, self.n_cols), dtype=np.int64), land=np.zeros((0, self.n_rows, self.n_cols)))
 
     def numbers(self, Xs, xp=np, keys=None):
         """
         The numbers in the program, from those in each engine's: each a dict of the arrays of its program (by the
-        names of `ss.solvers.backends.kernels.Program`), its tables (`fixed`, `mult`, `consts`, `rel_trans`; see `ss.solvers.Compartmental.tables()`),
+        names of `ss.solvers.numba.compartmental.Program`), its tables (`fixed`, `mult`, `consts`, `rel_trans`; see `ss.solvers.Compartmental.tables()`),
         and its compartments (`y`), as `ss.gradients.capture()` gives them
 
         Every number is one of an engine's, so this is a gather, in NumPy or in JAX (where it is differentiated through).
@@ -645,7 +645,7 @@ class JointStates:
         return out
 
     def split(self, k, y, stocks, flows, xp=np):
-        """ Engine k's compartments at the end, at each time point, and its flows over each step, from the program's (as `ss.solvers.backends.kernels.run()` returns them) """
+        """ Engine k's compartments at the end, at each time point, and its flows over each step, from the program's (as `ss.solvers.numba.compartmental.run()` returns them) """
         L = self.layout[k]
         idx, fidx = np.maximum(L.idx, 0), np.maximum(L.fidx, 0)
         yk = xp.where(L.idx >= 0, y.reshape(-1)[idx], 0.0)
@@ -693,9 +693,9 @@ class JointStates:
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of the program and the rates of its diseases at the start, as `ss.solvers.Compartmental.plain_seconds()` works it out for one engine """
         first = self.engines[0]
-        solver = ss.solvers.backends.kernels.solver_code(self.sim)
-        n_sub = ss.solvers.backends.kernels.substeps(np.concatenate([rate for e in self.engines for rate in e.start_rates()] + [self.program.mov_rate]), first.dt, first.substeps(), solver)
-        return ss.solvers.backends.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub)
+        solver = ss.solvers.numba.compartmental.solver_code(self.sim)
+        n_sub = ss.solvers.backends.compiling.substeps(np.concatenate([rate for e in self.engines for rate in e.start_rates()] + [self.program.mov_rate]), first.dt, first.substeps(), solver)
+        return ss.solvers.backends.compiling.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub)
 
     def run(self, use_jax=False):
         """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """

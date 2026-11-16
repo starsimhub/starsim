@@ -1168,7 +1168,7 @@ class Event(ss.products.EventSource, Intervention):
     def tabulated(self):
         """
         Whether a compartmental run can apply this delivery in the compiled kernels, for the whole run at once (fast), rather than step by
-        step in Python (see `ss.solvers.backends.kernels.apply_shifts()`): in a compartmental run of one disease, a product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
+        step in Python (see `ss.solvers.numba.compartmental.apply_shifts()`): in a compartmental run of one disease, a product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
         with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups (see `ss.solvers.CompartmentalDelivery.shifts()`)
         """
         return self.in_compartments is not None and self.in_compartments.tabulated()

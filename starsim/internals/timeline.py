@@ -48,8 +48,6 @@ def calendar_of(start, stop=None, unit=None):
     return None
 
 
-
-
 def same(a, b):
     """ Whether two time arguments are the same, for update() """
     try:
@@ -67,12 +65,7 @@ def how_bare(t):
 
 class Timeline:
     """
-    Handle time vectors and sequencing ("timelines") for both simulations and modules.
-
-    Each module can have its own time instance, in the case where the time vector
-    is defined by absolute dates, these time vectors are by definition aligned. Otherwise
-    they can be specified using dur objects which express relative times (they can be added
-    to a date to get an absolute time)
+    The time vectors and current step of a sim (`sim.t`) or of a module (`module.t`), which can step at its own rate
 
     Args:
         start (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module starts. For the sim: a date (e.g. '2000-01-01') or a year (a bare number from 1800 on, e.g. 2000) gives it a calendar; any other number, or a duration, is a time in its unit from 0 (default: 2000 for a model in years, else 0). For a module: a time on the sim's timeline (a bare number as for the sim's stop; a duration is that long after the sim's start, in a sim with a calendar)
@@ -83,8 +76,7 @@ class Timeline:
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop are provided; otherwise no)
         sim (Sim): if provided, initialize the `Timeline` with this as the parent (i.e. populating missing values)
 
-    The `Timeline` object, after initialization, has the following time vectors,
-    each representing a different way of representing time:
+    After initialization, it has these time vectors:
 
     - `tvec`: ground truth simulation time, either as absolute `ss.date` instances, or relative `ss.Duration` instances, e.g. `DateArray([<2021-01-01>, <2021-01-03>, <2021-01-05>, <2021-01-07>])`
     - `tivec`: the vector of time indices (`np.arange(len(tvec))`)
@@ -93,7 +85,7 @@ class Timeline:
     - `datevec`: time represented as `ss.date` instances
     - `relvec`: relative time, in the unit of the sim's step (`dt`)
 
-    The `Timeline` object also has the following attributes/methods:
+    And these attributes and methods:
 
     - `ti` (int): the current time point, which is also the current step: step `ti` runs from time point `ti` to the next, and its results go at `ti`
     - `npts` (int): the total number of time *points* in the timeline, which is also the number of steps (see note below)
@@ -101,13 +93,10 @@ class Timeline:
     - `calendar` (str): 'dates', 'years', or None (see `ss.timeline.calendar_of()`), and `unit`, the class of the sim's unit (e.g. `ss.days`)
     - `dur` (`ss.Duration`): the length of the run, from its start to its stop
 
-    Note: the time vectors include *both* the start and stop endpoints, and a step
-    is taken from each of them, so each time point is a period: a stock at it is the
-    state at its start, and a flow at it is the total over the step that starts there.
-    For example, `start=0, stop=1, dt=1` produces two time points (`[0, 1]`) and takes
-    two steps; the state after the last one is not recorded. Giving the length (`dur`)
-    is the same as giving the stop (`start=2000, dur=1` is the same timeline as `start=2000, stop=2001`).
-    See the time user guide for the rationale behind the inclusive endpoint.
+    Note: the time vectors include *both* the start and stop, and a step is taken from each, so each time point is a
+    period: a stock at it is the state at its start, and a flow at it is the total over the step that starts there.
+    For example, `start=0, stop=1, dt=1` has two time points (`[0, 1]`) and takes two steps; the state after the last
+    one is not recorded. See the time user guide for why.
 
     Examples:
         ```python
@@ -138,19 +127,16 @@ class Timeline:
         self.unit = None # The class of the sim's unit, e.g. ss.days, in which a bare time with no calendar is read
         self.origin = None # The start of the sim's run, from which a duration given as a time is counted when there is a calendar; set in reconcile_args()
 
-        # Populated later. The canonical vectors (tvec, tivec, yearvec) are built eagerly at
-        # init; the human-friendly vectors (timevec, datevec, relvec) are derived lazily on
-        # first access (see the properties below), so that sims that never read them do not
-        # pay to construct date sequences. Underscore attributes are the lazy backing stores.
+        # Populated on init: tvec, tivec, and yearvec then, and timevec, datevec, and relvec when first read (see the properties below), since most sims never read them
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.tvec    = None # The time vector for this instance in date or dur format
         self.tivec   = None # The time index vector
         self.yearvec = None # Time vector as floating point years
-        self._timevec = None # Backing store for the lazy timevec property (human-friendly representation)
-        self._datevec = None # Backing store for the lazy datevec property (date objects)
-        self._relvec  = None # Backing store for the lazy relvec property (relative time in sim units)
-        self._rel_start = None # Reference start for relvec, captured at init (None => use this timeline's own start)
-        self._rel_dur_class = None # Duration class for relvec, captured at init
+        self._timevec = None
+        self._datevec = None
+        self._relvec  = None
+        self._rel_start = None # The start that relvec counts from, set on init (None: this timeline's own start)
+        self._rel_dur_class = None # The duration class of relvec, set on init
         self.unitless = False # Whether time is counted in steps, with no unit or calendar (a declared model in which nothing has a unit); then there are no dates
         self.initialized = False # Call self.init(sim) to initialize the object
 
@@ -194,20 +180,12 @@ class Timeline:
                 self._datevec = ss.date.from_array(self.yearvec, allow_zero=True)
         return self._datevec
 
-    @datevec.setter
-    def datevec(self, value):
-        self._datevec = value
-
     @property
     def timevec(self):
         """ Human-friendly (plotting-friendly) representation of tvec (derived lazily) """
         if self._timevec is None and self.tvec is not None:
             self._timevec = self.tvec.to_human() # Dates if possible, else floats
         return self._timevec
-
-    @timevec.setter
-    def timevec(self, value):
-        self._timevec = value
 
     @property
     def relvec(self):
@@ -225,10 +203,6 @@ class Timeline:
             dur_vec = dur_class(dur_vec) # Convert to the intended class
             self._relvec = np.round(dur_vec.to_array(), decimals=6) # Only keep the numeric array, rounded since yearvec is only precise to 9 decimals, e.g. 2.000000004 months
         return self._relvec
-
-    @relvec.setter
-    def relvec(self, value):
-        self._relvec = value
 
     def to_dict(self):
         """ Return a dictionary of all time vectors """
@@ -271,16 +245,8 @@ class Timeline:
 
     @property
     def is_absolute(self):
-        """
-        Check whether the fundamental simulation unit is absolute
-
-        A time vector is absolute if the start is a date rather than a dur
-        A relative time vector can be made absolute by adding a date to it.
-        """
-        try:
-            return isinstance(self.start, ss.date)
-        except Exception:
-            return False
+        """ Whether the times are dates (the start is a date rather than a duration) """
+        return isinstance(self.start, ss.date)
 
     def now(self, key=None):
         """
@@ -300,12 +266,9 @@ class Timeline:
             t.now('str') # Returns '2021-06-25'
             ```
         """
-        # Preprocessing
-        to_str = False
-        if key in [None, 'none', 'str']: # All of these are the default
-            if key == 'str':
-                to_str = True
-            key = 'tvec' # Return a typed value (ss.date or ss.Duration)
+        to_str = key == 'str'
+        if key in [None, 'none', 'str']: # A typed value (ss.date or ss.Duration)
+            key = 'tvec'
         if not isinstance(key, str):
             errormsg = f'Key must be a string, not {key}'
             raise TypeError(errormsg)
@@ -482,7 +445,7 @@ class Timeline:
         for key, val in dict(start=start, stop=stop).items():
             if not (key == 'stop' and not_years):
                 ss.time.warn_ambiguous(val, key)
-        if unit_base is not None: # The model's unit (see ss.solvers.choose.init_unit())
+        if unit_base is not None: # The model's unit (see ss.solvers.build.init_unit())
             unit = ss.time.get_dur_class(unit_base)
         else: # On its own: the unit of a start or stop that is a duration; else years with a calendar, or with none, the step's unit
             calendar = calendar_of(start, stop, given_unit)
@@ -588,23 +551,17 @@ class Timeline:
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
-        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.solvers.choose.init_unit()
+        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.solvers.build.init_unit()
 
-        # If the sim is provided and matches the current object: copy from the sim
+        # If the sim's timeline is initialized and the same as this one, copy it
         tvkeys = ['start', 'stop', 'dt']
-        if sim is not None: # Sim is provided
-            if sim.t.initialized: # It's initialized
-                if all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in tvkeys]): # Types match
-                    if all([getattr(self, key) == getattr(sim.t, key) for key in tvkeys]): # Values match
-                        self._frac_from(sim.t)
-                        self.initialized = True
-                        return self
+        if sim is not None and sim.t.initialized:
+            if all(type(getattr(self, key)) == type(getattr(sim.t, key)) and getattr(self, key) == getattr(sim.t, key) for key in tvkeys):
+                self._copy_from(sim.t)
+                self.initialized = True
+                return self
 
-        # Build the canonical vectors: tvec (ss.date/ss.Duration) and yearvec (float years). We need to
-        # decide which to prioritize, since calendar dates don't convert consistently into fractional
-        # years (varying month/year lengths); we prioritize based on the type the user gave for start.
-        # The human-friendly datevec/timevec/relvec are derived lazily (see the properties above), so
-        # they are not eagerly constructed here.
+        # Build tvec (ss.date/ss.Duration) and yearvec (float years), from whichever the start is, since calendar dates don't convert consistently to fractional years
         if isinstance(self.dt, ss.dates.datedur):
             if isinstance(self.start, ss.Duration): # e.g. ss.Sim(start=ss.years(2000), dt=ss.months(1))
                 self.tvec = ss.Duration.arange(self.start, self.stop, self.dt)
@@ -651,12 +608,9 @@ class Timeline:
             warnmsg += 'Set ss.options.max_years = 0 to turn off this warning.'
             ss.warn(warnmsg)
 
-        # Capture the reference start and duration class so the lazy relvec property can be
-        # built later without needing the sim (relvec is in the unit of the sim's step)
-        self._capture_relvec_context(sim)
+        self._set_relvec_start(sim)
 
-        # Check that the eagerly-built vectors are the expected length (the lazy vectors are
-        # derived from yearvec and share its length by construction)
+        # Check that the vectors built are the same length (the others are made from yearvec)
         for k in ['tvec', 'tivec', 'yearvec']:
             v = getattr(self, k)
             if len(v) != n_steps:
@@ -667,15 +621,8 @@ class Timeline:
         self.initialized = True
         return self
 
-    def _frac_from(self, source):
-        """
-        Copy the time vectors from a matching (sim) timeline
-
-        Eager vectors are shallow-copied into independent array containers (sharing the
-        immutable date/dur elements).
-        The lazy vectors are copied only if the source has already materialized them, so a
-        module that never reads e.g. datevec does not force the sim to build it.
-        """
+    def _copy_from(self, source):
+        """ Copy the time vectors from a matching (sim) timeline: as shallow copies, and those made when read only if they have been """
         for attr in ['tvec', 'tivec', 'yearvec']:
             setattr(self, attr, getattr(source, attr).copy())
         for attr in ['_timevec', '_datevec', '_relvec']:
@@ -685,18 +632,11 @@ class Timeline:
         self._rel_dur_class = source._rel_dur_class
         return
 
-    def _capture_relvec_context(self, sim):
-        """ Capture the reference start (date or year) and duration class used by the lazy relvec property """
-        
-        def first_date(t):
-            """ Return the first date of a timeline, or the first year if it is duration-based (since dates are rounded) """
-            if isinstance(t.start, ss.date): # Date-based: the first tvec element is the first date
-                return t.tvec[0]
-            return t.yearvec[0] # Duration-based: use the exact first year
-
+    def _set_relvec_start(self, sim):
+        """ Set the start (the first date, or year if duration-based) and the duration class that relvec reads, from the sim's timeline (which may be this one), so it can be made later without the sim """
         try:
-            ref_t = sim.t # The sim's timeline (may be self, for the sim's own timeline)
-            start = first_date(ref_t)
+            ref_t = sim.t
+            start = ref_t.tvec[0] if isinstance(ref_t.start, ss.date) else ref_t.yearvec[0]
             rel_dt = ref_t.dt
         except Exception:
             start = None # Standalone timeline: the relvec property will fall back to its own start
@@ -879,7 +819,7 @@ class schedule:
                 counts[k] = bool(of_date(self.when, t, tvec[k])) and self.window[k]
         else:
             if self.at is None and self.every is None: # A window: every step that starts within it
-                self.counts = ((points >= first) & (points <= last)).astype(int)
+                self.counts = self.window.astype(int)
                 return self
             if self.at is not None:
                 times = np.array([to_time(x) for x in self.at], dtype=points.dtype)

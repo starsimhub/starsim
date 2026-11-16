@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+from .clusters import cluster_pairs
 
 __all__ = ['HouseholdNet']
 
@@ -69,34 +70,19 @@ class HouseholdNet(ss.Network):
     1. Register and request access at https://dhsprogram.com
     2. Download a Household Recode (HR) dataset in Stata format
        (e.g. `XXHR7xDT.zip`)
-    3. Use `HouseholdNet.load_dhs()` to extract the data::
+    3. Use `HouseholdNet.load_dhs()` to extract the data (see its example)
 
-        import starsim as ss; import starsim.library as ssl
-        dhs_data = ssl.networks.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
-        sim = ss.Sim(networks=ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False))
-        sim.run()
-
-    If real data are not available, synthetic data can be constructed::
-
-        import numpy as np
-        import sciris as sc
-        import starsim as ss; import starsim.library as ssl
-
-        n = 1000
-        age_strings = []
-        for i in range(n):
-            household_size = np.random.randint(1, 6)
-            ages = np.random.randint(0, 80, household_size)
-            age_strings.append(sc.strjoin(ages))
-        dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings)
-
-        household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False)
+    Example:
+        ```python
+        import starsim as ss
+        import starsim.library as ssl
+        household = ssl.networks.HouseholdNet(dhs_data='default') # Synthetic data: see make_default_data()
         sim = ss.Sim(diseases='sis', networks=household)
         sim.run()
         sim.plot()
+        ```
     """
     def __init__(self, pars=None, dhs_data=None, dynamic=None, prob_move_out=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             prob_move_out = ss.bernoulli(p=0.7),
@@ -147,13 +133,8 @@ class HouseholdNet(ss.Network):
         uids = (ppl.age >= 0).uids # Skip unborn agents
         ppl.age[uids] = ppl.age[uids] + self.rng_fractional_age.rvs(uids)
 
-        # Women already pregnant at initialization were captured by the DHS survey in
-        # their current household, so treat that as their post-move-out-decision state:
-        # mark them as already evaluated for their current pregnancy. Without this,
-        # `ti_move_out_check` defaults to -inf, so every pregnant non-head becomes eligible
-        # on the first step and ~prob_move_out of them move into new households simultaneously,
-        # distorting the input household size distribution. (Pregnancy is a demographics module,
-        # so it is initialized before networks and its states are populated by this point.)
+        # Women pregnant at the start are in the household the survey found them in, so their move-out is already decided
+        # (otherwise ~prob_move_out of them would all move on the first step, distorting the household sizes)
         if self.dynamic:
             preg = self.sim.get_module(ss.Pregnancy)
             preg_uids = preg.P.uids
@@ -179,21 +160,14 @@ class HouseholdNet(ss.Network):
         return self._dhs_parsed
 
     def add_pairs(self):
-        """ Generate contacts by assigning agents to households sampled from the data.
-
-        Households are drawn uniformly at random (with replacement) until they cover the whole
-        population. Sampling, age/sex assignment, edge creation, and head-of-household selection
-        are all vectorized rather than looped per household.
-        """
+        """ Generate contacts by assigning agents to households drawn uniformly (with replacement) from the data, until they cover the population """
         ppl = self.sim.people
         all_uids = (ppl.age >= 0).uids # Exclude unborn agents (e.g. from ss.Pregnancy(burnin=True)); they join their mother's household at birth
         pop_size = len(all_uids)
         sizes, ages_flat, sexes_flat, offsets, has_sex = self._parse_dhs()
         n_dhs = len(sizes)
 
-        # Sample household rows (uniform in [0, n_dhs), with replacement) until their members cover the
-        # population. Draws use the network's own RNG stream rather than the global np.random, so they are
-        # reproducible and don't perturb other modules; scalar-size draws aren't slot-based, so not CRN-safe.
+        # Sample household rows until their members cover the population (draws of a number, not by slot, so not CRN safe)
         self.rng_household.set(high=n_dhs)  # high isn't known until the data is parsed, so set it here
         n_est = int(pop_size/sizes.mean()*1.25) + 16
         rows = self.rng_household.rvs(n_est)
@@ -217,17 +191,7 @@ class HouseholdNet(ss.Network):
         if has_sex:
             ppl.female[all_uids] = (sexes_flat[gather] == 2)
 
-        # Build all within-household edges (every i<j pair), batched by household size
-        p1_list, p2_list = [], []
-        for s in np.unique(hsize):
-            if s < 2:
-                continue
-            starts = seg_start[hsize == s]
-            ii, jj = np.triu_indices(s, k=1)
-            p1_list.append((starts[:, None] + ii[None, :]).ravel())
-            p2_list.append((starts[:, None] + jj[None, :]).ravel())
-        p1 = np.concatenate(p1_list) if p1_list else np.empty(0, dtype=ss.dtypes.int)
-        p2 = np.concatenate(p2_list) if p2_list else np.empty(0, dtype=ss.dtypes.int)
+        p1, p2 = cluster_pairs(hsize) # Every pair within each household
         self.append(p1=all_uids[p1], p2=all_uids[p2], weight=np.ones(len(p1), dtype=ss.dtypes.float))
 
         if self.dynamic:
@@ -253,9 +217,7 @@ class HouseholdNet(ss.Network):
     def add_births(self):
         ppl = self.sim.people
 
-        # Find agents born during the sim (have a parent), already delivered
-        # (age >= 0), and not yet assigned to a household (household_ids is NaN).
-        # The isnan guard ensures each newborn is processed exactly once.
+        # Agents born during the sim and not yet in a household (household_ids is NaN), so each newborn is added once
         candidates = ss.uids(ppl.parent.notnan & (ppl.age >= 0))
         if len(candidates) == 0:
             return 0
@@ -265,8 +227,7 @@ class HouseholdNet(ss.Network):
 
         mat_uids = ppl.parent[birth_uids]
 
-        # Assign household IDs before creating edges so the newborn is
-        # included when looking up household members
+        # Assign household IDs before creating edges, so the newborn is found among the household's members
         self.household_ids[birth_uids] = self.household_ids[mat_uids]
 
         # Sort alive agents by household id so each household's members form a contiguous slice
@@ -280,8 +241,7 @@ class HouseholdNet(ss.Network):
         sorted_uids = auids[order]
         sorted_h = hvals[order]
 
-        # For every newborn, locate its household's member slice [lo, hi) in one vectorized pass,
-        # then gather all birth edges at once (no per-household split, no per-birth Python loop).
+        # For every newborn, find its household's member slice [lo, hi), then gather all birth edges at once
         mat_hids = self.household_ids[mat_uids]
         lo = np.searchsorted(sorted_h, mat_hids, side='left')
         hi = np.searchsorted(sorted_h, mat_hids, side='right')
@@ -309,12 +269,8 @@ class HouseholdNet(ss.Network):
         Move them and a randomly sampled male partner to a new household.
         """
         ppl = self.sim.people
-        # Evaluate each pregnancy for move-out exactly once (at its start). `ti_move_out_check`
-        # stores the `ti_P` of the pregnancy a woman was last evaluated for; she is eligible
-        # only when her current `ti_P` is newer than that. This is dt-agnostic: comparing
-        # against `ti_P` (rather than the sim timestep vs. the scheduled delivery) avoids mis-timed,
-        # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
-        # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households.
+        # Each pregnancy is evaluated for move-out once: `ti_move_out_check` is the `ti_P` of the pregnancy last evaluated,
+        # which holds whatever the pregnancy module's dt (e.g. ss.Pregnancy(dt=ss.months(3)))
         preg = self.sim.get_module(ss.Pregnancy)
         potential_movers = ss.uids(~self.fhoh & preg.P & (self.ti_move_out_check < preg.ti_P))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
@@ -339,11 +295,7 @@ class HouseholdNet(ss.Network):
     @staticmethod
     def make_default_data(n=1000, seed=1):
         """
-        Generate synthetic household data, used when `dhs_data='default'`.
-
-        Creates `n` households of 1-5 members with ages uniformly distributed
-        between 0 and 80. Intended for demos and testing when real DHS data are
-        not available; see `load_dhs()` for loading actual survey data.
+        Generate synthetic household data, used when `dhs_data='default'`: `n` households of 1-5 members with ages uniform from 0 to 80
 
         Args:
             n (int): number of synthetic households to generate
@@ -363,13 +315,8 @@ class HouseholdNet(ss.Network):
     @staticmethod
     def load_dhs(path):
         """
-        Load a DHS Household Recode (HR) Stata file and return a dataframe
-        suitable for use with `HouseholdNet`.
-
-        Reads the wide-format HR file, extracts per-member age (`HV105`)
-        and sex (`HV104`) columns, filters to valid entries (age <= 95 and
-        sex in [1, 2]), and returns a dataframe with columns `hh_id`,
-        `ages`, and `sexes`.
+        Load a DHS Household Recode (HR) Stata file as a dataframe for `HouseholdNet`: the age (`HV105`) and sex (`HV104`)
+        of each member, for valid entries (age <= 95 and sex 1 or 2)
 
         Args:
             path (str/Path): Path to a DHS Household Recode Stata file

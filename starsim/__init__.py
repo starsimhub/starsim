@@ -72,7 +72,7 @@ from .connectors import Connector, modify
 #%% Declared models: conditions, expressions, transitions, and the solvers that run them
 from .internals import conditions
 from .internals.conditions import ref
-from .solvers.backends.kernels import compile # The module is ss.solvers.backends.kernels
+from .solvers.backends.compiling import compile # The module is ss.solvers.backends.compiling
 from .internals import expressions
 from .internals.expressions import par, mother, attr
 from .internals import transitions
@@ -93,7 +93,8 @@ from .demographics import Demographics, Births, Deaths, Pregnancy, preterm # Aft
 from .internals import loop
 from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
-from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
+from .solvers.backends import jit
+from .solvers.numba import draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from . import sim
 from .simpars import SimPars
 from .sim import Sim, demo
@@ -118,7 +119,7 @@ def __getattr__(name):
 options.set(backend=options.backend)
 
 # Say if Starsim has not been compiled yet
-solvers.backends.kernels.note_uncompiled()
+solvers.backends.compiling.note_uncompiled()
 
 # Don't keep these in the module
 del sc

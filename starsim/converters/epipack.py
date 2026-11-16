@@ -48,7 +48,7 @@ import numpy as np
 if __package__: # As part of Starsim; run as a script in epipack's environment, the rest needs neither Sciris nor Starsim
     import sciris as sc
     import starsim as ss
-    from .core import Source, build, factors, product, names
+    from .core import Source, build, factors, product, names, rewrite_expr
 
 __all__ = ['load_epipack', 'to_epipack', 'dump', 'model_dict', 'record']
 
@@ -164,17 +164,7 @@ sympy_funcs = dict(exp='sympy.exp', log='sympy.log', sqrt='sympy.sqrt', sin='sym
 
 def sympy_code(node):
     """ An expression of `flatten()` (an AST) as code for sympy """
-    class Sub(ast.NodeTransformer):
-        def visit_Call(self, n):
-            self.generic_visit(n)
-            if n.func.id == 'where':
-                cond, yes, no = n.args
-                return ast.Call(ast.Name('sympy.Piecewise'), [ast.Tuple([yes, cond]), ast.Tuple([no, ast.Constant(True)])], [])
-            n.func = ast.Name(sympy_funcs.get(n.func.id, n.func.id))
-            return n
-        def visit_Name(self, n):
-            return ast.Name('sympy.pi') if n.id == 'pi' else n
-    return ast.unparse(Sub().visit(node))
+    return rewrite_expr(node, sympy_funcs, where='sympy.Piecewise(({yes}, {cond}), ({no}, True))', name=lambda n: ast.Name('sympy.pi') if n.id == 'pi' else n)
 
 
 def per_person(flow):

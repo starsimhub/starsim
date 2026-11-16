@@ -193,7 +193,7 @@ A Starsim model is written as Python, and that code is the model: it is what is 
 | A saved sim | `ss.save('run.sim', sim)` | the sim itself (a pickle), including partway through a run | yes, with `ss.load()` |
 | Another framework's format | `ss.export_to(sim, 'odin')` | the compartmental form of the declared diseases | yes, with `ss.import_from()` |
 
-`ss.export_to()` writes a model in SBML (for tools such as COPASI) or odin. Each is written from the model's compartmental form:
+`ss.export_to()` writes a model in SBML (for tools such as COPASI), odin, or the format of any framework in [the appendix](#appendix-every-importer-and-exporter). Each is written from the model's compartmental form:
 
 ```{python}
 print(ss.export_to(sim, 'odin'))

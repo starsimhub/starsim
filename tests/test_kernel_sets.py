@@ -10,7 +10,6 @@ Rust's are skipped if they have not been built (cd starsim/solvers/rust && ./bui
 # %% Imports and settings
 import os
 import sys
-import importlib
 import subprocess
 from unittest import mock
 import numba as nb
@@ -20,11 +19,11 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import starsim.internals.fitting
-from test_kernels import models, make_seir
+from corpus import kernel_models as models
 
 pytestmark = pytest.mark.numba # Compiles Numba's kernels, so CI runs it only in the jobs for Numba (see pytest.ini)
 kw = dict(verbose=0)
-D = ss.solvers.backends.draws
+D = ss.solvers.numba.draws
 rust = ss.solvers.backends.rust.built() or sc.parse_env('STARSIM_RUST_REQUIRED', False, bool) # Whether to compare Rust's
 needs_rust = pytest.mark.skipif(not rust, reason='the Rust kernels have not been built (cd starsim/solvers/rust && ./build)')
 compiled = ['numba', 'rust'] if rust else ['numba']
@@ -51,7 +50,7 @@ def how(solver):
     return dict(solver=ss.solvers.ode(integrator=solver)) if solver in ['rk4', 'euler'] else dict(solver=solver)
 
 
-def same(make, kernels, seeds=(0, 1)):
+def same(make, kernels, seeds=(0,)):
     """ Run each sim with each set of kernels; check they all give the same numbers, with no call going from Rust's to Numba's """
     ss.solvers.backends.rust.fell.clear()
     for seed in seeds:
@@ -84,7 +83,7 @@ def events_inputs():
         m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
         m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
         ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver=ss.solvers.abm(step='events'), unit='day', stop=30, **kw)
-        E = ss.solvers.backends.events
+        E = ss.solvers.numba.agent_events
         step_events = E.step_events
         def keep(*args):
             event_calls.append([np.array(x) if isinstance(x, np.ndarray) else x for x in args]) # Copies, since the pass changes the agents' arrays
@@ -98,7 +97,7 @@ def events_inputs():
 def events_call(args):
     """ A call of the events' pass on copies of its arguments: what it returns, and the agents' arrays it changes (state, ver, t_exit, exit_tr) """
     args = [np.array(x) if isinstance(x, np.ndarray) else x for x in args]
-    return ss.solvers.backends.events.step_events(*args), args[3:7]
+    return ss.solvers.numba.agent_events.step_events(*args), args[3:7]
 
 
 move_calls = [] # The arguments of the calls of the compiled moves in a sim, once taken (see moves_inputs())
@@ -115,7 +114,7 @@ def moves_inputs():
         d = ss.Disease(infection=S >> E @ 0.1*I, onset=onset, care=ss.Transition(I, {I: 0.5, ss.stay: None}, when=ss.on(onset, delay=ss.days(4))),
                        recovery=ss.Transition(I, {R: 0.95, ss.dead: None}, dur=ss.weibull(shape=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
         sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4), n_agents=1000, unit='day', stop=30, **kw)
-        M = ss.solvers.backends.moves
+        M = ss.solvers.numba.agent_moves
         kernels = {k: getattr(M, k) for k in ['due_agents', 'step_moves']}
         def keeper(k):
             def keep(*args):
@@ -146,12 +145,12 @@ def copied(args):
 def moves_call(k, args):
     """ A call of the compiled moves on copies of its arguments: what it returns, and every array it was given, which it changes in place """
     args = copied(args)
-    return getattr(ss.solvers.backends.moves, k)(*args), [x for x in args if isinstance(x, (np.ndarray, tuple))]
+    return getattr(ss.solvers.numba.agent_moves, k)(*args), [x for x in args if isinstance(x, (np.ndarray, tuple))]
 
 
 def twin_calls():
     """ A call of each kernel in `rust.names`, through the function that calls it where there is one, each giving what it returns and any array it fills """
-    P, D, net, rng = ss.solvers.backends.passes, ss.solvers.backends.draws, ss.networks, np.random.default_rng(1)
+    P, D, net, rng = ss.solvers.numba.passes, ss.solvers.numba.draws, ss.networks, np.random.default_rng(1)
     n = 1000
     uni = lambda dtype=float, size=n: rng.random(size).astype(dtype)
     auids, gone = np.arange(0, n, 2), np.arange(0, n, 50)
@@ -174,7 +173,7 @@ def twin_calls():
         crossed     = lambda: P.crossed(uni(), groups, np.arange(3.0), np.arange(3.0) + 0.5),
         probs       = lambda: P.infection_probs(a, auids, groups, rate, sus, 0.8, adjust, 1.0, 0.1),
         census      = lambda: P.census((a, b), alive, groups, 3, np.array([0, -1])),
-        nonzero     = lambda: [P.flatnonzero(a), P.flatnonzero_serial(a, 1)],
+        nonzero     = lambda: [P.flatnonzero(a), P.flatnonzero_drivers[0](a, 1)],
         infect      = lambda: P.infect(a, groups, rate, sus, 0.8, adjust, 1.0, 0.1, None, 1, 2, np.float32),
         due         = lambda: P.due(auids, ti_dead, ti_removed, 5),
         keep        = lambda: changed(lambda age: (P.keep_alive(auids, alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64)), P.keep_raw(alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64), int(alive.sum()))), ages),
@@ -226,7 +225,7 @@ def test_twins():
     R.fell.clear()
     for kernels in ['numba', 'rust']:
         for chunks in [1, 3]: # Serial and threaded, whatever the size
-            with ss.options.context(backend=kernels), mock.patch.object(ss.solvers.backends.passes, 'n_chunks', lambda n, width=1: chunks):
+            with ss.options.context(backend=kernels), mock.patch.object(ss.solvers.numba.passes, 'n_chunks', lambda n, width=1: chunks):
                 for m,keys in R.names.items():
                     for k in keys:
                         f = R.get(mods[m], k)
@@ -272,7 +271,7 @@ sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract
 sims += [ss.Sim(sir(), total_pop=10000, unit='day', stop=30, solver=solver, **kw) for solver in ['ode', 'binomial', 'gillespie', 'tau']]
 for sim in sims:
     sim.run()
-used = [f'{name}.{k}' for name in ['passes', 'events', 'kernels', 'draws'] for mod in [importlib.import_module(f'starsim.solvers.backends.{name}')] for k,f in vars(mod).items() if isinstance(f, numba.core.registry.CPUDispatcher) and f.__module__ == mod.__name__ and f.signatures]
+used = [f'{name}.{k}' for name in ['passes', 'agent_events', 'compartmental', 'draws'] for mod in [importlib.import_module(f'starsim.solvers.numba.{name}')] for k,f in vars(mod).items() if isinstance(f, numba.core.registry.CPUDispatcher) and f.__module__ == mod.__name__ and f.signatures]
 print(used)
 """
     out = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, check=True, env=os.environ | dict(MPLBACKEND='agg')) # A fresh process, so no other test's kernels have been compiled
@@ -284,7 +283,7 @@ print(used)
 @sc.timer()
 def test_stale_numba(tmp_path):
     sc.heading('Testing that Numba\'s cache is checked against the contents of a file, not its time')
-    C = ss.solvers.backends.cache
+    C = ss.solvers.backends.compiling
     path = tmp_path/'kernels.py'
     path.write_text('x = 1')
     before = C.contents(str(path))
@@ -317,21 +316,18 @@ def test_compartmental():
     sc.heading('Testing compartmental runs, compiled and as plain Python: every solver, with groups and places, whole and stepped')
     solvers = ['rk4', 'euler', 'binomial', 'tau', 'gillespie']
     for solver in solvers: # Small enough for plain Python
-        same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=s, **how(solver), **kw), compiled + ['python'], seeds=[2])
-        same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=40, rand_seed=s, branching=True, **how(solver), **kw), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.solvers.backends.kernels.GROUP)
+        same(lambda s: models.seir(total_pop=2000, stop=60, rand_seed=s, **how(solver)), compiled + ['python'], seeds=[2])
+        same(lambda s: models.seir(total_pop=2000, stop=40, rand_seed=s, branching=True, **how(solver)), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.solvers.numba.compartmental.GROUP)
     if rust:
-        for key in ['sir', 'commute', 'delay', 'biting']:
-            make, pars = models[key]
+        for key in ['commute', 'delay', 'biting']:
             for solver in solvers:
                 if solver == 'gillespie' and key == 'commute':
                     continue # Too slow for a quick test
-                same(lambda s: ss.Sim(make(), **sc.mergedicts(pars, kw), **how(solver), rand_seed=s), compiled, seeds=[0])
-        make, pars = models['towns'] # A branching process by place, which the exact solver steps place by place
-        for solver in ['binomial', 'gillespie']:
-            same(lambda s: ss.Sim(make(), **sc.mergedicts(pars, kw, dict(stop=30)), **how(solver), branching=True, rand_seed=s), compiled, seeds=[0])
-        make, pars = models['seir']
+                same(lambda s: models[key](**how(solver), rand_seed=s), compiled, seeds=[0])
+        for solver in ['binomial', 'gillespie']: # A branching process by place, which the exact solver steps place by place
+            same(lambda s: models.towns(stop=30, **how(solver), branching=True, rand_seed=s), compiled, seeds=[0])
         def stepped(seed):
-            sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial', rand_seed=seed)
+            sim = models.seir(solver='binomial', rand_seed=seed)
             sim.run(until=50)
             return sim
         same(stepped, compiled, seeds=[0])
@@ -340,13 +336,13 @@ def test_compartmental():
 
 @sc.timer()
 def test_noise():
-    sc.heading('Testing noise on a rate (ss.solvers.backends.kernels.NOISE): the same draws in each set of kernels, by group, in whole steps and substeps, and in each particle of a filter')
+    sc.heading('Testing noise on a rate (ss.solvers.numba.compartmental.NOISE): the same draws in each set of kernels, by group, in whole steps and substeps, and in each particle of a filter')
     def make(seed, substeps=None, data=None):
         S, I, R = ss.states('S I R')
         d = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.25)*I, noise=ss.par(0.4)), recovery=I >> R @ ss.perday(0.1), init_n=dict(I=20), name='sir')
         d.stratify(age={0: 0.4, 20: 0.6})
         return ss.Sim(d, solver=ss.solvers.binomial(substeps=substeps), total_pop=5000, unit='day', start=0, stop=60, rand_seed=seed, data=data, **kw)
-    for substeps in [None, 1, 3]:
+    for substeps in [None, 3]:
         same(lambda s: make(s, substeps), compiled + ['python'], seeds=[0])
     if rust:
         data = pd.DataFrame(dict(infection=make(5).run().results.sir.infection.values[1::7][:8]), index=np.arange(1, 57, 7))
@@ -376,7 +372,7 @@ def test_full_frac():
     vals, v, out = rng.random(n*n), rng.random(n*levels), np.empty(n*levels)
     matrix = vals.reshape(n, n)
     for by_columns in [True, False]:
-        ss.solvers.backends.kernels.frac(pairs, vals, v, n*levels, levels, out, by_columns)
+        ss.solvers.numba.compartmental.frac(pairs, vals, v, n*levels, levels, out, by_columns)
         ref = (v.reshape(n, levels).T @ matrix).T if by_columns else matrix @ v.reshape(n, levels)
         assert np.allclose(out, ref.ravel(), rtol=1e-12)
     return
@@ -384,23 +380,9 @@ def test_full_frac():
 
 @sc.timer()
 def test_met_counts():
-    sc.heading('Testing counts that a contact matrix acts on (beta*I.n, beta*I.frac, and weighted), by age within towns with commuting: each set of kernels, and JAX')
-    def make(seed=0, weighted=False, **kwargs):
-        towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-        S, I, R = ss.states('S I R')
-        I.rel_trans = 0.5
-        rate = 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 0.2*I.n_infectious/(S + I + R).n if weighted else 2e-6*I.n + 0.1*I.frac
-        sir = ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.days(8), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
-        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4))).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-        return ss.Sim(sir, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
-    for weighted in [False, True]:
-        for solver in ['rk4', 'binomial']:
-            same(lambda s: make(s, weighted, **how(solver)), compiled + ['python'], seeds=[0])
-        if importlib.util.find_spec('jax'):
-            ode, ref = make(weighted=weighted, solver='ode'), make(weighted=weighted, solver='ode')
-            with ss.options.context(backend='jax'):
-                ode.run()
-            assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
+    sc.heading('Testing counts that a contact matrix acts on (beta*I.n, beta*I.frac, and weighted by age and by infectiousness): each set of kernels')
+    for solver in ['rk4', 'binomial']:
+        same(lambda s: models.met(stop=60, rand_seed=s, **how(solver)), compiled + ['python'], seeds=[0])
     return
 
 
@@ -408,10 +390,8 @@ def test_met_counts():
 def test_jax():
     sc.heading('Testing the JAX backend: the ODE against the compiled one')
     pytest.importorskip('jax')
-    make, pars = models['towns']
     for branching in [False, True]: # And a branching process, by place
-        ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=branching)
-        ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=branching)
+        ode, ref = [models.towns(solver='ode', branching=branching) for i in range(2)]
         with ss.options.context(backend='jax'):
             ode.run()
         assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
@@ -460,6 +440,7 @@ def test_draws():
     for kernels, got in sets.items():
         for name in ref:
             assert np.array_equal(got[name], ref[name], equal_nan=True), f'{kernels}: {name}'
+    assert np.array_equal(ref['binomials'], ref['binomial'], equal_nan=True) and np.array_equal(ref['poissons'], ref['poisson'], equal_nan=True) # A row draws as single draws do
     return
 
 

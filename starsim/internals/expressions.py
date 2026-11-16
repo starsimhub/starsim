@@ -36,6 +36,12 @@ def did_you_mean(name, options):
 
 #%% Expressions
 
+class Shared:
+    """ Something that is never changed once made, so copies of a sim share it rather than copying it """
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+
 class Nameable:
     """ Something declared in a class body (a state, transition, parameter, or outcome), which takes the name it is assigned to unless given one """
     def __set_name__(self, owner, name):
@@ -413,15 +419,18 @@ class Stock(Expr):
         return self.state.name
 
 
+def mapped(expr, func):
+    """ An expression with `func` applied to each part that is not arithmetic or a NumPy function """
+    if isinstance(expr, BinOp):
+        return BinOp(expr.op, mapped(expr.a, func), mapped(expr.b, func))
+    elif isinstance(expr, Func):
+        return Func(expr.name, *[mapped(arg, func) for arg in expr.args])
+    return func(expr)
+
+
 def as_stocks(expr):
     """ A result with each bare state in it read as the number in that state, by group (see `Stock`) """
-    if isinstance(expr, ss.transitions.State):
-        return Stock(expr)
-    elif isinstance(expr, BinOp):
-        return BinOp(expr.op, as_stocks(expr.a), as_stocks(expr.b))
-    elif isinstance(expr, Func):
-        return Func(expr.name, *[as_stocks(arg) for arg in expr.args])
-    return expr
+    return mapped(expr, lambda e: Stock(e) if isinstance(e, ss.transitions.State) else e)
 
 
 def count_power(expr, kinds=('n', 'total')):
@@ -457,13 +466,12 @@ class Prop(Expr):
         self.cond = cond
         return
 
-    @property
-    def names(self):
-        """ The properties of people it reads, e.g. ['age'] """
+    def leaves_of(self, op):
+        """ The leaves of its condition of one kind, e.g. 'people' """
         out = []
         def walk(c):
-            if c.op == 'people' and len(c.args) == 1: # Not ss.person.get(name, default), which need not exist
-                out.append(c.args[0])
+            if c.op == op:
+                out.append(c)
             elif c.op not in ss.conditions.leaves:
                 for arg in c.args:
                     if isinstance(arg, ss.conditions.Cond):
@@ -473,19 +481,14 @@ class Prop(Expr):
         return out
 
     @property
+    def names(self):
+        """ The properties of people it reads, e.g. ['age'] """
+        return [c.args[0] for c in self.leaves_of('people') if len(c.args) == 1] # Not ss.person.get(name, default), which need not exist
+
+    @property
     def arrays(self):
         """ The arrays of modules written as code that it reads, e.g. ['hiv.cd4'] """
-        out = []
-        def walk(c):
-            if c.op == 'array':
-                out.append(f'{ss.conditions.modname(c.args[0])}.{c.args[1]}')
-            elif c.op not in ss.conditions.leaves:
-                for arg in c.args:
-                    if isinstance(arg, ss.conditions.Cond):
-                        walk(arg)
-            return
-        walk(self.cond)
-        return out
+        return [f'{ss.conditions.modname(c.args[0])}.{c.args[1]}' for c in self.leaves_of('array')]
 
 
 class Flow(Expr):
@@ -501,11 +504,7 @@ class Flow(Expr):
 
 def substitute(expr, subs):
     """ An expression with some parameters replaced, by id """
-    if isinstance(expr, BinOp):
-        return BinOp(expr.op, substitute(expr.a, subs), substitute(expr.b, subs))
-    elif isinstance(expr, Func):
-        return Func(expr.name, *[substitute(arg, subs) for arg in expr.args])
-    return subs.get(id(expr), expr)
+    return mapped(expr, lambda e: subs.get(id(e), e))
 
 
 def unheld(expr):
@@ -547,7 +546,7 @@ class Func(Expr):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
 
-class HeldFrac(Expr):
+class HeldFrac(Shared, Expr):
     """
     The fraction holding a product, as a quantity in a rate (`itn.held_frac`): the fraction of the people in the same place who hold it,
     each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
@@ -579,9 +578,6 @@ class HeldFrac(Expr):
     def __call__(self, weight):
         """ The fraction with each holder counted by a function of the time since delivery """
         return HeldFrac(self.product, weight)
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
     def to_str(self, parent=False):
         return self.name if self.weight is None else f'{self.name}({getattr(self.weight, "__name__", "weight")})'
@@ -657,7 +653,7 @@ class Clock(Expr):
         return f'{inner}.{self.kind}'
 
 
-class mother(Expr):
+class mother(Shared, Expr):
     """
     A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless include_born=True
 
@@ -688,9 +684,6 @@ class mother(Expr):
 
     def to_str(self, parent=False):
         return f'mother({self.x}{", include_born=True" if self.include_born else ""})'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
 
 def nodes(obj, seen=None):
@@ -731,7 +724,7 @@ def mothers_in(obj):
 combines = dict(last=lambda old, new: new, first=lambda old, new: np.where(np.isnan(old), new, old), max=np.fmax, min=np.fmin, sum=lambda old, new: old + new)
 
 
-class attr(Expr):
+class attr(Nameable, Expr):
     """
     A value for each person: drawn at an event, recorded at an event, drawn once when the person is made (a trait), or derived
 
@@ -762,7 +755,7 @@ class attr(Expr):
         ```
     """
     def __init__(self, value, when=None, combine='last', init=None, name=None, label=None, **kwargs):
-        ss.transitions.check_renamed(kwargs, 'ss.attr()', dict(on='when=, the event(s) that set it'))
+        ss.transitions.check_kwargs(kwargs, 'ss.attr()', ['value', 'when', 'combine', 'init', 'name', 'label'], renamed=dict(on='ss.attr() takes no on=; use when=, the event(s) that set it'))
         if isinstance(when, ss.on):
             if when.delay is not None:
                 errormsg = f'when= of an attribute is the event(s) that set it, at once; it takes no delay ({when})'
@@ -790,11 +783,6 @@ class attr(Expr):
         if self.kind == 'derived' and (combine != 'last' or init is not None):
             errormsg = f'A derived attribute ({self.label_name}) is worked out when it is read, so takes no combine= or init=; give it when= to record it at an event'
             raise ValueError(errormsg)
-        return
-
-    def __set_name__(self, owner, name):
-        if self.name is None:
-            self.name = name
         return
 
     @property
@@ -1003,13 +991,17 @@ def factors(expr):
 
 def as_counts(expr):
     """ The expression with each bare state replaced by the number in it, e.g. `beta*I` becomes `beta*I.n` """
-    if isinstance(expr, ss.transitions.State):
-        return expr.n
-    elif isinstance(expr, BinOp):
-        return BinOp(expr.op, as_counts(expr.a), as_counts(expr.b))
-    elif isinstance(expr, Func):
-        return Func(expr.name, *[as_counts(arg) for arg in expr.args])
-    return expr
+    return mapped(expr, lambda e: e.n if isinstance(e, ss.transitions.State) else e)
+
+
+def product(num, den):
+    """ The product of some factors, divided by others (see `factors()`) """
+    out = num[0] if num else par.inline(1)
+    for f in num[1:]:
+        out = BinOp('*', out, f)
+    for f in den:
+        out = BinOp('/', out, f)
+    return out
 
 
 def counted_in(expr):
@@ -1052,12 +1044,7 @@ def as_frac(rate, people):
         return rate
     num[fracs[0]] = Count(counted_in(num[fracs[0]]), kind='frac')
     den.pop(totals[0])
-    out = num[0]
-    for f in num[1:]:
-        out = BinOp('*', out, f)
-    for f in den:
-        out = BinOp('/', out, f)
-    return out
+    return product(num, den)
 
 
 def per_person(rate, src, people):
@@ -1078,13 +1065,6 @@ def per_person(rate, src, people):
     if len(src or []) != 1 or not any(f is src[0] for f in num):
         return rate
     num.pop(next(i for i,f in enumerate(num) if f is src[0]))
-    def product(num, den):
-        out = num[0] if num else par.inline(1)
-        for f in num[1:]:
-            out = BinOp('*', out, f)
-        for f in den:
-            out = BinOp('/', out, f)
-        return out
     out = product(num, den)
     frac = as_frac(out, people)
     if frac is not out: # A state over the total: its fraction
@@ -1108,14 +1088,8 @@ def evaluate(expr, ctx):
     people, in the same place as whoever the expression is evaluated for), and `ctx.exposure(state)`.
     """
     if isinstance(expr, BinOp):
-        a = evaluate(expr.a, ctx)
-        b = evaluate(expr.b, ctx)
-        op = expr.op
-        if   op == '+': return a + b
-        elif op == '-': return a - b
-        elif op == '*': return a * b
-        elif op == '/': return divide(a, b, getattr(ctx, 'xp', np))
-        else:           return a ** b
+        a, b = evaluate(expr.a, ctx), evaluate(expr.b, ctx)
+        return divide(a, b, getattr(ctx, 'xp', np)) if expr.op == '/' else arith[expr.op](a, b)
     elif isinstance(expr, Func):
         xp = getattr(ctx, 'xp', np) # A context can give another NumPy, e.g. jax.numpy
         args = [evaluate(arg, ctx) for arg in expr.args]

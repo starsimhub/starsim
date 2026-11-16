@@ -36,10 +36,7 @@ function that builds the RUME, or on a script that makes one called `rume`:
 or call `dump(rume, 'model.json')` from Python.
 
 Exporting: `to_epymorph(sim)` (`ss.export_to(sim, 'epymorph')`) writes the compartmental
-form of a sim (see `ss.converters.export.flatten()`) as an epymorph script: a
-`CompartmentModel` with an edge for each flow, and a RUME of it in one place with no
-movement, which the script simulates when it is run. Rates are in days, a parameter that
-varies in time is its value on each day, and the initial numbers are whole people. The
+form of a sim as an epymorph script that builds a RUME of it in one place and simulates it; the
 script's RUME is read back as above (`python epymorph.py exported.py:build_rume model.json`).
 
 Used with: compartments; declared modules
@@ -56,7 +53,7 @@ import numpy as np
 if __package__: # As part of Starsim; run as a script in epymorph's environment, the rest needs neither Sciris nor Starsim
     import sciris as sc
     import starsim as ss
-    from .core import Source, build
+    from .core import Source, build, rewrite_expr
 
 __all__ = ['load_epymorph', 'to_epymorph', 'dump', 'rume_dict']
 
@@ -144,15 +141,7 @@ numpy_funcs = dict(min='minimum', max='maximum', absolute='abs', ceiling='ceil')
 
 def sympy_expr(text):
     """ A rate of the compartmental form as sympy, as epymorph's edges are written: where() is Piecewise() """
-    class Sub(ast.NodeTransformer):
-        def visit_Call(self, n):
-            self.generic_visit(n)
-            if n.func.id == 'where':
-                cond, yes, no = n.args
-                return ast.Call(ast.Name('Piecewise'), [ast.Tuple([yes, cond]), ast.Tuple([no, ast.Constant(True)])], [])
-            n.func.id = sympy_funcs.get(n.func.id, n.func.id)
-            return n
-    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body))
+    return rewrite_expr(text, sympy_funcs, where='Piecewise(({yes}, {cond}), ({no}, True))')
 
 
 def numpy_expr(text):

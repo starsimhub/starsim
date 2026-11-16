@@ -24,16 +24,9 @@ _ = None
 
 @nb.jit(cache=True)
 def fisher_yates_shuffle(arr, randvals):
-    """ In-place Fisher-Yates shuffle using precomputed uniform random values.
+    """ In-place Fisher-Yates shuffle, from uniform random values on [0, 1) of the same length as `arr` (faster than `np.random.permutation()`)
 
-    Equivalent to `np.random.permutation` (a uniform random shuffle), but ~1.3x faster
-    for the large arrays used in network generation. `randvals` should be uniform on
-    [0, 1) and the same length as `arr`.
-
-    Note: `randvals` is consumed in order (`randvals[k]` for the k-th swap), not indexed
-    by position. This means that changing the array length (e.g. adding one agent) shifts
-    every swap, so the shuffle is *not* random-number safe -- matching `ss.RandomNet(method='exact')`'s
-    intended behavior (see `ss.RandomNet(method='safe')` for the CRN-safe version).
+    `randvals[k]` is used for the k-th swap, so adding one agent shifts every swap: not CRN safe, as for `ss.RandomNet(method='exact')`.
     """
     n = arr.shape[0]
     for k in range(n - 1):
@@ -49,10 +42,7 @@ def nb_transmit(src, trg, rel_trans, rel_sus, hazard, randvals):
 
     Edge i transmits with probability 1 − exp(−rel_trans[src]·rel_sus[trg]·hazard[i]): every factor scales the hazard in the step,
     so one contact infects at most once, whichever factor a model puts its effect in (see `Network.transmit()`).
-    Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
-    This avoids a full-length boolean temporary and two separate gather passes
-    (`trg[mask]`, `src[mask]`) -- ~1.4x faster at typical transmission rates, more when
-    transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
+    One branchless pass, with no boolean mask; UIDs come out in edge order, preserving CRN behavior.
     """
     n = src.shape[0]
     src_out = np.empty(n, dtype=np.int64) # int64 = uid dtype, so the caller can .view(uids) without a copy
@@ -212,7 +202,7 @@ class Route(ss.Module):
 
     A disease's beta can be given for each route, by its name (e.g. `ss.SIS(beta=dict(randomnet=0.05))`).
     """
-    sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
+    sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.solvers.build.init_unit()
     one_step = False # Whether every edge lasts one step: the edges of the dead then end at the next step anyway, so People.remove_dead() leaves them (see RandomNet)
     def agent_reasons(self, sim):
         """ A route works on groups, unless it says otherwise """
@@ -407,14 +397,14 @@ class Network(Route):
         if not len(self):
             return out
         edges = self.edges
-        found = ss.solvers.backends.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way, index=self.edge_index()) # Mother-to-child networks transmit one way
+        found = ss.solvers.numba.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way, index=self.edge_index()) # Mother-to-child networks transmit one way
         for d,inds in enumerate(found):
             source, target = [ends[inds] for ends in self.ends(d)]
             hazard = edge_hazard(d, inds, source, target)
             if hazard is None:
                 continue
             hazard = np.asarray(hazard, dtype=ss_float) if np.ndim(hazard) == 0 else hazard # One value for all edges
-            can = ss.solvers.backends.passes.can_transmit(source, target, rel_trans, rel_sus, hazard) # Of those, the ones with a chance above 0, exactly as over every edge
+            can = ss.solvers.numba.passes.can_transmit(source, target, rel_trans, rel_sus, hazard) # Of those, the ones with a chance above 0, exactly as over every edge
             if len(can) < len(inds):
                 inds, source, target = inds[can], source[can], target[can]
                 hazard = hazard[can] if np.ndim(hazard) else hazard
@@ -430,7 +420,7 @@ class Network(Route):
 
     def edge_index(self, now=False):
         """
-        The edges of each agent (see `ss.solvers.backends.passes.edge_index()`), so that transmission from a few people, or contact tracing,
+        The edges of each agent (see `ss.solvers.numba.passes.edge_index()`), so that transmission from a few people, or contact tracing,
         visits only their edges: None until the edges have stayed the same from one step to the next, so a network whose edges change every
         step never makes one, unless `now` (for agents taken by events, which visit only the edges of the people infectious however often
         the edges change). The edges change when they are assigned again (e.g. `edges.p1 = ...`), as every method that changes them does.
@@ -447,7 +437,7 @@ class Network(Route):
             self.agent_edges = sc.obj(ids=ids, ti=self.ti, lists=None)
         if len(p1) and (now or (not new and self.ti is not None and idx.ti is not None and self.ti > idx.ti)): # The same as in an earlier step, or wanted now
             n = max(p1.max(), p2.max()) + 1
-            self.agent_edges = sc.obj(p1=p1, p2=p2, lists=ss.solvers.backends.passes.edge_index(p1, p2, n))
+            self.agent_edges = sc.obj(p1=p1, p2=p2, lists=ss.solvers.numba.passes.edge_index(p1, p2, n))
             return self.agent_edges.lists
         return None
 
@@ -793,7 +783,7 @@ class Network(Route):
             return find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         inds = np.asarray(sc.toarray(inds), dtype=np.int64)
         s1, e1, o1, s2, e2, o2 = lists
-        partners = ss.solvers.backends.passes.partners(inds, s1, o1, s2, o2, len(s1) - 1)
+        partners = ss.solvers.numba.passes.partners(inds, s1, o1, s2, o2, len(s1) - 1)
         return partners if as_array else set(partners.tolist())
 
     def add_pairs(self):
@@ -811,16 +801,16 @@ class Network(Route):
         n = len(self.sim.people.alive.raw) if self.initialized else max(np.max(p1, initial=-1), np.max(p2, initial=-1)) + 1 # Every UID in the network
         is_removed = np.zeros(max(n, np.max(uids, initial=-1) + 1), dtype=bool) # A lookup table of the UIDs to remove (much faster than np.isin() for many edges)
         is_removed[uids] = True
-        self.drop_edges(*ss.solvers.backends.passes.touching(p1, p2, is_removed))
+        self.drop_edges(*ss.solvers.numba.passes.touching(p1, p2, is_removed))
         return
 
     def drop_edges(self, k, gone):
-        """ Remove the `k` edges at the indices `gone` (in order; all edges if `k` is the number of edges), as `ss.solvers.backends.passes.ending()` gives them; not for the user """
+        """ Remove the `k` edges at the indices `gone` (in order; all edges if `k` is the number of edges), as `ss.solvers.numba.passes.ending()` gives them; not for the user """
         if not k:
             return
         for key in self.meta_keys():
             arr = self.edges[key]
-            self.edges[key] = arr[:0] if k == len(arr) else ss.solvers.backends.passes.compress(arr, gone).view(type(arr))
+            self.edges[key] = arr[:0] if k == len(arr) else ss.solvers.numba.passes.compress(arr, gone).view(type(arr))
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -896,7 +886,7 @@ class DynamicNetwork(Network):
     def end_pairs(self):
         """ Remove partnerships whose duration has expired or whose members have died """
         n = len(self)
-        k, gone = ss.solvers.backends.passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
+        k, gone = ss.solvers.numba.passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
         if self.pars.get('memory') is not None:
             ended = gone if k < n else slice(None)
             self.remember(self.edges.p1[ended], self.edges.p2[ended])
@@ -1017,7 +1007,6 @@ class RandomNet(DynamicNetwork):
     methods = ['fast', 'exact', 'uniform', 'safe']
 
     def __init__(self, pars=None, n_contacts=_, dur=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
@@ -1071,7 +1060,7 @@ class RandomNet(DynamicNetwork):
         nc = np.asarray(n_contacts)
         by_agent = self.pars.method == 'uniform' or nc.size <= 1 or (nc == nc.flat[0]).all() # With the same number of stubs each, the owner of a stub drawn at random is an agent drawn at random
         seed = self.dist.rng.integers(2**62) # The key of this step's uniforms, one for each edge (from a counter, so a large network can be made by several threads)
-        source, target = ss.solvers.backends.passes.random_edges(inds, nc, seed, by_agent) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+        source, target = ss.solvers.numba.passes.random_edges(inds, nc, seed, by_agent) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
         source, target = source.view(ss.uids), target.view(ss.uids)
         self.dist.jump() # Reset the RNG manually, as in shuffle_edges()
         return source, target
@@ -1292,7 +1281,6 @@ class DegreeNet(DynamicNetwork):
         ```
     """
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             between = None,
@@ -1851,7 +1839,6 @@ class SexualNet(DegreeNet):
         ```
     """
     def __init__(self, pars=None, between=_, dur=_, debut=_, acts=_, participation=_, n_contacts=_, concurrency=_, max_contacts=_, match=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             between = 'mf',
@@ -1900,7 +1887,7 @@ class SexualNet(DegreeNet):
     def set_network_states(self):
         """ Draw the age of debut of anyone who has none (newborns, and people who arrive at any age), and whether each person takes part, when they reach their debut """
         people = self.sim.people
-        debuts = lambda reached: ss.solvers.backends.passes.debuts(people.auids, people.alive.raw, self.decided.raw, people.age.raw, self.debut.raw, reached).view(ss.uids)
+        debuts = lambda reached: ss.solvers.numba.passes.debuts(people.auids, people.alive.raw, self.decided.raw, people.age.raw, self.debut.raw, reached).view(ss.uids)
         uids = debuts(False) # Alive, with no debut age
         self.debut[uids] = self.pars.debut.rvs(uids)
         uids = debuts(True) # Alive, at least their debut age, and not decided
@@ -2041,7 +2028,55 @@ class BreastfeedingNet(PostnatalNet):
 
 #%% Mixing pools
 
-class MixingPools(Route):
+class PoolRoute(Route):
+    """ What a mixing pool (`ss.MixingPool`) and mixing pools (`ss.networks.MixingPools`) share: groups of people as source and target, without edges; not used directly """
+    def __init__(self):
+        super().__init__()
+        self.diseases = None
+        self.source_uids = None # The people in the source and target groups, from step()
+        self.target_uids = None
+        self.p_acquire = ss.bernoulli(p=0) # Placeholder value: see acquire()
+        return
+
+    def init_post(self):
+        """ Find the diseases that transmit over it: every communicable disease (one whose beta on it is 0 transmits nothing there) """
+        super().init_post()
+        self.diseases = [d for d in self.sim.diseases.values() if transmits(d)]
+        return
+
+    def remove_uids(self, uids):
+        """ Remove people who leave (e.g. die) from the groups given as UIDs
+
+        Args:
+            uids (array): the agents to remove
+        """
+        for key in ['source', 'target']:
+            groups = self.pars[key]
+            if isinstance(groups, ss.uids):
+                self.pars[key] = groups.remove(uids)
+            elif isinstance(groups, dict): # Mixing pools: a dict of groups
+                for k,group in groups.items():
+                    if isinstance(group, ss.uids):
+                        groups[k] = group.remove(uids)
+        return
+
+    def acquire(self, uids, exposure, disease_beta):
+        """ The people among `uids` infected in the step, for each one's exposure (contacts × infectiousness × susceptibility): the hazard of the
+        step, from the disease's beta, is scaled by the exposure before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission) """
+        self.p_acquire.set(p=1 - (1 - disease_beta)**exposure) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
+        return self.p_acquire.filter(uids)
+
+    def shrink(self):
+        """ Remove the people in each group, to save memory (e.g. before saving the sim) """
+        super().shrink()
+        shrunk = ss.utils.shrink()
+        self.diseases = shrunk
+        self.source_uids = shrunk
+        self.target_uids = shrunk
+        return
+
+
+class MixingPools(PoolRoute):
     """
     Mixing between groups of people, by a matrix of contacts between them: a mixing pool (`ss.MixingPool`) for each pair of groups, without edges
 
@@ -2080,7 +2115,6 @@ class MixingPools(Route):
     group is infectious). It is exact when everyone in the group is equally infectious, and close when `p` is small.
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             source = None,
@@ -2099,15 +2133,11 @@ class MixingPools(Route):
             )
         self.pools = [] # A pool for each pair of groups, only if contacts differ between people and are a matrix of distributions: see plain_contacts()
         self.matrix = None # Otherwise, the number of contacts between groups, [target, source]
-        self.source_uids = None # With a matrix: the people in each source group and each destination group, from step()
-        self.target_uids = None
-        self.diseases = None
         self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
         self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
         self.age_edges = None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         self.full = None # One matrix over several of the model's dimensions together (from ss.contacts())
         self.bare = None # A matrix given by position alone (ss.contacts(matrix)), until it is matched to the model's stratification with as many levels: see bare_contacts()
-        self.p_acquire = ss.bernoulli(p=0) # Placeholder value, for a matrix with no pools: see compute_transmission()
         self.unit = None # The unit of time the contacts are counted over, if not the sim's (e.g. 'day' for ss.contacts('Kenya')): see to_unit()
         return
 
@@ -2228,11 +2258,10 @@ class MixingPools(Route):
         return self.contact_scale*np.vectorize(lambda n: ss.solvers.Mixing.mean(n, unit), otypes=[float])(np.array(nc, dtype=object))
 
     def init_post(self):
-        """ Initialize each mixing pool, and find the diseases that use them """
+        """ Find the diseases that use them, and initialize each mixing pool """
         super().init_post()
         for mp in self.pools:
             mp.init_post()
-        self.diseases = pool_diseases(self)
         return
 
     def band_exposure(self, weights):
@@ -2295,22 +2324,17 @@ class MixingPools(Route):
             expo = sim.mixing.term_exposure(sim.mixing.pool_terms[self.name], infectious, n.astype(float))[groups]
         else:
             auids, expo = self.exposure(rel_trans.raw)
-        self.p_acquire.set(p=1 - (1 - disease_beta)**(expo*rel_sus.raw[auids]))
-        return self.p_acquire.filter(auids)
+        return self.acquire(auids, expo*rel_sus.raw[auids], disease_beta)
 
     def remove_uids(self, uids):
-        """ Remove UIDs from each mixing pool
+        """ Remove people who leave from each mixing pool, and from the groups given as UIDs
 
         Args:
             uids (array): the agents to remove
         """
         for mp in self.pools:
             mp.remove_uids(uids)
-        for key in ['source', 'target']:
-            groups = self.pars[key]
-            for k,group in groups.items():
-                if isinstance(group, ss.uids):
-                    groups[k] = group.remove(uids)
+        super().remove_uids(uids)
         return
 
     def step(self):
@@ -2360,10 +2384,6 @@ class MixingPools(Route):
         super().shrink()
         for mp in self.pools:
             mp.shrink()
-        shrunk = ss.utils.shrink()
-        self.diseases = shrunk
-        self.source_uids = shrunk
-        self.target_uids = shrunk
         return
 
 
@@ -2396,11 +2416,6 @@ def transmits(disease):
     return 'beta' in disease.pars
 
 
-def pool_diseases(route):
-    """ The diseases that transmit over a mixing pool or pools: every communicable disease (one whose beta on it is 0 transmits nothing there) """
-    return [d for d in route.sim.diseases.values() if transmits(d)]
-
-
 def pool_uids(sim, group):
     """ The people in a group of a mixing pool
 
@@ -2422,7 +2437,7 @@ def pool_uids(sim, group):
     raise TypeError(errormsg)
 
 
-class MixingPool(Route):
+class MixingPool(PoolRoute):
     """
     Mixing between two groups of people (or everyone), without edges: used in place of a network
 
@@ -2464,7 +2479,6 @@ class MixingPool(Route):
         ```
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             source = None,
@@ -2476,11 +2490,6 @@ class MixingPool(Route):
         self.define_states(
             ss.FloatArr('eff_contacts', default=self.pars.n_contacts, label='Effective number of contacts')
         )
-
-        self.diseases = None
-        self.source_uids = None
-        self.target_uids = None
-        self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
 
     def agent_reasons(self, sim):
@@ -2493,13 +2502,9 @@ class MixingPool(Route):
         return []
 
     def shrink(self):
-        """ Remove the people in each group, to save memory (e.g. before saving the sim) """
+        """ Remove the people in each group, and its own copy of the timeline (one for each of what can be many pools), to save memory """
         super().shrink()
-        shrunk = ss.utils.shrink()
-        self.diseases = shrunk
-        self.source_uids = shrunk
-        self.target_uids = shrunk
-        self.setattribute('t', shrunk) # Its own copy of the timeline, for each of what can be many pools
+        self.setattribute('t', ss.utils.shrink())
         return
 
     def __len__(self):
@@ -2523,21 +2528,8 @@ class MixingPool(Route):
     def init_post(self):
         """ Find the diseases that transmit over it, and check its contacts """
         super().init_post()
-        self.diseases = pool_diseases(self)
         if isinstance(self.pars.n_contacts, ss.Dist):
             check_drawn(self.eff_contacts.values, self.name, self.pars.n_contacts) # Over the people at the start, not each new one, which would cost a check of each pool on every step
-        return
-
-    def remove_uids(self, uids):
-        """ Remove people who leave (e.g. die) from source and target, if these are given as UIDs
-
-        Args:
-            uids (array): the agents to remove
-        """
-        for key in ['source', 'target']:
-            inds = self.pars[key]
-            if isinstance(inds, ss.uids):
-                self.pars[key] = inds.remove(uids)
         return
 
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
@@ -2558,12 +2550,9 @@ class MixingPool(Route):
         if disease_beta == 0 or disease not in self.diseases or len(self.source_uids) == 0 or len(self.target_uids) == 0:
             return []
 
-        # Calculate transmission: the hazard of the step, from the disease's beta, is multiplied by the infectious fraction and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
         trans = np.mean(rel_trans[self.source_uids])
         acq = self.eff_contacts[self.target_uids] * rel_sus[self.target_uids]
-        p = 1 - (1 - disease_beta)**(trans*acq) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
-        self.p_acquire.set(p=p)
-        return self.p_acquire.filter(self.target_uids)
+        return self.acquire(self.target_uids, trans*acq, disease_beta)
 
     def step(self):
         """ Update the UIDs of the source and target """

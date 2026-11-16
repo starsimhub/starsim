@@ -38,7 +38,7 @@ import subprocess
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, build, rewrite_expr
 
 __all__ = ['load_camdl', 'to_camdl']
 
@@ -551,17 +551,8 @@ def camdl_name(name):
 
 def camdl_expr(text, unit):
     """ An expression in Python syntax, as `ss.converters.export.flatten()` writes it, in camdl's syntax (with the time `t` a number in the unit) """
-    class Sub(ast.NodeTransformer):
-        def visit_Call(self, n):
-            self.generic_visit(n)
-            if n.func.id == 'where': # camdl's if, written whole as a name, since Python's expressions have no such form
-                cond, yes, no = [ast.unparse(a) for a in n.args]
-                return ast.Name(f'(if {cond} then {yes} else {no})')
-            n.func.id = camdl_funcs.get(n.func.id, n.func.id)
-            return n
-        def visit_Name(self, n):
-            return ast.Name(f"(t * 1 'per_{unit[:-1]})") if n.id == 't' else n if n.id == 'pi' else ast.Name(camdl_name(n.id)) # camdl's t is a time, not a number
-    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body)).replace('**', '^')
+    name = lambda n: ast.Name(f"(t * 1 'per_{unit[:-1]})") if n.id == 't' else n if n.id == 'pi' else ast.Name(camdl_name(n.id)) # camdl's t is a time, not a number
+    return rewrite_expr(text, camdl_funcs, where='(if {cond} then {yes} else {no})', name=name).replace('**', '^')
 
 
 def par_decl(name, p, lost):

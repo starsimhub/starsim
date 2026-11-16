@@ -5,17 +5,9 @@ These modules demonstrate how to connect a disease to fetal health outcomes
 and how to implement treatment that reverses fetal damage. They are designed
 to be extended for real applications.
 
-Architecture:
-    - `fetal_infection` (Connector): watches for infections in pregnant women
-      and applies fetal damage (preterm risk via timing shifts, low birth weight
-      via growth restriction). Damage is applied both at conception (if already
-      infected) and during pregnancy (if newly infected).
-    - `treat_pregnant` (Delivery): treats infected pregnant women, as `ss.treat()`
-      delivers a treatment, and partially reverses fetal damage.
-
-Both modules require `ssl.mnch.FetalHealth()` given to the sim and
-`ss.Pregnancy()` in demographics. The connector also requires the target
-disease (default: an `ssl.AgentSIR` named "sir") to be present.
+`fetal_infection` (a connector) applies fetal damage when a pregnant woman is infected, and `treat_pregnant`
+(a delivery) treats infected pregnant women and partially reverses it. Both need `ssl.mnch.FetalHealth()` given
+to the sim, `ss.Pregnancy()` in demographics, and the disease (by default an `ssl.AgentSIR` named "sir").
 
 Usage::
 
@@ -49,24 +41,12 @@ class FetalHealth(ss.Module):
     """
     Track fetal health outcomes during pregnancy.
 
-    Works alongside the Pregnancy module to model birth weight outcomes (low
-    birth weight, small for gestational age) based on fetal growth restriction.
-    Disease-agnostic by design: external modules (connectors, interventions)
-    modify fetal health via the public API methods.
-
-    Preterm classification is handled by the Pregnancy module (based on
-    gestational age at birth). This module focuses on the weight/growth axis.
-
-    Integrates with Pregnancy via its callbacks (`add_callback()`): Pregnancy
-    calls `on_conception` when new pregnancies begin and `on_delivery` when
-    births occur. External modules (e.g. disease connectors) can register their
-    own on `preg.conception`, after this module's, to act on new pregnancies
-    after baseline initialization.
-
-    During pregnancy, `weight_percentile`, `growth_restriction`,
-    `timing_shift`, and `n_exposures` are tracked on the mother. At
-    delivery, `birth_weight`, `lbw`, `vlbw`, and `sga` are stored
-    on the newborn.
+    Models birth weight outcomes (low birth weight, small for gestational age) from fetal growth restriction, beside
+    `ss.Pregnancy`, which classifies preterm births. It is disease-agnostic: other modules (connectors, interventions)
+    change fetal health through its methods. Pregnancy calls `on_conception()` and `on_delivery()` (as callbacks:
+    `add_callback()`); other modules can register their own on `preg.conception`, after this one's, to act on new
+    pregnancies after their baseline is set. During pregnancy, `weight_percentile`, `growth_restriction`, `timing_shift`,
+    and `n_exposures` are tracked on the mother; at delivery, `birth_weight`, `lbw`, `vlbw`, `sga`, and `svn` on the newborn.
 
     Each pregnancy gets a baseline weight percentile drawn at conception.
     Two modification levers are available:
@@ -191,11 +171,7 @@ class FetalHealth(ss.Module):
 
     def on_delivery(self, newborn_uids):
         """
-        Classify birth outcomes (called by Pregnancy).
-
-        Birth weight is computed from the mother's pregnancy-time states
-        (weight_percentile, growth_restriction). Outcomes (birth_weight,
-        lbw, vlbw, sga) are stored on the newborn agents.
+        Classify birth outcomes (called by Pregnancy), from the mother's states, and store them on the newborns
 
         Args:
             newborn_uids (array): the newborns
@@ -219,14 +195,11 @@ class FetalHealth(ss.Module):
         vlbw = birth_weights < self.pars.vlbw_threshold
         sga  = birth_weights < sga_threshold
 
-        self.lbw[newborn_uids]  = lbw
-        self.vlbw[newborn_uids] = vlbw
-        self.sga[newborn_uids]  = sga
-
-        # SVN: small vulnerable newborn = preterm | lbw | sga
         preterm = self.sim.get_module(ss.Pregnancy).preterm[newborn_uids]
-        svn = preterm | lbw | sga
-        self.svn[newborn_uids] = svn
+        svn = preterm | lbw | sga # Small vulnerable newborn
+        outcomes = dict(lbw=lbw, vlbw=vlbw, sga=sga, svn=svn)
+        for key,values in outcomes.items():
+            self.state_dict[key][newborn_uids] = values
 
         # Results: the means are over the births of the step, which may come in more than one call
         res = self.results
@@ -237,18 +210,13 @@ class FetalHealth(ss.Module):
             total = values[key].sum() + (res[key][ti]*before if before else 0)
             res[key][ti] = total/(before + n)
         res['birth'][ti] += n
-        res['lbw'][ti]    += lbw.sum()
-        res['vlbw'][ti]   += vlbw.sum()
-        res['sga'][ti]    += sga.sum()
-        res['svn'][ti]    += svn.sum()
+        for key,values in outcomes.items():
+            res[key][ti] += values.sum()
         return
 
     def apply_timing_shift(self, uids, shift_weeks):
         """
-        Bring delivery forward for pregnant women.
-
-        Uses a one-way ratchet: delivery can only be brought forward, never
-        pushed back. The actual shift applied is tracked in `timing_shift`.
+        Bring delivery forward for pregnant women (never back), tracking the shift applied in `timing_shift`
 
         Args:
             uids: UIDs of pregnant women
@@ -274,10 +242,8 @@ class FetalHealth(ss.Module):
 
     def apply_growth_restriction(self, uids, penalty):
         """
-        Apply fractional growth restriction (cumulative, diminishing).
-
-        Positive penalties use diminishing returns: `current + (1-current) * penalty`.
-        Negative penalties (growth boost, e.g. GDM macrosomia) are additive.
+        Apply fractional growth restriction: a positive penalty with diminishing returns, `current + (1-current) * penalty`,
+        and a negative one (a growth boost, e.g. GDM macrosomia) added
 
         Args:
             uids: UIDs of pregnant women
@@ -337,10 +303,7 @@ class FetalHealth(ss.Module):
 
     def compute_birth_weight(self, uids):
         """
-        Compute birth weight at delivery.
-
-        Override this method to customize the birth weight formula. The
-        interpolation function can be swapped via `pars.interp_fn`.
+        Compute birth weight at delivery; override this to change the formula (or give `interp_fn=` to change the interpolation)
 
         Args:
             uids (array): the mother of each newborn
@@ -392,7 +355,6 @@ class treat_pregnant(ss.Delivery):
     """
 
     def __init__(self, disease='sir', coverage=0.9, who=None, when=None, growth_reversal=0.7, timing_reversal=0.7, name=None, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', kwargs)
         self.disease_name = disease
         self.growth_reversal = growth_reversal
         self.timing_reversal = timing_reversal
@@ -452,16 +414,9 @@ class fetal_infection(ss.Connector):
     """
     Connect a disease to fetal health outcomes during pregnancy.
 
-    Monitors for infections in pregnant women and applies fetal damage:
-    - **Timing shift**: brings delivery forward (increases preterm birth risk).
-      Drawn from a lognormal distribution per affected pregnancy.
-    - **Growth restriction**: reduces birth weight by a fixed fractional penalty.
-
-    Damage is applied at two points:
-    1. At conception, if the mother is already infected (via a conception callback
-       registered with the pregnancy, after FetalHealth's).
-    2. During pregnancy, when a new infection occurs (detected in `step()`
-       by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
+    Each infection of a pregnant woman brings delivery forward (a timing shift drawn for each pregnancy, raising the risk
+    of preterm birth) and reduces birth weight by a fixed fraction. Damage is applied at conception, if the mother is
+    already infected (a callback on conception, after FetalHealth's), and in `step()` on a new infection in pregnancy.
 
     Requires `ssl.mnch.FetalHealth()` given to the sim and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
 
@@ -529,21 +484,18 @@ class fetal_infection(ss.Connector):
 
     def _on_conception(self, uids):
         """ Called by Pregnancy when new pregnancies begin, after FetalHealth's baseline — damage if already infected """
-        infected = self.sim.diseases.sir.infected[uids]
-        infected_uids = uids[infected]
-        if len(infected_uids):
-            self.fh.n_exposures[infected_uids] += 1
-            self._apply_damage(infected_uids)
+        self.expose(uids[self.sim.diseases.sir.infected[uids]])
+        return
+
+    def expose(self, uids):
+        """ Count an exposure for each pregnancy, and apply the damage """
+        if len(uids):
+            self.fh.n_exposures[uids] += 1
+            self._apply_damage(uids)
         return
 
     def _apply_damage(self, uids):
-        """
-        Apply fetal damage to pregnancies of infected women.
-
-        Override this method to customize the damage logic for a different
-        disease (e.g. stage-dependent growth penalties, trimester-dependent
-        timing shifts).
-        """
+        """ Apply fetal damage to pregnancies of infected women; override this for a different disease (e.g. damage by stage or trimester) """
         fh = self.fh
         shifts = self.pars.timing_shift.rvs(uids)
         fh.apply_timing_shift(uids, shifts)
@@ -560,8 +512,5 @@ class fetal_infection(ss.Connector):
         # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception)
         pregnant_uids  = preg.P.uids
         newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_P < self.ti)
-        affected = pregnant_uids[newly_infected[pregnant_uids]]
-        if len(affected):
-            self.fh.n_exposures[affected] += 1
-            self._apply_damage(affected)
+        self.expose(pregnant_uids[newly_infected[pregnant_uids]])
         return

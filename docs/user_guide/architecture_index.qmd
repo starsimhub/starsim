@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI; further reading trimmed on Nov 12 by AI
+  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI; further reading trimmed on Nov 12 by AI; initialization shortened to a link on Nov 15 by AI
 ---
 
 This section is developer documentation: it explains how Starsim is put together and why, for contributors and for anyone who wants to know what happens when they call `sim.run()`; no model needs it. What a modeler needs is on the modeler pages: what β means with a network ([Mixing](populations_mixing.qmd#choosing-how-people-mix)), base and effective values ([Interventions](interventions_interventions.qmd#how-changes-combine)), when stocks and flows are recorded ([Time](building_time.qmd#the-time-span-the-step-and-units)), and the order of a step ([Running sims](running_sim.qmd#the-order-of-a-step)). This page gives the idea, the principles, and a map of the package, and then looks at *modules*, the pieces a sim is made of. [From declaration to run](architecture_run.qmd) follows a model from its declaration to a run, and [Engines and transmission](architecture_engines.qmd) looks at the engines that run it. Random numbers are in [Random numbers](mechanics_random.qmd#how-it-works), and how the design is tested in the [developer guide](../contributing/developer.qmd#testing).
@@ -144,12 +144,7 @@ A module goes through four stages: it is made, initialized with the sim, stepped
 
 **Made.** `__init__()` stores what the module was given: its parameters, states, and, for a declared disease, its states and transitions, which are built into its graph ([From declaration to run](architecture_run.qmd#the-graph-resolve-complete-check)). Nothing is linked to a sim yet. When a module is given to a sim, the sim copies it, so one module can go into several sims; the copy is the one that runs, which is why a change to the original after the sim is made (adding a callback, say) raises an error saying to make it on `sim.diseases.<name>` instead.
 
-**Initialized.** `sim.init()` ([From declaration to run](architecture_run.qmd#what-sim.init-does)) chooses the solver first, since that decides which objects exist, and then initializes the modules in two passes:
-
-1. `init_pre(sim)`, for each module in turn: link it to the sim, set up its timeline, link its time parameters to its `dt` (so that `self.pars.dur.to_dt()` works without arguments), check its bare numbers against the sim's unit, add its parameters to `sim.pars` and its results to `sim.results`, add it and its states to the people (`sim.people.add_module()`), and make its results (`init_results()`). A declared disease first makes its engine, the object that will run its transitions under the chosen solver.
-2. Then the sim initializes every distribution, gives the people their starting values, and calls `init_post()` on each module, which gives each state its initial values (and, for a declared disease, its initial conditions: who starts infected).
-
-After that, the loop is built, and the parameters are locked, so setting one that doesn't exist raises an error.
+**Initialized.** `sim.init()` chooses the solver and builds the sim, in the order given in [What `sim.init()` does](architecture_run.qmd#what-sim.init-does). A module takes part through two methods: `init_pre(sim)`, called on each module in turn, links it to the sim and its timeline, adds its parameters, states, and results to the sim (`init_results()`), and, for a declared disease, makes its engine; after the distributions and people are initialized, `init_post()` gives each state its initial values (for a declared disease, who starts infected).
 
 **Stepped.** Each step, the loop calls the module's methods at its kind's place in the order: `start_step()`, `record_states()`, `step()` (and `step_state()` for a disease written as code), `on_death(uids)`, `record_events()`, and `finish_step()`. The order, and what each kind does in it, is in [the order of each step](running_sim.qmd#the-order-of-a-step); a method that is sure to do nothing in this sim is left out of the plan ([below](#reading-the-loop)).
 

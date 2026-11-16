@@ -11,7 +11,6 @@ import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
 from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_starts, by_level, no_tables
-from .backends import ode
 
 __all__ = ['Compartmental', 'synced_event']
 
@@ -42,20 +41,18 @@ def synced_event(tr, sim, home):
 
 def choose_kernels(owner, runs, seconds):
     """
-    The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.solvers.backends.kernels.choose()`), for an
+    The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.solvers.backends.compiling.choose()`), for an
     engine or joint states (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
     if ss.solvers.backends.rust.on: # Compiled ahead of time, so nothing to choose
-        return ss.solvers.backends.kernels.choose()
-    if runs == 1 and owner.program is not None and ode.wanted(owner.sim.solver, owner.program, owner.y): # The ODE in NumPy, which needs no compiling
-        return ode
+        return ss.solvers.backends.compiling.choose()
     if runs == 1 and owner.compiled is not None:
-        return ss.solvers.backends.kernels if owner.compiled else ss.solvers.backends.kernels.uncompiled()
+        return ss.solvers.numba.compartmental if owner.compiled else ss.solvers.backends.compiling.uncompiled()
     if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-        return ss.solvers.backends.kernels.choose()
-    kn = ss.solvers.backends.kernels.choose(runs*seconds())
+        return ss.solvers.backends.compiling.choose()
+    kn = ss.solvers.backends.compiling.choose(runs*seconds())
     if runs == 1:
-        owner.compiled = kn is ss.solvers.backends.kernels
+        owner.compiled = kn is ss.solvers.numba.compartmental
     return kn
 
 
@@ -88,7 +85,7 @@ def kernel_list(items):
 
 def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_state, grp_flow, start=0):
     """
-    Many runs of a program that differ only in their seed (`rngs`), in calls to the kernels that take all of them (see `ss.solvers.backends.kernels.run_many()`), for an
+    Many runs of a program that differ only in their seed (`rngs`), in calls to the kernels that take all of them (see `ss.solvers.numba.compartmental.run_many()`), for an
     engine or joint states (`owner`); a part of the run at a time, so the tables of values that vary in time (by group, at every step) are not all held at
     once. `args` are those of `run_args()`, and `outputs` the arrays the kernels fill: the stocks, flows and tallies, and those by group. The runs
     are taken from time point `start`, at which `ys` are their compartments
@@ -277,7 +274,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return self.joint is None or self.joint.lead == self.mod.name
 
     def init_register(self):
-        """ The movement register as arrays for the kernels (with no events, if there is none): see `ss.solvers.backends.kernels.Register` """
+        """ The movement register as arrays for the kernels (with no events, if there is none): see `ss.solvers.numba.compartmental.Register` """
         sim = self.sim
         mixing = sim.mixing
         ng = self.n_groups
@@ -285,7 +282,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         ints = lambda vals: np.array(vals, dtype=np.int64)
         ends = lambda lists: ints(np.cumsum([0] + [len(x) for x in lists]))
         if mixing.register is None or not self.graph.people_states:
-            self.register = ss.solvers.backends.kernels.Register(starts=ints([0]), src=ints([]), dst=ints([]), n=np.zeros(0), sel=ints([]), sel_starts=ints([0]), sel_comps=ints([]), sel_to=ints([]),
+            self.register = ss.solvers.numba.compartmental.Register(starts=ints([0]), src=ints([]), dst=ints([]), n=np.zeros(0), sel=ints([]), sel_starts=ints([0]), sel_comps=ints([]), sel_to=ints([]),
                                                 ent_starts=ints([0]), ent_comps=ints([]), ent_w=np.zeros((0, ng)), pg_starts=ints([0]), pg_groups=ints([]), step=0)
             return self.register
         ev = mixing.events()
@@ -308,7 +305,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     raise NotImplementedError(errormsg)
                 added.append((tracks[0].first, self.inflow_local[name]))
         pg_starts, pg_groups = by_level(sim.groups.group_coords[:, d], sim.groups.strats[d].n)
-        self.register = ss.solvers.backends.kernels.Register(
+        self.register = ss.solvers.numba.compartmental.Register(
             starts     = ints(np.searchsorted(ev.ti, np.arange(npts + 1))),
             src        = ev.src,
             dst        = ev.dst,
@@ -385,7 +382,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return
 
         def add_exits(ind, state, exits, competing, stays, slot=None, stayed=False):
-            """ The exits that act on a compartment: in a slot of a conveyor (see ss.solvers.backends.kernels.convey()), or past it (slot=None), given how long people there have stayed (and not one they took ss.stay out of) """
+            """ The exits that act on a compartment: in a slot of a conveyor (see ss.solvers.numba.compartmental.convey()), or past it (slot=None), given how long people there have stayed (and not one they took ss.stay out of) """
             for other in competing:
                 if stayed and other.stays:
                     continue
@@ -426,7 +423,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 track.starts = ([inds[combo] for combo in combos], start)
             return inds[combos[0]]
 
-        self.conveyors = [] # The slots of each fixed delay and minimum stay, and the flow out of its last: see ss.solvers.backends.kernels.convey()
+        self.conveyors = [] # The slots of each fixed delay and minimum stay, and the flow out of its last: see ss.solvers.numba.compartmental.convey()
         for name,state in graph.states.items():
             exits = graph.exits[name]
             tracks = []
@@ -480,7 +477,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 track.first = (grid[0] if grid else inds)[0]
                 kg = getattr(dwell, 'kg', None)
                 track.starts = None if (kg is None or (grid and not running)) else (grid[0] if grid else inds, k - kg) # Ragged: a group with fewer stages enters further along, so it passes through its own number
-                for i,row in enumerate(grid): # The other exits act on every slot, the last until its people leave it (see ss.solvers.backends.kernels.convey() and release_rates())
+                for i,row in enumerate(grid): # The other exits act on every slot, the last until its people leave it (see ss.solvers.numba.compartmental.convey() and release_rates())
                     for s,ind in enumerate(row):
                         add_exits(ind, state, exits, competing, stays, slot=i)
                         if slot_rates is not None and i < len(slot_rates) and slot_rates[i] > 0: # Leaving after this many steps, at the dwell time's own chance
@@ -533,7 +530,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if flow.kind != 'conveyor':
                 self.by_src[None if flow.held else flow.src].append(flow) # A held flow is drawn as an inflow
         stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None and not getattr(flow, 'raced', False) and flow.src not in self.leaving} # Not out of the last slot of a conveyor, whose stages lead on out of it
-        self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.solvers.backends.kernels.draw_chain())
+        self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.solvers.numba.compartmental.draw_chain())
         for c,flow in stage_flows.items():
             d = flow.stages - self.comps[c].stage
             if d > 1 and self.comps[c].state.people:
@@ -912,7 +909,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def init_tape(self):
         """
         Put the expressions that are worked out once a step for every group alike (the branch probabilities, and the rates
-        of the flows other than infection) on a tape that the kernels work out in one call (see `ss.solvers.backends.kernels.evaluate()`)
+        of the flows other than infection) on a tape that the kernels work out in one call (see `ss.solvers.numba.compartmental.evaluate()`)
 
         Each part is on the tape once, however many expressions it is in: the same parameter, the same number, a count of the
         same states, or the same operation on the same parts. This matters for an imported model, whose expressions can share
@@ -921,7 +918,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         `ss.expressions.evaluate()`.
         """
         E = ss.expressions
-        kn = ss.solvers.backends.kernels
+        kn = ss.solvers.numba.compartmental
         ops, a, b = [], [], []
         entries = dict() # The position of each entry, by what it is made of
         pars = dict() # The parameters, by their key: (row, the parameter, whether its value is fixed)
@@ -1022,7 +1019,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 val = np.asarray(self.value(p), dtype=float)
                 t.prog.const_grouped[row] = val.ndim > 0
                 t.consts[row] = val
-            ss.solvers.backends.kernels.choose().evaluate(self.y, t.prog, t.consts, t.out, t.grouped)
+            ss.solvers.backends.compiling.choose().evaluate(self.y, t.prog, t.consts, t.out, t.grouped)
             self.cache[key] = {i:(t.out[j].copy() if t.grouped[j] else float(t.out[j, 0])) for i,j in t.roots.items()}
         return self.cache[key]
 
@@ -1748,7 +1745,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ The rate of a flow before its multipliers: the only part that can depend on the number in each compartment """
         if flow.kind == 'inflow' and getattr(flow.tr, 'birth_on', None) is not None: # Births driven by a flow: added after each step (see add_per_births())
             return 0.0
-        elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.solvers.backends.kernels.convey())
+        elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.solvers.numba.compartmental.convey())
             return 1.0
         elif flow.kind == 'slot': # A slot of a dwell time as it is: see slot_rates()
             return flow.slot_rate
@@ -1936,7 +1933,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def init_program(self):
         """
-        Flatten the flows into arrays for the kernels: see `ss.solvers.backends.kernels`
+        Flatten the flows into arrays for the kernels: see `ss.solvers.numba.compartmental`
 
         A value that is a function of the sim is called once a step (see `refresh_program()`),
         and held within it, unless it gives an expression of the model's states (`I.n`), which
@@ -2017,7 +2014,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def flatten_rates(self):
         """ The operations of the kernels for each rate: what they act on, in order; the operations, and where each flow's start; the size of stack they need; and the row of consts of each mover's rate (see `init_program()`) """
-        kn = ss.solvers.backends.kernels
+        kn = ss.solvers.numba.compartmental
         pars, sets, exposures = dict(), dict(), dict() # What the operations act on, in order
         ops, args, starts = [], [], [0]
         self.foreign_pars = getattr(self, 'foreign_pars', dict()) # Counts of other diseases' states, as values worked out each step
@@ -2195,7 +2192,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return 1
 
         depth = 1
-        n_local = 0 # The most parts any rate keeps of its own (see ss.solvers.backends.kernels.LOAD)
+        n_local = 0 # The most parts any rate keeps of its own (see ss.solvers.numba.compartmental.LOAD)
         flow_uses = [{} for flow in self.flows]
         reps = dict() # A part of each kind, for working out those several rates share
         for flow,uses in zip(self.flows, flow_uses):
@@ -2226,7 +2223,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     args += [add(sets, (flow.src,)), 0]
                     depth = max(depth, 2)
                 sigma = flow.tr.noise
-                if sigma is not None: # Times gamma noise, drawn in each substep (see ss.solvers.backends.kernels.NOISE)
+                if sigma is not None: # Times gamma noise, drawn in each substep (see ss.solvers.numba.compartmental.NOISE)
                     check(sigma)
                     ops.append(kn.NOISE)
                     args.append(add(pars, ('number', repr(float(sigma.raw))) if sigma.literal and sc.isnumber(sigma.raw) else id(sigma), sigma))
@@ -2235,7 +2232,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
                     check(leaf)
             starts.append(len(ops))
-        for cv in self.conveyors: # After the flows' operations, each conveyor's (its flow, then its slots): see ss.solvers.backends.kernels.convey()
+        for cv in self.conveyors: # After the flows' operations, each conveyor's (its flow, then its slots): see ss.solvers.numba.compartmental.convey()
             ops += [kn.CONVEY]*(len(cv.slots) + 1)
             args += [next(i for i,flow in enumerate(self.flows) if flow is cv.flow)] + cv.slots
             starts.append(len(ops))
@@ -2307,15 +2304,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return 1.0 if state is None else state.rel_trans*self.mult_raw('rel_trans', state=state)*mask
 
     def make_program(self, rates, mix):
-        """ The arrays of the kernels' program (see `ss.solvers.backends.kernels.Program`), with what is set later (by `set_contacts()` and `pack_targets()`, and each step) left empty """
+        """ The arrays of the kernels' program (see `ss.solvers.numba.compartmental.Program`), with what is set later (by `set_contacts()` and `pack_targets()`, and each step) left empty """
         sim = self.sim
         mixing = sim.mixing
-        kn = ss.solvers.backends.kernels
+        kn = ss.solvers.numba.compartmental
         ng, nf, nt = self.n_groups, len(self.flows), mix.nt
         exposures = rates.exposures
         by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, 'where', None) is not None for m in self.net_mods) or any(self.prog_rtrs) or self.saturates # Contacts by exposure and group: see set_contacts()
         frac = mix.frac
-        frac.sort_indices() # A full matrix of entries is read as one, in order (see ss.solvers.backends.kernels.frac())
+        frac.sort_indices() # A full matrix of entries is read as one, in order (see ss.solvers.numba.compartmental.frac())
         setlist = list(rates.sets)
         members = [[m if isinstance(m, tuple) else (m, -1) for m in item] for item in setlist] # A weighted count's are (compartment, row of its weight)
         order = {id(flow):i for i,flow in enumerate(self.flows)}
@@ -2328,7 +2325,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             named      = np.array([flow.named for flow in self.flows], dtype=bool),
             index      = np.array([flow.index for flow in self.flows], dtype=int),
             record     = np.full(nf, -1),
-            inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.ones(ng) if flow.held else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.solvers.backends.kernels.convey())
+            inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.ones(ng) if flow.held else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.solvers.numba.compartmental.convey())
             fixed      = np.zeros((nf, ng)),
             mult       = np.ones((nf, ng)),
             depth      = rates.depth,
@@ -2483,7 +2480,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return list(maps).index(id(dim_map))
 
         self._weights = [item[1] for flow in self.flows for item in flow.targets + flow.credits] # To tell when they change
-        emptied = lambda flow: [(flow.src, -1.0, None)] if flow.kind == 'conveyor' else [] # The flow out of a conveyor empties its last slot (see ss.solvers.backends.kernels.convey())
+        emptied = lambda flow: [(flow.src, -1.0, None)] if flow.kind == 'conveyor' else [] # The flow out of a conveyor empties its last slot (see ss.solvers.numba.compartmental.convey())
         targets = [(ind, w, which(dim_map)) for flow in self.flows for ind,w,dim_map in flow.targets + emptied(flow)]
         credits = [(ind, w, par + start if par >= 0 else par) for flow,start in zip(self.flows, np.cumsum([0] + [len(flow.credits) for flow in self.flows])) for ind,w,par in flow.credits]
         weights = lambda items: np.array([np.broadcast_to(item[1], ng) for item in items], dtype=float).reshape(len(items), ng)
@@ -2500,7 +2497,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             crd_parent = np.array([item[2] for item in credits], dtype=int),
             maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
         )
-        local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) # Places do not affect each other within a step: see ss.solvers.backends.kernels.gillespie_places()
+        local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) # Places do not affect each other within a step: see ss.solvers.numba.compartmental.gillespie_places()
         self.program = self.program._replace(local=local and (not isinstance(self.solver, ss.solvers.gillespie) or self.certain() is None)) # The exact solver place by place works out its own rates, so does not take an infinite one (and only it reads this)
         return
 
@@ -2725,7 +2722,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     #%% A whole run in the kernels
 
     def certain(self):
-        """ The name of a transition with an infinite rate (a probability of 1 over the period) at the start, which the kernels take as everyone moving at once (see `ss.solvers.backends.kernels.certain()`), and which JAX and the exact solver by place do not; or None """
+        """ The name of a transition with an infinite rate (a probability of 1 over the period) at the start, which the kernels take as everyone moving at once (see `ss.solvers.numba.compartmental.certain()`), and which JAX and the exact solver by place do not; or None """
         for flow in self.flows:
             if flow.kind != 'conveyor' and (not flow.dynamic or flow.src is None) and np.isinf(np.asarray(self.flow_base(flow)*self.flow_mult(flow), dtype=float)).any():
                 name = flow.tr.name if flow.tr is not None else 'a transition'
@@ -2755,7 +2752,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def par_transfer(self, tf):
         """
         Whether a transfer's rate is a parameter that varies in time (e.g. aging at a rate given for each year), and nothing else of it does,
-        so that a whole run takes it from the program's values at each step, as it does a flow's (see `ss.solvers.backends.kernels.set_movers()`)
+        so that a whole run takes it from the program's values at each step, as it does a flow's (see `ss.solvers.numba.compartmental.set_movers()`)
         """
         raw = getattr(tf.rate, 'raw', None)
         if self.sim.modifiers.get((self.mod.name, 'transition', tf.name)) or tf.dur is not None or not isinstance(tf.rate, ss.par):
@@ -2942,29 +2939,29 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self._mover_rates = self.mover_rates()
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_rate[self.program.mov_starts[1, i]:self.program.mov_starts[1, i+1]] = matrix.data
-        solver = ss.solvers.backends.kernels.solver_code(sim)
+        solver = ss.solvers.numba.compartmental.solver_code(sim)
         if self.register is None:
             self.init_register()
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
     def kernels(self, runs=1):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.backends.kernels.choose()` """
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.backends.compiling.choose()` """
         return choose_kernels(self, runs, self.plain_seconds)
 
     def plain_seconds(self):
-        """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.solvers.backends.kernels.plain_seconds()`) """
+        """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.solvers.backends.compiling.plain_seconds()`) """
         p = self.program
-        solver = ss.solvers.backends.kernels.solver_code(self.sim)
-        n_sub = ss.solvers.backends.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
-        return ss.solvers.backends.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
+        solver = ss.solvers.numba.compartmental.solver_code(self.sim)
+        n_sub = ss.solvers.backends.compiling.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
+        return ss.solvers.backends.compiling.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
 
     def start_rates(self):
         """ The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for, each as an array """
         return [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and flow.known and flow.kind != 'conveyor']
 
     def init_shifts(self):
-        """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.solvers.backends.kernels.Shifts` """
+        """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.solvers.numba.compartmental.Shifts` """
         sim = self.sim
         nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
         self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Event) and mod._dis is self.mod and mod.tabulated]
@@ -2989,7 +2986,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for s,name in enumerate(self.selector.states):
                 for comp in self.state_comps[name]:
                     sel[k, comp], cov[k, comp] = sel_k[s], cov_k[s]
-        self.shifts = ss.solvers.backends.kernels.Shifts(due=due, sel=sel, cov=cov, to=to, rest=rest, land=land)
+        self.shifts = ss.solvers.numba.compartmental.Shifts(due=due, sel=sel, cov=cov, to=to, rest=rest, land=land)
         return self.shifts
 
     def run_all(self, use_jax=False):
@@ -3048,7 +3045,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         Take a whole run a part at a time, in calls to the kernels that each take as many steps as fit in `part_bytes`
 
-        Yields the time point each part starts at, and its compartments and flows at each of its time points (as `ss.solvers.backends.kernels.run()`
+        Yields the time point each part starts at, and its compartments and flows at each of its time points (as `ss.solvers.numba.compartmental.run()`
         returns them). The deliveries' results are stored as it goes. With `self.keep_at`, a part also ends at that time point, and
         the compartments there are kept, as `self.kept_y` (see `ss.fitting.run_kept()`).
         """
@@ -3411,7 +3408,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         the rates are known at the start (at most `max_binomial`): see `binomial_substeps()`.
         Each substep is off the ODE by an amount of order rate × dt (an acute stage of 1.7
         months at monthly steps can take everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
-        they pass in a substep (see `ss.solvers.backends.kernels.draw_chain()`), so it is the dwell's mean
+        they pass in a substep (see `ss.solvers.numba.compartmental.draw_chain()`), so it is the dwell's mean
         that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `ss.solvers.binomial(substeps=1)`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
         models) do.
@@ -3463,7 +3460,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             unit = self.sim._unit_name
             near = f' (R0 = {R0:.3g}, near the epidemic threshold, where a small bias in R moves the prevalence a lot)' if R0 is not None and x_max < self.binomial_bias else ''
             ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state{near}, so the chain-binomial solver would take {need} substeps a step to keep its step bias small; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', sim=self.sim)
-        if self.conveyors and n_sub % 2 == 0: # Odd, so that the people due to leave a conveyor leave after the middle draw, and the delay is its length (see ss.solvers.backends.kernels.convey())
+        if self.conveyors and n_sub % 2 == 0: # Odd, so that the people due to leave a conveyor leave after the middle draw, and the delay is its length (see ss.solvers.numba.compartmental.convey())
             n_sub += 1
         return n_sub
 
@@ -3485,7 +3482,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         first = owner.engines[0] # Whose step and substeps the program takes (the diseases of joint states have the same step)
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
         tables, row = owner.step_tables()
-        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.solvers.backends.kernels.solver_code(sim), first.substeps(), tables, row)
+        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.solvers.numba.compartmental.solver_code(sim), first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step, the next time point
             owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti + 1, first.integer))
         if isinstance(sim.solver, ss.solvers.gillespie) and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf

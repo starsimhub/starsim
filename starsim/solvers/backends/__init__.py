@@ -1,26 +1,20 @@
 """
-The backends: how the solvers' numbers are computed (see `ss.options.backend`), as the compiled functions (kernels) that the solvers run, and what they share
+The backends: how the solvers' numbers are computed (see `ss.options.backend`), and the machinery around the kernels (the compiled functions that the solvers run)
 
-What's here is used under the hood (by the solvers, JAX, networks, and `ss.Dist`), so that
-the common draws are all fast and none is a performance cliff, plus `ss.jit` for users' own code. The same kernels
-come in several sets (Numba's here, and Rust's, built from `../rust/`), which give the same numbers:
+The kernels themselves are Numba's, in `ss.solvers.numba` (the reference), and Rust's, built from `../rust/` and swapped in by `rust`. What's here:
 
     ss.jit                                               # Compile a function (see its docstring)
-    ss.solvers.backends.kernels                          # The compartmental kernels (kernels.py)
-    ss.solvers.backends.draws                            # Exact draws in Numba from counter-based uniforms, scalar and as vectorized rows, from Python or compiled code
-    ss.solvers.backends.passes                           # Compiled passes over the agents and a network's edges
     ss.solvers.backends.rust                             # Swaps in the Rust kernels, once built (see ss.options.backend)
+    ss.solvers.backends.compiling                        # Choosing compiled or plain Python for a compartmental run, ss.compile(), and Numba's cache
+    ss.solvers.backends.workers                          # Starting the workers of ss.parallel() and of a calibration
     ss.solvers.backends.keep_memory(), release_memory()  # Keep large freed arrays for reuse (the default), or give them back
-    ss.solvers.backends.compiling()                      # Say what is being compiled, and about how long it takes
-    ss.solvers.backends.timed_compile()                  # The same around a block, then how long it took (timed_first_call() for a function's first call)
+    ss.solvers.backends.timed_compile()                  # Say what is being compiled within a block, about how long it takes, and then how long it took (timed_first_call() for a function's first call)
 
 Used with: agents and compartments; declared and coded modules
 """
-import starsim as ss
-from . import draws
-from . import kernels
-from . import passes
+from . import compiling
+from . import workers
 from .memory import keep as keep_memory, release as release_memory
 keep_memory() # Large arrays freed are kept for reuse, so new ones take no page faults: see memory.py
 from .jit import jit # ss.solvers.backends.jit is the function; its module is starsim.solvers.backends.jit
-from .cache import compiling, timed as timed_compile, timed_first as timed_first_call
+from .compiling import timed as timed_compile, timed_first as timed_first_call

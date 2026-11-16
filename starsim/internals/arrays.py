@@ -6,6 +6,7 @@ A few classes here stand in for them when a run has groups of people rather than
 
 Used with: agents and compartments; declared and coded modules
 """
+import operator
 import itertools
 import numbers
 import numpy as np
@@ -22,6 +23,9 @@ ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
 numba_indexing = 2000 # The number of indices above which Numba (rather than NumPy) indexes arrays: it wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
+
+bool_ops = {'==': operator.eq, '>': operator.gt, '<': operator.lt, '>=': operator.ge, '<=': operator.le, '!=': operator.ne, '&': operator.and_, '|': operator.or_, '^': operator.xor} # For Arr._boolmath(); Numba doesn't make these faster
+math_ufuncs = {'+': np.add, '-': np.subtract, '*': np.multiply, '/': np.divide, '//': np.floor_divide, '**': np.power, '%': np.mod} # For Arr._math()
 
 
 def np_indexer(arr, inds):
@@ -41,12 +45,7 @@ def nb_indexer(arr, inds):
 
 @nb.jit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
 def nb_true(auids, vals, want):
-    """ Return the UIDs where `bool(vals[k])` equals `want` (True for true(), False for false()).
-
-    ~4-5x faster than `auids[vals.astype(bool)]` for large arrays: a single branchless pass
-    with no intermediate mask allocation. `vals[k] != 0` matches `.astype(bool)` for every dtype,
-    including NaN floats (NaN != 0 is True, i.e. NaN is truthy), so results are identical.
-    """
+    """ The UIDs where `bool(vals[k])` equals `want`: one branchless pass, ~4-5x faster than `auids[vals.astype(bool)]` for large arrays (`vals[k] != 0` matches `.astype(bool)`, including NaN being truthy) """
     n = auids.shape[0]
     out = np.empty(n, dtype=auids.dtype)
     m = 0
@@ -206,11 +205,8 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
             cls = self.__class__
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
-        new.__dict__.update(kwargs) # Update any keyword arguments provided # TODO: add validation?
-        if values is not None:
-            new.values = values # Replace data with new data
-        else:
-            new.values = sc.cp(new.values) # TODO: is this needed?
+        new.__dict__.update(kwargs)
+        new.values = values if values is not None else sc.cp(new.values)
         return new
 
     def update(self, skip_none=True, overwrite=True, force=False, **kwargs):
@@ -348,10 +344,7 @@ class Arr(BaseArr):
                 errormsg = f'A distribution cannot be used as the default for 2D array "{name}"; use a callable returning an array of shape (n, ncols) instead'
                 raise TypeError(errormsg)
 
-        if self.people is None:
-            # This Arr is being defined in advance (e.g., as a module state) and we want a bidirectional link
-            # with a People instance for dynamic growth. These properties will be initialized later when the
-            # People/Sim are initialized
+        if self.people is None: # Defined in advance (e.g. as a module state), and linked to the people (to grow with them) when the sim is initialized
             self.len_used = 0
             self.len_tot = 0
             self.initialized = skip_init
@@ -359,10 +352,7 @@ class Arr(BaseArr):
                 self.raw = np.empty((0, *self.item_shape), dtype=self.dtype)
             else:
                 self.raw = raw # Can't check length since we don't have the People object yet
-        else:
-            # This Arr is a temporary object used for intermediate calculations when we want to index an array
-            # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
-            # People object, but do not register it for dynamic growth
+        else: # A temporary array indexed by UID, for a calculation: it reads the people, but does not grow with them
             self.len_used = self.people.uid.len_used
             self.len_tot = self.people.uid.len_tot
             self.initialized = True
@@ -502,17 +492,10 @@ class Arr(BaseArr):
             b = other
             inds = self.auids
 
-        # Perform operations, listed in rough order of how frequently used they are; Numba doesn't make these operations faster
-        if   op == '==': c = a == b
-        elif op == '>':  c = a > b
-        elif op == '<':  c = a < b
-        elif op == '>=': c = a >= b
-        elif op == '<=': c = a <= b
-        elif op == '!=': c = a != b
-        elif op == '&':  c = a & b
-        elif op == '|':  c = a | b
-        elif op == '^':  c = a ^ b
-        elif op == '~':  c = ~a
+        if op == '~':
+            c = ~a
+        elif op in bool_ops:
+            c = bool_ops[op](a, b)
         else:
             errormsg = f'Unrecognized operator "{op}"'
             raise ValueError(errormsg)
@@ -543,14 +526,7 @@ class Arr(BaseArr):
 
     def isin(self, values):
         """
-        Return a `BoolArr` that is True wherever the array's value is in `values`.
-
-        An `Arr`-aware analogue of `numpy.isin` that also picks the faster algorithm:
-        `values` may be a scalar or any array-like of test values. For a small number
-        of test values the equality comparisons are OR-ed together (which avoids the
-        sort/hash overhead of `np.isin` and is faster for the common
-        handful-of-categories case); for larger sets it falls back to `np.isin`. The
-        result is a `BoolArr`, so `.uids`, `[uids]`, and boolean combination all work.
+        Return a `BoolArr` that is True wherever the array's value is in `values`, as `np.isin()` (faster for a few values)
 
         Args:
             values: a scalar, or an array-like (list/tuple/array) of values to test against.
@@ -607,14 +583,8 @@ class Arr(BaseArr):
         if reverse:
             a, b = b, a
 
-        if op == '+': ufunc = np.add
-        elif op == '-': ufunc = np.subtract
-        elif op == '*': ufunc = np.multiply
-        elif op == '/': ufunc = np.divide
-        elif op == '//': ufunc = np.floor_divide
-        elif op == '**': ufunc = np.power
-        elif op == '%': ufunc = np.mod
-        else:
+        ufunc = math_ufuncs.get(op)
+        if ufunc is None:
             errormsg = f'Unrecognized operator "{op}"'
             raise ValueError(errormsg)
 
@@ -622,33 +592,24 @@ class Arr(BaseArr):
             ufunc(a, b, out=self.raw) # In place, so the dtype cannot change, and an operation that would change it raises as it does for a NumPy array
             return self
         c = ufunc(a, b) # The dtype can change: it dictates the class, e.g. BoolArr*FloatArr is a FloatArr
-        result_cls, result_nan = self._math_result_type(c.dtype)
-        result = self.asnew(c, cls=result_cls, copy=False)
-        result.nan = result_nan # Since asnew() does not call __init__, which sets them
-        result.nan_eq = (result.nan == result.nan)
-        return result
+        return self._retyped(c, copy=False)
 
-    @staticmethod
-    def _math_result_type(dtype):
-        """
-        Choose the Arr subclass and nan sentinel for a numeric result dtype.
-
-        The NaN sentinel value is required because the NaN value is set in the constructor, which
-        does not get called when the new instance is created via `asnew()`. Therefore it is necessary
-        to explicitly set it. Because the default value is only defined as a function default value or
-        otherwise accessible only after creating an instance, we have to explicitly re-declare the NaN
-        values here. This could be avoided in the future if the NaN value were stored as a class variable
-        """
-        dtype = np.dtype(dtype)
+    def _retyped(self, arr, copy=None):
+        """ A new array of the class for the dtype of `arr` (e.g. a BoolArr for a comparison), with its NaN value (set here, since `asnew()` does not call `__init__()`) """
+        dtype = np.dtype(arr.dtype)
         if np.issubdtype(dtype, np.bool_):
-            return BoolArr, False
+            cls, nan = BoolArr, False
         elif np.issubdtype(dtype, np.integer):
-            return IntArr, int_nan
+            cls, nan = IntArr, int_nan
         elif np.issubdtype(dtype, np.floating):
-            return FloatArr, np.nan
+            cls, nan = FloatArr, np.nan
         else:
             errormsg = f'Unsupported arithmetic result dtype {dtype}'
             raise TypeError(errormsg)
+        new = self.asnew(arr, cls=cls, copy=copy)
+        new.nan = nan
+        new.nan_eq = (nan == nan)
+        return new
 
     def __add__(self, other): return self._math('+', other)
     def __radd__(self, other): return self._math('+', other, reverse=True)
@@ -838,11 +799,7 @@ class Arr(BaseArr):
         elif isinstance(obj, np.ndarray):
             if obj.dtype == self.dtype:
                 return self.asnew(obj, copy=copy)
-            cls, nan = self._math_result_type(obj.dtype) # The dtype has changed, e.g. np.float64(30) < age gives a BoolArr
-            new = self.asnew(obj, cls=cls, copy=copy)
-            new.nan = nan
-            new.nan_eq = (nan == nan)
-            return new
+            return self._retyped(obj, copy=copy) # The dtype has changed, e.g. np.float64(30) < age gives a BoolArr
         else:
             self._type_error(obj)
         return obj
@@ -982,13 +939,11 @@ class TimeArr(FloatArr):
     since a time between steps never equals a step: `eq()` is exact equality. For plain arithmetic on the times, compare
     them: e.g. `ti_x < sim.ti + 0.5` is due at the nearest step, and `ti_x <= sim.ti` at the first step at or after it.
 
-    A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
-    move it was (a progression at the step's start, an infection by contact at its end), so `ti_X.isclose(sim.ti)` is
-    "entered this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`). So the difference
-    of two of them is not always a duration: an infection by contact happens at the end of its step and a scheduled
-    move at the start of its step, so `ti_I - ti_E` of an SEIR reads one step longer than the latent period was. For
-    the time people spent in a state, use the state's `stays` (e.g. `np.mean(seir.E.stays)`, the mean latent period),
-    which is built from the engine's times.
+    A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, so
+    `ti_X.isclose(sim.ti)` is "entered this step"; `.raw` gives the engine's own time of the move (see `shift`). So
+    the difference of two is not always a duration (an infection by contact is at the end of its step, a scheduled
+    move at the start, so `ti_I - ti_E` of an SEIR reads a step longer than the latent period): for the time spent in
+    a state, use its `stays` (e.g. `np.mean(seir.E.stays)`).
 
     Example:
         ```python
@@ -1434,18 +1389,14 @@ class BoolState(BoolArr):
     @property
     def stays(self):
         """
-        For a state of a declared disease run as agents: how long each person who has been through it stayed there, e.g.
-        `np.mean(measles.E.stays)`, the mean latent period. A duration in the sim's unit, one value for each person who
-        has entered the state and left it (their last stay, if more than one; dead or alive), from the engine's own
-        times, so the mean is the declared one at any step. This is the way to get a time spent in a state: the
-        difference of two times of entering (`ti_I - ti_E`) is not, since each reads as the step its move happened in,
-        which can make it a step long (see `ss.TimeArr`).
+        For a state of a declared disease run as agents: how long each person who has been through it stayed there (their
+        last stay; dead or alive), e.g. `np.mean(measles.E.stays)`, the mean latent period. A duration in the sim's unit, from
+        the engine's own times; the way to get a time spent in a state, since `ti_I - ti_E` can be a step long (see `ss.TimeArr`).
 
-        Those still in the state are left out (`.time_in` gives how long they have been there so far), so a run that ends
-        while many are in it understates the mean; so are those who died in it, or left it other than by the
-        disease's transitions. Those placed in it at the start (e.g. seeded cases in I) count from the start of the run.
-        The engine keeps when each person last left every state whose time of entering is kept, so this works whenever
-        that time is, e.g. for any state with a dwell time (otherwise, see `ss.solvers.abm(keep_times=True)`).
+        Left out are those still in the state (see `.time_in`), so a run that ends while many are in it understates the
+        mean, and those who died in it or left it other than by the disease's transitions; those placed in it at the start
+        count from the start of the run. It needs the time of entering the state to be kept (e.g. any state with a
+        dwell time; otherwise, see `ss.solvers.abm(keep_times=True)`).
         """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
@@ -1494,10 +1445,7 @@ class BoolState(BoolArr):
             return super().__setitem__(key, value)
         if not isinstance(key, uids):
             key = self._convert_key(key)
-        inds = np.atleast_1d(np.asarray(key))
-        if engine.sim.groups.n_groups > 1:
-            engine.sim.groups.group_raw() # Any changes of group (e.g. by age) are counted before this one
-        old = self.raw[inds]
+        inds, old = self._before_write(engine, key)
         self.raw[key] = value
         if np.ndim(value) == 0 and value: # One value (the usual case): those it changes are those not at it before
             engine.wrote(self.name, inds[~old], uids())
@@ -1507,6 +1455,13 @@ class BoolState(BoolArr):
             new = self.raw[inds]
             engine.wrote(self.name, inds[~old & new], inds[old & ~new])
         return
+
+    def _before_write(self, engine, key):
+        """ The agents about to be written, and their values before, with any changes of group (e.g. by age) counted first """
+        inds = np.atleast_1d(np.asarray(key))
+        if engine.sim.groups.n_groups > 1:
+            engine.sim.groups.group_raw()
+        return inds, self.raw[inds]
 
     def set(self, uids, new_vals=None):
         """
@@ -1519,10 +1474,7 @@ class BoolState(BoolArr):
         engine = self._counter()
         if engine is None:
             return super().set(uids, new_vals=new_vals)
-        inds = np.atleast_1d(np.asarray(uids))
-        if engine.sim.groups.n_groups > 1:
-            engine.sim.groups.group_raw() # As in __setitem__()
-        old = self.raw[inds]
+        inds, old = self._before_write(engine, uids)
         out = super().set(uids, new_vals=new_vals)
         new = self.raw[inds]
         engine.wrote(self.name, inds[~old & new], inds[old & ~new])
@@ -1550,11 +1502,13 @@ class BoolState(BoolArr):
             engine.wrote(self.name, inds[self.raw[inds]], uids())
         return
 
+    # True in-place operators, which reuse the memory of the array, so a module's arrays keep their references;
+    # after a change to the whole array, whatever keeps count of the state counts it again
+
     def _changed_all(self):
-        """ After a change to the whole array (an in-place operation), whatever keeps count of the state counts it again """
         if self.watch is not None:
             self.watch.engine.regroup()
-        return
+        return self
 
     def __iand__(self, other):
         out = super().__iand__(other)
@@ -1722,16 +1676,13 @@ class uids(np.ndarray):
 
     The following operators are supported:
 
-    - `+` / `+=`: if the RHS is a `uids`, concatenation (equivalent to `uids.concatenate()`); otherwise element-wise addition (e.g. `uids([1,2]) + 1` → `uids([2,3])`). Concatenation preserves duplicates.
-    - `-` / `-=`: set difference — equivalent to `uids.remove()`. Duplicate entries in the original will also be removed (uses `np.setdiff1d` internally).
-    - `|` / `|=`: union (unique elements from both arrays). Note that duplicate entries in the original are **removed** (use `+` instead to keep them).
+    - `+` / `+=`: with `uids`, concatenation (keeping duplicates); otherwise element-wise addition (`uids([1,2]) + 1` → `uids([2,3])`)
+    - `-` / `-=`: set difference (`uids.remove()`; duplicates are removed)
+    - `|` / `|=`: union (duplicates are removed; use `+` to keep them)
     - `&` / `&=`: intersection
     - `^` / `^=`: symmetric difference
 
-    Note: because `uids` is a subclass of `np.ndarray`, set-like in-place operators
-    (`+=` with a `uids` RHS, `-=`, `|=`, `&=`, `^=`) must return a new array and rebind
-    the variable. However, `+=` with a scalar or array RHS modifies the array in-place
-    and preserves `id(self)`.
+    The set-like in-place operators return a new array (since the size changes); `+=` with a number or array changes it in place.
 
     Examples:
         ```python
@@ -1775,38 +1726,19 @@ class uids(np.ndarray):
             ss.uids.concatenate()          # returns empty ss.uids()
             ```
         """
-        # Handle a single input argument: my_uids.concatenate([uids1, uids2])
-        if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):
+        if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))): # One list of arrays: my_uids.concatenate([uids1, uids2])
             arrays = list(args[0]) if not isinstance(args[0], list) else args[0] # Handle corner case of [[]]
-        
-        # Handle multiple input arguments: my_uids.concatenate(uids1, uids2)
-        else:
+        else: # Several arrays: my_uids.concatenate(uids1, uids2)
             arrays = list(args)
-        
-        # Remove any None values
         valid = [a for a in arrays if a is not None]
-
-        # If non-empty arrays remain, concatenate, always using int type
-        if valid:
-            out = uids._ensure_int(np.concatenate(valid))
-        else:
-            out = uids()
-        return out
+        return uids._ensure_int(np.concatenate(valid)) if valid else uids()
 
     @classmethod
     def _ensure_int(cls, arr):
         """
-        Return an integer-typed uids view, validating that the values are valid UIDs.
+        An integer-typed uids view, for the constructor and for operations that can change the dtype (e.g. `np.intersect1d(uids, [])` is float)
 
-        UIDs are integer identifiers used for array indexing, so they must be integer-valued.
-        This is called both by the constructor and by operations that can change the dtype:
-        numpy may promote the return type (e.g. `np.intersect1d(uids, [])` returns a `float`),
-        and the constructor may receive float input directly (e.g. `ss.uids([1.5])`).
-
-        Integer input of the correct type is returned as a view with no copy. Other input is
-        accepted only if every value is finite and integer-valued (e.g. an empty list, or `2.0`);
-        genuinely fractional or non-finite values (`1.5`, `nan`, `inf`) are rejected, since they
-        can never index an array.
+        Integers of the right type are a view with no copy; other values must be finite whole numbers (e.g. `2.0`), else a TypeError.
         """
         if arr.dtype == ss_int or arr.dtype == ss_uid:
             return arr.view(cls) # Fast path: already the correct type, no copy needed
@@ -1892,17 +1824,9 @@ class uids(np.ndarray):
             return self._ensure_int(arr[keep])
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
-        # Guard 1: non-integer dtype → return a plain ndarray.
-        # Example: `uids_a == uids_b` produces a bool array. A boolean uids should
-        # never exist — uids are integer indices only — and returning one would cause
-        # `~(a == b)` to hit our __invert__ guard instead of doing a normal bitwise NOT.
-        if out_arr.dtype.kind not in ('i', 'u'):
+        if out_arr.dtype.kind not in ('i', 'u'): # E.g. uids_a == uids_b: a plain bool array, so ~(a == b) is a normal NOT
             return out_arr.view(np.ndarray)
-        # Guard 2: scalar reductions → return a plain Python int.
-        # Example: `uids.max()` should behave like `uids[0]` (a bare integer), not
-        # return a 0-d uids whose subsequent use in arithmetic (e.g. `max + 1`) would
-        # incorrectly route through our __add__ concatenation operator.
-        if return_scalar:
+        if return_scalar: # E.g. uids.max(): a plain int, so max + 1 is addition, not concatenation
             return out_arr.item()
         return super().__array_wrap__(out_arr, context, return_scalar)
 
@@ -1929,10 +1853,7 @@ class uids(np.ndarray):
     def __xor__(self, other) : return self.xor(other)
     def __invert__(self)     : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
-    # For set-like operations (uids RHS) the size changes, so in-place must return a new object
-    # and rebind the variable — same semantics as in-place operations on an immutable type.
-    # For scalar/array RHS (element-wise arithmetic) the size is unchanged, so we can modify
-    # in-place and preserve id(self).
+    # Set-like operations change the size, so in place they return a new object; element-wise arithmetic changes it in place
     def __iadd__(self, other):
         if isinstance(other, uids):
             return self.__add__(other)   # new object — size changes

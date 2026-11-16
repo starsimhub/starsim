@@ -312,7 +312,7 @@ class RateNoise(sc.prettyobj):
     """
     Gamma white noise on a transition's rate as agents (`ss.Transition(noise=)`), as a modifier of it: a multiplier with
     mean 1 and variance sigma²/dt, drawn once a step for each group, as the chain binomial draws it in each of its steps
-    (see `ss.solvers.backends.kernels.noise()`; Bretó et al. 2009)
+    (see `ss.solvers.numba.compartmental.noise()`; Bretó et al. 2009)
 
     Args:
         tr (Transition): the transition
@@ -665,7 +665,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         (`.uids`), which is several times faster for a large population: anyone who
         has died has already left every state (see `die()`).
         """
-        return ss.uids(ss.solvers.backends.passes.flatnonzero(self.mod[state.name].raw))
+        return ss.uids(ss.solvers.numba.passes.flatnonzero(self.mod[state.name].raw))
 
     def adjusted_rel(self, kind, state=None):
         """ The multiplier on rel_trans or rel_sus for each agent (by UID), for those in a state that has the dimension """
@@ -1152,7 +1152,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         order = {name:k for k,name in enumerate(want)}
         listed = np.array([order.get(name, -1) for name in names], dtype=np.int64)
         members = tuple(self.mod[name].raw for name in names)
-        counts, found, offsets = ss.solvers.backends.passes.census(members, sim.people.alive.raw, groups, ng, listed)
+        counts, found, offsets = ss.solvers.numba.passes.census(members, sim.people.alive.raw, groups, ng, listed)
         self.live = dict(zip(names, counts[:-1]))
         self.live_total = counts[-1] # Everyone alive
         self.n_counted = sim.people.uid.len_used

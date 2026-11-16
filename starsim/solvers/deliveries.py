@@ -707,7 +707,7 @@ class CompartmentalDelivery(sc.prettyobj):
 
     def shifts(self):
         """
-        The delivery as the kernels take it (see `ss.solvers.backends.kernels.Shifts`): the steps it happens on; the fraction of the people in each state and group
+        The delivery as the kernels take it (see `ss.solvers.numba.compartmental.Shifts`): the steps it happens on; the fraction of the people in each state and group
         who are eligible, and of those, who are reached; the group that each group's people move to if reached, and if not; and for a move
         between states, the fraction of those reached who land in each compartment (by compartment and group; otherwise all zero)
         """

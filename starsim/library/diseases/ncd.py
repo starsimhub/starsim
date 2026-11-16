@@ -13,9 +13,8 @@ class NCD(ss.Disease):
     """
     Example non-communicable disease
 
-    This class implements a basic NCD model with risk of developing a condition
-    (e.g., hypertension, diabetes), a state for having the condition, and associated
-    mortality. It is written as code (see `ss.Disease`), and is not transmitted.
+    A risk of developing a condition (e.g. hypertension, diabetes), the condition, and its mortality; written as
+    code (see `ss.Disease`), and not transmitted.
 
     Note: CRN safe.
 
@@ -47,12 +46,7 @@ class NCD(ss.Disease):
         return ~self.at_risk
 
     def init_post(self):
-        """
-        Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the State objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called.
-        """
+        """ Set who is at risk at the start, and when they become affected """
         super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
@@ -78,9 +72,6 @@ class NCD(ss.Disease):
         return new_cases
 
     def init_results(self):
-        """
-        Initialize results
-        """
         super().init_results()
         self.define_results(
             ss.Result('not_at_risk',   dtype=int,   label='Not at risk', kind='stock'),

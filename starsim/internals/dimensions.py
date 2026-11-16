@@ -21,6 +21,11 @@ def delivery_moves(mod, attr='move'):
     return (getattr(mod, attr) or {}) if isinstance(mod, ss.Event) else {}
 
 
+def delivery_dims(mod):
+    """ The dimensions a delivery moves people along, by move= or increment= """
+    return list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment'))
+
+
 def level_dtype(n):
     """ The integers that levels or groups are kept as, n of them: 16-bit if they fit, to save memory """
     return np.int16 if n < 2**15 else np.int32
@@ -224,6 +229,11 @@ class Strat:
     def move_level(self, level):
         """ A level that people are moved to, as given in `move=`: its position """
         return self.index(level)
+
+    def level_of(self, raw):
+        """ The level of each of some values of the property, as 16-bit integers if they fit, to save memory """
+        levels = np.clip(np.digitize(raw, self.edges) - 1, 0, self.n - 1) if self.edges is not None else ss.solvers.numba.passes.levels(raw)
+        return levels.astype(level_dtype(self.n), copy=False)
 
     def people_arr(self):
         """ The property of people that holds each agent's level, when they do not have it already: for a dimension with labels, the level itself, as 16-bit integers (so with one dimension it is also the group: see `Groups.group_raw()`); for a binned one, floats """
@@ -695,7 +705,7 @@ class Groups(sc.prettyobj):
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
                 self.dim_moves += [move for move in mod.dim_moves(sim) if move.dim not in [m.dim for m in self.dim_moves]]
-                for dim in list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment')):
+                for dim in delivery_dims(mod):
                     if dim not in strats:
                         raise sc.KeyNotFoundError(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)): # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
@@ -706,7 +716,7 @@ class Groups(sc.prettyobj):
                         strats[strat.name] = strat
         moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()] # A dimension that people are moved along, with no split of its own, starts with everyone at its first level
         moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in list(getattr(tr, 'move', None) or {}) + list(getattr(tr, 'increment', None) or {})]
-        moved += [dim for mod in sim.pars.interventions.values() for dim in list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment'))]
+        moved += [dim for mod in sim.pars.interventions.values() for dim in delivery_dims(mod)]
         for name in moved:
             strat = strats.get(name)
             if strat is not None and strat.guessed.get('fractions') == 'equal across levels':
@@ -863,10 +873,8 @@ class Groups(sc.prettyobj):
         """
         For a dimension with `who=` (e.g. age groups for women only): which groups have a level of it
 
-        The groups stay a grid, with a level of every dimension. People in a group outside a
-        dimension's `who=` have no level of it, so they are all counted at its first level
-        (the "fold" of their group), as people in a state that a dimension does not apply to are;
-        the groups at its other levels stay empty.
+        The groups stay a grid. People in a group outside a dimension's `who=` are all counted at its first level (the "fold"
+        of their group), and the groups at its other levels stay empty.
         """
         coords = self.group_coords.copy()
         inside = np.ones(coords.shape, dtype=bool) # Whether each group (rows) has a level of each dimension (columns)
@@ -988,16 +996,12 @@ class Groups(sc.prettyobj):
 
     def groups_changed(self, uids=None):
         """
-        Say that the level of some agents in a dimension has changed (or of any agent, if uids is None), so their groups are worked out again
-
-        Code that changes a property of people that a dimension is made from (e.g. `people.patch`)
-        calls this; see `group_raw()`.
+        Say that the level of some agents in a dimension has changed (or of any agent, if uids is None), so their groups are
+        worked out again: called by code that changes a property of people that a dimension is made from (e.g. `people.patch`)
         """
-        sim = self.sim
         self._group_cache = None
-        for mod in getattr(sim, 'declared', []): # The agent engines keep counts by group: see ss.solvers.Agents.regroup()
-            if mod.engine.agents:
-                mod.engine.regroup(uids)
+        for engine in self.agent_engines(): # See ss.solvers.Agents.regroup()
+            engine.regroup(uids)
         dirty = getattr(self, '_group_dirty', None)
         if uids is None or dirty is False:
             self._group_dirty = False # Everyone
@@ -1009,9 +1013,8 @@ class Groups(sc.prettyobj):
         """
         In an agent-based run: the group of every agent, as an array indexed by UID
 
-        It is kept until `groups_changed()` says it has changed, and then only the groups of the
-        agents named are worked out again. A dimension binned from a property that changes on its
-        own, such as age, is checked again on every step.
+        Kept until `groups_changed()` says it has changed, and then only the groups of the agents named are worked out again;
+        a dimension binned from a property that changes on its own, such as age, is checked on every step.
         """
         sim = self.sim
         cache = getattr(self, '_group_cache', None)
@@ -1033,7 +1036,7 @@ class Groups(sc.prettyobj):
             uids = np.unique(np.concatenate(dirty))
             levels = []
             out = kept[''] # Changed in place: the groups are only ever used straight away, so nothing holds the old ones
-            for strat,mult in zip(self.strats, np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]):
+            for strat,mult in zip(self.strats, self.group_mults):
                 raw = sim.people[strat.attr].raw
                 old_raw, old_level = kept[strat.name]
                 if len(old_raw) != n: # The arrays have grown since: work everything out
@@ -1041,7 +1044,7 @@ class Groups(sc.prettyobj):
                     return self.group_raw()
                 if len(uids):
                     before = old_level[uids]
-                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.solvers.backends.passes.levels(raw[uids])
+                    after = strat.level_of(raw[uids])
                     old_level[uids] = after
                     old_raw[uids] = raw[uids]
                     if not shared:
@@ -1055,10 +1058,8 @@ class Groups(sc.prettyobj):
         if kept is None:
             kept = self._level_cache = dict()
         levels = []
-        def level_of(strat, raw): # As 16-bit integers if they fit, to save memory
-            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.solvers.backends.passes.levels(raw)).astype(level_dtype(strat.n), copy=False)
         dtype = level_dtype(self.n_groups)
-        mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
+        mults = self.group_mults
         n = people.uid.len_tot
         rebuild = '' not in kept or len(kept['']) > n
         n0 = n if rebuild else len(kept['']) # Fewer than n if the people have grown since: the new agents' levels are added to what is kept, rather than all worked out again
@@ -1067,21 +1068,21 @@ class Groups(sc.prettyobj):
             raw = people[strat.attr].raw
             old = kept.get(strat.name)
             if old is not None and n0 < n and len(old[0]) == n0:
-                old = kept[strat.name] = (np.concatenate([old[0], raw[n0:]]), np.concatenate([old[1], level_of(strat, raw[n0:])]))
+                old = kept[strat.name] = (np.concatenate([old[0], raw[n0:]]), np.concatenate([old[1], strat.level_of(raw[n0:])]))
             if old is None or len(old[0]) != len(raw):
-                old = kept[strat.name] = (raw.copy(), level_of(strat, raw))
+                old = kept[strat.name] = (raw.copy(), strat.level_of(raw))
                 rebuild = True
             else:
                 if strat.edges is not None: # A binned property (e.g. age) changes for nearly everyone at each step, but only those who crossed an edge (or have no value) change level
                     inner = strat.edges[1:strat.n]
                     lo, hi = np.append(-np.inf, inner), np.append(inner, np.inf) # The bounds of each level, as digitize() bins them
-                    idx = ss.solvers.backends.passes.crossed(raw, old[1], lo, hi)
+                    idx = ss.solvers.numba.passes.crossed(raw, old[1], lo, hi)
                 else:
                     idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
                 if len(idx):
                     before = old[1][idx]
                     levels_new = old[1] # In place, as above
-                    levels_new[idx] = level_of(strat, raw[idx])
+                    levels_new[idx] = strat.level_of(raw[idx])
                     old[0][idx] = raw[idx]
                     old = kept[strat.name] = (old[0], levels_new)
                     updates.append((idx, before, levels_new[idx], int(mult)))
@@ -1115,10 +1116,13 @@ class Groups(sc.prettyobj):
         if moved is not None:
             self.regrouped(*moved)
         elif rebuild and cache is not None: # Worked out again from scratch: whatever keeps counts by group counts again
-            for mod in getattr(sim, 'declared', []):
-                if mod.engine.agents:
-                    mod.engine.regroup()
+            for engine in self.agent_engines():
+                engine.regroup()
         return self._group_cache[1]
+
+    def agent_engines(self):
+        """ The engines of the declared modules run as agents, which keep counts by group """
+        return [mod.engine for mod in getattr(self.sim, 'declared', []) if mod.engine.agents]
 
     def regrouped(self, uids, before, after):
         """ Some agents' groups have changed by themselves (e.g. they reached the next age group): the agent engines move them between the counts they keep by group (see `ss.solvers.Agents.moved_groups()`) """
@@ -1127,9 +1131,8 @@ class Groups(sc.prettyobj):
         if not changed.any():
             return
         uids, before, after = uids[changed], before[changed], after[changed]
-        for mod in getattr(self.sim, 'declared', []):
-            if mod.engine.agents:
-                mod.engine.moved_groups(uids, before, after)
+        for engine in self.agent_engines():
+            engine.moved_groups(uids, before, after)
         return
 
     def folded(self, groups):
@@ -1242,10 +1245,7 @@ class Groups(sc.prettyobj):
                 people[strat.attr][uids] = people[strat.attr].raw[parent.astype(int)]
                 continue
             rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
-            if strat.cond is not None:
-                people[strat.attr][uids] = strat.value(strat.draw(sim, uids, rvs))
-            else:
-                people[strat.attr][uids] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.fractions), rvs, side='right'), strat.n - 1))
+            people[strat.attr][uids] = strat.value(strat.draw(sim, uids, rvs))
         self.groups_changed(uids)
         return
 

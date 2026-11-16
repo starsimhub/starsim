@@ -128,7 +128,7 @@ A step is taken from every time point, the last one included, so every time poin
 - A **stock** at time point `k` (e.g. `I[k]`, the number infectious) is the state at the start of step `k`. `I[0]` is the initial condition.
 - A **flow** at time point `k` (e.g. `infection[k]`, the new infections) is the total during step `k`.
 
-So with yearly steps, the row for 2020 holds the prevalence on 1 January 2020 and the infections during 2020, which is how data labeled "2020" are usually meant. The state after the last step isn't recorded, so after a run `sim.people` is one step past the last time point.
+The state after the last step isn't recorded ([Time](building_time.qmd#the-time-span-the-step-and-units) says what this means for data and for `sim.people`).
 
 Throughout step `k`, in every module, `sim.ti` is `k` (the index, where results go) and `sim.now` is time point `k` as a date or a duration (the value, at which values that vary in time are read).
 

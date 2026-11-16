@@ -27,7 +27,7 @@ import yaml
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build, factors, product, funcs as known_funcs
+from .core import Source, build, factors, product, map_children, rewrite_expr, funcs as known_funcs
 
 __all__ = ['load_emulsion', 'to_emulsion']
 
@@ -43,11 +43,7 @@ def emulsion_expr(text):
     """ An EMULSION expression in Python syntax: comparison functions as comparisons, AND/OR as products and sums """
     node = ast.parse(str(text).strip(), mode='eval').body
     def visit(node):
-        for field,val in ast.iter_fields(node):
-            if isinstance(val, ast.AST):
-                setattr(node, field, visit(val))
-            elif isinstance(val, list):
-                setattr(node, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
+        map_children(node, visit)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             name = node.func.id
             if name in functions and len(node.args) == 2:
@@ -374,17 +370,8 @@ emulsion_units = dict(day='days', week='weeks') # The units EMULSION has (a Pyth
 
 def emulsion_text(node, comps, time):
     """ An expression (an AST node) in EMULSION's syntax: a compartment's count is total_X, the time is EMULSION's, and the functions are sympy's """
-    class Sub(ast.NodeTransformer):
-        def visit_Call(self, n):
-            self.generic_visit(n)
-            if n.func.id == 'where': # sympy's Piecewise, written whole as a name
-                cond, yes, no = [ast.unparse(a) for a in n.args]
-                return ast.Name(f'Piecewise(({yes}, {cond}), ({no}, True))')
-            n.func.id = emulsion_funcs.get(n.func.id, n.func.id)
-            return n
-        def visit_Name(self, n):
-            return ast.Name(f'total_{n.id}') if n.id in comps else ast.Name(time) if n.id == 't' else n
-    return ast.unparse(Sub().visit(node))
+    name = lambda n: ast.Name(f'total_{n.id}') if n.id in comps else ast.Name(time) if n.id == 't' else n
+    return rewrite_expr(node, emulsion_funcs, where='Piecewise(({yes}, {cond}), ({no}, True))', name=name) # where() as sympy's Piecewise
 
 
 def per_person(rate, src):

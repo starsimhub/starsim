@@ -1,4 +1,4 @@
-//! The passes over the agents and over a network's edges of `starsim/solvers/backends/passes.py`: the same arguments and results, and the same
+//! The passes over the agents and over a network's edges of `starsim/solvers/numba/passes.py`: the same arguments and results, and the same
 //! chunks, which several threads take when there is more than one (see `par()`). Lists are kept in order and counts are whole numbers,
 //! so the results do not depend on the number of threads. Each takes the arrays as slices (see `py.rs`).
 
@@ -223,6 +223,19 @@ fn in_place<T: Copy + Send>(out: &mut [T], n: usize, nchunks: usize, work: impl 
         })
     };
     close_gaps(out, &found, n)
+}
+
+/// As in_place(), for two outputs written alike (work(a, b, part0, part1) gives how many), as `passes.in_place()` with outputs=2: the length of each list
+fn in_place2<T: Copy + Send>(out0: &mut [T], out1: &mut [T], n: usize, nchunks: usize, work: impl Fn(usize, usize, &mut [T], &mut [T]) -> usize + Send + Sync + Copy) -> usize {
+    let found = {
+        let (o0, o1) = (Shared::new(out0), Shared::new(out1));
+        par(nchunks, move |c| {
+            let (a, b) = bounds(c, n, nchunks);
+            work(a, b, unsafe { o0.part(a, b) }, unsafe { o1.part(a, b) })
+        })
+    };
+    close_gaps(out1, &found, n);
+    close_gaps(out0, &found, n)
 }
 
 /// The counts of each chunk, added up
@@ -1049,53 +1062,36 @@ fn exits_chunk<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, scale: f6
 /// Who leaves a state by competing rates that are the same for everyone: their positions in uids, and the exit each takes (-1 for none), written from the start of pos and which; how many (`passes.competing_exits()`)
 #[allow(clippy::too_many_arguments)]
 pub fn competing_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, scale: f64, p_exit: f64, edges: &[f64], pos: &mut [i64], which: &mut [i64], nchunks: usize) -> usize {
-    let n = uids.len();
-    let found = {
-        let (ps, ws) = (Shared::new(pos), Shared::new(which));
-        par(nchunks, move |c| {
-            let (a, b) = bounds(c, n, nchunks);
-            exits_chunk(&uids[a..b], slots, key, shift, scale, p_exit, edges, a, unsafe { ps.part(a, b) }, unsafe { ws.part(a, b) })
-        })
-    };
-    close_gaps(which, &found, n);
-    close_gaps(pos, &found, n)
+    in_place2(pos, which, uids.len(), nchunks, move |a, b, ps, ws| exits_chunk(&uids[a..b], slots, key, shift, scale, p_exit, edges, a, ps, ws))
 }
 
 /// As competing_exits(), with chances that differ between agents: each one's chance of leaving, and the exits' hazards (a row for each exit), whose running total times frac are the edges (`passes.competing_agent_exits()`)
 #[allow(clippy::too_many_arguments)]
 pub fn competing_agent_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, scale: f64, p_exit: &[f64], frac: &[f64], hazards: &[f64], n_exits: usize, pos: &mut [i64], which: &mut [i64], nchunks: usize) -> usize {
-    let n = uids.len();
     let by_uid = slots.is_empty();
     let cols = if n_exits > 0 { hazards.len()/n_exits } else { 0 };
-    let found = {
-        let (ps, ws) = (Shared::new(pos), Shared::new(which));
-        par(nchunks, move |c| {
-            let (a, b) = bounds(c, n, nchunks);
-            let (ps, ws) = unsafe { (ps.part(a, b), ws.part(a, b)) };
-            let mut m = 0;
-            for (i, &uid) in uids[a..b].iter().enumerate() {
-                let j = a + i;
-                let u = draws::crn_uniform(key, if by_uid { uid as u64 } else { slots[uid as usize].int() as u64 }, shift, scale);
-                if u < p_exit[j] {
-                    let mut t = 0;
-                    let mut edge = 0.0;
-                    while t < n_exits {
-                        edge += hazards[t*cols + j];
-                        if u < edge*frac[j] {
-                            break;
-                        }
-                        t += 1;
+    in_place2(pos, which, uids.len(), nchunks, move |a, b, ps, ws| {
+        let mut m = 0;
+        for (i, &uid) in uids[a..b].iter().enumerate() {
+            let j = a + i;
+            let u = draws::crn_uniform(key, if by_uid { uid as u64 } else { slots[uid as usize].int() as u64 }, shift, scale);
+            if u < p_exit[j] {
+                let mut t = 0;
+                let mut edge = 0.0;
+                while t < n_exits {
+                    edge += hazards[t*cols + j];
+                    if u < edge*frac[j] {
+                        break;
                     }
-                    ps[m] = j as i64;
-                    ws[m] = if t < n_exits { t as i64 } else { -1 };
-                    m += 1;
+                    t += 1;
                 }
+                ps[m] = j as i64;
+                ws[m] = if t < n_exits { t as i64 } else { -1 };
+                m += 1;
             }
-            m
-        })
-    };
-    close_gaps(which, &found, n);
-    close_gaps(pos, &found, n)
+        }
+        m
+    })
 }
 
 
@@ -1178,9 +1174,10 @@ pub mod bind {
     }
 
     #[pyfunction]
-    fn flatnonzero<'py>(py: Python<'py>, raw: &Arr<'py>, nchunks: i64) -> PyResult<Arr<'py>> {
+    fn flatnonzero<'py>(py: Python<'py>, raw: &Arr<'py>, nchunks: i64) -> PyResult<(usize, Arr<'py>)> {
         let nchunks = chunks(py, nchunks)?;
-        Ok(arr(py, passes::flatnonzero(sl(raw)?, nchunks)))
+        let out = passes::flatnonzero(sl(raw)?, nchunks);
+        Ok((out.len(), arr(py, out)))
     }
 
     #[pyfunction]
@@ -1277,10 +1274,10 @@ pub mod bind {
 
     #[pyfunction]
     #[allow(clippy::too_many_arguments)]
-    fn can_transmit<'py>(py: Python<'py>, src: &Arr<'py>, trg: &Arr<'py>, rel_trans: &Arr<'py>, rel_sus: &Arr<'py>, beta: &Arr<'py>, out: &Arr<'py>, nchunks: i64) -> PyResult<Arr<'py>> {
+    fn can_transmit(py: Python, src: &Arr, trg: &Arr, rel_trans: &Arr, rel_sus: &Arr, beta: &Arr, out: &Arr, nchunks: i64) -> PyResult<usize> {
         let nchunks = chunks(py, nchunks)?;
         typed!(rel_trans, T in [f32, f64] => typed!(rel_sus, S in [f32, f64] => typed!(beta, B in [f32, f64] => {
-            head(out, passes::can_transmit::<T, S, B>(sl(src)?, sl(trg)?, sl(rel_trans)?, sl(rel_sus)?, sl(beta)?, sl_mut(out)?, nchunks))
+            Ok(passes::can_transmit::<T, S, B>(sl(src)?, sl(trg)?, sl(rel_trans)?, sl(rel_sus)?, sl(beta)?, sl_mut(out)?, nchunks))
         })))
     }
 
@@ -1302,17 +1299,17 @@ pub mod bind {
 
     #[pyfunction]
     #[allow(clippy::too_many_arguments)]
-    fn women<'py>(py: Python<'py>, auids: &Arr<'py>, female: &Arr<'py>, age: &Arr<'py>, lo: f64, hi: f64, out: &Arr<'py>, nchunks: i64) -> PyResult<Arr<'py>> {
+    fn women(py: Python, auids: &Arr, female: &Arr, age: &Arr, lo: f64, hi: f64, out: &Arr, nchunks: i64) -> PyResult<usize> {
         let nchunks = chunks(py, nchunks)?;
-        typed!(age, A in [f32, f64] => head(out, passes::women::<A>(sl(auids)?, sl(female)?, sl(age)?, lo, hi, sl_mut(out)?, nchunks)))
+        typed!(age, A in [f32, f64] => Ok(passes::women::<A>(sl(auids)?, sl(female)?, sl(age)?, lo, hi, sl_mut(out)?, nchunks)))
     }
 
     #[pyfunction]
     #[allow(clippy::too_many_arguments)]
-    fn debuts<'py>(py: Python<'py>, auids: &Arr<'py>, alive: &Arr<'py>, decided: &Arr<'py>, age: &Arr<'py>, debut: &Arr<'py>, reached: bool, out: &Arr<'py>, nchunks: i64) -> PyResult<Arr<'py>> {
+    fn debuts(py: Python, auids: &Arr, alive: &Arr, decided: &Arr, age: &Arr, debut: &Arr, reached: bool, out: &Arr, nchunks: i64) -> PyResult<usize> {
         let nchunks = chunks(py, nchunks)?;
         typed!(age, A in [f32, f64] => typed!(debut, D in [f32, f64] => {
-            head(out, passes::debuts::<A, D>(sl(auids)?, sl(alive)?, sl(decided)?, sl(age)?, sl(debut)?, reached, sl_mut(out)?, nchunks))
+            Ok(passes::debuts::<A, D>(sl(auids)?, sl(alive)?, sl(decided)?, sl(age)?, sl(debut)?, reached, sl_mut(out)?, nchunks))
         }))
     }
 

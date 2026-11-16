@@ -84,19 +84,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     A disease: states people are in and the transitions between them (declared), code, or both
 
-    Declared from its states and transitions, no methods need to be defined, and the
-    disease can be run with any solver (see `ss.Sim`):
-
-        S, I, R = ss.states(3)
-        sir = ss.Disease(
-            infection = S >> I @ 0.3 * I,
-            recovery  = ss.Transition(I, R, dur=10),
-            init_prev = 0.01,
-        )
-
-    The same disease can be declared in a class body (the class form), which can also
-    add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
-    this way.
+    Declared from its states and transitions (see the examples), no methods need to be defined, and the
+    disease can be run with any solver (see `ss.Sim`). The same disease can be declared in a class body
+    (the class form), which can also add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR`
+    are written this way.
 
     A disease can also be written as code: a subclass that declares
     nothing, defines its per-agent arrays (`define_states()`), and changes them in its

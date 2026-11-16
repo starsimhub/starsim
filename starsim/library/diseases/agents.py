@@ -5,9 +5,7 @@ These are the Starsim 3 library models, written as `ss.AgentDisease` subclasses 
 per-agent states and methods. They are teaching examples: they spell out, step by step
 in plain Python, what the declared `ss.SIR`, `ss.SIS`, and `ss.SEIR` do under the hood
 when run as agents, and they are starting points for a disease of your own written as
-code. In most cases, it would be preferable to use the declared form, but these are 
-included as examples of what explicit agent-based code looks like. Needless to say,
-they run only as agents.
+code. Usually the declared form is preferable; these run only as agents.
 
 They schedule each move in whole steps as the agent engine for a declared disease does (see `ss.AgentDisease`): an
 infection in a step happens at its end, so `dur` steps after it is due at `self.ti + 1 + dur`, and is
@@ -27,16 +25,29 @@ __all__ = ['AgentSIR', 'AgentSEIR', 'AgentSIS']
 _ = None # For function signatures
 
 
+def plot_results(mod, keys, **kwargs):
+    """ Plot the results of a disease (by key) as numbers of people over time """
+    fig = plt.figure()
+    kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+    res = mod.results
+    for rkey in keys:
+        plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
+    plt.legend(frameon=False)
+    plt.xlabel('Time')
+    plt.ylabel('Number of people')
+    plt.ylim(bottom=0)
+    sc.boxoff()
+    sc.commaticks()
+    return ss.return_fig(fig)
+
+
 class AgentSIR(ss.AgentDisease):
     """
     An SIR model written as code: Starsim 3's `ss.SIR`
 
-    This class implements a basic SIR model with states for susceptible,
-    infected/infectious, and recovered, as per-agent arrays updated in code (see
-    `ss.AgentDisease`). It also
-    includes deaths, and basic results. It is a teaching
-    example, showing in code what the declared `ss.SIR` does as agents, and a starting
-    point for a disease written as code (e.g. `ssl.HIV`).
+    A basic SIR model, with deaths, as per-agent arrays updated in code (see `ss.AgentDisease`): a teaching
+    example, showing in code what the declared `ss.SIR` does as agents, and a starting point for a disease
+    written as code (e.g. `ssl.HIV`).
 
     Its defaults are Starsim 3's: a lognormal `dur_inf` (a mean of 6 years, std 1 year)
     and `p_death=0.01`, where the declared `ss.SIR` is the textbook SIR, with an
@@ -102,23 +113,19 @@ class AgentSIR(ss.AgentDisease):
         self.infected[uids] = False
         return
 
+    def infectious_from(self, uids):
+        """ When the agents' infectious period starts: infected at the end of the step, so from the next (`AgentSEIR` overrides this) """
+        return self.ti_infected[uids] + 1
+
     def set_progression(self, uids):
-        """ Schedule recovery or death, relative to when each agent becomes infectious """
+        """ Schedule recovery or death, relative to when each agent becomes infectious (due() rounds the time to a step: see ss.TimeArr) """
         p = self.pars
-
-        # Sample duration of infection, being careful to only sample from the
-        # distribution once per timestep.
         dur_inf = p.dur_inf.rvs(uids)
-
-        # Determine who dies and who recovers and when. In AgentSIR agents are infectious as
-        # soon as they are infected, at the end of the step, so the infectious period runs
-        # from the next step (ti_infected + 1); AgentSEIR overrides this to run it from
-        # ti_infectious instead. due() rounds the time to a step (see ss.TimeArr).
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + 1 + dur_inf[will_die]
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + 1 + dur_inf[~will_die]
+        self.ti_dead[dead_uids] = self.infectious_from(dead_uids) + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = self.infectious_from(rec_uids) + dur_inf[~will_die]
         return
 
     def on_death(self, uids):
@@ -130,18 +137,7 @@ class AgentSIR(ss.AgentDisease):
 
     def plot(self, **kwargs):
         """ Default plot for SIR model """
-        fig = plt.figure()
-        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
-        res = self.results
-        for rkey in self.plot_states:
-            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
-        plt.legend(frameon=False)
-        plt.xlabel('Time')
-        plt.ylabel('Number of people')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        sc.commaticks()
-        return ss.return_fig(fig)
+        return plot_results(self, self.plot_states, **kwargs)
 
 
 class AgentSEIR(AgentSIR):
@@ -196,19 +192,9 @@ class AgentSEIR(AgentSIR):
         self.ti_infectious[uids] = self.ti_exposed[uids] + 1 + self.pars.dur_exp.rvs(uids) # Exposed at the end of this step, so the latent period runs from the next
         return
 
-    def set_progression(self, uids):
-        """ Schedule recovery or death, relative to the end of the latent period """
-        p = self.pars
-        dur_inf = p.dur_inf.rvs(uids)
-
-        # As AgentSIR, except that the infectious period runs from ti_infectious rather than
-        # from the time of acquisition, so the latent period delays it rather than eating into it
-        will_die = p.p_death.rvs(uids)
-        dead_uids = uids[will_die]
-        rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infectious[dead_uids] + dur_inf[will_die]
-        self.ti_recovered[rec_uids] = self.ti_infectious[rec_uids] + dur_inf[~will_die]
-        return
+    def infectious_from(self, uids):
+        """ The end of the latent period, so it delays the infectious period rather than eating into it """
+        return self.ti_infectious[uids]
 
     def not_naive(self):
         """ The agents who have ever been infected, for dynamic rescaling """
@@ -304,11 +290,8 @@ class AgentSIS(ss.AgentDisease):
         super().set_prognoses(uids, sources)
         self.immunity[uids] += self.pars.imm_boost
 
-        # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
-
-        # Determine when people recover: infected at the end of this step, so infectious from the next
-        self.ti_recovered[uids] = self.ti_infected[uids] + 1 + dur_inf
+        self.ti_recovered[uids] = self.ti_infected[uids] + 1 + dur_inf # Infected at the end of this step, so infectious from the next
         return
 
     def record_states(self):
@@ -320,15 +303,4 @@ class AgentSIS(ss.AgentDisease):
 
     def plot(self, **kwargs):
         """ Default plot for SIS model """
-        fig = plt.figure()
-        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
-        res = self.results
-        for rkey in ['susceptible', 'infected']:
-            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
-        plt.legend(frameon=False)
-        plt.xlabel('Time')
-        plt.ylabel('Number of people')
-        plt.ylim(bottom=0)
-        sc.boxoff()
-        sc.commaticks()
-        return ss.return_fig(fig)
+        return plot_results(self, ['susceptible', 'infected'], **kwargs)

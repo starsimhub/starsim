@@ -38,7 +38,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .core import terms, factors, product, names
+from .core import terms, factors, product, names, rewrite_expr
 from .epimodel import to_epimodel
 from .siminf import to_siminf
 from .summer2 import to_summer2
@@ -565,17 +565,8 @@ def to_sbml(sim):
 
 def odin_expr(text):
     """ An expression in R, as odin reads it """
-    class Sub(ast.NodeTransformer):
-        def visit_Call(self, n):
-            self.generic_visit(n)
-            if n.func.id == 'where': # R's if, written whole as a name, since Python's expressions have no such form
-                cond, yes, no = [ast.unparse(a) for a in n.args]
-                return ast.Name(f'(if ({cond}) {yes} else {no})')
-            n.func.id = odin_funcs.get(n.func.id, n.func.id)
-            return n
-        def visit_Name(self, n):
-            return ast.Constant(np.pi) if n.id == 'pi' else n # odin has no pi
-    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body)).replace('**', '^')
+    name = lambda n: ast.Constant(np.pi) if n.id == 'pi' else n # odin has no pi
+    return rewrite_expr(text, odin_funcs, where='(if ({cond}) {yes} else {no})', name=name).replace('**', '^')
 
 
 def to_odin(sim):

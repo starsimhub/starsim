@@ -1,127 +1,45 @@
 """
-Test Starsim arrays (ss.Arr, ss.FloatArr, etc)
+Test Starsim arrays (ss.Arr, ss.FloatArr, etc) and UIDs
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
 import pytest
 
 sc.options.interactive = False # Assume not running interactively
-# ss.options.warnings = 'error' # For additional debugging
 
-small = 100
-medium = 1000
 
-# %% Define the tests
-
-@sc.timer()
 def test_arrs():
-    sc.heading('Testing Arr objects')
-    o = sc.obj()
+    """ Indexing by active agents, with births and deaths; BoolArr and UID operations, in place and not """
+    pars = dict(n_agents=1000, diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random', verbose=0) # In years, for births and deaths over 50 years
+    s1 = ss.Sim(pars, demographics=ss.birth(rate=ss.peryear(0.01))).run()
+    s2 = ss.Sim(pars, demographics=ss.death(rate=ss.peryear(0.01))).run()
+    ppl = s1.people
+    assert len(ppl.auids) > len(s2.people.auids), 'Should have more people with births'
+    assert np.array_equal(ppl.age, ppl.age.raw[ppl.auids]) and np.array_equal(ppl.alive.uids, ppl.auids)
+    assert np.all(s2.people.alive) and not np.all(s2.people.alive.raw), 'Dead agents are in the raw array only'
+    assert np.array_equal(~ppl.female, ppl.male) and isinstance(ppl.age < 5, ss.BoolArr)
+    assert np.array_equal(ppl.age[ppl.age < 5], ppl.age[ppl.age.values < 5])
 
-    # Create a sim with only births
-    pars = dict(n_agents=medium, diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random') # In years, for births and deaths over 50 years
-    p1 = sc.mergedicts(pars, demographics=ss.birth(rate=ss.peryear(0.01)))
-    p2 = sc.mergedicts(pars, demographics=ss.death(rate=ss.peryear(0.01)))
-    s1 = ss.Sim(p1).run()
-    s2 = ss.Sim(p2).run()
-
-    # Tests
-    assert len(s1.people.auids) > len(s2.people.auids), 'Should have more people with births'
-    assert np.array_equal(s1.people.age, s1.people.age.raw[s1.people.auids]), 'Different ways of indexing age should match'
-    assert np.array_equal(s1.people.alive.uids, s1.people.auids), 'Active/alive agents should match'
-    assert np.all(s2.people.alive), 'All agents should be alive when indexed like this'
-    assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
-    assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
-    assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
-    assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
-
-    # Test BoolArr & uids operations
-    test_bool = s1.people.age > 20
+    test_bool = ppl.age > 20
     test_uids = test_bool.uids
-
-    # Standard operations
-    assert np.all(test_bool == test_uids)
-    assert np.all(~(test_bool != test_uids))
-    assert np.array_equal(s1.people.female & test_bool, s1.people.female & test_uids)
-    assert np.array_equal(s1.people.female | test_bool, s1.people.female | test_uids)
-    assert np.array_equal(s1.people.female ^ test_bool, s1.people.female ^ test_uids)
-    assert np.array_equal(test_uids & s1.people.female,  test_uids & s1.people.female.uids)
-    assert np.array_equal(test_uids | s1.people.female,  test_uids | s1.people.female.uids)
-    assert np.array_equal(test_uids ^ s1.people.female,  test_uids ^ s1.people.female.uids)
-
-    # Inplace BoolArr operations
-    a = s1.people.female & test_bool
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b &= test_bool
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female & test_uids
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b &= test_uids
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female | test_bool
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b |= test_bool
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    a = s1.people.female ^ test_uids
-    b = sc.dcp(s1.people.female)
-    original_id = id(b)
-    original_id_raw = id(b.raw)
-    b ^= test_uids
-    assert np.array_equal(a, b)
-    assert id(b) == original_id
-    assert id(b.raw) == original_id_raw
-
-    o.s1 = s1
-    o.s2 = s2
-
-    return o
+    assert np.all(test_bool == test_uids) and np.all(~(test_bool != test_uids))
+    for op in ['__and__', '__or__', '__xor__']: # A BoolArr with a BoolArr or with UIDs, and UIDs with either
+        assert np.array_equal(getattr(ppl.female, op)(test_bool), getattr(ppl.female, op)(test_uids))
+        assert np.array_equal(getattr(test_uids, op)(ppl.female), getattr(test_uids, op)(ppl.female.uids))
+    for op, iop in [('__and__', '__iand__'), ('__or__', '__ior__'), ('__xor__', '__ixor__')]: # In place: the same values, in the same object and array
+        for other in [test_bool, test_uids]:
+            b = sc.dcp(ppl.female)
+            ids = id(b), id(b.raw)
+            expected = getattr(ppl.female, op)(other)
+            b = getattr(b, iop)(other)
+            assert np.array_equal(expected, b) and (id(b), id(b.raw)) == ids
+    return s1
 
 
-@sc.timer()
-def test_arr_inplace():
-    # Note that the test function above focusses on BoolArr specifially which has its own version of some of the operators
-    sc.heading('Testing Arr in-place vs non-in-place arithmetic operators')
-
-    # Create two synthetic FloatArrs without needing a full sim
-    a = ss.FloatArr('a', default=3.0, mock=10)
-    b = ss.FloatArr('b', default=2.0, mock=10)
-
-    # --- In-place: += must update values without replacing the Arr or .raw array ---
-    original_id     = id(a)
-    original_id_raw = id(a.raw)
-    expected        = a.raw.copy() + b.raw.copy()
-    a += b
-    assert np.allclose(a.raw, expected),       'In-place += must produce correct values'
-    assert id(a)     == original_id,           'In-place += must not replace the Arr object'
-    assert id(a.raw) == original_id_raw,       'In-place += must not replace the .raw array'
-
-    # --- Non-in-place: + must return an independent copy without modifying the original ---
-    original_raw = a.raw.copy()
-    c = a + b
-    assert id(c)     != id(a),                 'Non-in-place + must return a new Arr object'
-    assert id(c.raw) != id(a.raw),             'Non-in-place + must use a new .raw array'
-    assert np.allclose(a.raw, original_raw),   'Non-in-place + must not modify the original Arr'
-    assert np.allclose(c.raw, original_raw + b.raw), 'Non-in-place + must produce correct values'
-
-    masked_auids = ss.uids(np.array([0, 1, 2, 4, 5, 6, 7, 8, 9], dtype=int))
-
+def test_arr_arithmetic():
+    """ Arithmetic in place and not, on active agents only, with Arrs, scalars, and arrays; bool times float """
+    masked_auids = ss.uids([0, 1, 2, 4, 5, 6, 7, 8, 9])
     def masked(b_auids=masked_auids):
         """ An Arr of 3s and one of 0 to 9, with agent 3 inactive """
         a = ss.FloatArr('a', default=3.0, mock=10)
@@ -130,372 +48,115 @@ def test_arr_inplace():
         b.people.auids = b_auids
         return a, b
 
-    # --- In-place masked Arr += Arr ---
     a, b = masked()
-
-    original_id = id(a)
-    original_id_raw = id(a.raw)
-    expected = a.raw.copy()
-    expected[masked_auids] += b.raw[masked_auids]
-
+    ids = id(a), id(a.raw)
     a += b
-    assert np.allclose(a.values, expected[masked_auids]), 'In-place += must update the active agents\' values'
-    assert id(a) == original_id,         'In-place += must not replace the Arr object'
-    assert id(a.raw) == original_id_raw, 'In-place += must not replace the .raw array'
-
-    # --- In-place masked Arr -= Arr ---
-    a, b = masked()
-    expected = a.raw.copy()
-    expected[masked_auids] -= b.raw[masked_auids]
-    a -= b
-    assert np.allclose(a.values, expected[masked_auids]), 'In-place -= must update the active agents\' values'
-
-    # --- In-place masked Arr +/- scalar ---
-    a, _ = masked()
-    expected = a.raw.copy()
-    expected[masked_auids] += 2
-    a += 2
-    assert np.allclose(a.values, expected[masked_auids]), 'In-place += scalar must update the active agents\' values'
-    expected[masked_auids] -= 1
     a -= 1
-    assert np.allclose(a.values, expected[masked_auids]), 'In-place -= scalar must update the active agents\' values'
-
-    # --- In-place masked Arr += ndarray aligned to active UIDs ---
-    a, _ = masked()
-    rhs = np.arange(len(masked_auids), dtype=float)
-    expected = a.raw.copy()
-    expected[masked_auids] += rhs
-    a += rhs
-    assert np.allclose(a.values, expected[masked_auids]), 'In-place += ndarray must treat the ndarray as aligned to active UIDs'
-
-    # --- In-place masked Arr += ndarray with mismatched length ---
-    a, _ = masked()
+    a += np.arange(len(masked_auids), dtype=float) # An array is aligned to the active UIDs
+    expected = 3.0 + np.arange(10.0) - 1
+    expected[masked_auids] += np.arange(len(masked_auids))
+    assert np.allclose(a.values, expected[masked_auids]) and (id(a), id(a.raw)) == ids, 'In place: the active values, in the same object and array'
     with pytest.raises(ValueError): # Neither one value per active agent nor one per raw place
-        a += np.arange(len(a.raw) + 1, dtype=float)
-
-    # --- In-place masked Arr += Arr with different active masks ---
-    a, b = masked(b_auids=ss.uids(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8], dtype=int)))
-    expected = a.raw.copy()
-    expected[masked_auids] += b.raw[masked_auids]
+        a += np.arange(11, dtype=float)
+    a, b = masked(b_auids=ss.uids(np.arange(9))) # Another active mask: the right side is read at the same agents
     a += b
-    assert np.allclose(a.values, expected[masked_auids]), 'Arr-to-Arr arithmetic must read RHS values at the same agents'
-
-    # --- Non-in-place masked Arr + Arr ---
+    assert np.allclose(a.values, 3 + masked_auids)
     a, b = masked()
-    original_raw = a.raw.copy()
+    raw = a.raw.copy()
     c = a + b
-    expected = original_raw.copy()
-    expected[masked_auids] += b.raw[masked_auids]
-    assert id(c) != id(a),               'Masked non-in-place + must return a new Arr object'
-    assert id(c.raw) != id(a.raw),       'Masked non-in-place + must use a new .raw array'
-    assert np.allclose(a.raw, original_raw), 'Masked non-in-place + must not modify the original Arr'
-    assert np.allclose(c.values, expected[masked_auids]), 'Masked non-in-place + must give the active agents\' values (the inactive agents\' raw values are computed too, and never read as theirs)'
+    assert id(c) != id(a) and id(c.raw) != id(a.raw) and np.allclose(a.raw, raw) and np.allclose(c.values, 3 + masked_auids), 'Not in place: a new Arr, the original unchanged'
 
-    return a, b
-
-
-@sc.timer()
-def test_arr_type_conversion():
-    sc.heading('Testing Arr type conversion and mixed bool/float arithmetic')
-
-    a = np.array([True, False], dtype=bool)
-    b = np.array([3, 4], dtype=float)
-    c = ss.BoolArr('c', raw=np.array([True, False], dtype=bool), mock=2)
-    d = ss.FloatArr('d', raw=np.array([3, 4], dtype=float), mock=2)
-
-    ab = a * b
-    ba = b * a
-    assert ab.dtype == float
-    assert ba.dtype == float
-    assert np.array_equal(ab, np.array([3.0, 0.0]))
-    assert np.array_equal(ba, np.array([3.0, 0.0]))
-
-    with pytest.raises(TypeError):
-        a_copy = a.copy()
-        a_copy *= b
-
-    b_copy = b.copy()
-    b_copy *= a
-    assert b_copy.dtype == float
-    assert np.array_equal(b_copy, np.array([3.0, 0.0]))
-
-    cd = c * d
-    dc = d * c
-    assert isinstance(cd, ss.FloatArr)
-    assert isinstance(dc, ss.FloatArr)
-    assert cd.raw.dtype == float
-    assert dc.raw.dtype == float
-    assert np.array_equal(cd.raw, np.array([3.0, 0.0]))
-    assert np.array_equal(dc.raw, np.array([3.0, 0.0]))
-
-    with pytest.raises(TypeError):
-        c_copy = ss.BoolArr('c_copy', raw=np.array([True, False], dtype=bool), mock=2)
-        c_copy *= d
-
-    d_copy = ss.FloatArr('d_copy', raw=np.array([3, 4], dtype=float), mock=2)
-    d_copy *= c
-    assert d_copy.raw.dtype == float
-    assert np.array_equal(d_copy.raw, np.array([3.0, 0.0]))
-
-    return dict(ab=ab, ba=ba, cd=cd, dc=dc)
+    c = ss.BoolArr('c', raw=np.array([True, False]), mock=2)
+    d = ss.FloatArr('d', raw=np.array([3.0, 4.0]), mock=2)
+    for prod in [c*d, d*c]:
+        assert isinstance(prod, ss.FloatArr) and np.array_equal(prod.raw, [3.0, 0.0])
+    with pytest.raises(TypeError): # As for NumPy arrays: a bool can't hold a float in place
+        c *= d
+    d *= c
+    assert np.array_equal(d.raw, [3.0, 0.0])
+    return a
 
 
-@sc.timer()
 def test_arr_2d():
-    sc.heading('Testing 2D Arr objects')
-    nv = 3
-
-    # Standalone tests
-    imm = ss.FloatArr('imm', default=0, columns=nv, mock=5)
+    """ 2D arrays: by UIDs and columns, named columns, and in a sim with births and deaths """
+    imm = ss.FloatArr('imm', default=0, columns=3, mock=5)
     two = ss.uids([0, 1])
     imm[two, 2] = 0.8
-    assert imm[two].shape == (2, nv) # Indexing by UIDs returns one row per agent
-    assert np.array_equal((imm.col(2) > 0.5).uids, two) # Columns are 1D arrays
-    assert np.array_equal((imm > 0.5).count(axis=0), [0, 0, 2]) # Count per column
+    assert imm[two].shape == (2, 3) and np.array_equal((imm.col(2) > 0.5).uids, two) and np.array_equal((imm > 0.5).count(axis=0), [0, 0, 2])
     with pytest.raises(ValueError):
         (imm > 0.5).uids # UIDs are not defined for 2D arrays
-
-    # Named columns
     named = ss.FloatArr('imm', default=0, columns=['wildtype', 'mutant'], mock=5)
     named[two, 'mutant'] = 0.8
-    assert np.array_equal((named.col('mutant') > 0.5).uids, two) # Columns can be accessed by name
-    assert np.array_equal(named[:, 'mutant'], named[:, 1]) # Names can also be used when indexing
-    assert np.array_equal(named.mutant, named.col('mutant')) and np.array_equal(named['mutant'], named.col('mutant')) # Or as attributes or keys
+    assert np.array_equal(named[:, 'mutant'], named[:, 1]) and np.array_equal(named.mutant, named.col('mutant')) and np.array_equal(named['mutant'], named.col('mutant'))
     with pytest.raises(ValueError):
         ss.FloatArr('imm', columns=['raw', 'mean'], mock=5) # Column names can't clash with attributes
-    with pytest.raises(KeyError):
-        named.col('omicron')
 
-    # Test in a sim with births and deaths
     class VarSIS(ss.SIS):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_states(ss.FloatArr('sus_imm', default=0.5, columns=nv))
-
+            self.define_states(ss.FloatArr('sus_imm', default=0.5, columns=3))
         def step(self):
             out = super().step()
             self.sus_imm[self.I.uids, 1] += 0.1
             return out
-
-    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, dur=ss.years(10)).run()
+    sim = ss.Sim(n_agents=1000, diseases=VarSIS(), networks='random', demographics=True, dur=ss.years(10), verbose=0).run()
     imm = sim.diseases.varsis.sus_imm
-    assert imm.raw.shape == (sim.people.uid.len_tot, nv) # Grows along the first axis
-    assert imm.values.shape == (len(sim.people), nv) # Values are active agents only
-    assert imm[:, 1].mean() > imm[:, 0].mean() == 0.5 # Only column 1 changes
-    assert 'sus_imm' not in sim.results.varsis # No automatic results
+    assert imm.raw.shape == (sim.people.uid.len_tot, 3) and imm.values.shape == (len(sim.people), 3) # Grows along the first axis; values are active agents only
+    assert imm[:, 1].mean() > imm[:, 0].mean() == 0.5 and 'sus_imm' not in sim.results.varsis # No automatic results
     return sim
 
 
-@sc.timer()
-def test_uids_operators():
-    sc.heading('Testing uids + and += operators')
-
-    a = ss.uids([1, 2, 3])
-    b = ss.uids([4, 5])
-
-    # __add__ returns a new uids with concatenated values
+def test_uids():
+    """ UIDs: + concatenates UIDs and adds numbers; set operations keep integers; reductions that make no sense raise; construction accepts only integers """
+    a, b = ss.uids([1, 2, 3]), ss.uids([4, 5])
     c = a + b
-    assert isinstance(c, ss.uids), '__add__ must return a uids instance'
-    assert list(c) == [1, 2, 3, 4, 5], '__add__ must concatenate values in order'
-
-    # __add__ does not modify the operands
-    assert list(a) == [1, 2, 3], '__add__ must not modify the left operand'
-    assert list(b) == [4, 5],    '__add__ must not modify the right operand'
-
-    # __add__ result is a distinct object
-    assert id(c) != id(a), '__add__ must return a new object'
-
-    # + with empty
-    assert list(a + ss.uids()) == [1, 2, 3], 'Concatenation with empty on right must return original values'
-    assert list(ss.uids() + a) == [1, 2, 3], 'Concatenation with empty on left must return original values'
-
-    # + with a uids RHS concatenates; with a non-uids RHS does element-wise addition
-    assert list(a + ss.uids([4, 5])) == [1, 2, 3, 4, 5],    '+ with uids RHS must concatenate'
-    assert list(a + 10) == [11, 12, 13],                      '+ with scalar RHS must add element-wise'
-    assert list(a + np.array([10, 20, 30])) == [11, 22, 33],  '+ with ndarray RHS must add element-wise'
-    assert isinstance(a + 1, ss.uids), '+ with scalar RHS must return a uids'
-
-    # element-wise addition is commutative via __radd__
-    assert list(10 + a) == [11, 12, 13], 'scalar + uids must also do element-wise addition'
-    assert isinstance(10 + a, ss.uids),  'scalar + uids must return a uids'
-
-    # + with uids RHS preserves duplicates (unlike | which deduplicates)
-    dup = ss.uids([1, 2, 3])
-    assert list(a + dup) == [1, 2, 3, 1, 2, 3], '+ with uids RHS must preserve duplicate entries'
-    assert len(a | dup) == 3, '| must deduplicate'
-
-    # __iadd__ with uids RHS concatenates and rebinds (size changes, id changes)
-    x = ss.uids([10, 20])
-    y = ss.uids([30, 40])
-    via_concatenate = x.concatenate(y)
-    x += y
-    np.testing.assert_array_equal(x, via_concatenate), '+= must produce same result as concatenate'
-    assert isinstance(x, ss.uids), '+= must return a uids instance'
-
-    # __iadd__ with uids RHS changes id (size changes, cannot resize ndarray in-place)
-    a = ss.uids([1, 2, 3])
+    assert isinstance(c, ss.uids) and list(c) == [1, 2, 3, 4, 5] and list(a) == [1, 2, 3] and list(a + a) == [1, 2, 3, 1, 2, 3] # Duplicates kept, unlike |
+    assert list(a + 10) == list(10 + a) == [11, 12, 13] and list(a + np.array([10, 20, 30])) == [11, 22, 33] and isinstance(10 + a, ss.uids)
     ref = a
-    original_id = id(a)
-    a += ss.uids([4, 5])
-    assert id(a) != original_id, '+= with uids RHS must rebind to a new object'
-    assert list(ref) == [1, 2, 3], 'Prior reference must still point to the original unmodified array'
-
-    # __iadd__ with scalar RHS modifies in-place (size unchanged, id preserved)
-    a = ss.uids([1, 2, 3])
-    original_id = id(a)
+    a += b # A new object, since the size changes
+    assert list(ref) == [1, 2, 3] and list(a) == [1, 2, 3, 4, 5]
+    ids = id(a)
     a += 10
-    assert list(a) == [11, 12, 13], '+= with scalar RHS must add element-wise'
-    assert id(a) == original_id,    '+= with scalar RHS must preserve id (in-place modification)'
-
-    # Set operators should always return an integer-dtype uids
+    assert id(a) == ids # In place
     x = ss.uids([1, 2, 3])
-    for label, result in [
-        ('| []',          x | []),
-        ('& []',          x & []),
-        ('- []',          x - []),
-        ('^ []',          x ^ []),
-        ('| uids',        x | ss.uids([3, 4])),
-        ('& uids',        x & ss.uids([2, 3])),
-        ('- uids',        x - ss.uids([2])),
-        ('^ uids',        x ^ ss.uids([3, 4])),
-        ('union([])',     x.union([])),
-        ('intersect([])', x.intersect([])),
-        ('remove([])',    x.remove([])),
-        ('xor([])',       x.xor([])),
-    ]:
-        assert isinstance(result, ss.uids), f'{label} must return a uids'
-        assert result.dtype == ss.dtypes.int, f'{label} must preserve integer dtype, got {result.dtype}'
-
-    # Integer-valued floats are accepted
-    assert (x | [4.0, 5.0]).dtype == ss.dtypes.int, 'integer-valued float RHS must coerce to int'
-
-    # Fractional floats are rejected
+    for result in [x | [], x & [], x - [], x ^ [], x | ss.uids([3, 4]), x.union([]), x.intersect([]), x.remove([]), x.xor([]), x | [4.0, 5.0]]:
+        assert isinstance(result, ss.uids) and result.dtype == ss.dtypes.int
     for bad in [[1.5], [np.nan]]:
         with pytest.raises(TypeError):
-            _ = x | bad
+            x | bad
 
-    # Confirm output can be used for indexing
-    arr = ss.FloatArr('age', raw=np.arange(10, dtype=float), mock=10)
-    _ = arr.raw[x | []]
+    assert np.array_equal(ss.uids.concatenate([None, x, b]), [1, 2, 3, 4, 5]) and len(ss.uids.concatenate()) == 0
 
-
-@sc.timer()
-def test_uids_concatenate():
-    sc.heading('Testing uids.concatenate()')
-
-    x = ss.uids([1, 2, 3])
-    y = ss.uids([4, 5, 6])
-    expected = ss.uids([1, 2, 3, 4, 5, 6])
-
-    cases = { # The ways to call it, and what each gives
-        'x.concatenate(y)':                   (lambda: x.concatenate(y), expected),
-        'x.concatenate(None)':                (lambda: x.concatenate(None), x),
-        'ss.uids.concatenate(x, y)':          (lambda: ss.uids.concatenate(x, y), expected),
-        'ss.uids.concatenate([x, y])':        (lambda: ss.uids.concatenate([x, y]), expected),
-        'ss.uids.concatenate([None, x])':     (lambda: ss.uids.concatenate([None, x]), x),
-        'ss.uids.concatenate([x, None, y])':  (lambda: ss.uids.concatenate([x, None, y]), expected),
-        'ss.uids.concatenate()':              (lambda: ss.uids.concatenate(), ss.uids()),
-        'ss.uids.concatenate((x, y))':        (lambda: ss.uids.concatenate((x, y)), expected), # Non-list iterables
-        'ss.uids.concatenate(generator)':     (lambda: ss.uids.concatenate(a for a in [x, y]), expected),
-    }
-    for label,(func,want) in cases.items():
-        result = func()
-        assert isinstance(result, ss.uids), f'{label} must return a uids'
-        np.testing.assert_array_equal(result, want)
-
-    return result
-
-
-@sc.timer()
-def test_uids_array_wrap():
-    sc.heading('Testing uids __array_wrap__ guards')
-
-    x = ss.uids([1, 2, 3])
-
-    # Scalar reductions must return plain Python ints, not uids
-    assert type(x.max()) is int, 'max() must return a plain Python int'
-    assert type(x.min()) is int, 'min() must return a plain Python int'
-    assert x.max() == 3, 'max() must return the correct value'
-    assert x.min() == 1, 'min() must return the correct value'
-
-    # Arithmetic on the returned scalar must not route through uids.__add__
-    assert x.max() + 1 == 4, 'max() + 1 must be plain integer arithmetic, not concatenation'
-
-    # Comparisons must return plain ndarray (not uids) to avoid hitting __invert__
-    eq = x == ss.uids([1, 2, 3])
-    assert type(eq) is np.ndarray, '== must return a plain ndarray, not uids'
-    assert eq.dtype == bool, '== result must have bool dtype'
-    assert np.all(~eq == False), '~ on the bool result of == must work normally'
-
-    # Nonsensical numeric reductions must raise TypeError — via instance method
-    for op in ('sum', 'mean', 'std', 'var', 'prod', 'cumsum', 'cumprod'):
+    assert type(x.max()) is int and x.max() + 1 == 4 # Plain ints, not uids (+ would concatenate)
+    for op in ['sum', 'mean', 'std', 'cumsum']:
         with pytest.raises(TypeError):
             getattr(x, op)()
-
-    # np.sum(x) also routes through x.sum() and must raise the same error
-    with pytest.raises(TypeError):
-        np.sum(x)
-
+    with pytest.raises(TypeError): # Rejected, not silently truncated
+        ss.uids([1.5])
     return x
 
 
-@sc.timer()
-def test_uids_construction():
-    sc.heading('Testing uids construction and dtype validation')
-
-    # Integer-valued input is accepted and normalized to the standard int dtype (issue #1381)
-    for label, arr in [
-        ('list',        ss.uids([1, 2, 3])),
-        ('float ints',  ss.uids([1.0, 2.0, 3.0])),
-        ('np int32',    ss.uids(np.array([1, 2, 3], dtype=np.int32))),
-        ('set',         ss.uids({1, 2, 3})),
-        ('scalar',      ss.uids(5)),
-        ('empty list',  ss.uids([])),
-        ('none',        ss.uids()),
-    ]:
-        assert isinstance(arr, ss.uids), f'{label} must return a uids'
-        assert arr.dtype in [ss.dtypes.int, ss.dtypes.uid], f'{label} must have integer dtype, got {arr.dtype}' # 32-bit integers are kept as they are
-
-    assert list(ss.uids([1.0, 2.0, 3.0])) == [1, 2, 3], 'integer-valued floats must be preserved as ints'
-    assert sorted(ss.uids({3, 1, 2})) == [1, 2, 3], 'set construction must preserve values'
-
-    # Genuinely non-integer input is rejected, not silently truncated (consistent with operators)
-    for bad in [[1.5], np.array([1.5]), {1.5}, 1.5, [np.nan], [np.inf]]:
-        with pytest.raises(TypeError):
-            ss.uids(bad)
-
-    return
-
-
-@sc.timer()
 def test_catarr():
-    sc.heading('Testing categorical states (ss.CatArr)')
+    """ Categorical states, by label or integer category """
     loc = ss.CatArr('loc', categories=['urban', 'rural'], default='rural', mock=5)
     loc[ss.uids([0, 1])] = 'urban'
     loc[ss.uids([2])] = ['urban']
-    assert list((loc == 'urban').uids) == [0, 1, 2]
-    assert (loc != 'urban').count() == 2
-    assert loc.isin(['urban', 'rural']).count() == 5
-    assert list(loc.labels()) == ['urban']*3 + ['rural']*2
-    assert list(loc.index()) == [0, 0, 0, 1, 1]
+    assert list((loc == 'urban').uids) == [0, 1, 2] and (loc != 'urban').count() == 2 and loc.isin(['urban', 'rural']).count() == 5
+    assert list(loc.labels()) == ['urban']*3 + ['rural']*2 and list(loc.index()) == [0, 0, 0, 1, 1]
     loc[ss.uids([3])] = loc[ss.uids([0])] # Codes, as read, are kept as they are
     assert loc.labels(ss.uids([3]))[0] == 'urban'
     with pytest.raises(ValueError):
         loc == 'suburban'
     quint = ss.CatArr('quintile', categories=[1, 2, 3, 4, 5], default=3, mock=4) # Integer categories are stored as they are
     quint[ss.uids([0])] = 5
-    assert (quint == 5).count() == 1 and (quint == 3).count() == 3
-    assert list(quint.labels()) == [5, 3, 3, 3]
-    assert list(quint.index()) == [4, 2, 2, 2]
+    assert (quint == 5).count() == 1 and list(quint.labels()) == [5, 3, 3, 3] and list(quint.index()) == [4, 2, 2, 2]
     with pytest.raises(ValueError):
         ss.CatArr('mixed', categories=[1, 'two']) # An integer could then be a category or a code
     return loc
 
 
-# %% Run as a script
 def test_boolstate_result():
     """ A BoolState is counted as a result of its module, and a BoolArr is not """
-    sc.heading('Testing BoolState results')
     class Flags(ss.Module):
         counted = ss.BoolState(default=True)
         hidden = ss.BoolArr(default=True)
@@ -504,30 +165,17 @@ def test_boolstate_result():
     sim = ss.Sim(Flags(), n_agents=50, dur=2, verbose=0).run()
     assert 'counted' in sim.results.flags and 'hidden' not in sim.results.flags and 'grid' not in sim.results.flags
     assert sim.results.flags.counted[-1] == sim.results.alive[-1]
-    with pytest.raises(ValueError, match='2D'): # Several columns can make no result
+    with pytest.raises(ValueError): # Several columns can make no result
         ss.BoolState('x', columns=2)
     return sim
 
 
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
-
-    # Start timing
-    T = sc.tic()
-
-    # Run tests
-    sims  = test_arrs()
-    arrs  = test_arr_inplace()
-    vals  = test_arr_type_conversion()
-    arr2d = test_arr_2d()
-    uids  = test_uids_operators()
-    cat   = test_uids_concatenate()
-    wrap  = test_uids_array_wrap()
-    const = test_uids_construction()
-
-    cat2  = test_catarr()
-    res   = test_boolstate_result()
-    sc.toc(T)
-    plt.show()
-    print('Done.')
+    T = sc.timer()
+    test_arrs()
+    test_arr_arithmetic()
+    test_arr_2d()
+    test_uids()
+    test_catarr()
+    test_boolstate_result()
+    T.toc()

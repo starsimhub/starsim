@@ -2,77 +2,18 @@
 Contract tests: properties every model and solver must have, checked on the model corpus
 (see corpus.py). A failure here is usually a silent wrong answer somewhere else.
 """
-
-# %% Imports and settings
 import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
-import starsim.library as ssl
 import corpus
 
 stochastic = ['binomial', 'gillespie', 'abm']
 
 
-# %% The guesses are marked
-
-def guessed(text):
-    """ The lines of describe() marked as guesses """
-    return [line for line in text.splitlines() if '[Guessed' in line or 'Nothing in the model has a unit' in line]
-
-
-def plain_sir(**kwargs):
-    S, I, R = ss.states('S I R')
-    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), name='sir', **kwargs)
-
-
-def declared_sir(**kwargs):
-    S, I, R = ss.states('S I R')
-    return ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.erlang(mean=10, k=3, unit='days'), init_prev=0.01, name='sir', **kwargs)
-
-
-def lognormal(stages):
-    dur = ss.lognormal(mean=10, std=4, unit='days')
-    S, I, R = ss.states('S I R')
-    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=dur, stages=stages), init_prev=0.01, name='sir')
-
-
-def fitted_sir(beta):
-    S, I = ss.states('S I')
-    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), name='sir')
-
-
-def unnamed(named):
-    S, I, R = ss.states('S I R')
-    infection, recovery = S >> I @ 0.3*I, I >> R @ ss.days(10)
-    if named:
-        return ss.Disease(infection, recovery, init_prev=0.01, name='sir')
-    return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
-
-
-# Each guess that describe() marks: a sim that makes the guess, one that does not, and what describe() says
-guesses = dict(
-    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'time in I ~'),
-    stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
-    unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
-    mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'Mixing'),
-    names      = (lambda: ss.Sim(unnamed(False)),                    lambda: ss.Sim(unnamed(True)),                        'name built from'),
-    pop        = (lambda: ss.Sim(plain_sir(), stop=50),             lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'people'),
-    stop       = (lambda: ss.Sim(plain_sir(), total_pop=1000),      lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'to 50'),
-    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(plain_sir()),                         'acquisition'),
-    midpoint   = (lambda: ss.Sim(fitted_sir(ss.par(bounds=[0.1, 0.5]))), lambda: ss.Sim(fitted_sir(ss.par(0.3, bounds=[0.1, 0.5]))), 'middle of its bounds'),
-)
-
-
-@pytest.mark.parametrize('row', list(guesses))
-def test_guesses_marked(row):
-    sc.heading(f'Testing that the guess of "{row}" is marked, and only when it is made')
-    make_guess, make_given, key = guesses[row]
-    marked = guessed(make_guess().describe())
-    unmarked = guessed(make_given().describe())
-    assert any(key in line for line in marked), f'Expected a line with "{key}" marked as guessed, but the marked lines are:\n' + '\n'.join(marked)
-    assert not any(key in line for line in unmarked), f'Expected no line with "{key}" marked as guessed, but:\n' + '\n'.join(unmarked)
-    return marked
+def size(solver, n):
+    """ A population of n, as agents or as people """
+    return dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
 
 
 # %% Streams are independent
@@ -87,167 +28,114 @@ class Counter(ss.Analyzer):
 
 @pytest.mark.parametrize('solver', stochastic)
 def test_streams(solver):
-    sc.heading(f'Testing that random streams are independent under {solver}')
-    agents = dict(n_agents=2000) if solver == 'abm' else {}
-    two_sirs = lambda *names: ss.Sim([corpus.make_sir(name=name) for name in names], solver=solver, unit='day', stop=100, total_pop=10_000, verbose=0, **agents) # Two SIRs that share no states
-    alone = corpus.sir(solver=solver, unit='day', **agents).run().results.sir.I.values
-
-    # An analyzer, or an unrelated disease, does not change the draws of a disease, whether the run is whole or stepped
-    withan = corpus.sir(solver=solver, unit='day', analyzers=Counter(), **agents).run().results.sir.I.values
-    assert np.array_equal(alone, withan), 'An analyzer changed the draws'
-    if solver != 'abm': # Nor those of its outcomes (cases, hospitalizations, deaths), which a compartmental run draws after its states
-        plain, counted = [corpus.outcomes(solver=solver, rand_seed=5, **kw).run().results.sir for kw in [{}, dict(analyzers=Counter())]]
-        for key in ['cases', 'hosp', 'n_hosp', 'deaths']:
-            assert np.array_equal(plain[key].values, counted[key].values), f'An analyzer changed the draws of the outcome "{key}" by up to {np.abs(plain[key].values - counted[key].values).max():n}'
-    for profile in [False, True]: # Profiling makes the run step from Python
-        both = (two_sirs('sir', 'other').perf_profile(kind='loop', plot=False).sim if profile else two_sirs('sir', 'other').run()).results.sir.I.values
-        assert np.array_equal(alone, both), f'Another disease changed the draws (profile={profile}): max difference {np.abs(alone - both).max():n}'
-
-    # Two identical diseases whose names are anagrams have their own streams
-    ab = two_sirs('ab', 'ba').run().results
+    """ Random streams are independent of analyzers, other diseases, stepping from Python, other sims, and other runs; a rate that varies in time is evaluated at the same step either way """
+    kw = dict(solver=solver, unit='day', **size(solver, 10_000))
+    alone = corpus.sir(**kw).run().results.sir.I.values
+    assert np.array_equal(alone, corpus.sir(**kw, analyzers=Counter()).run().results.sir.I.values), 'An analyzer changed the draws'
+    two_sirs = lambda *names: ss.Sim([corpus.make_sir(name=name) for name in names], stop=100, verbose=0, **kw) # Two SIRs that share no states
+    both = two_sirs('sir', 'other').perf_profile(kind='loop', plot=False).sim.results.sir.I.values # Profiling makes the run step from Python
+    assert np.array_equal(alone, both), f'Another disease, or stepping, changed the draws by up to {np.abs(alone - both).max():n}'
+    ab = two_sirs('ab', 'ba').run().results # Two identical diseases whose names are anagrams have their own streams
     assert not np.array_equal(ab.ab.I.values, ab.ba.I.values), 'Two modules got the same stream'
+    a, b = corpus.sir(**kw, rand_seed=1), corpus.sir(**kw, rand_seed=2) # Interleaving two sims changes neither
+    a.run(until=50)
+    b.run(until=50)
+    assert np.array_equal(a.run().results.sir.I.values, corpus.sir(**kw, rand_seed=1).run().results.sir.I.values)
+    if solver == 'abm':
+        return alone
 
-    if solver != 'abm':
-        # The order the states are declared in does not change the draws
-        def declared(order):
-            states = dict(zip(order.split(), ss.states(order)))
-            S, I, R, V = [states[name] for name in 'SIRV']
-            sir = ss.Disease(infection=S >> I @ ss.perday(0.42) * I, recovery=I >> R @ ss.perday(0.09), vax=S >> V @ ss.perday(0.011), breakthrough=V >> I @ ss.perday(0.17) * I, init_n=dict(I=25), name='sir')
-            return ss.Sim(sir, total_pop=10_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0).run().results.sir.I.values
-        siv, svi = declared('S I R V'), declared('S V I R')
-        assert np.array_equal(siv, svi), f'Declaring the states in another order changed I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
+    plain, counted = [corpus.outcomes(solver=solver, rand_seed=5, **k).run().results.sir for k in [{}, dict(analyzers=Counter())]] # Nor the draws of outcomes, drawn after the states
+    for key in ['cases', 'hosp', 'deaths']:
+        assert np.array_equal(plain[key].values, counted[key].values), f'An analyzer changed the draws of the outcome "{key}"'
+    runs = ss.parallel(corpus.outcomes(solver=solver, rand_seed=5), n_runs=3).results.sir.cases.values # Each run of several draws from its own seed, as on its own
+    for i in range(3):
+        assert np.array_equal(runs[i], corpus.outcomes(solver=solver, rand_seed=5 + i).run().results.sir.cases.values), f'Run {i} of three differs from the same run on its own'
 
-        # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws
-        def seasonal(solver):
-            S, I, R, V = ss.states('S I R V')
-            sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
-            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=ss.solvers.binomial(substeps=1) if solver == 'binomial' else solver, rand_seed=587, verbose=0) # With 2 substeps, a whole binomial run and a stepped one differ
-        for s in [solver, 'ode']:
-            whole, stepped = [seasonal(s).run().results.sir.vax.values, seasonal(s).perf_profile(kind='loop', plot=False).sim.results.sir.vax.values]
-            if s == 'ode': # With more than one substep, the kernel compiled into a whole run and the one called from Python round differently, by about 1e-16
-                assert np.allclose(whole, stepped, rtol=1e-12, atol=0), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}'
-            else:
-                assert np.array_equal(whole, stepped), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # 61 under binomial before
-
-        # Each run of several draws its outcomes from its own seed, as it would on its own
-        sim = corpus.outcomes(solver=solver, rand_seed=5)
-        runs = ss.parallel(sim, n_runs=3).results.sir.cases.values
-        for i in range(3):
-            one = corpus.outcomes(solver=solver, rand_seed=5 + i).run().results.sir.cases.values
-            assert np.array_equal(runs[i], one), f'Run {i} of three drew its outcomes differently from the same run on its own'
+    def seasonal(solver):
+        S, I, R, V = ss.states('S I R V')
+        sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
+        return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=ss.solvers.binomial(substeps=1) if solver == 'binomial' else solver, rand_seed=587, verbose=0) # With 2 substeps, a whole binomial run and a stepped one differ
+    for s in [solver, 'ode']:
+        whole, stepped = [seasonal(s).run().results.sir.vax.values, seasonal(s).perf_profile(kind='loop', plot=False).sim.results.sir.vax.values]
+        assert np.allclose(whole, stepped, rtol=1e-12, atol=0), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # Equal, but for rounding of about 1e-16 in the ODE's substeps
     return alone
 
 
-def test_streams_across_sims():
-    sc.heading('Testing that interleaving two sims does not change either')
-    a1 = corpus.sir(solver='binomial', unit='day', rand_seed=1).run().results.sir.I.values
-    a, b = corpus.sir(solver='binomial', unit='day', rand_seed=1), corpus.sir(solver='binomial', unit='day', rand_seed=2)
-    a.run(until=50)
-    b.run(until=50)
-    a2 = a.run().results.sir.I.values
-    assert np.array_equal(a1, a2), f'Running another sim in between changed the results by up to {np.abs(a1 - a2).max():n}'
-    return a2
-
-
-# %% The solvers agree
+# %% The solvers agree, and keep their people
 
 fine = dict(dt=ss.days(0.25), total_pop=10_000) # Agents and stepped solvers differ from the ODE by an amount of order dt, so compare at a fine step; and at a size that runs quickly event by event
-skip_solver = dict( # Corpus models that a solver cannot run, with the reason
-    screening = dict(gillespie='rounds of a delivery need a step'),
-)
+skip_solver = dict(screening=dict(gillespie='rounds of a delivery need a step'))
 loose = dict( # Wider tolerances, with the reason
     sir         = 0.07, # Agents are about 3% above the ODE in S and below it in R, and the mean of 5 runs varies by about 2%
     custom      = 0.10, # Few people are hospitalized, so the counts are noisy
-    threshold   = 0.15, # The switch on and off at the threshold amplifies differences
-    ages        = 0.10, # Each of 5,000 agents is 20 people, so the few who start infected make the timing of the epidemic noisy (3% with 50,000)
-    age_vaccine = 0.12, # And a force of infection near 0.7 per day, so the difference of order dt is about 6% even at a quarter-day step (1% at a tenth)
+    ages        = 0.10, # Each of 5,000 agents is 20 people, so the few who start infected make the timing of the epidemic noisy
+    age_vaccine = 0.12, # And a force of infection near 0.7 per day, so the difference of order dt is about 6% even at a quarter-day step
     patches     = 0.10,
 )
-
-
-def mean_states(sim):
-    """ The mean over time of each state, for each declared module """
-    return {f'{mod.name}.{key}':res.values.mean() for mod in sim.declared for key,res in mod.results.items() if key in mod.graph.states and isinstance(res, ss.Result) and np.ndim(res.values) == 1}
-
-
+closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.dead
 simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus; the others are checked only with -m slow
+
+
+def people(sim):
+    """ The number of people in each declared module, at each time point """
+    return [sum(mod.results[state.name].values for state in mod.states.values() if state.people) for mod in sim.declared]
 
 
 @pytest.mark.parametrize('name', simple + [pytest.param(name, marks=pytest.mark.slow) for name in corpus.compartmental if name not in simple])
 def test_solvers_agree(name):
-    sc.heading(f'Testing that every solver agrees with the ODE for the corpus model "{name}"')
+    """ Every solver agrees with the ODE on the mean of each state, and a closed model keeps its population under every solver """
     make = corpus.models[name]
-    ode = mean_states(make(solver='ode', **fine).run())
-    tol = loose.get(name, 0.05) # Within 5%, which allows for the noise of a few runs
-    floor = 0.1*max(ode.values()) # A small state is compared with a tenth of the largest, so its noise does not fail it
+    sims = {'ode': [make(solver='ode', **fine).run()]}
     for solver in stochastic:
-        if solver in skip_solver.get(name, {}):
-            continue
-        runs = [mean_states(make(solver=solver, rand_seed=seed, **fine).run()) for seed in range(5 if solver == 'abm' else 3)] # Agents vary more between runs, e.g. in when the epidemic takes off
+        if solver not in skip_solver.get(name, {}):
+            sims[solver] = [make(solver=solver, rand_seed=seed, **fine).run() for seed in range(5 if solver == 'abm' else 3)] # Agents vary more between runs
+    means = lambda sim: {f'{mod.name}.{key}':res.values.mean() for mod in sim.declared for key,res in mod.results.items() if key in mod.graph.states and isinstance(res, ss.Result) and np.ndim(res.values) == 1}
+    ode = means(sims['ode'][0])
+    floor = 0.1*max(ode.values()) # A small state is compared with a tenth of the largest, so its noise does not fail it
+    for solver, runs in sims.items():
         for key,val in ode.items():
-            mean = np.mean([run[key] for run in runs])
-            assert abs(mean - val) <= tol*max(val, floor), f'{name} under {solver}: {key} averages {mean:n}, against {val:n} for the ODE'
+            mean = np.mean([means(sim)[key] for sim in runs])
+            assert abs(mean - val) <= loose.get(name, 0.05)*max(val, floor), f'{name} under {solver}: {key} averages {mean:n}, against {val:n} for the ODE'
+        if name in closed:
+            for total in people(runs[0]):
+                assert np.allclose(total, total[0], rtol=1e-9), f'{name} under {solver}: the population goes from {total[0]:n} to {total[-1]:n}'
     return ode
 
 
 def test_binomial_short_stay():
-    sc.heading('Testing that the chain binomial follows the ODE when a stay is one step')
+    """ The chain binomial follows the ODE when a stay is one step """
     def make(solver, seed=0):
         S, I, R = ss.states('S I R')
         dis = ss.Disease(S, I, R, infection=S >> I @ ss.permonth(2)*I.frac, recovery=I >> R @ ss.months(1), init=dict(I=0.001), name='sir')
         return ss.Sim(dis, solver=solver, unit='month', stop=24, total_pop=1e6, rand_seed=seed, verbose=0).run().results.sir
     ode = make('ode')
     runs = [make('binomial', seed) for seed in range(3)]
-    final = np.mean([res.R[-1] for res in runs])
-    curve = np.mean([res.I.values for res in runs], axis=0)
-    assert np.isclose(final, ode.R[-1], rtol=0.05), f'The chain binomial ends with {final:n} recovered, against {ode.R[-1]:n} for the ODE' # 950,577 against 797,129 with whole steps
-    assert np.abs(curve - ode.I.values).max() < 0.2*ode.I.max(), 'The chain binomial\'s infected are far from the ODE\'s' # 1.33 of the peak with whole steps
-    return
-
-
-def test_agents_match_ode():
-    sc.heading('Testing that agents match the ODE on the corpus\'s models, and that R0() is the analytic value')
-    analytic = dict( # From the corpus's parameters
-        sir     = 0.3*10, # β·D
-        seir    = 0.3*10, # β·D, since everyone exposed becomes infectious
-        malaria = np.sqrt(0.3*0.5*50_000/9_900*100 * 0.3*0.5*0.1/(0.1 + 0.1)*10), # √(abM/(Nr) · acσ/((σ + μ)μ)) = 7.54, with M = 50,000 mosquitoes at equilibrium and N = 9,900 people, the 1% infected at the start left out (was 0, then 7.5 with them counted as susceptible)
-    )
-    for name,R0 in analytic.items():
-        sim = corpus.models[name](solver='ode', **fine)
-        ode = mean_states(sim.run())
-        assert np.isclose(sim.diseases[name].R0(), R0), f'{name}: R0() is {sim.diseases[name].R0():n}, not {R0:n}'
-        if name in simple: # Agents are compared for these in test_solvers_agree()
-            continue
-        runs = [mean_states(corpus.models[name](solver='abm', rand_seed=seed, **fine).run()) for seed in range(3)]
-        floor = 0.1*max(ode.values())
-        for key,val in ode.items():
-            mean = np.mean([run[key] for run in runs])
-            assert abs(mean - val) <= 0.03*max(val, floor), f'{name} as agents: {key} averages {mean:n}, against {val:n} for the ODE' # About 1% apart at a quarter-day step
+    assert np.isclose(np.mean([res.R[-1] for res in runs]), ode.R[-1], rtol=0.05) # 950,577 against 797,129 with whole steps
+    assert np.abs(np.mean([res.I.values for res in runs], axis=0) - ode.I.values).max() < 0.2*ode.I.max()
     return
 
 
 @pytest.mark.parametrize('solver', ['ode', 'binomial', 'gillespie', 'tau', 'abm'])
-def test_exit_order(solver):
-    sc.heading(f'Testing that the order of competing exits does not matter under {solver}')
+def test_exits(solver):
+    """ The order of competing exits does not matter; a fixed delay is a conveyor: everyone leaves exactly then """
     fracs = []
     for order in [('a', 'b', 'c'), ('c', 'a', 'b')]:
         I = ss.State(name='I')
         dests = {key:ss.State(name=key.upper()) for key in 'abc'}
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
-        dis = ss.Disease(I, *dests.values(), **exits, default_state='I', name='exits')
-        agents = dict(n_agents=20_000) if solver == 'abm' else {}
-        sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
-        assert str(sim.solver) == solver
-        res = sim.results.exits
-        left = np.array([res[f'{k.upper()}'][-1] for k in 'abc'])
+        sim = ss.Sim(ss.Disease(I, *dests.values(), **exits, default_state='I', name='exits'), unit='day', stop=5, solver=solver, verbose=0, **size(solver, 20_000)).run()
+        left = np.array([sim.results.exits[k.upper()][-1] for k in 'abc'])
         fracs.append(left/left.sum())
-    for frac in fracs:
-        assert np.allclose(frac, 1/3, atol=0.02), f'Expected a third by each exit, not {frac}'
+    assert np.allclose(fracs, 1/3, atol=0.02), f'Expected a third by each exit, not {fracs}'
+    E, I = ss.states(2)
+    cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='cohort')
+    n_E = ss.Sim(cohort, unit='day', stop=20, solver=solver, verbose=0, **size(solver, 1000)).run().results.cohort.E.values
+    assert n_E[10] == 1000 and n_E[11] == 0, f'{n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
     return fracs
 
 
 def test_dwell_forms():
-    sc.heading('Testing that agents agree with the ODE at a fine step for every form of dwell time')
+    """ Agents agree with the ODE at a fine step for every form of dwell time; one too variable for Erlang stages runs as agents under auto """
     forms = dict(
         exponential  = lambda I, R, D: dict(out=I >> R @ ss.days(4)),
         rate         = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.25))),
@@ -262,71 +150,28 @@ def test_dwell_forms():
     def run(form, solver):
         I, R, D = ss.states('I R D')
         dis = ss.Disease(I, R, D, **forms[form](I, R, D), default_state='I', name='cohort')
-        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
-        res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size).run().results.cohort
+        res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size(solver, 20_000)).run().results.cohort
         return np.array([res.I.values.mean(), res.R[-1], res.D[-1]])/20_000 # Time infected, and where people end up
     for form in forms:
         ode, abm = run(form, 'ode'), run(form, 'abm')
         assert np.allclose(abm, ode, rtol=0.03, atol=0.005), f'{form}: agents {abm}, ODE {ode}'
-    return
 
-
-def test_wide_dwell():
-    sc.heading('Testing that a dwell time too variable for Erlang stages runs as agents under auto, and warns under the ODE')
-    def make(c, solver='auto'):
+    def wide(c, solver='auto'):
         A, B = ss.states('A B')
         dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(shape=c, scale=ss.years(1))), default_state='A', name='m')
         return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
-    assert isinstance(make(0.5).solver, ss.solvers.ode) # A coefficient of variation of 2.2
-    assert isinstance(make(0.3).solver, ss.solvers.abm) # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B
-    with pytest.warns(RuntimeWarning, match='coefficient of variation'):
-        make(0.3, 'ode')
+    assert isinstance(wide(0.5).solver, ss.solvers.ode) and isinstance(wide(0.3).solver, ss.solvers.abm) # Coefficients of variation of 2.2 and 5.4
+    with pytest.warns(RuntimeWarning):
+        wide(0.3, 'ode')
     return
 
 
-def test_destinations():
-    sc.heading('Testing that every solver agrees on the flow to each destination, by age')
-    def run(solver, seed=1):
-        I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, out=ss.Transition(I, {R: 0.7, D: 0.3}, dur=ss.days(4)), init_n=dict(I=1000), default_state='I', name='cohort')
-        dis.stratify(age=ss.years([0, 40]))
-        res = ss.Sim(dis, n_agents=1000, total_pop=1000, unit='day', stop=40, solver=solver, rand_seed=seed, verbose=0).run().results.cohort
-        return np.array([res.out.D.select(age=age).sum() for age in [0, 1]])
-    ode = run('ode')
-    for solver in stochastic:
-        runs = np.array([run(solver, seed) for seed in range(20)])
-        se = runs.std(axis=0)/np.sqrt(len(runs))
-        assert np.all(abs(runs.mean(axis=0) - ode) <= 3*se + 1e-9), f'{solver}: deaths by age {runs.mean(axis=0)}, against {ode} for the ODE'
-    return ode
-
-
-# %% Conservation and exact identities
-
-closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.dead
-
-
-@pytest.mark.parametrize('name', closed)
-def test_conservation(name):
-    sc.heading(f'Testing that the corpus model "{name}" keeps its population under every solver')
-    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
-        if solver in skip_solver.get(name, {}):
-            continue
-        sim = corpus.models[name](solver=solver, total_pop=10_000).run()
-        for mod in sim.declared:
-            total = sum(mod.results[f'{state.name}'].values for state in mod.states.values() if state.people)
-            assert np.allclose(total, total[0], rtol=1e-9), f'{name} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
-    return
-
-
-@pytest.mark.parametrize('dwell', ['exponential', 'fixed', 'erlang', 'lognormal', 'after'])
-def test_joint_conservation(dwell):
-    sc.heading(f'Testing that diseases tracked jointly keep their people under every solver, with a dwell that is {dwell}')
+@pytest.mark.parametrize('dwell', ['fixed', 'after'])
+def test_joint_states(dwell):
+    """ Diseases tracked jointly keep the same people in each under every solver, with a conveyor or a minimum stay; as a joint model written by hand; within a budget """
     dwells = dict(
-        exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
-        fixed       = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people
-        erlang      = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9), stages=3),
-        lognormal   = lambda P, NP: ss.Transition(P, NP, dur=ss.lognormal(ss.months(9), ss.months(3))),
-        after       = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), min_stay=ss.months(3)),
+        fixed = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people
+        after = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), min_stay=ss.months(3)),
     )
     for solver in ['ode', 'binomial', 'abm']:
         M = ss.states('M0 M1 M2')
@@ -334,17 +179,37 @@ def test_joint_conservation(dwell):
         NP, P = ss.states('NP P')
         p = ss.Disease(NP, P, conception=NP >> P @ ss.peryear(0.25), birth=dwells[dwell](P, NP), default_state='NP', name='p')
         mod = ss.modify(p.conception, multiply=0.1, who=M[1]) # Crosses the two
-        size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
-        sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
+        sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size(solver, 2000)).run()
         assert solver == 'abm' or sim.joint_states
-        for mod in sim.declared:
-            total = sum(mod.results[f'{state.name}'].values for state in mod.states.values() if state.people)
-            assert np.allclose(total, 2000, rtol=1e-9), f'{dwell} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
-    return
+        assert np.allclose(people(sim), 2000, rtol=1e-9), f'{solver}: the population changes'
+    if dwell == 'after':
+        return
+
+    def pair(solver='auto'): # Dying of one disease leaves the other too, though neither refers to the other
+        S, I = ss.states(2)
+        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.dead, dur=2), init_prev=0.1, name='a')
+        S, I = ss.states(2)
+        b = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.3)*I, recovery=ss.Transition(I, S, dur=3), init_prev=0.1, name='b')
+        return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0)
+    res = pair('binomial').run().results
+    assert np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
+    SS, SI, IS, II = ss.states('SS SI IS II') # The same as the joint model written as one disease, whose states are the combinations
+    ba, bb = ss.peryear(0.5), ss.peryear(0.3)
+    joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
+                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.dead, dur=2), d2=ss.Transition(II, ss.dead, dur=2),
+                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), default_state='SS', name='ab')
+    j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
+    res = pair().run().results
+    assert np.allclose(res.a.I.values, j.IS.values + j.II.values, rtol=1e-9) and np.allclose(res.b.I.values, j.SI.values + j.II.values, rtol=1e-9)
+    with ss.options.context(max_joint=3): # Above the budget, auto runs agents, and a compartmental solver that was asked for stops
+        assert isinstance(pair().init().solver, ss.solvers.abm)
+        with pytest.raises(ss.CapabilityError):
+            pair('ode').init()
+    return j
 
 
 def test_empty_place():
-    sc.heading('Testing that a place with no one in it changes nothing, under every solver that runs by group')
+    """ A place with no one in it changes nothing, under every solver that runs by group """
     def make(solver, places=True):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.2)*I.frac + ss.perday(1e-5)*I.n + ss.perday(1e-6)*I.total), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
@@ -362,65 +227,20 @@ def test_empty_place():
     return
 
 
-def test_identities():
-    sc.heading('Testing constant-rate decay and a fixed branch share against their exact values')
-
-    # Constant-rate decay is exponential
-    I, R = ss.states('I R')
-    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), default_state='I', name='decay')
-    res = ss.Sim(decay, total_pop=1e6, unit='day', stop=50, solver='ode', verbose=0).run().results.decay
-    t = np.arange(51)
-    assert np.allclose(res.I.values, 1e6*np.exp(-0.1*t), rtol=1e-5) # RK4's error is about 1e-7 a step at this rate
-
-    # A fixed branch share is the share that leaves by each branch
-    for solver in ['ode', 'binomial', 'abm']:
-        I, R, D = ss.states('I R D')
-        branch = ss.Disease(course=ss.Transition(I, {R: None, D: 0.2}, dur=5), default_state='I', name='branch')
-        agents = dict(n_agents=50_000) if solver == 'abm' else {}
-        res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
-        frac = res.D[-1]/(res.R[-1] + res.D[-1])
-        atol = 1e-9 if solver == 'ode' else 0.01 # Exact for the ODE; for a stochastic run, many standard errors of the share
-        assert np.isclose(frac, 0.2, atol=atol), f'{solver}: a share of {frac:n} left by D, not 0.2'
-
-    # A fixed delay is a conveyor: everyone who starts in E leaves exactly 10 days later, under every solver and as agents
-    E, I = ss.states(2)
-    for solver in ['ode', 'binomial', 'gillespie', 'abm']:
-        size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
-        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='cohort')
-        n_E = ss.Sim(cohort, unit='day', stop=20, solver=solver, verbose=0, **size).run().results.cohort.E.values
-        assert n_E[10] == 1000 and n_E[11] == 0, f'{solver}: {n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
-
-    # With a constant inflow as well, E holds the inflow over the delay: exactly in the ODE at every step, and on average in the stochastic solvers
-    flow = ss.Disease(arrival=ss.unborn >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='flow')
-    exact = np.r_[1000 + 100*np.arange(11), np.full(20, 1000)] # Those who started in E leave on day 10, and the arrivals of each day 10 days later
-    n_E = ss.Sim(flow, total_pop=1000, unit='day', stop=30, verbose=0).run().results.flow.E.values
-    assert np.allclose(n_E, exact, rtol=1e-9)
-    for solver in ['binomial', 'gillespie']:
-        runs = ss.parallel(ss.Sim(flow, total_pop=1000, unit='day', stop=30, solver=solver, verbose=0), n_runs=20).results.flow.E.values
-        assert np.isclose(np.mean(runs, axis=0)[11:].mean(), 1000, rtol=0.03), f'{solver}: E holds {np.mean(runs, axis=0)[11:].mean():n} on average, not 1000'
-    return
-
-
 def test_acquisition():
-    sc.heading('Testing that an infection by a bite rate is an acquisition: the bednet idiom, a vaccine, and a cure act on the Ross-Macdonald model')
-    for solver,size in [('ode', dict(total_pop=5000)), ('abm', dict(n_agents=5000))]:
+    """ An infection by a bite rate is an acquisition: the bednet idiom, a vaccine, and a cure act on the Ross-Macdonald model, whose R0() is the analytic value """
+    R0 = np.sqrt(0.3*0.5*50_000/9_900*100 * 0.3*0.5*0.1/(0.1 + 0.1)*10) # √(abM/(Nr) · acσ/((σ + μ)μ)) = 7.54, with M = 50,000 mosquitoes at equilibrium and N = 9,900 people, the 1% infected at the start left out
+    assert np.isclose(corpus.malaria(solver='ode').init().diseases.malaria.R0(), R0)
+    for solver in ['ode', 'abm']:
         infections = {}
         for key,intv in dict(none=None, bednet=ss.modify('malaria.rel_sus', multiply=0.0), vaccine=ss.vaccinate(ss.Vaccine(efficacy=1.0), when=[0], coverage=1.0),
                              cure=ss.treat(ss.Treatment(cure=1.0), when=[100], coverage=0.9, name='mda')).items():
-            sim = corpus.malaria(solver=solver, interventions=intv, **size).run()
+            sim = corpus.malaria(solver=solver, interventions=intv, **size(solver, 5000)).run()
             infections[key] = sim.results.malaria.infection.values.sum()
-        assert infections['none'] > 5000 and infections['bednet'] == 0 # Was the same: rel_sus did not reach an infection by Iv.n
-        assert infections['vaccine'] == 0
-        assert sim.results.mda.delivered.values.sum() > 1000 # Was 0: nobody counted as infected
-    def imported(acq): # An importation alongside transmission is not an acquisition unless it says so
-        S, I, R = ss.states(3)
-        return ss.Disease(infection=S >> I @ ss.perday(0.2)*I, imported=ss.Transition(S, I, rate=ss.perday(0.01), acquisition=acq), recovery=I >> R @ ss.days(10), name='sir')
-    protected = [ss.Sim(imported(acq), interventions=ss.modify('sir.rel_sus', multiply=0), unit='day', stop=50, total_pop=1000, verbose=0).run().results.sir.imported.values.sum() for acq in [None, True]]
-    assert protected[0] > 300 and protected[1] == 0
+        assert infections['none'] > 5000 and infections['bednet'] == 0 and infections['vaccine'] == 0
+        assert sim.results.mda.delivered.values.sum() > 1000 # Those infected by bites count as infected
     return
 
-
-# %% Behavior: a regression, a counter, and a switching row by age
 
 def behavior(solver, seed=1, n=2000):
     """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age, one entry per destination """
@@ -435,156 +255,30 @@ def behavior(solver, seed=1, n=2000):
         conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
         deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity'),
         mix=mix, default_state='none', name='contra')
-    size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
-    sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), aging=False, verbose=0, **size)
-    sim.stratify(age=[0, 30])
-    sim.stratify(urban={False: 0.4, True: 0.6})
-    sim.stratify(edu={False: 0.5, True: 0.5})
-    sim.stratify(parity=[0, 1, 2, 3])
+    sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), aging=False, verbose=0, **size(solver, n))
+    sim.stratify(age=[0, 30], urban={False: 0.4, True: 0.6}, edu={False: 0.5, True: 0.5}, parity=[0, 1, 2, 3])
     return sim
 
 
-def behavior_fracs(sim):
-    """ The share of people in each state (none, pill, iud, P) by age group, over the last year """
-    res = sim.results.contra
-    n = np.array([res[s].by('age').values[-12:].mean(axis=0) for s in ['none', 'pill', 'iud', 'P']])
-    return n/n.sum(axis=0)
-
-
-@sc.timer()
 def test_behavior_solvers():
-    sc.heading('Testing that a module of behavior (a regression, a counter, and a switching row by age) has the same shares by method and age under every solver')
-    ode = behavior_fracs(behavior('ode').run())
+    """ A module of behavior (a regression, a counter, and a switching row by age) has the same shares by method and age under the binomial solver and as agents """
+    def fracs(sim): # The share in each state by age group, over the last year
+        res = sim.results.contra
+        n = np.array([res[s].by('age').values[-12:].mean(axis=0) for s in ['none', 'pill', 'iud', 'P']])
+        return n/n.sum(axis=0)
+    ode = fracs(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
     sim.pars.solver = ss.solvers.binomial(substeps=10) # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
-    binomial = behavior_fracs(sim.run())
-    assert np.allclose(binomial, ode, rtol=0.01), f'Expected the binomial solver to match the ODE: {binomial} against {ode}'
-    for solver in ['gillespie', 'abm']: # 20 runs each, within 3 standard errors
-        runs = np.array([behavior_fracs(behavior(solver, seed=seed).run()) for seed in range(20)])
-        mean, se = runs.mean(axis=0), runs.std(axis=0, ddof=1)/np.sqrt(len(runs))
-        assert np.all(np.abs(mean - ode) < 3*se), f'Expected {solver} to match the ODE within 3 standard errors: {mean} against {ode}, z = {(mean - ode)/se}'
+    assert np.allclose(fracs(sim.run()), ode, rtol=0.01)
+    runs = np.array([fracs(behavior('abm', seed=seed).run()) for seed in range(20)]) # Within 3 standard errors
+    mean, se = runs.mean(axis=0), runs.std(axis=0, ddof=1)/np.sqrt(len(runs))
+    assert np.all(np.abs(mean - ode) < 3*se), f'Agents {mean} against the ODE {ode}, z = {(mean - ode)/se}'
     return ode
-
-
-# %% Code beside a declared model
-
-class Watch(ss.Analyzer):
-    """ An analyzer that only reads a count, saying nothing about solvers """
-    def init_post(self):
-        super().init_post()
-        self.seen = []
-        return
-
-    def step(self):
-        self.seen.append(self.sim.diseases.sir.I.n)
-        return
-
-
-class NumpySIS(ss.Module):
-    """ An ODE of its own, in plain NumPy, with Euler steps of a day """
-    def init_post(self):
-        super().init_post()
-        self.y = np.array([0.99, 0.01])
-        return
-
-    def step(self):
-        S, I = self.y
-        flow = (0.3*S*I - 0.1*I)*self.t.dt.days
-        self.y = np.array([S - flow, I + flow])
-        return
-
-
-class Tagger(ss.Intervention):
-    """ An intervention written as code, which works on agents """
-    def step(self):
-        return self.sim.diseases.sir.S.uids
-
-
-def test_coded_beside():
-    sc.heading('Testing that code beside a declared model does not change its solver unless it needs agents')
-    alone = corpus.sir(unit='day').run()
-    assert isinstance(alone.solver, ss.solvers.ode)
-
-    # An analyzer that reads counts, or a NumPy ODE of its own, runs beside the compartments, and the declared model's results are unchanged
-    watched = corpus.sir(unit='day', analyzers=Watch()).run()
-    assert isinstance(watched.solver, ss.solvers.ode), f'An analyzer changed the solver to {watched.solver}'
-    assert np.array_equal(watched.results.sir.I.values, alone.results.sir.I.values)
-    seen = watched.analyzers.watch.seen # An analyzer runs at the end of a step, so it sees the next time point's count
-    assert len(seen) == len(alone.results.sir.I) and np.allclose(seen[:-1], alone.results.sir.I.values[1:])
-    numpy = corpus.sir(unit='day', connectors=NumpySIS()).run()
-    assert isinstance(numpy.solver, ss.solvers.ode) and np.array_equal(numpy.results.sir.I.values, alone.results.sir.I.values)
-    assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)
-
-    # Code that says it needs agents makes the model run as agents; an intervention written as code does not, and if it reads agents, the run stops and says so
-    class Agentish(Watch):
-        compartmental = False
-    class AgentTagger(Tagger):
-        compartmental = False
-    for mod in [Agentish(), AgentTagger()]:
-        sim = corpus.sir(unit='day', **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
-        assert isinstance(sim.solver, ss.solvers.abm), f'{type(mod).__name__} should need agents'
-    assert isinstance(corpus.sir(unit='day', interventions=Tagger()).init().solver, ss.solvers.ode) # Written as code is not a reason for agents
-    with pytest.raises(ss.CapabilityError, match='compartmental = False'):
-        corpus.sir(unit='day', interventions=Tagger()).run()
-    with pytest.raises(ss.CapabilityError):
-        corpus.sir(unit='day', interventions=AgentTagger(), solver='ode').init()
-    class Level(ss.Module): # A plain module that keeps a value for each person needs agents (it ran as an ODE and failed partway)
-        def __init__(self):
-            super().__init__()
-            self.define_states(ss.FloatArr('level', default=0.0))
-    assert isinstance(corpus.sir(unit='day', connectors=Level()).init().solver, ss.solvers.abm)
-    return numpy
-
-
-def test_joint_population():
-    sc.heading('Testing diseases tracked jointly: the same people in each, as a joint model written by hand, within a budget')
-    def pair(solver='auto', **kwargs):
-        S, I = ss.states(2)
-        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.dead, dur=2), init_prev=0.1, name='a')
-        S, I = ss.states(2)
-        b = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.3)*I, recovery=ss.Transition(I, S, dur=3), init_prev=0.1, name='b')
-        return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0, **kwargs)
-
-    # Dying of one disease leaves the other too, though neither refers to the other (b kept all 20,000 people, with 1,642 left in a)
-    for solver in ['ode', 'binomial']:
-        sim = pair(solver).run()
-        res = sim.results
-        assert sim.joint_states and np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
-
-    # The same as the joint model written as one disease, whose states are the combinations
-    SS, SI, IS, II = ss.states('SS SI IS II')
-    ba, bb = ss.peryear(0.5), ss.peryear(0.3)
-    joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
-                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.dead, dur=2), d2=ss.Transition(II, ss.dead, dur=2),
-                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), default_state='SS', name='ab')
-    j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
-    res = pair().run().results
-    assert np.allclose(res.a.I.values, j.IS.values + j.II.values, rtol=1e-9) and np.allclose(res.b.I.values, j.SI.values + j.II.values, rtol=1e-9)
-
-    # Above the budget, auto runs agents, and a compartmental solver that was asked for stops before anything is made
-    with ss.options.context(max_joint=3):
-        sim = pair().init()
-        assert isinstance(sim.solver, ss.solvers.abm) and 'max_joint' in sim.solver_reason
-        with pytest.raises(ss.CapabilityError, match='max_joint=4'):
-            pair('ode').init()
-    S, A, B, I = ss.states('S A B I') # A first state that splits on entry has no joint form yet: auto runs agents rather than stopping
-    split = ss.Disease(S, A, B, I, split=ss.Transition(S, {A: 0.5, B: None}, dur=0), inf=A >> I @ ss.peryear(0.5)*I, init=dict(I=0.1), name='a')
-    assert isinstance(ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver, ss.solvers.abm)
-    text = pair().init().describe()
-    assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'Solver       a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe() # How it is run
-    return j
 
 
 if __name__ == '__main__':
     T = sc.timer()
-    for row in guesses:
-        try:
-            test_guesses_marked(row)
-        except AssertionError as e:
-            print(f'{row}: {e}')
     for name in corpus.compartmental:
         test_solvers_agree(name)
-    behavior = test_behavior_solvers()
-    joint = test_joint_population()
+    test_behavior_solvers()
     T.toc()

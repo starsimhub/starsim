@@ -11,7 +11,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
-from .expressions import as_expr, evaluate, Expr, par
+from .expressions import arith, as_expr, evaluate, Expr, par
 
 
 # Define classes to not descend into further -- based on sciris.sc_nested
@@ -229,10 +229,8 @@ class Pars(sc.obj):
                     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
-                elif callable(old): # It's a function: update directly
+                elif callable(old) or isinstance(old, dict): # A function or a dict: update directly
                     self[key] = new
-                elif isinstance(old, dict):
-                    self[key] = new # Take dictionaries directly, without warning the user
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -247,13 +245,12 @@ class Pars(sc.obj):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
         if not len(old): # It's empty, just overwrite
             self[key] = new
-        else: # Don't overwrite an existing ndict
-            if isinstance(new, dict):
-                for newkey,newvals in new.items():
-                    old[newkey].pars.update(newvals) # e.g. pars = {'diseases': {'sir': {'dur_inf': 6}}}
-            else:
-                errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
-                raise TypeError(errormsg)
+        elif isinstance(new, dict): # Don't overwrite an existing ndict
+            for newkey,newvals in new.items():
+                old[newkey].pars.update(newvals) # e.g. pars = {'diseases': {'sir': {'dur_inf': 6}}}
+        else:
+            errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
+            raise TypeError(errormsg)
         return
 
     def _update_module(self, old, new):
@@ -266,43 +263,15 @@ class Pars(sc.obj):
         return
 
     def _update_timepar(self, key, old, new):
-        """ Update a time parameter """
-
-        # It's a TimePar, e.g. dur_inf = ss.years(6); use directly
-        if isinstance(new, ss.TimePar):
+        """ Update a time parameter: a single number (e.g. dur_inf = 6) or an array sets its value, keeping its unit; another time parameter, a table (for demographics), a dict (e.g. beta by network), a distribution, or a value that varies in time or by level replaces it """
+        if isinstance(new, (ss.TimePar, pd.Series, pd.DataFrame, dict, ss.Dist, TimeValue, by)):
             self[key] = new
-
-        # It's a dataframe, allow the update -- used for demographics
-        elif isinstance(new, (pd.Series, pd.DataFrame)):
-            self[key] = new # TODO: add validation or convert to timepar
-
-        # It's a single number, e.g. dur_inf = 6; set parameters
-        elif sc.isnumber(new):
-            old.value = new
+        elif sc.isnumber(new) or sc.checktype(new, 'arraylike'):
+            old.value = new if sc.isnumber(new) else sc.toarray(new)
             self.note_bare(key, old, new)
-
-        # It's array-like; set the value, but convert first to handle lists etc
-        elif sc.checktype(new, 'arraylike'):
-            old.value = sc.toarray(new)
-            self.note_bare(key, old, new)
-
-        # It's a dict, e.g. beta for different networks, just set it directly and trust the user
-        elif isinstance(new, dict):
-            self[key] = new
-
-        # It's a distribution, e.g. a duration that varies; replace it
-        elif isinstance(new, ss.Dist):
-            self[key] = new
-
-        # It varies in time or by level, e.g. ss.timeseries({2000: ss.peryear(0.01), 2010: ss.peryear(0.02)}); replace it
-        elif isinstance(new, (TimeValue, by)):
-            self[key] = new
-
-        # Give up
         else:
             errormsg = f'Updating timepar "{key}" ({old}) from {type(old)} to {type(new)} is not supported'
             raise TypeError(errormsg)
-
         return
 
     def _update_dist(self, key, old, new):
@@ -357,11 +326,9 @@ class Pars(sc.obj):
 
     def check_key_mismatch(self, pars):
         """ Check whether additional keys are being added to the dictionary """
-        available_keys = list(self.keys())
-        new_keys = pars.keys()
-        mismatches = [key for key in new_keys if key not in available_keys]
+        mismatches = [key for key in pars.keys() if key not in self]
         if len(mismatches):
-            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}{ss.v3_deprecations.hint(keys=mismatches, call="ss.Sim" if isinstance(self, ss.SimPars) else "ss.Module")}'
+            errormsg = f'Key(s) {mismatches} not found; available keys are {list(self.keys())}{ss.v3_deprecations.hint(keys=mismatches, call="ss.Sim" if isinstance(self, ss.SimPars) else "ss.Module")}'
             raise sc.KeyNotFoundError(errormsg)
         return
 
@@ -406,9 +373,6 @@ def check_verbose(verbose):
 
 #%% Values that vary by level or in time
 
-arith = {'+':lambda a,b: a + b, '-':lambda a,b: a - b, '*':lambda a,b: a*b, '/':lambda a,b: a/b, '**':lambda a,b: a**b} # The arithmetic of ss.by
-
-
 class by_func:
     """
     A value for each level of one dimension from a function of the sim, `ss.by(patch=fn)`, where `fn(sim)` gives one value per level
@@ -427,7 +391,7 @@ class by_func:
         return
 
     def __repr__(self):
-        return f'ss.by({self.dim}={getattr(self.func, "__name__", "function")})'
+        return self.__name__
 
     def levels(self, sim, convert):
         """ The function's values now, converted to numbers in the sim's unit: one number, or an `ss.by` over the dimension, which each solver reads as it reads any """
@@ -1347,14 +1311,7 @@ class timeseries(TimeValue):
         return vals[i]*(1 - w) + vals[j]*w
 
     def series(self, years, sim, convert):
-        """
-        The value at each of an array of years, converted to plain numbers by `convert`
-
-        Args:
-            years (array): the years, as decimals
-            sim (`ss.Sim`): the sim
-            convert (func): the function to convert each value to a number
-        """
+        """ As `TimeValue.series()`, converting each value once rather than at each time """
         vals = [const_value(v) for v in self.values]
         if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
@@ -1455,14 +1412,7 @@ class seasonal(TimeValue):
         return const_value(self.mean)*float(self.factor(year))
 
     def series(self, years, sim, convert):
-        """
-        The value at each of an array of years, converted to plain numbers by `convert`
-
-        Args:
-            years (array): the years, as decimals
-            sim (`ss.Sim`): the sim
-            convert (func): the function to convert each value to a number
-        """
+        """ As `TimeValue.series()`, converting the mean once rather than at each time """
         mean = const_value(self.mean)
         if isinstance(mean, ss.prob): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)

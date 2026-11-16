@@ -1,15 +1,10 @@
 # Backends
 
-The kernels that the solvers run, and what they share. None of this is needed to use Starsim, but it is where most of the time of a run goes. The same kernels come in several sets, which give the same numbers: Numba's (here, the reference), Rust's (built from `../rust/`), plain Python's, and, where it applies, JAX's. `ss.options.backend` chooses between them.
+How the solvers' numbers are computed (`ss.options.backend`), and the machinery around the kernels. None of this is needed to use Starsim. The kernels themselves are in `../numba/` (Numba's, the reference, with a table of each file and its Rust copy) and `../rust/` (Rust's, built from source).
 
-- `kernels.py`: the compartmental kernels (`ss.solvers.backends.kernels`), and `ss.compile()`, which compiles them ahead of time
-- `ode.py`: the ODE's steps in NumPy, vectorized over groups
-- `passes.py`: compiled passes over the agents and a network's edges, for the agent solver
-- `events.py`: the compiled pass of agents taken event by event within a step (`solver=ss.solvers.abm(step='events')`), with its Rust copy in `../rust/src/events.rs`
-- `draws.py`: exact random draws from counter-based uniforms, which the other kernels and `ss.Dist` use
-- `rust.py`: swaps in the Rust kernels, once they have been built
+- `rust.py`: swaps in the Rust kernels, once they have been built, and falls back to Numba's for arrays of a type Rust's do not take
+- `compiling.py`: which compartmental kernels a run takes (Rust's, Numba's compiled, or the same code as plain Python), `ss.compile()`, Numba's on-disk cache, and saying when something is being compiled
+- `workers.py`: starting the workers of `ss.parallel()` and of a calibration, with one thread each for the kernels
 - `jit.py`: `ss.jit`, to compile users' own code with Numba or JAX
-- `cache.py`: Numba's on-disk cache, and saying when something is being compiled
 - `memory.py`: keeping large freed arrays for reuse
-
-To change a kernel, change the Numba code here first, then its Rust copy to match, and run `tests/test_kernel_sets.py` (see `../rust/README.md`).
+- `_rs.abi3.so`: the built Rust library (gitignored), put here by `../rust/build`

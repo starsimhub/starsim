@@ -18,9 +18,7 @@ import starsim as ss
 
 class Profile(sc.profile):
     """
-    Class to profile the performance of a simulation
-
-    Typically invoked via `sim.perf_profile()` (`kind='line'`, the default).
+    Class to profile the performance of a simulation; typically invoked via `sim.perf_profile()` (`kind='line'`, the default)
 
     Args:
         sim (`ss.Sim`): the sim to profile
@@ -124,9 +122,7 @@ class Profile(sc.profile):
 
 class Diagnostics(sc.quickobj):
     """
-    Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
-
-    It exists to find where two runs that should match first differ.
+    Detailed diagnostic information, to find where two runs that should match first differ; see `sim.set_diagnostics()`
 
     Args:
         sim (ss.Sim): the sim to attach diagnostics to
@@ -314,8 +310,7 @@ def mock_module(dur=10, **kwargs):
 
 def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
     '''
-    Compute the difference of the summaries of two simulations, and print any
-    values which differ.
+    Compute the difference of the summaries of two simulations, and print any values which differ
 
     Args:
         sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summarize().value.to_dict())
@@ -397,42 +392,28 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     if len(mismatches):
         valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
-        diff = []
-        ratio = []
-        change = []
-        zscore = []
-        small_change = 1 + 1e-3  # Define a small change, e.g. a rounding error
+        diff, ratio, change, zscore = [], [], [], []
+        small_change = 1.96 if multi else 1 + 1e-3  # A change within the 95% CI, roughly speaking, or a rounding error
         for d in mismatches.values():
-            old = d.sim1
-            new = d.sim2
-            if multi:
-                old_sem = d.sim1_sem
-                new_sem = d.sim2_sem
-                sem = old_sem + new_sem
-                small_change = 1.96 # 95% CI, roughly speaking
-
-            numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
-            if numeric:
+            old, new = d.sim1, d.sim2
+            if sc.isnumber(old) and sc.isnumber(new): # Should all be numeric, but just in case
                 this_diff = new - old
                 this_ratio = new / old if old else np.nan
                 if multi:
-                    abs_ratio = abs(this_diff)/sem
+                    abs_ratio = abs(this_diff)/(d.sim1_sem + d.sim2_sem)
                     this_zscore = abs_ratio
                 else:
                     abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
                     this_zscore = np.nan
 
-                # Set the character to use
-                approx_eq = abs_ratio < small_change
-                if approx_eq:    change_char = '≈'
+                # Set the character to use, and how many repeats it should have
+                if abs_ratio < small_change: change_char = '≈'
                 elif new > old:  change_char = '↑'
                 elif new < old:  change_char = '↓'
                 elif new == old: change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
-
-                # Set how many repeats it should have
                 repeats = 1
                 if abs_ratio == 0:   repeats = 0
                 if abs_ratio >= 1.1: repeats = 2
@@ -440,11 +421,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 if abs_ratio >= 10:  repeats = 4
                 this_change = change_char * repeats
             else:  # pragma: no cover
-                this_diff =  np.nan
-                this_ratio  = np.nan
+                this_diff = this_ratio = this_zscore = np.nan
                 this_change = 'N/A'
-                this_zscore = np.nan
-
             diff.append(this_diff)
             ratio.append(this_ratio)
             change.append(this_change)
@@ -498,12 +476,5 @@ def check_sims_match(*args, full=False):
     if len(args) < 2:
         errormsg = 'Must compare at least 2 sims'
         raise ValueError(errormsg)
-    base = args[0]
-    matches = []
-    for other in args[1:]:
-        diff = diff_sims(base, other, full=False, output=False, die=False)
-        matches.append(not(diff)) # Return the opposite of the diff
-    if full:
-        return matches
-    else:
-        return all(matches)
+    matches = [not diff_sims(args[0], other, full=False, output=False, die=False) for other in args[1:]]
+    return matches if full else all(matches)

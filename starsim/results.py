@@ -34,15 +34,6 @@ def log_scale(ax, decades=6):
     return
 
 
-def set_scale(ax, res, log=False):
-    """ A log scale for the y axis, if asked for (see `log_scale()`); otherwise, keep the axis from going negative if the result doesn't (see `ss.Result._floor()`) """
-    if log:
-        log_scale(ax)
-    else:
-        res._floor(ax)
-    return
-
-
 def people_scale(sim):
     """
     What a declared result is multiplied by when written: the people each agent stands for, or 1
@@ -908,14 +899,11 @@ class Result(ss.arrays.BaseArr):
             widths = np.asarray((calendar(keys + 1) - starts)/pd.Timedelta(days=1), dtype=float) # The days in each month or year
             step = np.median(np.diff(idx)/pd.Timedelta(days=1)) if len(idx) > 1 else widths[0]
             return bins, starts, np.bincount(bins)*step > widths - 0.5*step
-        if isinstance(new_unit, str):
-            if new_unit not in ['day', 'week', 'month', 'year']:
-                errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
-                raise ValueError(errormsg)
+        if isinstance(new_unit, str) and new_unit in ['day', 'week', 'month', 'year']:
             new_unit = getattr(ss, new_unit + 's')(1)
         if not isinstance(new_unit, ss.Duration):
-            errormsg = f'Cannot resample to {new_unit}; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
-            raise TypeError(errormsg)
+            errormsg = f'Cannot resample to {new_unit!r}; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
+            raise (ValueError if isinstance(new_unit, str) else TypeError)(errormsg)
         if dated and new_unit.base in ['days', 'weeks']: # Periods of a fixed number of days from the start
             idx = pd.DatetimeIndex(tv)
             t = np.asarray((idx - idx[0])/pd.Timedelta(days=1), dtype=float)
@@ -1148,7 +1136,7 @@ class Result(ss.arrays.BaseArr):
             ax = get_ax(fig, ax, kw)
             if self._draw(ax, kw, label=label, lines=lines, floor=False) or label:
                 ax.legend(**kw.legend)
-            set_scale(ax, self, log)
+            log_scale(ax) if log else self._floor(ax) # Otherwise, not negative if the result isn't
             ax.set_title(self.full_label)
             ax.set_xlabel('Time')
         return ss.return_fig(ax.figure, given=given, **kw.return_fig)
@@ -1420,16 +1408,21 @@ class Results(ss.ndict):
             return f'"{key}" is not a result of {owner}{f"; did you mean {sc.strjoin(near[:3])}?" if near else ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}{mods}'
         return None
 
+    def _lookup(self, key, error):
+        """ For `__getitem__()` and `__getattr__()`, a key that is not here: a result however it is spelled, else a module's results by its default name (e.g. `sim.results.sir`); else raises `error` saying what there is, or returns None """
+        if (res := self.find(key, die=False)) is not None:
+            return res
+        if isinstance(key, str) and (res := self.by_default(key)) is not None:
+            return res
+        if msg := self._given_msg(key) or self._unknown_msg(key):
+            raise error(msg)
+        return None
+
     def __getitem__(self, key):
         if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
             return dict.__getitem__(self, key)
-        if (res := self.find(key, die=False)) is not None:
-            return res
-        if isinstance(key, str) and (res := self.by_default(key)) is not None: # A module's results by its default name, e.g. sim.results['sir']
-            return res
-        if msg := self._given_msg(key) or self._unknown_msg(key):
-            raise sc.KeyNotFoundError(msg)
-        return super().__getitem__(key)
+        res = self._lookup(key, sc.KeyNotFoundError)
+        return res if res is not None else super().__getitem__(key)
 
     def __missing__(self, key):
         """ As for any `sc.obj` (by index), not by a module's default name, which `__getitem__()` has looked for """
@@ -1440,13 +1433,10 @@ class Results(ss.ndict):
             return dict.__getitem__(self, attr)
         if attr.startswith('_'):
             raise AttributeError(attr)
-        if (res := self.find(attr, die=False)) is not None:
-            return res
-        if (res := self.by_default(attr)) is not None: # A module's results by its default name, e.g. sim.results.sir
-            return res
-        if msg := self._given_msg(attr) or self._unknown_msg(attr):
-            raise AttributeError(msg)
-        raise AttributeError(f'"{attr}" is not a result')
+        res = self._lookup(attr, AttributeError)
+        if res is None:
+            raise AttributeError(f'"{attr}" is not a result')
+        return res
 
     def __setitem__(self, key, value):
         """ Also link the flow to each destination of a transition with several to its total, so `res.cin.X` is `res['cin.X']` """
@@ -1554,8 +1544,7 @@ class Results(ss.ndict):
             common = functools.reduce(np.intersect1d, times.values())
             if len(common):
                 data = {key:res.values[np.isin(times[key], common)] for key,res in flat.items()}
-                timevec = flat[0]._convert_timevec()[np.isin(times[flat.keys()[0]], common)]
-                return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
+                return time_frame(data, flat[0]._convert_timevec()[np.isin(times[flat.keys()[0]], common)], set_date_index)
         if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
             own = Results(self._module)
             for key,val in self.items():
@@ -1564,9 +1553,7 @@ class Results(ss.ndict):
             parts = sc.obj(sim=own.to_df(sep=sep, set_date_index=set_date_index, **kwargs))
             parts.update({key:val.to_df(sep=sep, set_date_index=set_date_index, **kwargs) for key,val in self.items() if isinstance(val, Results)})
             return sc.obj({key:df for key,df in parts.items() if df is not None})
-        timevec = flat[0]._convert_timevec()
-        data = {key:res.values for key,res in flat.items()}
-        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
+        return time_frame({key:res.values for key,res in flat.items()}, flat[0]._convert_timevec(), set_date_index)
 
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """
@@ -1609,21 +1596,12 @@ class Results(ss.ndict):
             raise ValueError(errormsg)
         if annualize:
             groups = [[res.resample('year') if isinstance(res, Result) and resamplable(res) else res for res in group] for group in groups]
-        n_cols,_ = sc.getrowscols(len(groups)) # Number of columns of axes
-        figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
-        kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
+        kw = grid_args(len(groups), kwargs)
         data = data or {}
         given = fig is not None
         with ss.style(**kw.style):
             colors = self.scenario_colors()
-            if fig is None:
-                fig, axs = sc.getrowscols(len(groups), make=True, **kw.fig)
-                if isinstance(axs, np.ndarray):
-                    axs = axs.flatten()
-            else:
-                axs = fig.axes
-            if not sc.isiterable(axs):
-                axs = [axs]
+            fig, axs = grid_axes(len(groups), fig, kw)
             many = False
             for ax,group in zip(axs, groups):
                 summed = False
@@ -1662,10 +1640,35 @@ class Results(ss.ndict):
         """ For results across the runs of several scenarios, the color of each scenario, from the colors of the current style, so that each has the same color in every axes; else None """
         scenarios = [list(dict.fromkeys(res.runs['scenario'])) for _,_,res in self.walk() if res.runs is not None]
         scenarios = max(scenarios, key=len, default=[])
-        if len(scenarios) < 2:
-            return None
-        cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
-        return {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(scenarios)}
+        return cycle_colors(scenarios) if len(scenarios) > 1 else None
+
+
+def cycle_colors(labels):
+    """ A color for each label, in order, from the colors of the current style """
+    cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
+    return {label:cycle[i % len(cycle)] for i,label in enumerate(labels)}
+
+
+def grid_args(n, kwargs):
+    """ The plotting arguments (see `ss.plot_args()`) for a grid of `n` axes, one per result, with the default figure size scaled with the number of columns """
+    n_cols,_ = sc.getrowscols(n)
+    figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5)
+    return ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
+
+
+def grid_axes(n, fig, kw):
+    """ A new figure with a grid of `n` axes, or the axes of the figure given; returns the figure and a list of its axes """
+    if fig is None:
+        fig, axs = sc.getrowscols(n, make=True, **kw.fig)
+    else:
+        axs = fig.axes
+    axs = axs.flatten() if isinstance(axs, np.ndarray) else axs
+    return fig, (axs if sc.isiterable(axs) else [axs])
+
+
+def time_frame(data, timevec, set_date_index=False):
+    """ A dataframe of columns of values, with the times as its index, or as its first column, `time` """
+    return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
 
 
 def intervention_marks(sim, fill=False):
@@ -1703,20 +1706,29 @@ def format_value(v):
     return f'{v:.3g}'
 
 
-def summary_attr(obj, attr):
-    """ A row of a `Summary` (or a value of one of its columns) by its result's dotted name, read as attributes, e.g. `summary.sir.infection` or `summary.value.sir.infection` for `summary.loc['sir.infection']`: `summary.sir` is that module's rows; only for an attribute pandas does not have """
-    if not attr.startswith('_'):
-        index = object.__getattribute__(obj, 'index')
-        labels = index.get_level_values(0) if isinstance(index, pd.MultiIndex) else index
-        labels = [label for label in dict.fromkeys(labels) if isinstance(label, str)]
-        if attr in labels:
-            return obj.loc[attr]
-        if rows := [label for label in labels if label.startswith(attr + '.')]:
-            return obj.loc[rows].rename(index=lambda label: label.removeprefix(attr + '.'), level=0 if isinstance(index, pd.MultiIndex) else None)
-    raise AttributeError(f"'{type(obj).__name__}' object has no attribute '{attr}'")
+class SummaryRows:
+    """ What a `Summary` and its rows and columns share: numbers shown rounded (see `format_value()`), and rows read as attributes """
+    def __getattr__(self, attr):
+        """ A row (or a value of a column) by its result's dotted name, e.g. `summary.sir.infection` or `summary.value.sir.infection` for `summary.loc['sir.infection']`: `summary.sir` is that module's rows; only for an attribute pandas does not have """
+        try:
+            return super().__getattr__(attr)
+        except AttributeError:
+            if not attr.startswith('_'):
+                index = object.__getattribute__(self, 'index')
+                labels = index.get_level_values(0) if isinstance(index, pd.MultiIndex) else index
+                labels = [label for label in dict.fromkeys(labels) if isinstance(label, str)]
+                if attr in labels:
+                    return self.loc[attr]
+                if rows := [label for label in labels if label.startswith(attr + '.')]:
+                    return self.loc[rows].rename(index=lambda label: label.removeprefix(attr + '.'), level=0 if isinstance(index, pd.MultiIndex) else None)
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'") from None
+
+    def __repr__(self):
+        with pd.option_context('display.float_format', format_value):
+            return super().__repr__()
 
 
-class SummarySeries(pd.Series):
+class SummarySeries(SummaryRows, pd.Series):
     """ A row or column of a `Summary`, shown the same way """
     @property
     def _constructor(self):
@@ -1726,18 +1738,8 @@ class SummarySeries(pd.Series):
     def _constructor_expanddim(self):
         return Summary
 
-    def __getattr__(self, attr):
-        try:
-            return super().__getattr__(attr)
-        except AttributeError:
-            return summary_attr(self, attr)
 
-    def __repr__(self):
-        with pd.option_context('display.float_format', format_value):
-            return super().__repr__()
-
-
-class Summary(sc.dataframe):
+class Summary(SummaryRows, sc.dataframe):
     """
     The table of `sim.summarize()` and `msim.summarize()`: a dataframe, shown with its numbers rounded to sensible units (see `format_value()`); its values are not rounded
 
@@ -1747,16 +1749,6 @@ class Summary(sc.dataframe):
     @property
     def _constructor_sliced(self):
         return SummarySeries
-
-    def __getattr__(self, attr):
-        try:
-            return super().__getattr__(attr)
-        except AttributeError:
-            return summary_attr(self, attr)
-
-    def __repr__(self):
-        with pd.option_context('display.float_format', format_value):
-            return super().__repr__()
 
     def _repr_html_(self):
         with pd.option_context('display.float_format', format_value):
@@ -2139,9 +2131,15 @@ def given_data(sim, data=None):
     if not any(col in ss.SimData.time_cols for col in df.columns):
         return df
     df = validate_sim_data(df)
+    note_by_year(sim, df)
+    return df
+
+
+def note_by_year(sim, df):
+    """ Say how data by calendar year (see `by_year()`) is compared with the results """
     if by_year(df):
         ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=sim)
-    return df
+    return
 
 
 def compare(sim, data=None):

@@ -270,7 +270,7 @@ class Demographics(ss.Module):
     the `ss.People` population and can interact with `ss.Network` objects
     (e.g. to add newborns to contact networks).
     """
-    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
+    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.build.init_unit()
 
 
 class Flows(Demographics):
@@ -280,7 +280,7 @@ class Flows(Demographics):
     Every declared disease's people are born and die by them, once, under every solver: they become
     transitions of the first declared disease (or the first with the state that births name), whose
     people are everyone's, since as agents the diseases share the people, and in a compartmental run
-    with several declared diseases, their states are tracked jointly (see `ss.solvers.choose.init_flows()`).
+    with several declared diseases, their states are tracked jointly (see `ss.solvers.build.init_flows()`).
     With no declared disease, the sim adds one of everyone alive to hold them (`ss.SimPars.population()`), so
     they are a declared model like any other. This class is not usually used directly.
 
@@ -427,7 +427,7 @@ class Births(Demographics):
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
-        mothers = ss.solvers.backends.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
+        mothers = ss.solvers.numba.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
         if not len(mothers):
             return ss.uids()
 
@@ -810,7 +810,7 @@ class Pregnancy(Demographics, ss.Disease):
     birth       = ss.birth(NP, when=delivery) # Children, linked to the mother (agents only, for now): children= of them (see __init__())
     infant_mortality = ss.Transition(NP, ss.dead, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
 
-    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
+    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.build.init_unit()
 
     def __init__(self, pars=None, fetal_agents='auto', columns=None, **kwargs):
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]

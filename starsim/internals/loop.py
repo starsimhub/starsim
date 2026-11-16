@@ -25,12 +25,7 @@ def empty_function(func):
 @dataclass(slots=True)
 class LoopEntry:
     """
-    One executable event in the integration loop
-
-    It exists to give each step of the plan its time, module, and function in one small record.
-
-    Note: `slots=True` is used primarily to reduce the memory footprint across the
-    10⁴–10⁵ instances created for a typical plan (no per-instance `__dict__`).
+    One executable event in the integration loop: its time, module, and function (with slots, since a plan has 10⁴–10⁵ of them)
     """
     time: object
     ti: int
@@ -45,14 +40,9 @@ class LoopEntry:
 
 class Loop:
     """
-    Define the integration loop
+    Define the integration loop: the order in which each function is called in the sim (see `collect_funcs()`)
 
-    The Loop handles the order in which each function is called in the sim. The
-    order is defined in `Loop.collect_funcs()`, which searches through the sim
-    and collects all methods to call, in order, in the integration loop.
-
-    Each type of module is called at a different time. Within each module type,
-    they are called in the order listed. The default loop order is:
+    Each type of module is called at a different time; within each type, in the order listed. The default order is:
 
         1. sim:               advance()        # Move the time to this step's time point (from the second step on)
         2. sim:               start_step()     # Initialize the sim, including plotting progress
@@ -129,10 +119,7 @@ class Loop:
         self._plan = value
 
     def __len__(self):
-        if self.initialized:
-            return len(self.plan)
-        else:
-            return 0
+        return len(self.plan) if self.initialized else 0
 
     def __iadd__(self, func):
         """ Allow functions to be added to the function list """
@@ -234,9 +221,9 @@ class Loop:
         return self.funcs
 
     def _on_sim_time(self, mod):
-        """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
+        """ Whether a module shares the sim's timeline (the usual case: the same time points in the same unit), so its time moves with the sim's """
         t, sim_t = mod.t, self.sim.t
-        return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
+        return len(t.yearvec) == len(sim_t.yearvec) and getattr(t.tvec, 'unit', None) is getattr(sim_t.tvec, 'unit', None) and np.array_equal(t.yearvec, sim_t.yearvec)
 
     def collect_by_type(self, sim):
         """ The steps of the modules, each kind at its place in the loop (the default; see `ss.Loop`) """
@@ -320,12 +307,9 @@ class Loop:
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
             if name == 'start_step':
                 return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
-            elif name == 'finish_step':
-                return inherited
             elif name == 'record_states':
                 return self._null_record(obj)
-            elif name == 'record_events':
-                return inherited
+            return inherited # finish_step() and record_events()
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
             same = people.step_die is ss.People.step_die and people.finish_step is ss.People.finish_step and people.update_post is ss.People.update_post and people.remove_dead is ss.People.remove_dead
@@ -335,33 +319,22 @@ class Loop:
     @staticmethod
     def _null_record(mod):
         """
-        Return True if a module's `record_states()` is a guaranteed no-op and can be skipped
-
-        This holds only when the module uses the inherited base `Module.record_states`
-        (not overridden anywhere below `ss.Module` in the class hierarchy, so no `super()`
-        call or mixin behavior is missed) and has no auto-generated boolean-state or
-        derived-state results for the base method to count. Such a call would iterate an empty list and change
-        nothing, so omitting it from the plan is result-identical.
+        Whether a module's `record_states()` is sure to do nothing: it is `ss.Module`'s, not overridden, and the module has no states to count
         """
         not_overridden = type(mod).record_states is ss.Module.record_states
         return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
 
     def collect_abs_tvecs(self):
         """
-        Collect time arrays for each module
-
-        Two parallel arrays are stored per module: `abs_tvecs` holds the ground-truth
-        time objects (`ss.date`/`ss.Duration`, used verbatim as each plan entry's time), and
-        `abs_numvecs` holds the canonical numeric representation (float years). The
-        numeric arrays are what `make_plan()` uses to decide uniformity and to sort,
-        so that date/dur objects are never compared during plan construction.
+        Collect the time arrays of each module: its times (`abs_tvecs`, each plan entry's time), and the same as numbers
+        (`abs_numvecs`, in years), which `make_plan()` sorts by, since comparing dates and durations is slow
         """
         self.abs_tvecs = sc.obj()
         self.abs_numvecs = sc.obj()
 
         # Handle the sim and people first
         sim = self.sim
-        for key in ['sim', sim.people.__class__.__name__.lower()]: # To handle subclassing of People -- TODO, make more elegant!
+        for key in ['sim', sim.people.__class__.__name__.lower()]: # The people by the name of its class, which may be a subclass (see __iadd__())
             self.abs_tvecs[key] = sim.t.tvec
             self.abs_numvecs[key] = sim.t.yearvec
 
@@ -374,16 +347,10 @@ class Loop:
 
     def make_plan(self):
         """
-        Combine the module ordering and the time vectors into the integration plan
-
-        The plan is the list of `LoopEntry` events in execution order: tick-major, and
-        within each tick ordered by function order. When every module shares the sim's
-        canonical timeline (the common case) this order can be generated directly, with
-        no sort. Otherwise a numeric sort is used. In neither case are date/dur objects
-        compared (which is slow); the canonical numeric time vectors (`abs_numvecs`) are
-        used instead.
+        Combine the module ordering and the time vectors into the integration plan: the `LoopEntry` events by time, then by
+        function order; made directly if every module shares the sim's timeline (the usual case), else by sorting
         """
-        if self._timelines_uniform():
+        if all(self._on_sim_time(mod) for mod in self.sim.modules):
             self.plan = self._make_plan_uniform()
         else:
             self.plan = self._make_plan_sorted()
@@ -394,26 +361,10 @@ class Loop:
 
         return
 
-    def _timelines_uniform(self):
-        """ Check whether every module shares the sim's canonical timeline (numeric values, length, and unit) """
-        sim_num = self.abs_numvecs['sim']
-        sim_unit = getattr(self.abs_tvecs['sim'], 'unit', None) # Plain numbers have no unit
-        npts = len(sim_num)
-        for key, num in self.abs_numvecs.items():
-            # Exact numeric equality plus matching unit: only then is the schedule provably identical
-            if len(num) != npts or getattr(self.abs_tvecs[key], 'unit', None) is not sim_unit or not np.array_equal(num, sim_num):
-                return False
-        return True
-
     def _make_plan_uniform(self):
         """
-        Fast path: all modules share the sim's timeline, so emit entries directly in
-        execution order (each tick, every function in func order) without sorting.
-
-        Because all entries at a given tick share one time and the times are strictly
-        increasing, this is identical to sorting by (time, func_order); and the tick
-        index equals the sim time index, so no separate ti pass is needed. The first
-        step is at the first tick, which the timelines are already at, so it has no advance().
+        The plan when every module shares the sim's timeline: at each time point, every function in order (the first with
+        no advance(), since the timelines start there)
         """
         tvec = self.abs_tvecs['sim']
         # Precompute the per-function fields once, rather than rebuilding them per entry
@@ -429,9 +380,7 @@ class Loop:
 
     def _make_plan_sorted(self):
         """
-        General path: modules have heterogeneous timelines, so build the full list of
-        entries and sort into execution order. The sort uses `np.lexsort` on the
-        canonical numeric times (and function order), never on date/dur objects.
+        The plan when modules have timelines of their own: every entry, sorted by numeric time and then function order
         """
         raw = []
         times_num = []
@@ -478,16 +427,9 @@ class Loop:
             ss.warn(warnmsg)
         return
 
-    def store_time(self, start):
-        """ Store the time elapsed since start in as high resolution as possible (only called when profiling) """
-        self.cpu_time.append(time.perf_counter() - start)
-        return
-
     def run_one_step(self):
         """
-        Take a single step, i.e. call a single function; only used for debugging purposes.
-
-        Compare sim.run_one_step(), which runs a full timestep (which involves multiple function calls).
+        Call a single function of the plan, for debugging; `sim.run_one_step()` instead runs a full timestep
         """
         self._check_initialized()
         entry = self.plan[self.index] # Get the next entry
@@ -510,11 +452,7 @@ class Loop:
         """
         Actually run the integration loop; usually called by sim.run()
 
-        By default, per-entry CPU timing is *not* recorded and the plan DataFrame is *not*
-        built at the end of the run -- both are pure overhead (~15–25 ms for a bare 10-year
-        sim) that most runs do not use. Pass `profile=True` to record per-entry timing (which
-        `to_df()`/`plot_cpu()` then expose as the `cpu_time` column); otherwise `cpu_time` is
-        `NaN`. The plan metadata (via `to_df()`) is always available on demand regardless.
+        With `profile=True`, the CPU time of each entry is recorded (the `cpu_time` column of `to_df()`, and `plot_cpu()`).
 
         Args:
             until (str/date/Expr/func): if a time, stop after the step that starts at it (used by sim.run_one_step); if a condition (see `sim.run()`), stop once it holds at the end of a step
@@ -557,7 +495,7 @@ class Loop:
             # Tidy up
             self.index += 1 # Increment the count
             if self.profile:
-                self.store_time(start)
+                self.cpu_time.append(time.perf_counter() - start)
 
         return
 
@@ -598,26 +536,14 @@ class Loop:
                 else:
                     plan.append(entry)
             self.plan = plan
-            self.df = None
-            self.cpu_df = None
-            return
 
-        # Perform the insertion in reverse order
-        name = func.__name__
-        sim_func = ft.partial(func, self.sim) # Construct a partial function (not a lambda, so the sim is updated when deepcopied)
-        for m in sorted(matches, reverse=True):
-            current = self.plan[m]
-            row = LoopEntry(
-                time = current.time,
-                ti = current.ti,
-                func_order = None,
-                func = sim_func,
-                label = name,
-                module = None,
-                func_name = name,
-            )
-            ind = m if before else m+1
-            self.plan.insert(ind, row)
+        else: # Perform the insertion in reverse order
+            name = func.__name__
+            sim_func = ft.partial(func, self.sim) # Construct a partial function (not a lambda, so the sim is updated when deepcopied)
+            for m in sorted(matches, reverse=True):
+                current = self.plan[m]
+                row = LoopEntry(time=current.time, ti=current.ti, func_order=None, func=sim_func, label=name, module=None, func_name=name)
+                self.plan.insert(m if before else m+1, row)
 
         self.df = None
         self.cpu_df = None
@@ -625,17 +551,10 @@ class Loop:
 
     def insert(self, func, label=None, match_fn=None, before=False):
         """
-        Insert a function into the loop plan at the specified location.
+        Insert a function into the loop plan at the specified location, like an analyzer or an intervention but at (almost) any point; after `sim.init()`
 
-        The loop plan metadata view is a dataframe with columns including time (e.g. `date('2025-05-05')`),
-        label (e.g. `'randomnet.step'`), module ('`randomnet'`), and function name (`'step'`).
-        By default, this method will match the conditions in the plan based on
-        the criteria specified.
-
-        This functionality is similar to an analyzer or an intervention, but gives
-        additional flexibility since can be inserted at (almost) any point in a sim.
-
-        Note: the loop must be initialized (`sim.init()`) before you can call this.
+        The plan is matched as a dataframe with columns including time (e.g. `date('2025-05-05')`), label (e.g. `'randomnet.step'`),
+        module (`'randomnet'`), and function name (`'step'`).
 
         Args:
             func (func/Module): the function to insert, which must take a single argument, `sim`; or a module of the sim, whose `step()` is moved there
@@ -687,11 +606,9 @@ class Loop:
 
     def to_df(self):
         """
-        Return a user-friendly version of the plan, omitting object columns
+        Return a user-friendly version of the plan, omitting object columns, also kept as `self.df` (and the time by function as `self.cpu_df`)
 
-        The `cpu_time` column is populated only if the run recorded per-entry timing
-        (i.e. `sim.perf_profile(kind="loop")`); otherwise it is `NaN`. This is built lazily and
-        cached in `self.df`/`self.cpu_df`.
+        The `cpu_time` column is filled only if the run was profiled (`sim.perf_profile(kind="loop")`); otherwise it is `NaN`.
         """
         # Compute the main dataframe
         if self.plan is not None:

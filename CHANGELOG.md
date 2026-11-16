@@ -2,9 +2,9 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
-## Version 4.0.0 (2026-11-12)
+## Version 4.0.0 (2026-11-16)
 
-Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (custom `step()` methods, `ssl.AgentSIR`) still run, but their stocks (the counts in each state) are recorded one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
+Starsim 4 adds a way to write models using declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as "code" (i.e. the Starsim v3 approach, with custom `step()` methods) still run, but their results are slightly different. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim v3 code to Starsim v4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
 
 ### New features
@@ -463,7 +463,7 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 
 ## Version 3.1.0 (2026-02-12)
-- *Migration information*: See `docs/migration/v3.0_v3.1.md` for a detailed, LLM-friendly migration guide.
+- *Migration information*: See [`docs/migration/v3.0_v3.1.md`](https://github.com/starsimhub/starsim/blob/v3.7.4/docs/migration/v3.0_v3.1.md) for a detailed, LLM-friendly migration guide.
 - Added new functionality to the `Pregnancy` module:
     - Renamed `make_p_fertility()` -> `make_p_conceive()`
     - Added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -650,7 +650,7 @@ Starsim v3 comes with several new options, set via `ss.options`:
 `ss.options` also now has a `help` method that will print detailed help on a given option or all options, e.g. `ss.options.help(detailed=True)`.
 
 #### Migration summary
-- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration/v2_v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
+- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then [`docs/migration/v2_v3/README.md`](https://github.com/starsimhub/starsim/blob/v3.7.4/docs/migration/v2_v3/README.md). However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
 - *GitHub info*: PR [927](https://github.com/starsimhub/starsim/pull/927)
 
 

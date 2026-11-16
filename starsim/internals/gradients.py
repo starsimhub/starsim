@@ -1,7 +1,7 @@
 """
 Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
 
-A compartmental engine flattens its flows into a `ss.solvers.backends.kernels.Program`. The kernels
+A compartmental engine flattens its flows into a `ss.solvers.numba.compartmental.Program`. The kernels
 (Numba or Rust) step through it; `run()` here takes the same program and runs the same
 fourth-order Runge-Kutta (or Euler) steps in JAX, so that the run can be
 differentiated (`gradient()`) and many runs with different values can be taken in
@@ -30,6 +30,11 @@ diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 
 table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
+def static_fields(program):
+    """ The parts of the program that say how its flows are put together, rather than numbers """
+    return [name for name in program._fields if name not in diff_fields + table_fields]
+
+
 platform_advice = 'run JAX on the CPU: ss.options.jax_platform = "cpu" (or the environment variable STARSIM_JAX_PLATFORM=cpu, or JAX_PLATFORMS=cpu)' # What to do when JAX fails to start on a GPU
 original = {} # JAX's platforms, and JAX_PLATFORMS, before ss.options.jax_platform first changed them (see jax()), which "auto" goes back to
 
@@ -38,18 +43,11 @@ def jax():
     """
     Import JAX (imported only when first used, since it takes a few tenths of a second), on the platform that `ss.options.jax_platform` says
 
-    If JAX has not been imported yet, it is given a device for each core of the CPU (as
-    `numpyro.set_host_device_count()` does), or as many as the threads asked for in the
-    environment (e.g. `OMP_NUM_THREADS=1`: see `ss.settings.thread_limit`), so that the chains
-    of a posterior run on cores of their own; everything else runs on the first. XLA's own
-    threads (most of them compiling) are not limited by it: no flag of XLA's limits them.
-
-    The platform it runs on is `ss.options.jax_platform` (e.g. "cpu"), if not "auto". If JAX has
-    started already on others (by Starsim or anything else), it is started again on these:
-    arrays made already stay on their devices, and are moved when used with new ones, and
-    what was compiled is compiled again. "auto" goes back to the platforms JAX had before
-    Starsim first changed them. The first time, its devices are started here, so that a GPU
-    that fails to start (e.g. with a CUDA plugin of another version than jaxlib) says what to do.
+    If JAX has not been imported yet, it is given a device for each core of the CPU (or as many as the threads
+    asked for in the environment: see `ss.settings.thread_limit`), so that the chains of a posterior run on cores
+    of their own. If JAX has started already on other platforms, it is started again on these ("auto" goes back
+    to the platforms JAX had before Starsim first changed them). Its devices are started here, so that a GPU that
+    fails to start says what to do.
     """
     if ss.options.jax_platform != 'auto':
         if not original: # About to change them for the first time
@@ -124,11 +122,15 @@ def check_plugins():
 
 #%% The run
 
+def ratio(num, den):
+    """ num/den, or 0 where den is not positive (as in the kernels: e.g. the fraction of an empty place is 0) """
+    jnp = jax().numpy
+    return jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
+
+
 class OneHot(sc.prettyobj):
     """
     Which of n rows each group is in (e.g. its place), applied as a one-hot matrix would be, but as sums and indexing (O(groups), not O(groups²)): nothing at all when each group is its own row
-
-    It exists to avoid a large dense matrix in the run.
 
     Args:
         index (array): the row of each group
@@ -177,7 +179,7 @@ class Run(sc.prettyobj):
         program (Program): the engine's program, for how its flows are put together
         dt (float): the timestep
         npts (int): the number of steps
-        solver (int): 0 for RK4, 1 for Euler (see `ss.solvers.backends.kernels.solvers`)
+        solver (int): 0 for RK4, 1 for Euler (see `ss.solvers.numba.compartmental.solvers`)
         n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
@@ -196,7 +198,7 @@ class Run(sc.prettyobj):
     @staticmethod
     def key(program, dt, npts, solver, n_sub):
         """ What a compiled run depends on, apart from the numbers in it """
-        static = [getattr(program, name) for name in program._fields if name not in diff_fields + table_fields]
+        static = [getattr(program, name) for name in static_fields(program)]
         return (dt, npts, solver, n_sub) + tuple(np.asarray(v).tobytes() + str(np.shape(v)).encode() for v in static)
 
     def layout(self):
@@ -236,14 +238,14 @@ class Run(sc.prettyobj):
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
         self.dense_frac = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time fraction with at least an eighth of its entries is taken as a matrix (see function())
-        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.solvers.backends.kernels.convey())
+        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.solvers.numba.compartmental.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
         self.cv_first = np.array([s[0] for s in slots], dtype=int)
         self.cv_last = np.array([s[-1] for s in slots], dtype=int)
         self.cv_prev = np.array([c for s in slots for c in s[:-1]], dtype=int)
         self.cv_next = np.array([c for s in slots for c in s[1:]], dtype=int)
-        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.solvers.backends.kernels.release_rates())
+        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.solvers.numba.compartmental.release_rates())
         self.comp_mats = {}
         return
 
@@ -259,7 +261,7 @@ class Run(sc.prettyobj):
         return self.comp_mats[nc]
 
     def rates(self, ys, vals):
-        """ The rate of every flow, by group, with the compartments at ys and the program's values in vals: as `ss.solvers.backends.kernels.step()` works them out """
+        """ The rate of every flow, by group, with the compartments at ys and the program's values in vals: as `ss.solvers.numba.compartmental.step()` works them out """
         jnp = jax().numpy
         p = self.p
         fixed, mult, consts, rel_trans, X = vals
@@ -281,7 +283,7 @@ class Run(sc.prettyobj):
             expo = 0.0
             if self.simple and not p.use[0].any() and not p.use[2].any() and not p.exp_n[e]: # One group, mixing with itself
                 for t in range(len(p.sizes)):
-                    expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*jnp.where(n > 0, infectious/jnp.where(n > 0, n, 1.0), 0.0)
+                    expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*ratio(infectious, n)
                 exposures.append(expo)
                 continue
             for t in range(len(p.sizes)):
@@ -293,7 +295,7 @@ class Run(sc.prettyobj):
                 if p.use[0, t]: # Move people to where they spend their time
                     num = self.frac(num, block, X, True)
                     den = self.frac(den, block, X, True)
-                prev = num if p.exp_n[e] else jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
+                prev = num if p.exp_n[e] else ratio(num, den)
                 if p.use[1, t]: # Mix between the levels in each place
                     prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
                 if p.use[2, t]: # Mix between places
@@ -302,14 +304,14 @@ class Run(sc.prettyobj):
             exposures.append(expo)
 
         rows = [fixed[f] for f in range(self.nf)]
-        regs = {} # The parts used more than once (see ss.solvers.backends.kernels.LOAD), those several rates share first
+        regs = {} # The parts used more than once (see ss.solvers.numba.compartmental.LOAD), those several rates share first
         self.evaluate(ys, 0, p.starts[0], consts, exposures, local_n, regs)
         for f in self.dynamic: # The operations on a stack, as in the kernels
             rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n, regs), (self.ng,))*mult[f]
         return jnp.stack(rows)
 
     def members(self, ys, s, consts):
-        """ The compartments of set s, by group, each times its weight if it has one (as `ss.solvers.backends.kernels.member()`) """
+        """ The compartments of set s, by group, each times its weight if it has one (as `ss.solvers.numba.compartmental.member()`) """
         jnp = jax().numpy
         rows = self.set_w[s]
         out = ys[self.sets[s]]
@@ -318,10 +320,10 @@ class Run(sc.prettyobj):
         return out
 
     def evaluate(self, ys, a, b, consts, exposures, local_n, regs):
-        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.solvers.backends.kernels.step()` works out a rate) """
+        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.solvers.numba.compartmental.step()` works out a rate) """
         jnp = jax().numpy
         p = self.p
-        kn = ss.solvers.backends.kernels
+        kn = ss.solvers.numba.compartmental
         stack = []
         for k in range(a, b):
             op, arg = p.ops[k], p.args[k]
@@ -343,7 +345,7 @@ class Run(sc.prettyobj):
                 local = self.members(ys, arg, consts).sum(axis=0)
                 if not self.simple:
                     local = self.place.local(local)
-                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.solvers.backends.kernels.leaf_frac(): the fraction of an empty place is 0
+                stack.append(ratio(local, local_n) if op == kn.FRAC else local) # As ss.solvers.numba.compartmental.leaf_frac()
             elif op >= kn.EXP:
                 x = stack.pop()
                 func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
@@ -367,7 +369,7 @@ class Run(sc.prettyobj):
         return stack[0] if stack else None # None for the shared parts, which leave nothing on the stack
 
     def frac(self, v, block, X, by_columns):
-        """ The time fraction between places times values by place and level (as `ss.solvers.backends.kernels.frac()`) """
+        """ The time fraction between places times values by place and level (as `ss.solvers.numba.compartmental.frac()`) """
         jnp = jax().numpy
         p = self.p
         v = v.reshape(-1, block)
@@ -375,6 +377,14 @@ class Run(sc.prettyobj):
             return (X['sh_mat' if by_columns else 'sh_mat_t'] @ v).ravel()
         frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
         return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
+
+    def mover(self, ys, X, m):
+        """ The compartments that mover m moves between groups, the groups each entry moves them to, and the rate at which they move, by entry """
+        p = self.p
+        ent = slice(p.mov_starts[1, m], p.mov_starts[1, m+1])
+        frm, to = p.mov_pair[0, ent], p.mov_pair[1, ent]
+        comps = p.mov_comps[p.mov_starts[0, m]:p.mov_starts[0, m+1]]
+        return comps, frm, to, ys[comps][:, frm]*X['mov_rate'][ent]
 
     def derivs(self, ys, rates, X, h):
         """ The rate of change of each compartment, and of each transition and mover """
@@ -384,10 +394,7 @@ class Run(sc.prettyobj):
         dy = jnp.zeros_like(ys)
         df = jnp.zeros((self.nflows, self.ng))
         for m in range(p.n_movers): # Movement between groups
-            ent = slice(p.mov_starts[1, m], p.mov_starts[1, m+1])
-            frm, to, rate = p.mov_pair[0, ent], p.mov_pair[1, ent], X['mov_rate'][ent]
-            comps = p.mov_comps[p.mov_starts[0, m]:p.mov_starts[0, m+1]]
-            moved = ys[comps][:, frm]*rate
+            comps, frm, to, moved = self.mover(ys, X, m)
             dy = dy.at[comps].add(jnp.zeros((len(comps), self.ng)).at[:, to].add(moved).at[:, frm].add(-moved))
             df = df.at[p.n_trans + m].add(jnp.zeros(self.ng).at[frm].add(moved.sum(axis=0)))
         src = np.maximum(p.src, 0)
@@ -424,7 +431,7 @@ class Run(sc.prettyobj):
         jx = jax()
         jnp = jx.numpy
         lax = jx.lax
-        K = ss.solvers.backends.kernels
+        K = ss.solvers.numba.compartmental
         dt, n_max = self.dt, self.n_max
         rk4 = self.solver == 0
         rows = {}
@@ -439,9 +446,9 @@ class Run(sc.prettyobj):
         def step(y, ti, step_rows=None):
             nonlocal rows
             rows = step_rows or {} # The rows of the tables that vary in time for this step, if given (see function())
-            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.solvers.backends.kernels.convey())
+            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.solvers.numba.compartmental.convey())
 
-            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a fraction of -1), lowered so that the slot is empty at its end with its other exits (see ss.solvers.backends.kernels.release_rates())
+            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a fraction of -1), lowered so that the slot is empty at its end with its other exits (see ss.solvers.numba.compartmental.release_rates())
                 x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti)), 0.0)*dt
                 small = x < 1e-12
                 frac = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
@@ -450,26 +457,25 @@ class Run(sc.prettyobj):
                 Xs = X
             if self.n_sub:
                 n = self.n_sub
-            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.solvers.backends.kernels.step())
+            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.solvers.numba.compartmental.step())
                 rates0 = self.rates(y, vals(ti))
                 fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
-                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.solvers.backends.kernels.step())
-                    ent = slice(self.p.mov_starts[1, m], self.p.mov_starts[1, m+1])
-                    comps = self.p.mov_comps[self.p.mov_starts[0, m]:self.p.mov_starts[0, m+1]]
-                    dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, self.p.mov_pair[1, ent]].add(y[comps][:, self.p.mov_pair[0, ent]]*X['mov_rate'][ent]))
-                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.solvers.backends.kernels.step())
+                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.solvers.numba.compartmental.step())
+                    comps, frm, to, moved = self.mover(y, X, m)
+                    dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, to].add(moved))
+                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.solvers.numba.compartmental.step())
                 filling = (dy0 > 0) & (y > least)
                 growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
-                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.solvers.backends.kernels.step())
+                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.solvers.numba.compartmental.step())
                     tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
                     rising = (grow > 0) & (tot > least)
                     growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
                 speed = lax.stop_gradient(jnp.maximum(fastest, growing))
                 n = need = jnp.maximum(jnp.ceil(speed*dt/0.25), 1)
-                fast = speed*dt/n > K.FAST # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length (see ss.solvers.backends.kernels.FAST)
+                fast = speed*dt/n > K.FAST # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length (see ss.solvers.numba.compartmental.FAST)
                 h_fast = dt/n
                 if clamp:
                     n = jnp.minimum(n, n_max)
@@ -477,7 +483,7 @@ class Run(sc.prettyobj):
                 need = n
             h = dt/n
 
-            def derivs(ys):
+            def derivs(ys, h=h):
                 return self.derivs(ys, self.rates(ys, vals(ti)), Xs, h)
 
             def sub(s, carry):
@@ -514,12 +520,9 @@ class Run(sc.prettyobj):
                 return y_end, flows, need
 
             def dormand_prince(y):
-                """ The step by Dormand-Prince, as ss.solvers.backends.kernels.step() takes it: substeps of its own length, each kept if its error is within the tolerance (the attempts count as the substeps the step needs; clamped, the last it may take ends the step) """
+                """ The step by Dormand-Prince, as ss.solvers.numba.compartmental.step() takes it: substeps of its own length, each kept if its error is within the tolerance (the attempts count as the substeps the step needs; clamped, the last it may take ends the step) """
                 A, B, E = K.DP_A, K.DP_B, K.DP_E
                 least = 1e-9*y.sum()
-
-                def at(ys, h):
-                    return self.derivs(ys, self.rates(ys, vals(ti)), Xs, h)
 
                 def attempt(carry):
                     k, t, h, y, flows, dy0, df0, forced = carry
@@ -529,11 +532,11 @@ class Run(sc.prettyobj):
                     dys, dfs = [dy0], [df0]
                     for stage in range(1, 7):
                         ys = y + h*sum(A[stage, j]*dys[j] for j in range(stage))
-                        dy, df = at(ys, h)
+                        dy, df = derivs(ys, h)
                         dys.append(dy)
                         dfs.append(df)
                     err = jnp.abs(h*sum(E[j]*dys[j] for j in range(7)))/(least + K.TOL*jnp.maximum(jnp.abs(y), jnp.abs(ys)))
-                    worst = lax.stop_gradient(jnp.max(jnp.where(err > 0, err, 0.0))) # (Not a NaN: see ss.solvers.backends.kernels.step())
+                    worst = lax.stop_gradient(jnp.max(jnp.where(err > 0, err, 0.0))) # (Not a NaN: see ss.solvers.numba.compartmental.step())
                     ok = (worst <= 1) | (h < 1e-6*dt)
                     forced = forced | (last & ~(ok & ends))
                     keep = ok | last
@@ -549,7 +552,7 @@ class Run(sc.prettyobj):
                 def going(carry):
                     return ~(carry[1] >= dt*(1 - 1e-12))
 
-                dy0, df0 = at(y, h_fast)
+                dy0, df0 = derivs(y, h_fast)
                 carry = (jnp.asarray(0), jnp.asarray(0.0), jnp.asarray(h_fast, dtype=y.dtype), y, jnp.zeros((self.nflows, self.ng)), dy0, df0, jnp.asarray(False))
                 if clamp and self.fixed: # A loop with a fixed count, for reverse mode, the attempts after the last skipped
                     carry = lax.fori_loop(0, n_max, lambda s, c: lax.cond(going(c), attempt, lambda c: c, c), carry)
@@ -563,14 +566,14 @@ class Run(sc.prettyobj):
             else:
                 y_end, flows, need = lax.cond(fast, dormand_prince, substeps, y)
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
-                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.solvers.backends.kernels.convey())
+                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.solvers.numba.compartmental.convey())
             return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
 
         return step
 
     @staticmethod
     def deliver(y, X, ti):
-        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.solvers.backends.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.solvers.numba.compartmental.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
         for k in range(X['sh_due'].shape[0]):
             reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
             a = reached*X['sh_cov'][k]
@@ -711,10 +714,7 @@ class JointRun(sc.prettyobj):
 
         return run
 
-    def get(self, kind='run'):
-        if kind not in self.compiled:
-            self.compiled[kind] = compile_run(self.function(), kind)
-        return self.compiled[kind]
+    get = Run.get
 
 
 def capture(engine, compact=True):
@@ -774,8 +774,20 @@ def units(sim):
     return out
 
 
+def of_unit(unit, values):
+    """ What a unit (see `units()`) is run with, from a value for each engine: its engine's, or a tuple of its engines' """
+    return values[unit[0]] if len(unit) == 1 else tuple(values[j] for j in unit)
+
+
+def shifted(x, k, h):
+    """ A copy of the values x, with value k moved by h """
+    x = x.copy()
+    x[k] += h
+    return x
+
+
 def run_joint(joint):
-    """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.solvers.backends.kernels.run()` does """
+    """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.solvers.numba.compartmental.run()` does """
     captured = [capture(engine) for engine in joint.engines]
     run = joint_runner(joint, [c[:2] for c in captured])
     ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
@@ -798,7 +810,7 @@ def call(run, kind, *args):
 
 
 def run(engine):
-    """ Take a whole run of an engine in JAX: returns what `ss.solvers.backends.kernels.run()` does """
+    """ Take a whole run of an engine in JAX: returns what `ss.solvers.numba.compartmental.run()` does """
     program, how, X = capture(engine)
     y, stocks, flows, n = call(runner(engine, program, how), 'run', X)
     return np.asarray(y), np.asarray(stocks), np.asarray(flows), 0.0
@@ -813,8 +825,7 @@ def stack(Xs):
 def check_same(programs):
     """ Runs can only be taken together if their flows are put together in the same way """
     first, how = programs[0]
-    static = [name for name in first._fields if name not in diff_fields + table_fields]
-    if all(h == how and all(getattr(p, name) is getattr(first, name) for name in static) for p,h in programs): # The same arrays, so nothing to compare
+    if all(h == how and all(getattr(p, name) is getattr(first, name) for name in static_fields(first)) for p,h in programs): # The same arrays, so nothing to compare
         return
     keys = {Run.key(program, *how) for program,how in programs}
     if len(keys) > 1:
@@ -931,9 +942,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
     for k,h in enumerate(hs):
         sides = []
         for sign in [1, -1]:
-            x = x0.copy()
-            x[k] += sign*h
-            set_pars(x)
+            set_pars(shifted(x0, k, sign*h))
             sides.append([capture(mod.engine) for mod in mods])
         for j in range(len(mods)):
             check_same([sides[0][j][:2], sides[1][j][:2], base[j][:2]])
@@ -947,9 +956,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
     for k,h in enumerate(hs):
         sides = []
         for sign in [1, -1]:
-            x = x0.copy()
-            x[k] += sign*h
-            set_pars(x)
+            set_pars(shifted(x0, k, sign*h))
             give(sim, outs, shift=[[sign*h*v[k] for v in slope[:3]] for slope in slopes])
             sides.append(read(sim.run()))
         derivs.append(difference(sides[0], sides[1], h))
@@ -979,8 +986,7 @@ def find_pars(sim, names=None, several=False):
         for name,p in mod.graph.pars.items():
             if (wanted is None and p.bounds is not None) or (wanted is not None and (name in wanted or f'{mod.name}.{name}' in wanted)):
                 if not any(p is q for q in out.values()): # A parameter shared by several modules is counted once
-                    same = [m.graph.pars[name] for m in sim.declared if name in m.graph.pars]
-                    out[name if all(q is same[0] for q in same) else f'{mod.name}.{name}'] = p
+                    out[par_key(sim, mod, name)] = p
     missing = [name for name in sc.tolist(wanted) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if wanted is not None else [] # By name, or 'module.name'
     if missing or not out:
         options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars]
@@ -994,6 +1000,12 @@ def find_pars(sim, names=None, several=False):
             errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
             raise ValueError(errormsg)
     return out
+
+
+def par_key(sim, mod, name):
+    """ The name of a declared module's parameter: by its name, or as 'module.name' if other modules have other parameters of that name """
+    same = [m.graph.pars[name] for m in sim.declared if name in m.graph.pars]
+    return name if all(q is same[0] for q in same) else f'{mod.name}.{name}'
 
 
 def base_name(name):
@@ -1112,9 +1124,19 @@ def fixed_rate(flow, dw, ctx):
     return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/(1/val if dw.is_rate else val)
 
 
-def table_years(engine, raw):
-    """ The year of each row of an engine's tables, for a value that varies in time, as `ss.solvers.Compartmental.tables()` works them out """
-    return engine.table_years(raw)
+def rate_flows(engine, fitted):
+    """ The flows of an engine whose rate is worked out from fitted parameters alone (`fitted(leaf)` says whether a parameter is): (index, flow, dwell time) of each """
+    out = []
+    for f,flow in enumerate(engine.flows):
+        if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.solvers.numba.compartmental.convey())
+            continue
+        dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
+        leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
+        if dw is not None and dw.dist is not None and any(fitted(leaf) for leaf in dw.par.leaves):
+            raise Unsupported(f'a parameter of the distribution of a dwell time ("{flow.tr.name}")')
+        if any(fitted(leaf) for leaf in leaves):
+            out.append((f, flow, dw))
+    return out
 
 
 def time_value(raw, ctx, years, values=None):
@@ -1179,9 +1201,9 @@ class Context(sc.prettyobj):
         return sum(self.stock(s) for s in states)
 
     def frac(self, states):
-        jnp = self.xp
+        xp = self.xp
         n = self.count(self.engine.graph.people_states)
-        return jnp.where(n > 0, self.count(states)/jnp.where(n > 0, n, 1.0), 0.0)
+        return xp.where(n > 0, self.count(states)/xp.where(n > 0, n, 1.0), 0.0)
 
     local_count = count
     local_frac = frac
@@ -1297,13 +1319,7 @@ class Density(sc.prettyobj):
         lows, highs = self.limits()
         if len(self.x0) <= 4:
             return [np.array(corner) for corner in itertools.product(*zip(lows, highs))]
-        points = []
-        for i in range(len(self.x0)):
-            for lim in [lows, highs]:
-                x = self.x0.copy()
-                x[i] = lim[i]
-                points.append(x)
-        return points
+        return [shifted(self.x0, i, lim[i] - self.x0[i]) for i in range(len(self.x0)) for lim in [lows, highs]]
 
     #%% The numbers in the run
 
@@ -1319,7 +1335,7 @@ class Density(sc.prettyobj):
         for engine in self.engines:
             for p in engine.time_pars:
                 if isinstance(p.raw, ss.parameters.TimeValue) and (id(p) in self.series_of or any(id(q) in self.index for q in p.raw.pars)):
-                    years = self.timed[(id(engine), id(p))] = table_years(engine, p.raw)
+                    years = self.timed[(id(engine), id(p))] = engine.table_years(p.raw)
                     with jax().enable_x64(True):
                         same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
                     if not same:
@@ -1328,56 +1344,40 @@ class Density(sc.prettyobj):
         self.hows = [c[1] for c in captured]
         self.X0 = [c[2] for c in captured]
         keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
+        same_layout = lambda captured: all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys))
         corners = [] # The numbers at the corners of the bounds, where the run is laid out as at the start
         for x in self.corners():
             captured = self.capture(x)
-            if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)):
+            if same_layout(captured):
                 corners.append((x, [c[2] for c in captured]))
         middle = np.mean(self.limits(), axis=0) # And at the middle of the bounds, where with many parameters all of them have moved (see corners())
         captured = self.capture(middle)
-        checked = corners + [(middle, [c[2] for c in captured])] if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)) else corners
+        checked = corners + [(middle, [c[2] for c in captured])] if same_layout(captured) else corners
 
         # The run of each set of engines that are run together, with room to spare for the substeps
         self.runs = []
         for unit in self.units:
-            if len(unit) == 1:
-                j = unit[0]
-                base = runner(self.engines[j], self.programs[j], self.hows[j])
-                args = self.X0[j]
-            else:
-                joint = self.engines[unit[0]].joint
-                base = joint_runner(joint, [(self.programs[j], self.hows[j]) for j in unit])
-                args = tuple(self.X0[j] for j in unit)
+            j = unit[0]
+            joint = self.engines[j].joint if len(unit) > 1 else None
+            parts = [(self.programs[i], self.hows[i]) for i in unit]
+            base = runner(self.engines[j], *parts[0]) if joint is None else joint_runner(joint, parts)
             if not base.n_sub: # The most a step needs at the start and at the corners of the bounds, with room to spare, so that a draw anywhere within them gets the substeps it needs
-                need = np.asarray(call(base, 'run', args)[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
+                need = np.asarray(call(base, 'run', of_unit(unit, self.X0))[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
                 for x,Xs in corners:
-                    need = max(need, np.asarray(call(base, 'run', Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit))[3]).max())
+                    need = max(need, np.asarray(call(base, 'run', of_unit(unit, Xs))[3]).max())
                 n_max = int(2**np.ceil(np.log2(max(2*need, 1))))
             else:
                 n_max = base.n_sub
-            if len(unit) == 1:
-                self.runs.append(Run(self.programs[unit[0]], *self.hows[unit[0]], n_max=n_max))
-            else:
-                self.runs.append(joint_runner(joint, [(self.programs[j], self.hows[j]) for j in unit], n_max=n_max))
+            program, how = parts[0]
+            self.runs.append(Run(program, *how, n_max=n_max) if joint is None else joint_runner(joint, parts, n_max=n_max))
 
         # The values in the rates that are fitted, and the flows whose rate is worked out from fitted parameters alone
         self.consts = []
         self.fixed = []
         for engine in self.engines:
-            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if id(p) in self.index or id(p) in self.levels or (id(engine), id(p)) in self.timed})
             fitted = lambda leaf: id(leaf) in self.index or id(leaf) in self.levels or (id(engine), id(leaf)) in self.timed
-            fixed = []
-            for f,flow in enumerate(engine.flows):
-                if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.solvers.backends.kernels.convey())
-                    continue
-                dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
-                leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
-                if dw is not None and dw.dist is not None and any(fitted(leaf) for leaf in dw.par.leaves):
-                    raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
-                if any(fitted(leaf) for leaf in leaves):
-                    mult = np.reshape(engine.flow_mult(flow), -1).astype(float) # For each group, or once for all (as the table is then kept: see capture())
-                    fixed.append((f, flow, dw, mult))
-            self.fixed.append(fixed)
+            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if fitted(p)})
+            self.fixed.append([(f, flow, dw, np.reshape(engine.flow_mult(flow), -1).astype(float)) for f,flow,dw in rate_flows(engine, fitted)]) # The multiplier for each group, or once for all (as the table is then kept: see capture())
 
         # The rest, by how they change with each parameter
         h = 1e-4*np.where(self.x0 != 0, np.abs(self.x0), 1.0)
@@ -1385,10 +1385,8 @@ class Density(sc.prettyobj):
         for i in range(len(self.x0)):
             sides = []
             for sign in [1, -1]:
-                x = self.x0.copy()
-                x[i] += sign*h[i]
-                captured = self.capture(x)
-                if any(Run.key(program, *how) != key for (program,how,X),key in zip(captured, keys)):
+                captured = self.capture(shifted(self.x0, i, sign*h[i]))
+                if not same_layout(captured):
                     raise Unsupported(f'the fitted parameter "{self.names[i]}" changes how the model is laid out')
                 sides.append([c[2] for c in captured])
             for j,X0 in enumerate(self.X0):
@@ -1472,33 +1470,21 @@ class Density(sc.prettyobj):
         for col,lik in liks.items():
             if lik is not None and not isinstance(lik, ss.Dist):
                 raise Unsupported(f'the likelihood of "{col}", a function')
-        lined = ss.results.lineup(sim)
         self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
-        self.series = []
-        for col in sim.data.columns:
-            base, dims = ss.results.parse_column(col)
-            res = ss.results.match_name(sim, base)
-            owners = [j for j,mod in enumerate(self.mods) if mod.results.get(res.name) is res] # By the result itself, since its module is a label
-            keep = None
-            if dims: # The groups of a stratum
-                keep = np.ones(sim.groups.n_groups)
-                for dim,level in ss.results.column_levels(sim, dims).items():
-                    d = sim.groups.dim_index(dim)
-                    keep = keep*(sim.groups.group_levels[:, d] == sim.groups.strats[d].index(level))
-            if not owners:
+        self.series = ss.fitting.data_series(sim, liks, self.weights)
+        for s in self.series:
+            col, name = s.col, s.name
+            if s.j is None:
                 raise Unsupported(f'the data series "{col}", which is not a result of a declared disease')
-            j = owners[0]
-            engine = self.engines[j]
+            engine = self.engines[s.j]
             graph = engine.graph
-            name = res.name
             staying = name.startswith('n_') and name[2:] in engine.outcomes # The number in an outcome that people stay in
             if name not in graph.states and not staying and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
                 raise Unsupported(f'the data series "{col}" is the result "{name}", which is not a state, a transition, an outcome, or an expression')
             if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
                 raise Unsupported(f'the outcome "{name}"')
-            W, expected, rows = lined[col]
-            rows, cols = np.nonzero(W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
-            self.series.append(sc.obj(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fitting.series_weight(self.weights, col)))
+            rows, cols = np.nonzero(s.W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
+            s.W = (rows, cols, s.W[rows, cols], s.W.shape[0])
         return
 
     def outcomes(self, engine, ctx, new, npts):
@@ -1576,8 +1562,7 @@ class Density(sc.prettyobj):
         Xs = self.numbers(x)
         out = {}
         for unit,run in zip(self.units, self.runs):
-            args = Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit)
-            stocks = run.function(clamp=True)(args)[1]
+            stocks = run.function(clamp=True)(of_unit(unit, Xs))[1]
             for k,j in enumerate(unit):
                 st = stocks if len(unit) == 1 else stocks[k]
                 total = st.sum(axis=-1) # Over the groups
@@ -1596,12 +1581,9 @@ class Density(sc.prettyobj):
         flows = [None]*len(self.engines)
         need = 0
         for unit,run in zip(self.units, self.runs):
-            if len(unit) == 1:
-                y_end, stocks[unit[0]], flows[unit[0]], n = run.function(clamp=True)(Xs[unit[0]])
-            else:
-                y_end, unit_stocks, unit_flows, n = run.function(clamp=True)(tuple(Xs[j] for j in unit))
-                for k,j in enumerate(unit):
-                    stocks[j], flows[j] = unit_stocks[k], unit_flows[k]
+            y_end, unit_stocks, unit_flows, n = run.function(clamp=True)(of_unit(unit, Xs))
+            for k,j in enumerate(unit):
+                stocks[j], flows[j] = (unit_stocks, unit_flows) if len(unit) == 1 else (unit_stocks[k], unit_flows[k])
             need = jax().numpy.maximum(need, n)
         results = self.results(x, stocks, flows)
         total = 0.0

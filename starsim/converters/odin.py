@@ -27,7 +27,7 @@ import keyword
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, Code, build, factors, product
+from .core import Source, Code, build, factors, product, map_children
 
 __all__ = ['load_odin']
 
@@ -178,12 +178,7 @@ def strip_index(node):
             return ast.Name(f'{name}__index') # Anything else: kept, and found later
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'sum' and len(n.args) == 1 and isinstance(n.args[0], ast.Name):
             return ast.Name(f'{n.args[0].id}__sum')
-        for field,val in ast.iter_fields(n):
-            if isinstance(val, ast.AST):
-                setattr(n, field, visit(val))
-            elif isinstance(val, list):
-                setattr(n, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
-        return n
+        return map_children(n, visit)
     return visit(node)
 
 

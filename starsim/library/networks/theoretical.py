@@ -17,14 +17,8 @@ _ = None # Sentinel for "not provided" default arguments
 
 class NullNet(ss.Network):
     """
-    A convenience class for a network of size n that only has self-connections with a weight of 0.
-    This network can be useful for debugging purposes or as a placeholder network during development
-    for conditions that require more complex network mechanisms.
-
-    Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
-
-    For an empty network (i.e., no edges), use
-    `ss.RandomNet(n_contacts=0)`.
+    A network of n agents, each with one contact (themselves) of weight 0: a placeholder, e.g. for debugging.
+    For a network with no edges, use `ss.RandomNet(n_contacts=0)`.
 
     Note: CRN safe.
 
@@ -47,10 +41,9 @@ class NullNet(ss.Network):
         popsize = sim.pars['n_agents']
         if self.n is None:
             self.n = popsize
-        else:
-            if self.n > popsize:
-                errormsg = f'Please ensure the size of the network ({self.n}) is less than or equal to the population size ({popsize}).'
-                raise ValueError(errormsg)
+        elif self.n > popsize:
+            errormsg = f'Please ensure the size of the network ({self.n}) is less than or equal to the population size ({popsize}).'
+            raise ValueError(errormsg)
         self.get_edges()
         return
 
@@ -188,8 +181,7 @@ class StaticNet(ss.Network):
     def get_edges(self):
         p1s = []
         p2s = []
-        for edge in self.nx_graph.edges():
-            p1, p2 = edge
+        for p1,p2 in self.nx_graph.edges():
             p1s.append(p1)
             p2s.append(p2)
         edges = dict(p1=p1s, p2=p2s, weight=np.ones_like(p1s))

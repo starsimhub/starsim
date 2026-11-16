@@ -16,7 +16,7 @@ from types import SimpleNamespace as Bunch # A plain object with attributes; muc
 __all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'people_flows', 'crude_rates', 'population_flows', 'hold_flows']
 
 
-from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.solvers.backends.kernels.step()
+from .numba.compartmental import no_tables # For a step whose program holds for the whole step: see ss.solvers.numba.compartmental.step()
 
 
 def convert(val, unit, cache=None):
@@ -532,6 +532,33 @@ class Engine(Telling, Effects):
 
     It exists to keep what does not depend on the solver in one place.
 
+    Each engine (`ss.solvers.Compartmental`, and `ss.solvers.Agents` with its variants `Compiled` and `Events`) defines the rest, in its
+    own terms (as agents, uids; in compartments, fractions of each state and group):
+
+    - `define()`: put the run-time form of the declared states on the module, and make its distributions
+    - `init_pre()`: lay out what the run needs, before the people are initialized
+    - `init_post()`: set the starting values, once the people are initialized
+    - `step_state()`: the part of a step before the interventions: what changes with no contact with others
+    - `step()`: the part of a step after the interventions, including transmission
+    - `arrive()`: add the people who arrive in a step
+    - `force()`: move people to a state now, by a delivery; returns how many moved
+    - `move_states()`: move people out of some states into another
+    - `move_some()`: a one-off move from code (`ss.move()`)
+    - `whole_steps()`: a time as a number of whole steps
+    - `backfill_burnin()`: place the people part way through at the start (see `ss.Pregnancy`'s `burnin=`)
+    - `n_people()`: the number of people, in all or by group
+    - `count()`: the number of people in some states, in all or by group
+    - `set_count()`: set the number of people in a state
+    - `stock()`: the number in a state, as an expression reads it
+    - `exposure()`: exposure to the people in a state
+    - `prop()`: the value of a property of people, as an expression reads it
+    - `attr()`: the value of an attribute, as an expression reads it
+    - `clock()`: the value of a clock (`X.time_in`), as an expression reads it
+    - `held_frac()`: the fraction holding a product, as an expression reads it
+    - `mother()`: the value of an expression for each person's mother (`ss.mother()`)
+    - `call_uids()`: call a function that takes uids
+    - `note_counter()`: note a counter whose levels are not one apart, if it matters to this engine
+
     Args:
         module (`ss.Module`): the module whose graph is run
         sim (`ss.Sim`): the sim
@@ -566,104 +593,6 @@ class Engine(Telling, Effects):
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
-
-    #%% What each engine defines, in its own terms: as agents, uids; in compartments, fractions of each state and group
-
-    def undefined(self, name):
-        """ The error for a method this engine does not define """
-        return ss.CapabilityError(f'{type(self).__name__} does not define {name}()')
-
-    def define(self):
-        """ Put the run-time form of the declared states on the module, and make its distributions """
-        raise self.undefined('define')
-
-    def init_pre(self):
-        """ Lay out what the run needs, before the people are initialized """
-        raise self.undefined('init_pre')
-
-    def init_post(self):
-        """ Set the starting values, once the people are initialized """
-        raise self.undefined('init_post')
-
-    def step_state(self):
-        """ The part of a step before the interventions: what changes with no contact with others """
-        raise self.undefined('step_state')
-
-    def step(self):
-        """ The part of a step after the interventions, including transmission """
-        raise self.undefined('step')
-
-    def arrive(self, *args, **kwargs):
-        """ Add the people who arrive in a step """
-        raise self.undefined('arrive')
-
-    def force(self, *args, **kwargs):
-        """ Move people to a state now, by a delivery; returns how many moved """
-        raise self.undefined('force')
-
-    def move_states(self, *args, **kwargs):
-        """ Move people out of some states into another """
-        raise self.undefined('move_states')
-
-    def move_some(self, *args, **kwargs):
-        """ A one-off move from code (`ss.move()`) """
-        raise self.undefined('move_some')
-
-    def whole_steps(self, *args, **kwargs):
-        """ A time as a number of whole steps """
-        raise self.undefined('whole_steps')
-
-    def backfill_burnin(self, sp):
-        """ Place the people part way through at the start (see `ss.Pregnancy`'s `burnin=`) """
-        raise self.undefined('backfill_burnin')
-
-    def n_people(self, total=True):
-        """ The number of people, in all or by group """
-        raise self.undefined('n_people')
-
-    def count(self, states, total=True):
-        """ The number of people in some states, in all or by group """
-        raise self.undefined('count')
-
-    def set_count(self, state, value):
-        """ Set the number of people in a state """
-        raise self.undefined('set_count')
-
-    def stock(self, state):
-        """ The number in a state, as an expression reads it """
-        raise self.undefined('stock')
-
-    def exposure(self, state):
-        """ Exposure to the people in a state """
-        raise self.undefined('exposure')
-
-    def prop(self, cond):
-        """ The value of a property of people, as an expression reads it """
-        raise self.undefined('prop')
-
-    def attr(self, a):
-        """ The value of an attribute, as an expression reads it """
-        raise self.undefined('attr')
-
-    def clock(self, clock):
-        """ The value of a clock (`X.time_in`), as an expression reads it """
-        raise self.undefined('clock')
-
-    def held_frac(self, expr):
-        """ The fraction holding a product, as an expression reads it """
-        raise self.undefined('held_frac')
-
-    def mother(self, expr):
-        """ The value of an expression for each person's mother (`ss.mother()`) """
-        raise self.undefined('mother')
-
-    def call_uids(self, func, p=None):
-        """ Call a function that takes uids """
-        raise self.undefined('call_uids')
-
-    def note_counter(self, strat, what):
-        """ Note a counter whose levels are not one apart, if it matters to this engine """
-        raise self.undefined('note_counter')
 
     #%% What the engines share
 
@@ -1373,7 +1302,7 @@ class Engine(Telling, Effects):
         if getattr(route, 'has_acts', False):
             self._per_act = True
             return self.act_hazards(raw, route)
-        elif isinstance(raw, ss.peract): # Checked when the sim is built: see ss.solvers.choose.check_betas()
+        elif isinstance(raw, ss.peract): # Checked when the sim is built: see ss.solvers.build.check_betas()
             raise ValueError(f'beta for "{self.mod.name}" on "{nkey}" is {raw}, a probability per act, but "{nkey}" has no acts')
         return self.plain_value(raw)
 
@@ -1448,7 +1377,7 @@ class Engine(Telling, Effects):
 
     @property
     def inferred_unit(self):
-        """ Whether the sim's unit was worked out from the typed values in the model, rather than given with unit= (see `ss.solvers.choose.init_unit()`) """
+        """ Whether the sim's unit was worked out from the typed values in the model, rather than given with unit= (see `ss.solvers.build.init_unit()`) """
         return self.sim.pars.unit is None and self.sim.unit_source == 'the typed values in the model'
 
     def bare_return(self, p, func, out):
@@ -1695,7 +1624,7 @@ class Engine(Telling, Effects):
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
             if isinstance(sim.solver, ss.solvers.abm) and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
                 continue
-            if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.solvers.backends.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
+            if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.solvers.numba.compartmental.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 frac = min(x, 1) if euler else -np.expm1(-x)
                 leave = 'almost everyone leaves' if frac > 0.99 else f'{frac:.0%} leave'

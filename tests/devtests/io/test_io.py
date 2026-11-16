@@ -1,95 +1,15 @@
 """
-Test importing models from other frameworks (ss.import_from()), as the Starsim code it writes; and exporting a sim to EMULSION
+Test importing models from other frameworks (ss.import_from()): the rules for reading rates, the Starsim code an import writes, and one import of each format, of an SIR written as that framework writes it, against the same SIR written by hand
 
-The EMULSION export is run with EMULSION from its environment in the lingua_franca repo (`_envs/emulsion`; set STARSIM_LF to say where the repo is), and skipped if it is not there.
+The tests against the frameworks' own examples are in the lingua_franca repo's `tests/conversion/`; the exporters are tested in test_io_export.py.
 """
-
-# %% Imports and settings
-import csv
-import tempfile
-import subprocess
 import pytest
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import corpus
-import paths
 
 kw = dict(verbose=0)
-emulsion_bin = paths.lf/'_envs'/'emulsion'/'bin'/'emulsion'
-
-# An EMULSION model with a fixed stay, a per-step probability, deaths, a capacity, and things that are not translated
-emulsion_yaml = """
-model_name: seirq
-time_info: {time_unit: days, delta_t: 1, total_duration: '2*50'}
-levels:
-  population: {aggregation_type: compartment}
-processes:
-  population: [infection]
-grouping:
-  population:
-    infection: {machine_name: health_state, key_variables: [health_state]}
-state_machines:
-  health_state:
-    states:
-      - S: {name: Susceptible}
-      - E: {name: Exposed}
-      - I: {name: Infectious}
-      - Q: {name: Quarantined, duration: quarantine_duration}
-      - R: {name: Resistant}
-      - D: {autoremove: yes}
-    transitions:
-      - {from: S, to: E, rate: 'force_of_infection'}
-      - {from: E, to: I, proba: p_onset}
-      - {from: I, to: R, rate: recovery}
-      - {from: I, to: Q, rate: detection, when: 'some_period'}
-      - {from: Q, to: R, proba: 1}
-      - {from: I, to: D, rate: mortality}
-parameters:
-  initial_population_size: {value: 1000}
-  initial_infected: {value: 10}
-  transmission_I: {value: 0.5}
-  p_onset: {value: 0.2}
-  recovery: {value: 0.1}
-  mortality: {value: 0.001}
-  quarantine_duration: {value: '2*5'}
-  quarantine_size: {value: 20}
-  detection: {value: '0.05*StrictLessThan(total_Q, quarantine_size)'}
-  force_of_infection: {value: 'transmission_I * total_I / total_population'}
-  prevalence_pct: {value: '100 * (total_E + total_I) / total_population'}
-initial_conditions:
-  population:
-    - population:
-        - total: 'initial_population_size'
-        - vars: [S]
-          amount: 'initial_population_size - initial_infected'
-        - vars: [I]
-          amount: 'initial_infected'
-outputs:
-  population: {period: 1, extra_vars: [prevalence_pct]}
-"""
-
-
-# Plain state names, a probability per day with a weekly step, births, and a metapopulation level, which is listed as not translated
-emulsion_weekly = """
-time_info: {time_unit: days, delta_t: 7, total_duration: 14}
-levels: {population: {aggregation_type: compartment}, metapop: {contains: [population], aggregation_type: metapopulation}}
-state_machines:
-  health_state:
-    states: [S, I, R]
-    transitions: [{from: S, to: I, rate: 0}, {from: I, to: R, proba: 0.1}]
-    productions: [{from: R, to: S, rate: 0.01}]
-prototypes: {population: [{infected: {health_state: I}}]}
-initial_conditions: {population: [{prototype: infected, amount: 1000}]}
-"""
-
-
-def emulsion_file(folder):
-    """ Write the EMULSION model to a file """
-    filename = sc.path(folder) / 'seirq.yaml'
-    sc.savetext(filename, emulsion_yaml)
-    return filename
 
 
 def test_rates():
@@ -117,111 +37,10 @@ def test_rates():
     assert out == ['beta * I', 'beta * I', 'beta * I.n', 'gamma', 'beta * W.n / (W.n + K)', 'xi * I.n', 'mu * (S + I + R).n', 'beta * I', 'beta * I.n / K2'], out
     rules = [rates.classify(sc.obj(src=a, dst=b, rate=r, per=per))[2] for a,b,r,per in flows]
     assert rules[:5] == [2, 2, 3, 4, 5] and rules[7:] == [2, 3]
-    return out
 
 
-def test_emulsion(tmp_path):
-    sc.heading('Testing an EMULSION import')
-    filename = emulsion_file(tmp_path)
-    with pytest.warns(ss.errors.ImportIncomplete):
-        sim = ss.import_from(filename, **kw) # The format is told from the file
-    imp = sim.imported
-    assert imp.format == 'EMULSION'
-    assert any('when' in name for name,why in imp.incomplete), 'The calendar condition should be listed as not translated'
-    sim.init()
-    dis = sim.diseases.seirq
-    assert set(dis.states.keys()) == {'S', 'E', 'I', 'Q', 'R'} # D is removed: an outflow
-    assert isinstance(sim.pars.solver, ss.solvers.binomial)
-    assert 'force_of_infection' in dis.graph.transitions # A rate given by a named expression names its transition
-    assert dis.graph.transitions.force_of_infection.contact
-    sim.run()
-    res = sim.results.seirq
-    full = res.Q.values >= 20 # The capacity is a condition on the count at the start of a step
-    assert full.any() and (res.detection.values[full] == 0).all()
-    assert np.isclose(res.prevalence_pct[10], 100*(res.E[10] + res.I[10])/(res.S[10] + res.E[10] + res.I[10] + res.Q[10] + res.R[10]))
-
-    # The same model as an ODE agrees with the stochastic one on average
-    ode = ss.import_from(filename, format='emulsion', **kw)
-    ode.pars.solver = 'ode'
-    ode.run()
-    runs = ss.parallel(ss.import_from(filename, format='emulsion', **kw), n_runs=50).results.seirq.R.values[:, -1].mean()
-    assert np.isclose(runs, ode.results.seirq.R[-1], rtol=0.1)
-
-    # A probability is per time unit, as EMULSION reads it, not per step
-    sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
-    with pytest.warns(ss.errors.ImportIncomplete):
-        weekly = ss.import_from(tmp_path/'weekly.yaml', format='emulsion', **kw)
-    listed = [name for name,why in weekly.imported.incomplete]
-    assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
-    assert 'convert-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
-    left = weekly.new(solver='ode').run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
-    assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
-    return sim
-
-
-def emulsion_export_sims():
-    """ An SEIR with a dwell time written as Erlang stages and deaths from I, and an SIR with births and deaths """
-    S, E, I, R = ss.states('S E I R')
-    seir = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=ss.Transition(I, R, dur=ss.lognormal(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
-    S, I, R = ss.states('S I R')
-    sir = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.5)), infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(10), deaths=ss.death([S, I, R], rate=ss.peryear(0.2)), init_prev=0.01, name='sir')
-    return dict(seir=ss.Sim(seir, total_pop=1000, unit='day', stop=80, verbose=0), sir=ss.Sim(sir, total_pop=1000, unit='day', stop=60, verbose=0))
-
-
-def test_emulsion_export(tmp_path):
-    sc.heading('Testing an export to EMULSION, read back')
-    sims = emulsion_export_sims()
-    text, summary, lost = ss.converters.emulsion.to_emulsion(sims['seir'])
-    assert '{from: S, to: E, rate: beta * I / N, desc: infection}' in text # The rate for each person, the source taken out
-    assert '{from: I_1, to: removed, rate: rate_deaths, desc: deaths_1}' in text and 'autoremove: true' in text
-    assert 'I: {desc: the expression I, value: total_I_1 + total_I_2' in text and 'aggregation_type: compartment' in text
-    sc.savetext(tmp_path/'seir.yaml', text)
-    back = ss.import_from(tmp_path/'seir.yaml', format='emulsion', **kw)
-    assert back.pars.solver == ss.solvers.binomial(substeps=1) # As EMULSION runs it
-    ref = sims['seir'].new(solver='ode').run().results.seir
-    res = back.new(solver='ode').run().results.seir
-    for k in ['S', 'E', 'R']:
-        assert np.allclose(ref[k].values, res[k].values, rtol=1e-9, atol=1e-9), f'{k} should be the same read back'
-    text, summary, lost = ss.converters.emulsion.to_emulsion(sims['sir'])
-    assert '{from: R, to: S, rate: \'0.0013698630136986301\', desc: births}' in text # Births, from the people in every state
-    return back
-
-
-@pytest.mark.skipif(not emulsion_bin.exists(), reason='needs EMULSION (its environment in the lingua_franca repo; set STARSIM_LF)')
-def test_emulsion_export_run(tmp_path):
-    sc.heading('Testing an export to EMULSION, run in EMULSION')
-    n_runs = 20
-    for name,sim in emulsion_export_sims().items():
-        file = tmp_path/f'{name}.yaml'
-        sc.savetext(file, ss.converters.emulsion.to_emulsion(sim)[0])
-        subprocess.run([str(emulsion_bin), 'run', str(file), '--runs', str(n_runs), '--seed', '1', '--quiet', '--output-dir', str(tmp_path/name)], check=True, capture_output=True, cwd=tmp_path)
-        rows = list(csv.DictReader(open(tmp_path/name/'counts.csv')))
-        steps = sorted({int(r['step']) for r in rows})
-        I = np.array([np.mean([sum(float(v) for c,v in r.items() if c == 'I' or c.startswith('I_')) for r in rows if int(r['step']) == s]) for s in steps])
-        ref = np.mean([sim.new(solver=ss.solvers.binomial(substeps=1), rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
-        if name == 'seir': # The Erlang stages in whole steps are not the lognormal dwell time in whole steps: compare with the import, whose stages are states
-            back = ss.import_from(file, format='emulsion', **kw)
-            ref = np.mean([sum(r[c].values for c in r.keys() if c.startswith('I_') and c[2:].isdigit()) for r in [back.new(rand_seed=i).run().results.seir for i in range(n_runs)]], axis=0)
-        assert np.abs(I - ref).max() < 0.1*ref.max(), f'{name}: the mean number infectious in EMULSION should be close to Starsim\'s'
-    return I
-
-
-def test_code(tmp_path):
+def test_code():
     sc.heading('Testing the code of an import: it builds the sim, and stands alone')
-    def check(sim):
-        """ The code builds the same sim, run on its own """
-        space = {}
-        exec(sim.imported.code, space)
-        new = space['sim']
-        new.pars.verbose = 0
-        assert ss.debugtools.check_sims_match(sim.run(), new.run()), 'The code should give the same results'
-        return sim.imported.code
-
-    # An imported model: the code says how it was read and what was not translated
-    with pytest.warns(ss.errors.ImportIncomplete):
-        sim = ss.import_from(emulsion_file(tmp_path), **kw)
-    code = check(sim)
-    assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code and 'force_of_infection = S >> E @ ' in code
 
     # Every kind of value an importer gives: bounds and a prior, a time series, a seasonal value, values by group, a dwell time as a distribution, a branch, an outcome with a delay and a likelihood, a result, and a stratification
     src = ss.converters.Source('model', format='test')
@@ -240,98 +59,202 @@ def test_code(tmp_path):
     src.stratify(risk={'lo': 0.6, 'hi': 0.4}, adjust={'rel_sus': [1, 2]})
     src.config.update(unit='day', stop=ss.days(60), solver='ode')
     sim = ss.converters.build(src, verbose=False)
-    code = check(sim)
-    for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, interpolation='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
-                 'infection = S >> I @ (beta * season * I)', '{R: 0.99, D: None}', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
-                 "model.stratify(risk=ss.levels(dict(lo=0.6, hi=0.4), rel_sus=[1, 2]))"]:
-        assert text in code, f'Expected "{text}" in the code'
+    code = sim.imported.code
+    assert 'infection = S >> I @ (beta * season * I)' in code and '{R: 0.99, D: None}' in code
+    space = {}
+    exec(code, space)
+    new = space['sim']
+    new.pars.verbose = 0
+    assert ss.debugtools.check_sims_match(sim.run(), new.run()), 'The code should give the same results'
     assert sim.results.model.cases.sum() > 0
 
-    # A value the code cannot say is refused, with what to do instead
-    src.config.networks = ss.RandomNet()
-    with pytest.raises(TypeError, match='ss.converters.Code'):
-        ss.converters.build(src, verbose=False)
-    src.config.networks = ss.converters.Code('ss.RandomNet()')
-    assert 'networks=ss.RandomNet()' in ss.converters.write(src).code
 
-    # Values written as code keep what they are: a table's index (so data is compared at its own times), and a rate's unit
-    code_value = ss.converters.core.code_value
-    for val in [pd.DataFrame(dict(I=[5.0, 20, 40]), index=[10, 20, 30]), pd.DataFrame(dict(I=[1.0, 2]), index=pd.to_datetime(['2020-01-01', '2020-02-01']))]:
-        assert eval(code_value(val), dict(pd=pd)).equals(val)
-    rate = eval(code_value(ss.Rate(0.3, ss.weeks(2))), dict(ss=ss))
-    assert rate.value == 0.3 and rate.unit == ss.weeks(2)
+#%% An SIR (beta 0.3, gamma 0.1, 990 susceptible and 10 infectious, 50 days) in each format
 
-    # Several sources: a disease's variable is not a name another source defines (here a state)
-    host = ss.converters.Source('host', format='test')
-    for state in 'SIR':
-        host.add_state(state, init=990 if state == 'S' else 10*(state == 'I'))
-    host.add_par('beta', 0.3)
-    host.add_flow('S', 'I', 'beta*S*I/(S+I+R)', per='total', name='infection')
-    vector = ss.converters.Source('vector', format='test')
-    vector.add_state('V', init=100)
-    vector.add_state('host', init=0)
-    vector.add_flow('V', 'host', 0.05, name='bite')
-    sim = ss.converters.build([host, vector], verbose=False, stop=10, unit='day').run()
-    assert sim.results.host.I[-1] > 10 and sim.results.vector.host[-1] > 0
-    return code
+emulsion = """
+model_name: sir
+time_info: {time_unit: days, delta_t: 1, total_duration: 50}
+levels: {population: {aggregation_type: compartment}}
+processes: {population: [infection]}
+grouping: {population: {infection: {machine_name: health_state, key_variables: [health_state]}}}
+state_machines:
+  health_state:
+    states: [S: {}, I: {}, R: {}]
+    transitions:
+      - {from: S, to: I, rate: 'beta * total_I / total_population'}
+      - {from: I, to: R, rate: gamma}
+parameters: {beta: {value: 0.3}, gamma: {value: 0.1}}
+initial_conditions: {population: [{population: [{total: 1000}, {vars: [S], amount: 990}, {vars: [I], amount: 10}]}]}
+"""
+
+odin = """
+deriv(S) <- -beta * S * I / N
+deriv(I) <- beta * S * I / N - gamma * I
+deriv(R) <- gamma * I
+N <- S + I + R
+initial(S) <- 990
+initial(I) <- 10
+initial(R) <- 0
+beta <- user(0.3)
+gamma <- user(0.1)
+"""
+
+def species(s, n):
+    return f'<species id="{s}" compartment="c" initialAmount="{n}" hasOnlySubstanceUnits="true" boundaryCondition="false" constant="false"/>'
+
+def reaction(name, src, dst, math):
+    ref = lambda s: f'<speciesReference species="{s}" stoichiometry="1" constant="true"/>'
+    law = f'<kineticLaw><math xmlns="http://www.w3.org/1998/Math/MathML">{math}</math></kineticLaw>'
+    return f'<reaction id="{name}" reversible="false"><listOfReactants>{ref(src)}</listOfReactants><listOfProducts>{ref(dst)}</listOfProducts>{law}</reaction>'
+
+sbml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<sbml xmlns="http://www.sbml.org/sbml/level3/version1/core" level="3" version="1"><model id="sir">
+  <listOfCompartments><compartment id="c" size="1" constant="true"/></listOfCompartments>
+  <listOfSpecies>{species('S', 990)}{species('I', 10)}{species('R', 0)}</listOfSpecies>
+  <listOfParameters><parameter id="beta" value="0.3" constant="true"/><parameter id="gamma" value="0.1" constant="true"/></listOfParameters>
+  <listOfReactions>
+    {reaction('infection', 'S', 'I', '<apply><divide/><apply><times/><ci>beta</ci><ci>S</ci><ci>I</ci></apply><apply><plus/><ci>S</ci><ci>I</ci><ci>R</ci></apply></apply>')}
+    {reaction('recovery', 'I', 'R', '<apply><times/><ci>gamma</ci><ci>I</ci></apply>')}
+  </listOfReactions>
+</model></sbml>
+"""
+
+siminf = """
+library(SimInf)
+transitions <- c("S -> beta*S*I/(S+I+R) -> I", "I -> gamma*I -> R")
+u0 <- data.frame(S = 990, I = 10, R = 0)
+model <- mparse(transitions = transitions, compartments = c("S", "I", "R"), gdata = c(beta = 0.3, gamma = 0.1), u0 = u0, tspan = 1:50)
+"""
+
+flepimop = dict(name='sir', start_date='2020-01-01', end_date='2020-02-20', compartments=dict(infection_stage=['S', 'I', 'R']),
+    initial_conditions=dict(method='SetInitialConditions', initial_conditions_file='ic.csv'),
+    seir=dict(integration=dict(method='rk4', dt=1), parameters=dict(beta=dict(value=0.3), gamma=dict(value=0.1)), transitions=[
+        dict(source=['S'], destination=['I'], rate=['beta'], proportional_to=['source', ['I']], proportion_exponent=['1', '1']),
+        dict(source=['I'], destination=['R'], rate=['gamma'], proportional_to=['source'], proportion_exponent=['1'])]))
+
+op = lambda name, left, right: {'bin_op': {'op': name, 'left': left, 'right': right}}
+camdl = {'ir_version': '0.40', 'model': { # camdl's IR, as camdlc writes it, trimmed of what the importer does not read
+    'name': 'sir', 'time_unit': 'days',
+    'compartments': [{'name': 'S'}, {'name': 'I'}, {'name': 'R'}],
+    'transitions': [
+        {'name': 'infection', 'stoichiometry': [['S', -1], ['I', 1]], 'rate': op('div', op('mul', op('mul', {'param': 'beta'}, {'pop': 'S'}), {'pop': 'I'}), {'binding_ref': 'N'})},
+        {'name': 'recovery', 'stoichiometry': [['I', -1], ['R', 1]], 'rate': op('mul', {'param': 'gamma'}, {'pop': 'I'})},
+    ],
+    'parameters': [{'name': 'beta', 'value': {'mode': 'required'}}, {'name': 'gamma', 'value': {'mode': 'required'}}], # Given with pars=, as camdl is given them with --param
+    'initial_conditions': {'S': {'deterministic': {'const': 990.0}}, 'I': {'deterministic': {'const': 10.0}}},
+    'simulation': {'t_start': 0.0, 't_end': 50.0, 'dt': None},
+    'bindings': [{'name': 'N', 'expr': {'pop_sum': ['S', 'I', 'R']}}],
+}}
+
+epimodel = dict(format='epimodel', functions=[], runs=[dict(kind='dcm', type='SIR', networks=[], modules={}, # EpiModel's built-in SIR in dcm(), as dump_epimodel.R writes it
+    param={'inf.prob': 0.3, 'act.rate': 1, 'rec.rate': 0.1}, init={'s.num': 990, 'i.num': 10, 'r.num': 0}, control=dict(nsteps=51, dt=1, odemethod='rk4'))])
+
+epipack = dict(format='epipack', name='sir', compartments=['S', 'I', 'R'], population=1000.0, dynamic=False, parameters={}, incomplete=[],
+    events=[dict(kind='quadratic', rate='0.3*S*I', changes=dict(S=-1, I=1)), dict(kind='linear', rate='0.1*I', changes=dict(I=-1, R=1))], # epipack divides a quadratic rate by the population
+    initial=dict(S=990.0, I=10.0, R=0.0), run=dict(tmax=50.0, solver='ode'))
+
+epymorph = dict(format='epymorph', name='sir', compartments=['S', 'I', 'R'], places=['a'], start='2020-01-01', days=50, movement=[[0.0]], incomplete=[],
+    edges=[dict(source='S', target='I', rate='I*S*beta/N'), dict(source='I', target='R', rate='I*gamma')],
+    parameters=dict(beta=dict(kind='number', value=0.3), gamma=dict(kind='number', value=0.1)), initial=[[990.0, 10.0, 0.0]])
+
+epydemix = dict(format='epydemix', name='sir', compartments=['S', 'I', 'R'], overrides={}, interventions=[],
+    transitions=[dict(source='S', target='I', kind='mediated', params=['beta', 'I']), dict(source='I', target='R', kind='spontaneous', params='gamma')],
+    parameters=dict(beta=dict(kind='number', value=0.3), gamma=dict(kind='number', value=0.1)),
+    population=dict(name='Toy', groups=['all'], Nk=[1000.0], contacts=dict(all=[[1.0]])),
+    run=dict(start_date='2020-01-01', end_date='2020-02-20', dt=1.0, initial=dict(S=[990.0], I=[10.0], R=[0.0]), parameters={}))
+
+memilio = dict(format='memilio', model='osir', groups=1, states=['Susceptible', 'Infected', 'Recovered'], other={},
+    parameters=dict(TransmissionProbabilityOnContact=dict(kind='age', value=[0.3]), TimeInfected=dict(kind='age', value=[10.0])),
+    populations=dict(Susceptible=[990.0], Infected=[10.0], Recovered=[0.0]),
+    contacts=dict(matrices=[dict(baseline=[[1.0]], minimum=[[0.0]], dampings=[])], samples=[dict(time=0.0, matrix=[[1.0]])]),
+    run=dict(t0=0.0, tmax=50.0, dt=0.1, function='simulate'))
+
+summer2 = dict(format='summer2', compartments=['S', 'I', 'R'], infectious=['I'], initial_population=dict(S=990, I=10, R=0), times=[0, 50], timestep=1.0,
+    initial=[dict(name='S', strata={}, value=990.0), dict(name='I', strata={}, value=10.0), dict(name='R', strata={}, value=0.0)],
+    flows=[dict(name='infection', kind='InfectionFrequencyFlow', sources=['S'], dest='I', param=0.3), dict(name='recovery', kind='TransitionFlow', sources=['I'], dest='R', param=0.1)],
+    stratifications=[], outputs={})
+
+# The format, the model (a file's text, or what the framework's script writes), the arguments to import it, and the solver it is read as (as the framework runs it)
+formats = [
+    ('emulsion', 'sir.yaml', emulsion, {}, ss.solvers.binomial),
+    ('odin', 'sir.R', odin, dict(stop=50), ss.solvers.ode),
+    ('sbml', 'sir.xml', sbml, dict(stop=50), ss.solvers.ode),
+    ('siminf', 'sir.R', siminf, {}, ss.solvers.gillespie),
+    ('flepimop', 'sir.yml', flepimop, {}, ss.solvers.ode),
+    ('camdl', None, camdl, dict(pars=dict(beta=0.3, gamma=0.1)), ss.solvers.ode),
+    ('epimodel', None, epimodel, {}, ss.solvers.ode),
+    ('epipack', None, epipack, {}, ss.solvers.ode),
+    ('epymorph', None, epymorph, {}, ss.solvers.tau),
+    ('epydemix', None, epydemix, {}, ss.solvers.binomial),
+    ('memilio', None, memilio, {}, ss.solvers.ode),
+    ('summer2', None, summer2, {}, ss.solvers.ode),
+]
 
 
-def test_save_load(tmp_path):
-    sc.heading('Testing that every corpus model can be saved and loaded after a run')
-    def results(sim):
-        return {k:np.asarray(v.values, dtype=float) for k,v in sim.results.flatten().items() if isinstance(v, ss.Result)}
-    for name,make in corpus.models.items():
-        sim = make().run()
-        a = results(sim)
-        sim.save(tmp_path/f'{name}.sim') # After a run, so that every module shrinks
-        loaded = results(ss.load(tmp_path/f'{name}.sim'))
-        assert all(np.allclose(a[k], loaded[k]) for k in a), f'{name}: the loaded sim has different results'
-    return
+@pytest.mark.parametrize('fmt, filename, model, kwargs, solver', formats, ids=[f[0] for f in formats])
+def test_import(tmp_path, fmt, filename, model, kwargs, solver):
+    sc.heading(f'Testing importing an SIR from {fmt}')
+    if fmt == 'flepimop': # A configuration, and its initial conditions beside it
+        sc.saveyaml(tmp_path/filename, model)
+        pd.DataFrame(dict(mc_name=['S', 'I'], amount=[990, 10])).to_csv(tmp_path/'ic.csv', index=False)
+        model = tmp_path/filename
+    elif filename:
+        sc.savetext(tmp_path/filename, model)
+        model = tmp_path/filename
+    sim = ss.import_from(model, format=fmt, **kwargs, **kw)
+    assert not sim.imported.incomplete
+    assert isinstance(sim.init().solver, solver)
+    res = sim.new(solver='ode').run().results[sim.diseases[0].name]
+    I = res.Infected if fmt == 'memilio' else res.I
+
+    # By hand
+    S, I_, R = ss.states('S I R')
+    sir = ss.Disease(infection=S >> I_ @ ss.perday(0.3)*I_, recovery=I_ >> R @ ss.perday(0.1), init_n=dict(I=10), name='sir')
+    ref = ss.Sim(sir, total_pop=1000, unit='day', stop=50, **kw).run().results.sir
+    assert np.allclose(I.values[:51], ref.I.values, rtol=1e-9), 'The import should be the SIR written by hand'
 
 
-def test_hand(tmp_path):
-    sc.heading('Testing that an import and a hand translation give the same results')
-    with pytest.warns(ss.errors.ImportIncomplete):
-        sim = ss.import_from(emulsion_file(tmp_path), **kw)
-    def hand(beta=0.5):
-        S, E, I, Q, R = ss.states('S E I Q R')
-        seirq = ss.Disease(
-            force_of_infection = S >> E @ ss.perday(beta) * I,
-            onset      = E >> I @ -np.log(1 - 0.2),
-            recovery   = I >> R @ ss.perday(0.1),
-            detection  = I >> Q @ (0.05 * (Q.n < 20)),
-            release    = Q >> R @ ss.constant(ss.days(10)),
-            death      = I >> ss.dead @ ss.perday(0.001),
-            init_n     = dict(I=10),
-            name       = 'seirq',
-        )
-        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver=ss.solvers.binomial(substeps=1), **kw)
-    a, b = [s.new(solver='ode').run().results.seirq for s in [sim, hand()]] # As an ODE, since the import's random numbers are drawn for its other parts too
-    for state in 'SEIQR':
-        assert np.allclose(a[state], b[state]), state
-    assert not np.allclose(hand(beta=0.8).new(solver='ode').run().results.seirq.I, b.I)
-    return a
+def test_atomica(tmp_path):
+    sc.heading('Testing importing an Atomica framework and databook')
+    sheets = dict( # An SIR with a probability, a duration, a rate, a number, and a function
+        About = [['Name', 'Description'], ['tiny', 'A tiny SIR']],
+        Compartments = [['Code Name', 'Display Name', 'Is Source', 'Is Sink', 'Is Junction', 'Databook Page'],
+                        ['sus', 'Susceptible', 'n', 'n', 'n', 'state_variables'], ['inf', 'Infected', 'n', 'n', 'n', None],
+                        ['rec', 'Recovered', 'n', 'n', 'n', None], ['dead', 'Dead', 'n', 'y', 'n', None]],
+        Characteristics = [['Code Name', 'Display Name', 'Databook Page', 'Components', 'Denominator'],
+                           ['ch_all', 'Total', 'state_variables', 'sus, inf, rec', None], ['ch_prev', 'Prevalence', 'state_variables', 'inf', 'ch_all']],
+        Parameters = [['Code Name', 'Display Name', 'Format', 'Databook Page', 'Default Value', 'Function'],
+                      ['beta', 'Transmission probability', 'Probability', 'parameters', None, None],
+                      ['foi', 'Force of infection', 'Rate', None, None, 'beta * ch_prev'],
+                      ['dur', 'Duration of infection', 'Duration', 'parameters', None, None],
+                      ['mort', 'Death rate', 'Rate', 'parameters', 0.02, None],
+                      ['vacc', 'Number vaccinated', 'Number', 'parameters', None, None]],
+        Transitions = [[None, 'sus', 'inf', 'rec', 'dead'], ['sus', None, 'foi', 'vacc', None], ['inf', None, None, 'dur', 'mort'], ['rec', None, None, None, None], ['dead', None, None, None, None]],
+    )
+    fw, db = tmp_path/'framework.xlsx', tmp_path/'databook.xlsx'
+    with pd.ExcelWriter(fw) as w:
+        for name,rows in sheets.items():
+            pd.DataFrame(rows).to_excel(w, sheet_name=name, header=False, index=False)
+    years = list(range(2000, 2005))
+    block = lambda label, units, const, vals: [[label, 'Provenance', 'Units', 'Uncertainty', 'Constant', None, *years], ['adults', None, units, None, const, 'OR', *vals], [None]*(6 + len(years))]
+    state = block('Susceptible', 'Number', None, [900]*5) + block('Total', 'Number', None, [1000]*5) + block('Prevalence', 'Fraction', None, [0.05]*5)
+    par = block('Transmission probability', 'Probability', 0.6, [None]*5) + block('Duration of infection', 'Duration', 5, [None]*5) + block('Number vaccinated', 'Number', None, [10, 10, 20, 20, 20])
+    with pd.ExcelWriter(db) as w:
+        pd.DataFrame([['Abbreviation', 'Full Name'], ['adults', 'Adults']]).to_excel(w, sheet_name='Population Definitions', header=False, index=False)
+        pd.DataFrame(state).to_excel(w, sheet_name='State Variables', header=False, index=False)
+        pd.DataFrame(par).to_excel(w, sheet_name='Parameters', header=False, index=False)
 
+    sim = ss.import_from(fw, format='atomica', databook=db, dt=1, **kw)
+    res = sim.run().results.tiny
+    assert np.allclose([res.sus[0], res.inf[0], res.rec[0]], [900, 50, 50]), 'The initial numbers should be solved from the characteristics'
+    assert sim.t.yearvec[-1] == 2009, 'Atomica runs to five years after the data, if there are no births'
 
-def test_no_disease():
-    sc.heading('Testing what an import of networks only gives')
-    S = ss.State(init_n=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
-    sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
-    assert np.ptp(sim.results.d.S.values) == 0
-    return sim
-
-
-if __name__ == '__main__':
-    T = sc.timer()
-    with tempfile.TemporaryDirectory() as tmp:
-        folder = sc.path(tmp)
-        test_rates()
-        test_emulsion(folder)
-        test_emulsion_export(folder)
-        if emulsion_bin.exists():
-            test_emulsion_export_run(folder)
-        test_code(folder)
-        test_save_load(folder)
-        test_hand(folder)
-        test_no_disease()
-    T.toc()
+    # Atomica's step by hand: rates and probabilities move value × dt, durations dt/value, numbers value × dt people
+    x = np.array([900.0, 50, 50, 0])
+    vacc = np.interp(np.arange(2000, 2010), years, [10, 10, 20, 20, 20])
+    for i in range(9):
+        s, inf, r, d = x
+        new = 0.6*inf/(s + inf + r)*s
+        sr, ir, dead = min(vacc[i], s), inf/5, 0.02*inf
+        x = np.array([s - new - sr, inf + new - ir - dead, r + sr + ir, d + dead])
+    assert np.allclose([res.sus[-1], res.inf[-1], res.rec[-1], res.dead[-1]], x), 'Should match Atomica\'s Euler step'

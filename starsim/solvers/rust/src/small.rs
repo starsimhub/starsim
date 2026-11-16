@@ -3,7 +3,7 @@
 use crate::draws;
 
 /// The UIDs whose value is truthy (or not) (`arrays.nb_true_raw()`)
-pub fn true_raw<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T], want: bool) -> Vec<i64> {
+pub fn nb_true_raw<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T], want: bool) -> Vec<i64> {
     let zero = T::default();
     let mut out = Vec::with_capacity(auids.len() + 1);
     let spare = out.spare_capacity_mut();
@@ -17,7 +17,7 @@ pub fn true_raw<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T], want: b
 }
 
 /// The (source, target) of the edges that transmit (`networks.nb_transmit()`): `h` gives each edge's hazard, and it transmits with probability 1 − exp(−h)
-pub fn transmit<V: Copy + Into<f64>>(src: &[i64], trg: &[i64], h: impl Fn(usize, usize, usize) -> f64, rvs: &[V]) -> (Vec<i64>, Vec<i64>) {
+pub fn nb_transmit<V: Copy + Into<f64>>(src: &[i64], trg: &[i64], h: impl Fn(usize, usize, usize) -> f64, rvs: &[V]) -> (Vec<i64>, Vec<i64>) {
     let (mut s_out, mut t_out) = (Vec::with_capacity(src.len()), Vec::with_capacity(src.len()));
     let (so, to) = (s_out.spare_capacity_mut(), t_out.spare_capacity_mut());
     let mut m = 0;
@@ -40,7 +40,7 @@ impl Real for f32 { fn of(x: f64) -> Self { x as f32 } }
 impl Real for f64 { fn of(x: f64) -> Self { x } }
 
 /// One uniform for each slot, from a counter-based hash (`distributions._hash_uniforms_fill()`)
-pub fn hash_uniforms<R: Real>(seed: i64, ind: i64, slots: &[u64], out: &mut [R], shift: u64, scale: f64) {
+pub fn _hash_uniforms_fill<R: Real>(seed: i64, ind: i64, slots: &[u64], out: &mut [R], shift: u64, scale: f64) {
     let key = draws::key(seed, ind);
     for (o, &slot) in out.iter_mut().zip(slots) {
         *o = R::of(draws::crn_uniform(key, slot, shift, scale));
@@ -48,7 +48,7 @@ pub fn hash_uniforms<R: Real>(seed: i64, ind: i64, slots: &[u64], out: &mut [R],
 }
 
 /// The values at some indices (`arrays.nb_indexer()`), negative ones counted from the end, as in Numba
-pub fn indexer<T: Copy>(arr: &[T], inds: &[i64]) -> Vec<T> {
+pub fn nb_indexer<T: Copy>(arr: &[T], inds: &[i64]) -> Vec<T> {
     let n = arr.len() as i64;
     inds.iter().map(|&i| arr[(if i < 0 { i + n } else { i }) as usize]).collect()
 }
@@ -63,7 +63,7 @@ pub fn indexer_strided<T: Copy>(base: *const T, stride: isize, len: usize, inds:
 }
 
 /// The UIDs whose value is truthy (or not), from the values of the active agents (`arrays.nb_true()`)
-pub fn true_vals<T: Copy + PartialEq + Default>(auids: &[i64], vals: &[T], want: bool) -> Vec<i64> {
+pub fn nb_true<T: Copy + PartialEq + Default>(auids: &[i64], vals: &[T], want: bool) -> Vec<i64> {
     let zero = T::default();
     let vals = &vals[..auids.len()];
     let mut out = Vec::with_capacity(auids.len() + 1);
@@ -78,7 +78,7 @@ pub fn true_vals<T: Copy + PartialEq + Default>(auids: &[i64], vals: &[T], want:
 }
 
 /// The number of active agents whose value is truthy (`arrays.nb_count()`)
-pub fn count<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T]) -> i64 {
+pub fn nb_count<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T]) -> i64 {
     let zero = T::default();
     auids.iter().map(|&u| (raw[u as usize] != zero) as i64).sum()
 }
@@ -93,7 +93,7 @@ macro_rules! ix {
 ix!(i16, i32, i64, u32, u64);
 
 /// In-place Fisher-Yates shuffle, from uniforms (`networks.fisher_yates_shuffle()`)
-pub fn shuffle<T: Copy, R: Copy + Into<f64>>(arr: &mut [T], randvals: &[R]) {
+pub fn fisher_yates_shuffle<T: Copy, R: Copy + Into<f64>>(arr: &mut [T], randvals: &[R]) {
     let n = arr.len();
     for k in 0..n.saturating_sub(1) {
         let i = n - 1 - k; // Position to swap, working from the top down
@@ -103,7 +103,7 @@ pub fn shuffle<T: Copy, R: Copy + Into<f64>>(arr: &mut [T], randvals: &[R]) {
 }
 
 /// Mark the partners of the agents flagged in is_ind, in both directions of each edge (`networks._mark_partners()`)
-pub fn mark_partners<I: Ix>(p1: &[I], p2: &[I], is_ind: &[bool], is_partner: &mut [bool]) {
+pub fn _mark_partners<I: Ix>(p1: &[I], p2: &[I], is_ind: &[bool], is_partner: &mut [bool]) {
     for (&a, &b) in p1.iter().zip(p2) {
         let (a, b) = (a.ix(), b.ix());
         if is_ind[a] {
@@ -150,36 +150,36 @@ pub mod bind {
     use crate::py::{arr, sl, sl_mut, strided};
 
     #[pyfunction]
-    fn true_raw<'py>(py: Python<'py>, auids: &Bound<'py, PyAny>, raw: &Bound<'py, PyAny>, want: bool) -> PyResult<Bound<'py, PyAny>> {
-        typed!(raw, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(arr(py, small::true_raw::<T>(sl(auids)?, sl(raw)?, want))))
+    fn nb_true_raw<'py>(py: Python<'py>, auids: &Bound<'py, PyAny>, raw: &Bound<'py, PyAny>, want: bool) -> PyResult<Bound<'py, PyAny>> {
+        typed!(raw, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(arr(py, small::nb_true_raw::<T>(sl(auids)?, sl(raw)?, want))))
     }
 
     #[pyfunction]
-    fn transmit<'py>(py: Python<'py>, src: &Bound<'py, PyAny>, trg: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, rel_sus: &Bound<'py, PyAny>, beta: &Bound<'py, PyAny>,
+    fn nb_transmit<'py>(py: Python<'py>, src: &Bound<'py, PyAny>, trg: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, rel_sus: &Bound<'py, PyAny>, beta: &Bound<'py, PyAny>,
                      rvs: &Bound<'py, PyAny>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
         // The hazard rel_trans[u]*rel_sus[v]*hazard[i] in the type Numba gives it: float32 if all three are, else float64
         typed!(rvs, V in [f64, f32] => {
             if let (Ok(t), Ok(s), Ok(b)) = (sl::<f32>(rel_trans), sl::<f32>(rel_sus), sl::<f32>(beta)) {
-                let (s, t) = small::transmit(sl(src)?, sl(trg)?, |i, u, v| (t[u]*s[v]*b[i]) as f64, sl::<V>(rvs)?);
+                let (s, t) = small::nb_transmit(sl(src)?, sl(trg)?, |i, u, v| (t[u]*s[v]*b[i]) as f64, sl::<V>(rvs)?);
                 return Ok((arr(py, s), arr(py, t)));
             }
             typed!(beta, B in [f64, f32] => with_rel!(rel_trans, rel_sus, rel => {
                 let b = sl::<B>(beta)?;
-                let (s, t) = small::transmit(sl(src)?, sl(trg)?, |i, u, v| rel(u, v)*(b[i] as f64), sl::<V>(rvs)?);
+                let (s, t) = small::nb_transmit(sl(src)?, sl(trg)?, |i, u, v| rel(u, v)*(b[i] as f64), sl::<V>(rvs)?);
                 Ok((arr(py, s), arr(py, t)))
             }))
         })
     }
 
     #[pyfunction]
-    fn hash_uniforms(seed: i64, ind: i64, slots: &Bound<PyAny>, out: &Bound<PyAny>, shift: u64, scale: f64) -> PyResult<()> {
-        typed!(out, R in [f32, f64] => Ok(small::hash_uniforms::<R>(seed, ind, sl(slots)?, sl_mut(out)?, shift, scale)))
+    fn _hash_uniforms_fill(seed: i64, ind: i64, slots: &Bound<PyAny>, out: &Bound<PyAny>, shift: u64, scale: f64) -> PyResult<()> {
+        typed!(out, R in [f32, f64] => Ok(small::_hash_uniforms_fill::<R>(seed, ind, sl(slots)?, sl_mut(out)?, shift, scale)))
     }
 
     #[pyfunction]
-    fn indexer<'py>(py: Python<'py>, a: &Bound<'py, PyAny>, inds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn nb_indexer<'py>(py: Python<'py>, a: &Bound<'py, PyAny>, inds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         typed!(a, T in [bool, u8, i8, i16, i32, i64, u64, f32, f64] => Ok(arr(py, match sl::<T>(a) {
-            Ok(x) => small::indexer::<T>(x, sl(inds)?),
+            Ok(x) => small::nb_indexer::<T>(x, sl(inds)?),
             Err(_) => { // A strided view
                 let (base, stride, len) = strided::<T>(a)?;
                 small::indexer_strided::<T>(base, stride, len, sl(inds)?)
@@ -188,26 +188,26 @@ pub mod bind {
     }
 
     #[pyfunction]
-    fn true_vals<'py>(py: Python<'py>, auids: &Bound<'py, PyAny>, vals: &Bound<'py, PyAny>, want: bool) -> PyResult<Bound<'py, PyAny>> {
-        typed!(vals, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(arr(py, small::true_vals::<T>(sl(auids)?, sl(vals)?, want))))
+    fn nb_true<'py>(py: Python<'py>, auids: &Bound<'py, PyAny>, vals: &Bound<'py, PyAny>, want: bool) -> PyResult<Bound<'py, PyAny>> {
+        typed!(vals, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(arr(py, small::nb_true::<T>(sl(auids)?, sl(vals)?, want))))
     }
 
     #[pyfunction]
-    fn count(auids: &Bound<PyAny>, raw: &Bound<PyAny>) -> PyResult<i64> {
-        typed!(raw, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(small::count::<T>(sl(auids)?, sl(raw)?)))
+    fn nb_count(auids: &Bound<PyAny>, raw: &Bound<PyAny>) -> PyResult<i64> {
+        typed!(raw, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(small::nb_count::<T>(sl(auids)?, sl(raw)?)))
     }
 
     #[pyfunction]
-    fn shuffle<'py>(arr: &Bound<'py, PyAny>, randvals: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn fisher_yates_shuffle<'py>(arr: &Bound<'py, PyAny>, randvals: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         typed!(randvals, R in [f64, f32] => typed!(arr, T in [i64, i32, i16, u64, u32, f64, f32] => {
-            small::shuffle::<T, R>(sl_mut(arr)?, sl(randvals)?);
+            small::fisher_yates_shuffle::<T, R>(sl_mut(arr)?, sl(randvals)?);
             Ok(arr.clone())
         }))
     }
 
     #[pyfunction]
-    fn mark_partners(p1: &Bound<PyAny>, p2: &Bound<PyAny>, is_ind: &Bound<PyAny>, is_partner: &Bound<PyAny>) -> PyResult<()> {
-        typed!(p1, I in [i64, i32, i16, u64, u32] => Ok(small::mark_partners::<I>(sl(p1)?, sl(p2)?, sl(is_ind)?, sl_mut(is_partner)?)))
+    fn _mark_partners(p1: &Bound<PyAny>, p2: &Bound<PyAny>, is_ind: &Bound<PyAny>, is_partner: &Bound<PyAny>) -> PyResult<()> {
+        typed!(p1, I in [i64, i32, i16, u64, u32] => Ok(small::_mark_partners::<I>(sl(p1)?, sl(p2)?, sl(is_ind)?, sl_mut(is_partner)?)))
     }
 
     /// The bits of an array of 8-byte or 4-byte numbers (floats, or the ints of a hash), as `.view(np.uint64)` or `.view(np.uint32)` gives them
@@ -250,14 +250,14 @@ pub mod bind {
 
     /// Add these kernels to the module
     pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_function(wrap_pyfunction!(true_raw, m)?)?;
-        m.add_function(wrap_pyfunction!(transmit, m)?)?;
-        m.add_function(wrap_pyfunction!(hash_uniforms, m)?)?;
-        m.add_function(wrap_pyfunction!(indexer, m)?)?;
-        m.add_function(wrap_pyfunction!(true_vals, m)?)?;
-        m.add_function(wrap_pyfunction!(count, m)?)?;
-        m.add_function(wrap_pyfunction!(shuffle, m)?)?;
-        m.add_function(wrap_pyfunction!(mark_partners, m)?)?;
+        m.add_function(wrap_pyfunction!(nb_true_raw, m)?)?;
+        m.add_function(wrap_pyfunction!(nb_transmit, m)?)?;
+        m.add_function(wrap_pyfunction!(_hash_uniforms_fill, m)?)?;
+        m.add_function(wrap_pyfunction!(nb_indexer, m)?)?;
+        m.add_function(wrap_pyfunction!(nb_true, m)?)?;
+        m.add_function(wrap_pyfunction!(nb_count, m)?)?;
+        m.add_function(wrap_pyfunction!(fisher_yates_shuffle, m)?)?;
+        m.add_function(wrap_pyfunction!(_mark_partners, m)?)?;
         m.add_function(wrap_pyfunction!(combine_rvs, m)?)?;
         m.add_function(wrap_pyfunction!(combine2_rvs, m)?)?;
         Ok(())

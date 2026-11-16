@@ -1,6 +1,6 @@
 """
 Not for the user: the agent engine with its moves compiled (`ss.solvers.Compiled`): a declared graph laid out once as tables, whose
-moves of a step are one call (see `ss.solvers.backends.moves.step_moves()`)
+moves of a step are one call (see `ss.solvers.numba.agent_moves.step_moves()`)
 
 Used with: agents; declared modules
 """
@@ -10,7 +10,7 @@ import sciris as sc
 import starsim as ss
 from .agents import Agents
 from .agents_moving import ROUNDS, ROUND_MAX
-from .backends import moves as kernel
+from .numba import agent_moves as kernel
 
 __all__ = ['Compiled', 'compiled_reasons']
 
@@ -106,7 +106,7 @@ class Compiled(Agents):
     """
     The agent engine, with the moves of a step compiled: those that are not by contact are one call over the agents, and those after the
     step's infections another, each taking every agent whose time has come through its exits, splits, and moves after events, as the
-    same-step cascade does (see `ss.solvers.backends.moves`). Everything else is the agent engine's. A graph with what the call doesn't
+    same-step cascade does (see `ss.solvers.numba.agent_moves`). Everything else is the agent engine's. A graph with what the call doesn't
     take yet (see `compiled_reasons()`) runs on the agent engine itself. The call makes the draws the agent engine's moves would make, in
     the same rounds (see `Moving.new_round()`), so the two give the same numbers.
     """
@@ -294,7 +294,7 @@ class Compiled(Agents):
         return len(self.kspecs) - 1
 
     def dist_pars(self, key, dist):
-        """ The parameters of a distribution, as the call takes them (SciPy's, see `ss.solvers.backends.moves.draw()`), each a number or a function giving one value per agent (by UID) """
+        """ The parameters of a distribution, as the call takes them (SciPy's, see `ss.solvers.numba.agent_moves.draw()`), each a number or a function giving one value per agent (by UID) """
         if isinstance(dist, ss.constant):
             names = ['value']
         elif type(dist) is ss.uniform:
@@ -523,7 +523,7 @@ class Compiled(Agents):
                 np.array([lefts[i] is not None for i in range(len(names))]), fdum(XT, f), fdum(XW, xw_dtype), TT)
 
     def crn_tables(self):
-        """ For the call's draws (see `ss.solvers.backends.moves.rand()`): the seed of each stream in each round, by the transition the round is for (the first column for none), as `round_seed()` gives it, and the width of its uniforms """
+        """ For the call's draws (see `ss.solvers.numba.agent_moves.rand()`): the seed of each stream in each round, by the transition the round is for (the first column for none), as `round_seed()` gives it, and the width of its uniforms """
         k = self.kplan
         m = max(len(k.streams), 1)
         RS = np.zeros((m, k.nt + 1), np.int64)
@@ -533,7 +533,7 @@ class Compiled(Agents):
             seed = dist.seed
             RS[r] = [self.round_seed(seed, None)] + [self.round_seed(seed, tr.name) for tr in k.trs]
             dtype = np.dtype(dist.hash_dtype or ss.dtypes.float)
-            ush[r], usc[r] = ss.solvers.backends.draws.crn_bits(dtype)
+            ush[r], usc[r] = ss.solvers.numba.draws.crn_bits(dtype)
             z32[r] = dtype.itemsize <= 4 # SciPy's ndtri of these is single precision (see ss.normal.ppf())
         self.kcrn[self._source] = (RS, ush, usc, z32)
         return self.kcrn[self._source]

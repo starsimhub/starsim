@@ -726,9 +726,9 @@ class People:
     def step_die(self):
         """ Carry out the deaths and removals of this step (those requested in it, or set for it before), and return who died or left """
         ti = self.sim.ti
-        deaths, n_alive = ss.solvers.backends.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
+        deaths, n_alive = ss.solvers.numba.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
-            deaths = ss.solvers.backends.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
+            deaths = ss.solvers.numba.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         dying = death_uids
         self._died_of = {}
@@ -802,12 +802,12 @@ class People:
             room = self._auids_room
         else:
             room = np.empty(expected + max(1000, expected//10), dtype=ss.dtypes.uid) # With room for births: see add_active()
-        n_kept = ss.solvers.backends.passes.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
+        n_kept = ss.solvers.numba.passes.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
         if n_kept >= 0:
             gone = dying.view(np.ndarray)
         else: # ...or else from the active agents themselves
             room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=ss.dtypes.uid)
-            n_kept, gone = ss.solvers.backends.passes.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
+            n_kept, gone = ss.solvers.numba.passes.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
         if len(gone): # Agents who are still active but no longer alive
 
             # Remove the UIDs from the networks too
@@ -832,7 +832,7 @@ class People:
         else:
             if len(bins) < len(age): # The arrays have grown
                 bins = np.concatenate([bins, np.digitize(age[len(bins):], edges)])
-            moved = ss.solvers.backends.passes.crossed(age, bins, np.append(-np.inf, edges), np.append(edges, np.inf))
+            moved = ss.solvers.numba.passes.crossed(age, bins, np.append(-np.inf, edges), np.append(edges, np.inf))
             bins[moved] = np.digitize(age[moved], edges)
         self._age_bins[key] = bins
         return bins
@@ -855,7 +855,7 @@ class People:
                 if res[state.name].values.dtype.kind in 'iu':
                     res[state.name]._init_values(dtype=float, force=True)
         elif all(state.raw.ndim == 1 for state in states):
-            counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
+            counts = ss.solvers.numba.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
             counts = counts[:-1] if counts[-1] == len(self.auids) else [state.count() for state in states]
         unborn = self.unborn_uids()
         if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.unborn)

@@ -141,7 +141,7 @@ def start_lines(sim, notes=()):
                 if ngm is not None:
                     R0, R = [float(np.max(np.abs(np.linalg.eigvals(m)))) for m in [ngm, ngm_start]]
                     count = float(dis.engine.count(sources))
-                    shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A fraction, with total_pop=1, is not 0
+                    shown = ss.results.format_value(count) # A fraction, with total_pop=1, is not 0
                     at_start = ''
                     if abs(R - R0) > 0.01*R0: # Some start immune
                         graph = dis.graph
@@ -172,8 +172,12 @@ def end_line(sim):
                 when = ss.utils.time_str(tvec[peak], sim) # A date, or e.g. day 27, as in the first line
                 fmt = '.3g' if ss.solvers.in_proportions(sim) else ',.0f' # In proportions, fractions rather than counts
                 parts.append(f'{dis.name}: {total:{fmt}} infections; at most {infectious[peak]:{fmt}} infectious, on {when}')
-    took = f'{sim.elapsed:.2g}' if sim.elapsed < 1 else f'{sim.elapsed:.1f}'
-    return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
+    return f'  Done in {seconds_str(sim.elapsed)} s' + (f'; {"; ".join(parts)}' if parts else '')
+
+
+def seconds_str(seconds):
+    """ A time taken, in seconds, to two significant figures if under a second, else to a tenth """
+    return f'{seconds:.2g}' if seconds < 1 else f'{seconds:.1f}'
 
 
 class RunsProgress(Progress):
@@ -384,7 +388,7 @@ class Diagram(Text):
 #%% A graph: describe_graph(), diagram(), and equations(), which `ss.Disease.describe()` and so on call
 
 def unit_name(graph, sim=None):
-    """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.choose.init_unit()), if they agree """
+    """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.build.init_unit()), if they agree """
     if sim is not None:
         return sim._unit_name
     units = {u.removesuffix('s') for u in graph.unit_values()}
@@ -399,13 +403,21 @@ def describe_graph(graph, sim=None, out=None):
     out = Description() if out is None else out
     add = out.add
     shown = set() # The parameters whose doc= and source= are shown already
-    def provenance(p):
-        """ A parameter's doc= and source=, under it """
+    def par_line(p, kind, key=''):
+        """ A parameter and its value, then its doc= and source= under it, once """
+        add(key, par_str(p, kind, unit), midpoint_guess(p))
         if id(p) not in shown:
             shown.add(id(p))
             for text in [p.doc, p.source and f'source: {p.source}']:
                 if text:
                     add('', f'  {text}')
+        return
+
+    def rate_pars(tr):
+        """ The parameters of a transition's rate, e.g. its beta; a factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own """
+        for leaf in tr.rate.leaves:
+            if isinstance(leaf, par) and not leaf.literal:
+                par_line(leaf, 'rate' if leaf.slot == 'rate' else None)
         return
 
     out.section(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}'", f'{len(graph.states)} states, {len(graph.transitions)} transitions')
@@ -457,18 +469,13 @@ def describe_graph(graph, sim=None, out=None):
             guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
             add(name, f'{tr._arrow}   transmission, from {source}', f'Guessed: {guess}' if guess else None)
             flow_line(tr)
-            for leaf in tr.rate.leaves:
-                if isinstance(leaf, par) and not leaf.literal:
-                    add('', par_str(leaf, 'rate' if leaf.slot == 'rate' else None, unit), midpoint_guess(leaf)) # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
-                    provenance(leaf)
+            rate_pars(tr)
             terms = getattr(getattr(sim, 'mixing', None), 'terms', [])
             if sim is None or (not len(sim.pars.networks) and all(term.kind == 'homogeneous' for term in terms)):
                 expanded = format_expr(tr.rate, values='number', unit=unit, bare=lambda s: f'{s.name}.n / N', mul='×')
                 add('', f'rate = {expanded}', 'Homogeneous mixing')
-            elif not len(sim.pars.networks):
-                add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'Exposure through the contact matrices')
             else:
-                add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', 'Exposure through the networks')
+                add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', f'Exposure through the {"networks" if len(sim.pars.networks) else "contact matrices"}')
             for text in (route_lines(mod, tr, sim) if sim is not None else []):
                 add('', text)
         elif tr.trigger is not None:
@@ -491,10 +498,8 @@ def describe_graph(graph, sim=None, out=None):
                 kind += ', not an acquisition'
             add(name, f'{tr._arrow}   {kind}', f'Guessed: {guess}' if guess else None)
             flow_line(tr)
-            for leaf in (tr.rate.leaves if counted else []): # Its beta
-                if isinstance(leaf, par) and not leaf.literal:
-                    add('', par_str(leaf, 'rate' if leaf.slot == 'rate' else None, unit), midpoint_guess(leaf))
-                    provenance(leaf)
+            if counted: # Its beta
+                rate_pars(tr)
             if tr._immediate:
                 add('', 'Immediately (dur=0), in the step people arrive')
             elif not tr._inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
@@ -544,8 +549,7 @@ def describe_graph(graph, sim=None, out=None):
         for expr in [tr.rate, tr.dur, getattr(tr, 'noise', None)] + sc.tolist(tr.p): # The other parameters of the transition that are documented (or labeled) or can be fitted, each with its value
             for leaf in (expr.leaves if isinstance(expr, Expr) else []):
                 if isinstance(leaf, par) and (leaf.doc or leaf.source or leaf.label or leaf.bounds is not None) and id(leaf) not in shown:
-                    add('', par_str(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None, unit), midpoint_guess(leaf))
-                    provenance(leaf)
+                    par_line(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None)
     for name,oc in graph.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
         source = oc.source_str().replace(' * ', ' × ')
         text = f'outcome: {source}' + (f', after {delay_str(oc.delay, unit)}' if oc.delay is not None else '')
@@ -559,8 +563,7 @@ def describe_graph(graph, sim=None, out=None):
         add('', 'A state\'s count (the result X) includes the step people enter it; they stay for the whole time drawn for them')
     fitted = [p for p in graph.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a fraction of an outcome
     for i,p in enumerate(fitted):
-        add('' if i else 'Fitted', par_str(p, p.slot if p.slot in ['rate', 'dur'] else None, unit), midpoint_guess(p))
-        provenance(p)
+        par_line(p, p.slot if p.slot in ['rate', 'dur'] else None, key='' if i else 'Fitted')
     return out
 
 
@@ -825,15 +828,17 @@ def plot_diagram(graphs, titles=None, links=None, fig=None):
                                     linestyle='--' if contact else '-', color=colors.edge, linewidth=1.2, zorder=2)
             ax.add_patch(arrow)
             ax.text(x, y, label, ha=ha, va=va, fontsize=8, zorder=5, bbox=dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor='none', alpha=0.85))
+    index = {}
+    for i,g in enumerate(graphs):
+        index.setdefault(g.module.name, i)
     for link in links or []:
-        gi_src = [i for i,g in enumerate(graphs) if g.module.name == link.src]
-        gi_dst = [i for i,g in enumerate(graphs) if g.module.name == link.dst]
-        if not gi_src or not gi_dst or (gi_src[0], link.state) not in nodes:
+        gi_src, gi_dst = index.get(link.src), index.get(link.dst)
+        if gi_src is None or gi_dst is None or (gi_src, link.state) not in nodes:
             continue
-        patch = nodes[(gi_src[0], link.state)]
-        target = mids.get((gi_dst[0], link.tr))
+        patch = nodes[(gi_src, link.state)]
+        target = mids.get((gi_dst, link.tr))
         if target is None: # The disease as a whole: its first state
-            first = [key for key in nodes if key[0] == gi_dst[0]][0]
+            first = [key for key in nodes if key[0] == gi_dst][0]
             target = nodes[first].get_x() + nodes[first].get_width()/2, nodes[first].get_y() + nodes[first].get_height()
         x, y = patch.get_x() + patch.get_width()/2, patch.get_y() + patch.get_height()/2
         arrow = FancyArrowPatch((x, y), target, patchA=patch, connectionstyle='arc3,rad=0.2', arrowstyle='-|>', mutation_scale=14, linestyle=':', color=colors.link, linewidth=1.5, zorder=6)
@@ -982,7 +987,7 @@ def flow_terms(graph, engine=None, contacts=None):
 
     out = []
     mocked = getattr(engine.mod.t, 'dt', None) is None
-    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.solvers.backends.kernels.convey())
+    per_step = lambda k: f'{k} * {{}} / dt' if mocked else f'{k/engine.dt:n} * {{}}' # A conveyor (a fixed delay or a minimum stay), as stages of a step each, and half a step in its first slot and its last (see ss.solvers.numba.compartmental.convey())
     for cv in engine.conveyors:
         for i,(a,b) in enumerate(zip(cv.slots[:-1], cv.slots[1:])):
             term = per_step(2 if i == 0 else 1).format(comp_name(a))
@@ -1181,9 +1186,8 @@ def describe_sim(sim):
     coded = [mod for mod in mods if getattr(mod, 'graph', None) is None and not isinstance(mod, shown)]
     if coded:
         desc.section('Written as code')
-        kinds = ss.modules.module_map()
         for mod in coded:
-            kind = next((key for key,cls in kinds.items() if isinstance(mod, cls)), 'module')
+            kind = ss.simpars.module_kind(mod, default='module')
             add((kind.removesuffix('s') if kind != 'demographics' else kind).capitalize(), f'{mod.name} ({type(mod).__name__})')
     if sim.declared:
         desc.section('Mixing and interventions')
@@ -1413,13 +1417,6 @@ def beta_leaf(tr):
     return next((leaf for leaf in leaves if isinstance(leaf.raw, (dict, ss.peract))), next((leaf for leaf in leaves if leaf.slot == 'rate'), None))
 
 
-def route_beta(raw, net):
-    """ The value of a beta on one route """
-    if isinstance(raw, dict):
-        return ss.networks.route_beta(raw, net.name)
-    return raw
-
-
 def route_lines(mod, tr, sim):
     """
     For describe(): how each route reads a transmission's beta (per act on a network with acts, in each of its directions,
@@ -1432,7 +1429,7 @@ def route_lines(mod, tr, sim):
     unit = sim._unit_name
     lines = []
     for name,net in nets.items():
-        val = route_beta(leaf.raw, net)
+        val = ss.networks.route_beta(leaf.raw, name) if isinstance(leaf.raw, dict) else leaf.raw # The value of the beta on this route
         if val is None:
             continue
         if getattr(net, 'has_acts', False):

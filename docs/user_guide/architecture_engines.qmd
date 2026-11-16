@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI; linked to the one description of a step on Nov 12 by AI after the docs review
+  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI; linked to the one description of a step on Nov 12 by AI after the docs review; the choice of solver and the kernels shortened to links on Nov 15 by AI
 ---
 
 
@@ -15,11 +15,11 @@ The words, as this page uses them:
 - **Solver:** the method (`'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, `'abm'`), chosen with `ss.Sim(solver=)`.
 - **Backend:** how the numbers are computed (Rust, Numba, plain Python, or JAX), chosen with `ss.options.backend`; it never changes the results.
 - **Engine** (internal): the object that runs one declared module under the solver (`module.engine`: `Compartmental`, `Agents`, `JointStates`, or `Undeclared`). A modeler never needs it.
-- **Kernels** (internal): the compiled functions of a backend (`solvers/backends/kernels.py`, and their Rust copies).
+- **Kernels** (internal): the compiled functions of a backend (`solvers/numba/compartmental.py`, and their Rust copies).
 
 ## How the solver is chosen
 
-The default, `solver='auto'`, picks the simplest, fastest representation that runs the model without changing what it means: an ODE if every part of the model has a compartmental form, and agents otherwise. The line the sim prints when it is initialized says which it chose, and `sim.solver_reason` (and `describe()`) says why:
+How `solver='auto'` chooses, from a modeler's side, is in [Solvers and backends](running_solvers.qmd#how-starsim-chooses): an ODE if every part of the model has a compartmental form, agents otherwise. `sim.solver_reason` (and `describe()`) says why:
 
 ```{python}
 import starsim as ss
@@ -40,13 +40,13 @@ print()
 sim = ss.Sim(make_sir(ss.lognormal(mean=ss.days(10), std=ss.days(4))), **kw).init() # A lognormal dwell time
 ```
 
-The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level: a model runs as agents if it has an individual-level network, `n_agents=`, a function of `uids`, a module written as code that keeps a value for each person, or anything that needs individual histories. Being written as code isn't a reason by itself: a module that keeps nothing per person runs beside the compartments. The full list is in [What needs agents](running_solvers.qmd#appendix-what-needs-agents), and the rules themselves are in `solvers/choose.py` ([below](#what-decides-which-engine-runs-a-model)).
+The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level. Being written as code isn't a reason by itself: a module that keeps nothing per person runs beside the compartments ([Declared modules and modules written as code](architecture_index.qmd#declared-modules-and-modules-written-as-code)). The full list is in [What needs agents](running_solvers.qmd#appendix-what-needs-agents), and the rules themselves are in `solvers/choose.py` ([below](#what-decides-which-engine-runs-a-model)).
 
 The one thing `'auto'` approximates unasked is a dwell time that isn't exponential, Erlang or fixed, as in the third example. Sending a simple model to agents over one lognormal would be the bigger surprise, so it uses Erlang stages that keep the mean exactly, and prints the standard deviation they give. A dwell time too variable for stages (a coefficient of variation above 3) makes `'auto'` choose agents.
 
 `sim.describe()` lists each ingredient that matters for the choice and whether it runs as compartments: `yes`, `approx` (and how), or `no` (and why). Code is never analyzed in advance: a function is called with what the solver has (one value per agent, or one per group), and if it asks for something only agents have, the run stops with an `ss.CapabilityError` that names it.
 
-`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, exact dwell times (`ss.solvers.ode(dwells='exact')`), or event-driven agents (`ss.solvers.abm(step='events')`) are used only when asked for. Any solver can also run the model as a branching process (`branching=True`; see [Branching and rescaling](running_branching.qmd)). Every solver and its options are listed in [Solvers and backends](running_solvers.qmd#appendix-every-solver).
+`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, exact dwell times (`ss.solvers.ode(dwells='exact')`), or event-driven agents (`ss.solvers.abm(step='events')`) are used only when asked for ([every solver](running_solvers.qmd#appendix-every-solver)).
 
 ### Approximations are announced
 
@@ -77,8 +77,8 @@ Each declared module gets one engine when the sim is initialized. A module writt
 
 | Engine | Files | What it does |
 |---|---|---|
-| Compartmental | `solvers/compartmental.py`, `solvers/mixing.py`, `solvers/backends/kernels.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/backends/kernels.py`, compiled with Numba, or their Rust copies) step that program for all the compartmental solvers. `mixing.py` turns networks and mixing pools into contact rates between groups. |
-| Agents | `solvers/agents.py`, `solvers/agents_*.py`, `solvers/backends/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
+| Compartmental | `solvers/compartmental.py`, `solvers/mixing.py`, `solvers/numba/compartmental.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/numba/compartmental.py`, compiled with Numba, or their Rust copies) step that program for all the compartmental solvers. `mixing.py` turns networks and mixing pools into contact rates between groups. |
+| Agents | `solvers/agents.py` (with its parts `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, `agents_branching.py`); its variants `agents_compiled.py` (`Compiled`, the default, whose moves of a step are one call to `solvers/numba/agent_moves.py`) and `agents_events.py` (event by event, `solvers/numba/agent_events.py`); `solvers/numba/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
 | JointStates | `solvers/joint_states.py` | Diseases tracked jointly, when a condition in one refers to a state of another (`ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`). Their compartments are crossed and run as one program, up to a budget (`ss.options.max_joint`); above it, `'auto'` uses agents. |
 
 Three details of the compartmental engine explain most of its behavior:
@@ -91,11 +91,11 @@ What a step does, under each solver (competing exits, when rates are read, casca
 
 Each of the engine's draws is keyed by its stream, the step, and the *round* (`Agents.draw()`, `Agents.new_round()`): each transition of the sweep is a round, as is each way in from code. A draw is not keyed by how many times the stream has been called, so it does not depend on how the work of a round is batched; an agent moves at most once in a round, so each agent's draws from a stream are its own (`STARSIM_CHECK_DRAWS=1` checks it).
 
-The random draws are shared too: `solvers/backends/draws.py` has exact draws from counter-based uniforms, so a stream doesn't depend on how work is split across threads. Users' own code can be compiled with `@ss.jit` (`solvers/backends/jit.py`), with the same results as when run as Python.
+The random draws are shared too: `solvers/numba/draws.py` has exact draws from counter-based uniforms, so a stream doesn't depend on how work is split across threads. Users' own code can be compiled with `@ss.jit` (`solvers/backends/jit.py`), with the same results as when run as Python.
 
 ### The kernels
 
-The same kernels exist as several sets, which give the same numbers: Rust's (`solvers/rust/`, swapped in by `solvers/backends/rust.py`), Numba's (`solvers/backends/kernels.py`, `passes.py`, `events.py`, `draws.py`), and plain Python's (the compartmental kernels run without compiling; for the ODE, `solvers/backends/ode.py` in NumPy). `ss.options.backend` chooses between them; by default Rust is used where it is built, then Numba, with plain Python for compartmental runs too short to be worth compiling. JAX is the fourth backend, for a whole run of the ODE only (`ss.options.backend = 'jax'`); it runs the same program through `ss.gradients` rather than through a set of kernels. Numba's kernels are the reference: a change is made there first, then in Rust's (`solvers/rust/README.md` says how), and `test_kernel_sets.py` checks that every set still gives the same numbers. What each set works with is in [Backends](running_performance.qmd#backends).
+The same kernels exist as several sets, which give the same numbers: Rust's (`solvers/rust/`), Numba's (`solvers/numba/`, the reference, each file with a Rust file of the same name), and plain Python's; JAX runs a whole ODE through `ss.gradients` instead. `ss.options.backend` chooses between them ([Backends](running_performance.qmd#backends)); where each set lives, and how to change a kernel in every set, is in the [developer guide](../contributing/developer.qmd#the-kernels).
 
 ## Execution paths and the tests that pin them
 

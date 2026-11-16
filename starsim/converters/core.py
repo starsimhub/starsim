@@ -217,6 +217,40 @@ def free(node):
     return out
 
 
+def map_children(node, func):
+    """ Replace each child of an AST node with `func(child)`, in place, and return the node """
+    for field,val in ast.iter_fields(node):
+        if isinstance(val, ast.AST):
+            setattr(node, field, func(val))
+        elif isinstance(val, list):
+            setattr(node, field, [func(v) if isinstance(v, ast.AST) else v for v in val])
+    return node
+
+
+def rewrite_expr(expr, funcs=None, where=None, name=None):
+    """
+    An expression of the compartmental form, as `ss.converters.export.flatten()` writes it, in another language's syntax: for the exporters
+
+    Args:
+        expr (str/ast.expr): the expression, as text or an AST node
+        funcs (dict): the names of the functions in the other language, where they differ, e.g. dict(minimum='fmin')
+        where (str): how `where(cond, yes, no)` is written, from those three as text, e.g. '(if {cond} then {yes} else {no})'
+        name (func): what a name (an `ast.Name`, including that of a function) is written as, as an AST node; by default, as it is
+    """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where' and where is not None: # Written whole as a name, since Python's expressions have no such form
+                cond, yes, no = [ast.unparse(a) for a in n.args]
+                return ast.Name(where.format(cond=cond, yes=yes, no=no))
+            n.func.id = (funcs or {}).get(n.func.id, n.func.id)
+            return n
+        def visit_Name(self, n):
+            return n if name is None else name(n)
+    node = ast.parse(expr, mode='eval').body if isinstance(expr, str) else expr
+    return ast.unparse(Sub().visit(node))
+
+
 def terms(node):
     """ An expression that is a sum, as its terms """
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
@@ -252,12 +286,7 @@ class Rates(sc.prettyobj):
                 return node
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in funcs:
                 return ast.Call(ast.Name(funcs[node.func.id]), [visit(a) for a in node.args], [])
-            for field,val in ast.iter_fields(node):
-                if isinstance(val, ast.AST):
-                    setattr(node, field, visit(val))
-                elif isinstance(val, list):
-                    setattr(node, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
-            return node
+            return map_children(node, visit)
         return visit(node)
 
     def is_total(self, node):
@@ -290,32 +319,24 @@ class Rates(sc.prettyobj):
             if isinstance(node, ast.Name) and node.id in self.source.states:
                 return ast.Attribute(node, 'n')
             elif isinstance(node, ast.Name) and node.id == total:
-                return everyone()
-            for field,val in ast.iter_fields(node):
-                if isinstance(val, ast.AST):
-                    setattr(node, field, visit(val))
-                elif isinstance(val, list):
-                    setattr(node, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
-            return node
-        def everyone():
-            out = None
-            for name in self.people:
-                out = ast.Name(name) if out is None else ast.BinOp(out, ast.Add(), ast.Name(name))
-            return ast.Attribute(out, 'n')
+                return ast.Attribute(self.sum_people(), 'n')
+            return map_children(node, visit)
         if self.is_total(node) and not (isinstance(node, ast.Name) and node.id == total):
-            return everyone()
+            return ast.Attribute(self.sum_people(), 'n')
         return visit(node)
+
+    def sum_people(self):
+        """ The sum of the states of people, e.g. S + I + R """
+        out = None
+        for name in self.people:
+            out = ast.Name(name) if out is None else ast.BinOp(out, ast.Add(), ast.Name(name))
+        return out
 
     def counts_in_calls(self, node):
         """ The expression with every state inside a function call written as its number (I.n), e.g. a capacity in a coefficient """
         if isinstance(node, ast.Call):
             return self.counts_of(node)
-        for field,val in ast.iter_fields(node):
-            if isinstance(val, ast.AST):
-                setattr(node, field, self.counts_in_calls(val))
-            elif isinstance(val, list):
-                setattr(node, field, [self.counts_in_calls(v) if isinstance(v, ast.AST) else v for v in val])
-        return node
+        return map_children(node, self.counts_in_calls)
 
     def bare_of(self, node):
         """ For a result: states of people as they are (in a result, a state is its number, by group), states that are not people as counts (W.n), and the total as the sum of the states of people """
@@ -323,16 +344,8 @@ class Rates(sc.prettyobj):
             if isinstance(node, ast.Name) and node.id in self.counts:
                 return ast.Attribute(node, 'n')
             elif isinstance(node, ast.Name) and node.id == total:
-                out = None
-                for name in self.people:
-                    out = ast.Name(name) if out is None else ast.BinOp(out, ast.Add(), ast.Name(name))
-                return out
-            for field,val in ast.iter_fields(node):
-                if isinstance(val, ast.AST):
-                    setattr(node, field, visit(val))
-                elif isinstance(val, list):
-                    setattr(node, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
-            return node
+                return self.sum_people()
+            return map_children(node, visit)
         return visit(node)
 
     def classify(self, flow):

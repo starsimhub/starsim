@@ -780,7 +780,7 @@ class Moving:
             if how == 'uniform':
                 return rvs
             elif how == 'expon':
-                return ss.solvers.backends.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
+                return ss.solvers.numba.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
             elif how == 'agent':
                 n, pars, kwds = self.agent_pars(key, dist, checked=True, uids=uids)
                 pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values

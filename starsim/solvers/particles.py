@@ -60,7 +60,7 @@ class Particles(sc.prettyobj):
         self.rngs = kernel_list([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each run (of each place among the runs, which a run drawn again takes over)
         self.n_threads = min(ss.options.threads or nb.get_num_threads(), n)
         if self.n_threads > 1: # A copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
-            self.progs = kernel_list([ss.solvers.backends.kernels.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
+            self.progs = kernel_list([ss.solvers.numba.compartmental.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
         self.done = 0
         return
 
@@ -70,7 +70,7 @@ class Particles(sc.prettyobj):
 
         Args:
             end (int): the time point, after the last step to take
-            tables (list): the parts of the program that vary in time, as `ss.solvers.backends.kernels.advance()` takes them, if not the engine's own: one entry for every run, or one for each (as each particle of IF2 has its own values)
+            tables (list): the parts of the program that vary in time, as `ss.solvers.numba.compartmental.advance()` takes them, if not the engine's own: one entry for every run, or one for each (as each particle of IF2 has its own values)
             fracs (array): the time fraction between places of every run (runs by entries), if not the engine's own
             row0 (int): the row of a whole run's tables that the first row of `tables` is
         """
@@ -79,8 +79,8 @@ class Particles(sc.prettyobj):
         tables = self.tables if tables is None else tables
         fracs = self.fracs if fracs is None else fracs
         rest = (self.solver, self.n_sub, *tables, fracs, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
-        n_sub = ss.solvers.backends.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
-        kn = ss.solvers.backends.kernels.choose(len(self.ys)*ss.solvers.backends.kernels.plain_seconds(self.program, self.ys[0], end - self.done, self.solver, n_sub))
+        n_sub = ss.solvers.backends.compiling.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
+        kn = ss.solvers.backends.compiling.choose(len(self.ys)*ss.solvers.backends.compiling.plain_seconds(self.program, self.ys[0], end - self.done, self.solver, n_sub))
         if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
             self.rngs = nb.typed.List(self.rngs)
             if self.n_threads > 1:
