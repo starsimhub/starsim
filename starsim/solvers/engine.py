@@ -513,7 +513,7 @@ class Effects(sc.prettyobj):
         value = value.raw if isinstance(value, ss.par) else value
         if not (sc.isnumber(value) or isinstance(value, ss.TimePar)):
             return f'"{name}" of "{mod.name}" is a {type(value).__name__}, and a module written as code reads a number, a rate, a probability, or a duration from a parameter a modifier changes. Modify its rel_sus or rel_trans, or declare the disease (see ss.Disease).'
-        if name not in getattr(mod, 'allow_modifiers', ()) and any(ss.conditions.on_people(getattr(m, 'where', None)) for m in mods):
+        if name not in getattr(mod, 'allow_modifiers', ()) and any(ss.conditions.on_people(getattr(m, '_who_now', None)) for m in mods):
             return (f'"{mod.name}" is written as code, so it reads one value of "{name}", self.pars.{name}, which cannot differ between people. '
                     f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
         return None
@@ -1002,7 +1002,7 @@ class Engine(Telling, Effects):
         The branches' multipliers with their who=: a branch is closed to the people (or groups) it does not hold for, so the
         others share the rest; but if every branch is closed to someone, they are split as before and wait until one opens
         """
-        ws = [self.where_frac(tr, state, uids) if tr is not None and getattr(tr, 'where', None) is not None else None for tr in branches]
+        ws = [self.where_frac(tr, state, uids) if tr is not None and getattr(tr, '_who_now', None) is not None else None for tr in branches]
         if all(w is None for w in ws):
             return mults
         n = len(uids) if uids is not None else self.n_groups
@@ -1018,11 +1018,11 @@ class Engine(Telling, Effects):
         """ For a branch with who=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
         sel = self.selector
         if sel.abm:
-            mask = np.asarray(sel.select(tr.where))
+            mask = np.asarray(sel.select(tr._who_now))
             return (mask[uids] if uids is not None else mask).astype(float) # For the agents asked for only
-        if not ss.conditions.is_static(tr.where, self.sim):
+        if not ss.conditions.is_static(tr._who_now, self.sim):
             return None
-        frac = np.broadcast_to(np.asarray(sel.select(tr.where), dtype=float), (len(sel.states), self.n_groups))
+        frac = np.broadcast_to(np.asarray(sel.select(tr._who_now), dtype=float), (len(sel.states), self.n_groups))
         return np.clip(frac[sel.states.index(getattr(state, 'name', state))], 0, 1)
 
     def branch_mult_of(self, name, uids=None):
@@ -1198,8 +1198,8 @@ class Engine(Telling, Effects):
                     self.branch_adjust[name] = self.branch_adjust.get(name, 1.0)*sim.groups.group_vals(d, vals)
                 else:
                     tr = self.graph.transitions[name]
-                    if tr.trigger is not None:
-                        raise sc.KeyNotFoundError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
+                    if tr._trigger is not None:
+                        raise sc.KeyNotFoundError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr._trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
                     if tr.source and not any(self.applies[src.name][d] for src in tr.source) and not (d == self.strain and tr.contact):
                         raise ValueError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.source)}) have no level of "{strat.name}". '
                                                    f'To make where they arrive depend on it, give "{strat.name}" a split instead.')
@@ -1552,7 +1552,7 @@ class Engine(Telling, Effects):
         for i,m in enumerate(mods):
             if m.op != 'set':
                 continue
-            if m.where is not None or m.holding:
+            if m._who_now is not None or m.holding:
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with who= or until=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with who=.')
             new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(mean=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
             if new is None or ss.transitions.varying_pars(new):

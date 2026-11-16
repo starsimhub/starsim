@@ -88,8 +88,8 @@ def test_where_count():
 def test_count_is_when():
     sc.heading('A count in when= of a transition says when its rate applies; an intervention written as code takes a count and a schedule')
     S, I, Q = ss.states('S I Q')
-    assert ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20).trigger is None # With a rate, the count gates it
-    assert ss.Transition(I, Q, when=Q.n < 20).trigger is not None # With no rate, it moves everyone at once
+    assert ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20)._trigger is None # With a rate, the count gates it
+    assert ss.Transition(I, Q, when=Q.n < 20)._trigger is not None # With no rate, it moves everyone at once
     for solver in ['ode', 'abm']:
         S, I, Q = ss.states('S I Q')
         d = ss.Disease(S, I, Q, infection=S >> I @ ss.peryear(2)*I, q=ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20), init_prev=0.1, name='d')

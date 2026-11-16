@@ -772,7 +772,7 @@ class attr(Nameable, Expr):
                 errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no when='
                 raise ValueError(errormsg)
             on = list(value.keys())
-        self.on = on
+        self.when = on # The event(s) that set it
         self.combine = combine
         self.init = init
         self.name = name
@@ -789,7 +789,7 @@ class attr(Nameable, Expr):
     def kind(self):
         """ 'drawn', 'recorded', 'trait', or 'derived' (a dict by event is 'recorded', each event's value drawn or worked out) """
         random = isinstance(self.value, ss.Dist) or (isinstance(self.value, Expr) and bool(dists_in(self.value)))
-        if self.on is None:
+        if self.when is None:
             return 'trait' if random else 'derived'
         return 'drawn' if random else 'recorded'
 

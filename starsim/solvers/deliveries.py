@@ -138,10 +138,10 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
     """
     sim = owner.sim
     for mod in sim.declared:
-        for tr in [tr for tr in mod.graph.transitions.values() if tr.trigger is not None and tr.trigger.outcome]:
-            event, cond = ss.conditions.split_where(tr.trigger.x)
-            if getattr(tr, 'where', None) is not None: # The transition's own who= restricts who moves too (when=event, who=cond)
-                cond = ss.conditions.join('&', [c for c in [cond, tr.where] if c is not None])
+        for tr in [tr for tr in mod.graph.transitions.values() if tr._trigger is not None and tr._trigger.outcome]:
+            event, cond = ss.conditions.split_where(tr._trigger.x)
+            if getattr(tr, '_who_now', None) is not None: # The transition's own who= restricts who moves too (when=event, who=cond)
+                cond = ss.conditions.join('&', [c for c in [cond, tr._who_now] if c is not None])
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
             if not isinstance(sim.solver, ss.solvers.abm): # As fractions of each state and group
@@ -186,16 +186,16 @@ def order_steps(mods):
     for i,m in enumerate(mods):
         deps[i] = set()
         if isinstance(m, ss.Event):
-            for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond) else []:
+            for leaf in ss.conditions.event_leaves(m._trigger) if isinstance(m._trigger, ss.conditions.Cond) else []:
                 if leaf.op == 'event' and isinstance(leaf.args[0], (ss.products.EventSource, str)):
                     found = find(leaf.args[0])
                     if not found:
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
                         raise ValueError(errormsg)
-                    if m.delay is None: # A delayed delivery reads the events since its last step (see ss.Event._delayed_arrivals())
+                    if m._delay is None: # A delayed delivery reads the events since its last step (see ss.Event._delayed_arrivals())
                         deps[i] |= {index[id(d)] for d in found if d is not m}
-            if m.delay is None and any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], ss.Event) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
-                errormsg = f'"{m.name}" is triggered by its own event ({m.trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), or be triggered by itself with a delay (when=ss.on(event, delay=...)), but not otherwise'
+            if m._delay is None and any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], ss.Event) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m._trigger) if isinstance(m._trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
+                errormsg = f'"{m.name}" is triggered by its own event ({m._trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), or be triggered by itself with a delay (when=ss.on(event, delay=...)), but not otherwise'
                 raise ValueError(errormsg)
     out, done = [], set()
     while len(out) < len(mods):
@@ -688,14 +688,14 @@ class CompartmentalDelivery(sc.prettyobj):
             return False
         product = d.product
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
-        scheduled = d._routine or (d._in_rounds and d.trigger is None)
-        watched = d.name in [ss.utils.own_name(sim.modules, ss.conditions.modname(leaf.args[0])) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
+        scheduled = d._routine or (d._in_rounds and d._trigger is None)
+        watched = d.name in [ss.utils.own_name(sim.modules, ss.conditions.modname(leaf.args[0])) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod._trigger)] or d._needs # Its events are read, which the kernels do not keep
         fixed = d.coverage is None or sc.isnumber(d.coverage) or isinstance(d.coverage, ss.by)
         typed = d.rate is None or (isinstance(d.rate, ss.TimePar) and not d._in_rounds) # A rate among those eligible, the same fraction at each step
-        static = ss.conditions.is_static(d.eligible, sim) and fixed and typed
-        past = d.at_age is not None # The people past the age are left out on the first step: see ss.Event._skip_past()
+        static = ss.conditions.is_static(d._who_now, sim) and fixed and typed
+        past = d._at_age is not None # The people past the age are left out on the first step: see ss.Event._skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
-        return moves and scheduled and static and not limited and d.when is None and d.or_where is None and not watched and not past
+        return moves and scheduled and static and not limited and d._when_date is None and d._or_when is None and not watched and not past
 
     def plain_move(self):
         """ Whether a move between states (`move=S >> I`) keeps everyone in their group, so the kernels can take it: no strain to arrive with, no record of who was offered it, and states of the same dimensions """
@@ -719,7 +719,7 @@ class CompartmentalDelivery(sc.prettyobj):
         due = np.zeros(npts, dtype=np.bool_) # By the step, which is the time point it starts from (see ss.loop.Loop)
         for ti in range(npts):
             due[ti] = d.ti_start <= ti < d.ti_stop and (d.round_tis is None or ti in d.round_tis)
-        sel = d._offer(d._default_eligible() if d.eligible is None else selector.select(d.eligible))
+        sel = d._offer(d._default_eligible() if d._who_now is None else selector.select(d._who_now))
         cov = np.broadcast_to(np.clip(d._chance(selector), 0, 1), selector.shape)
         changes = dict(d.changes) if d.product is None else {sim.groups.dim_index(d.product.dim):1}
         offered = {sim.groups.dim_index(d._offered):1} if d._remembers else {}

@@ -1005,15 +1005,16 @@ def check_not_time(who, what):
     return who
 
 
-def split_delivery(on=None, who=None, where=None):
+def split_delivery(trigger=None, who=None, gate=None):
     """
     The trigger and the condition of a delivery, either of which may be None
 
-    on (from when=) is what triggers it: an event (the people it happened to on this step), or events joined with | and &, or a
+    trigger (from when=) is what triggers it: an event (the people it happened to on this step), or events joined with | and &, or a
     transition by its path (`when='sir.infection'`). who chooses people or compartments: a condition on them (who is
-    eligible). where (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
-    condition on people too. who and where are joined with &, and neither takes an event.
+    eligible). gate (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
+    condition on people too. who and gate are joined with &, and neither takes an event.
     """
+    on, where = trigger, gate
     for val in [who, where]:
         check_not_time(val, 'an event')
     for key,val in dict(on=on, who=who, where=where).items():
@@ -1253,7 +1254,7 @@ class Selector(sc.prettyobj):
             if isinstance(mod, ss.Event):
                 if mod.product is not None:
                     out |= {(mod.product.name, outcome), (mod.product.name, None)}
-                out |= self.lineage(mod.trigger, depth + 1)
+                out |= self.lineage(mod._trigger, depth + 1)
             return out
         elif cond.op in leaves:
             return {event_key(cond)} if is_event(cond) else set()

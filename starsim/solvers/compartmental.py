@@ -24,7 +24,7 @@ def synced_event(tr, sim, home):
     `Compartmental.init_syncs()`); None for anything else (an event of its own module, entering or leaving a state, or
     an event a module records in code)
     """
-    trig = tr.trigger
+    trig = tr._trigger
     if trig is None or not trig.event or not isinstance(trig.x, ss.conditions.Event):
         return None
     kind, obj, dst = trig.x.args
@@ -442,16 +442,16 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 apart = len(staged) > 1 # Several, each for other people (who=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_fracs())
                 if apart and (stays or any(self.dwells[tr.name].fixed for tr in staged)):
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has min_stay=')
-                if apart and any(tr.where is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
+                if apart and any(tr._who_now is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
                     tracks.append(Bunch(tr=None, p=None, immediate=False, raced=staged))
                 else:
                     tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
             if exits.held: # People who took ss.stay, with no exit of their own (p=0, entered only from the split)
                 tracks.append(Bunch(tr=None, p=ss.expressions.par.inline(0.0), immediate=False, stay=True))
             for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
-                if tr.trigger.outcome: # Moved when the outcome happens: see ss.solvers.deliveries.trigger_moves()
+                if tr._trigger.outcome: # Moved when the outcome happens: see ss.solvers.deliveries.trigger_moves()
                     continue
-                if tr.trigger.event: # Moved by the other module's flow (see init_syncs()), or at the end of the step (see step_triggers())
+                if tr._trigger.event: # Moved by the other module's flow (see init_syncs()), or at the end of the step (see step_triggers())
                     continue
                 tracks.append(Bunch(tr=tr, p=None, immediate=True, trigger=True))
 
@@ -780,7 +780,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         plain = [track for tracks in self.tracks.values() for track in tracks]
         if self.joint is not None or self.triggers or self.sim.mixing.register is not None or self.mod.burnin_plan(self) is not None or self.branch_adjust:
             return False
-        if any(getattr(track, 'apart', False) or getattr(track, 'trigger', False) or getattr(track.tr, 'where', None) is not None for track in plain):
+        if any(getattr(track, 'apart', False) or getattr(track, 'trigger', False) or getattr(track.tr, '_who_now', None) is not None for track in plain):
             return False
         if any(kind == 'branch' for name,kind,*rest in self.sim.modifiers):
             return False
@@ -1224,9 +1224,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         for tr in self.event_triggers:
             srcs = [s for s in tr.source if s.people]
-            frac = np.asarray(self.selector.select(tr.trigger.x), dtype=float)*self.selector.in_states([s.name for s in srcs])
-            if tr.where is not None and tr.where is not tr.trigger.x:
-                frac = frac*self.selector.select(tr.where)
+            frac = np.asarray(self.selector.select(tr._trigger.x), dtype=float)*self.selector.in_states([s.name for s in srcs])
+            if tr._who_now is not None and tr._who_now is not tr._trigger.x:
+                frac = frac*self.selector.select(tr._who_now)
             if frac.any():
                 self.move_frac(tr, frac, srcs)
         return
@@ -1359,10 +1359,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if ev is None or ev.mod != self.mod.name:
                     continue
                 tr = self.graph.transitions[ev.tr]
-                where = f'"{mod.name}.{otr.name}" (triggered by {otr.trigger.x.label}) cannot run with solver="{sim.solver}"'
+                where = f'"{mod.name}.{otr.name}" (triggered by {otr._trigger.x.label}) cannot run with solver="{sim.solver}"'
                 if self.joint is None or mod.name not in self.joint.names:
                     raise ss.CapabilityError(f'{where}: "{mod.name}" and "{self.mod.name}" are not tracked jointly. Run with solver="abm".')
-                if otr.where is not None:
+                if otr._who_now is not None:
                     raise ss.CapabilityError(f'{where} with who=: a synchronized flow moves everyone in its source. Put the condition in the source states, or run with solver="abm".')
                 if id(tr) not in moved:
                     raise ss.CapabilityError(f'{where}: "{self.mod.name}.{tr.name}" moves people with no wait (passed through on entry), so it has no flow of its own to synchronize with. Run with solver="abm".')
@@ -1371,7 +1371,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 self.syncs.append(Bunch(tr=tr, to=ev.to, mod=mod, otr=otr, row=self.n_trans, S=None, mask=None, rec=None))
                 self.n_trans += 1
                 if self.integer and len(tr.dest) > 1: # Otherwise it is exact
-                    ss.note(f'{mod.name}.{otr.name} is triggered by {otr.trigger.x.label}, a synchronized flow, which moves people in {mod.name} as {self.mod.name}.{tr.name} moves them; with solver="{sim.solver}" its count is drawn apart from the move, so agrees with it on average', sim=sim)
+                    ss.note(f'{mod.name}.{otr.name} is triggered by {otr._trigger.x.label}, a synchronized flow, which moves people in {mod.name} as {self.mod.name}.{tr.name} moves them; with solver="{sim.solver}" its count is drawn apart from the move, so agrees with it on average', sim=sim)
         return
 
     def syncs_of(self, tr, dst):
@@ -1399,14 +1399,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         def scalar(w, what):
             w = np.broadcast_to(np.asarray(w, dtype=float), (ng,))
             if np.ptp(w) > 1e-12:
-                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr.trigger.x.label}, and {what} differs between groups, which a synchronized flow cannot carry yet. Run with solver="abm".')
+                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr._trigger.x.label}, and {what} differs between groups, which a synchronized flow cannot carry yet. Run with solver="abm".')
             return float(w[0])
         dst = sc.ddict(float) # Level of the other's dimension -> fraction, for people leaving the source
         ps = [scalar(p, 'its branch probability') for p in other.branch_probs(sy.otr)]
         for state,p in zip(sy.otr.dest, ps):
             comps, credits = other.entry[state.name]
             if credits:
-                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr.trigger.x.label}, and its destination "{state.name}" is passed straight through, which a synchronized flow cannot carry yet. Run with solver="abm".')
+                raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr._trigger.x.label}, and its destination "{state.name}" is passed straight through, which a synchronized flow cannot carry yet. Run with solver="abm".')
             for ind,w in comps:
                 dst[level(ind)] += p*scalar(w, 'where its destination is entered')
         stay = 1 - sum(ps)
@@ -1487,20 +1487,20 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def init_triggers(self):
         """ Triggers (`ss.on()`): on states and strata, the compartments where they hold vanish; on time or counts, they are applied at each step """
         sim = self.sim
-        self.triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and not tr.trigger.event and not tr.trigger.outcome]
-        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr.trigger is not None and tr.trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
+        self.triggers = [tr for tr in self.graph.transitions.values() if tr._trigger is not None and not tr._trigger.event and not tr._trigger.outcome]
+        self.event_triggers = [tr for tr in self.graph.transitions.values() if tr._trigger is not None and tr._trigger.event and synced_event(tr, sim, self.mod.name) is None] # An event of this module: moved at the end of the step, see step_triggers()
         for tr in self.triggers:
-            tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
+            tr.static = ss.conditions.is_static(tr._trigger.x, sim) and ss.conditions.is_static(tr._who_now, sim)
             if tr.static:
-                self.tell(ss.note, f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dest)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
+                self.tell(ss.note, f'{tr.name} is triggered by {tr._trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dest)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
         return
 
     def trigger_frac(self, tr):
         """ Where a trigger holds, as the fraction of each state (rows) and group (columns) it selects """
         sel = self.selector
-        out = np.asarray(sel.select(tr.trigger.x), dtype=float)
-        if tr.where is not None:
-            out = out*np.asarray(sel.select(tr.where), dtype=float)
+        out = np.asarray(sel.select(tr._trigger.x), dtype=float)
+        if tr._who_now is not None:
+            out = out*np.asarray(sel.select(tr._who_now), dtype=float)
         return np.broadcast_to(out, (len(sel.states), self.n_groups))
 
     def trigger_mask(self, tr, name):
@@ -1836,7 +1836,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def branch_where(self, tr):
         """ Whether a transition is a branch out of each of its sources whose who= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
-        return tr.where is not None and ss.conditions.is_static(tr.where, self.sim) and all(tr in self.graph.exits[s.name].branches + sc.tolist(self.graph.exits[s.name].remainder) for s in tr.source if s.people)
+        return tr._who_now is not None and ss.conditions.is_static(tr._who_now, self.sim) and all(tr in self.graph.exits[s.name].branches + sc.tolist(self.graph.exits[s.name].remainder) for s in tr.source if s.people)
 
     @staticmethod
     def trait_mean(mod, a, sim):
@@ -1967,9 +1967,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if key[0] != self.mod.name or self.joint is not None or any(m.op == 'add' for m in mods):
                 continue
             for m in list(mods):
-                expr = getattr(m, 'where', None)
+                expr = getattr(m, '_who_now', None)
                 simple = isinstance(m, ss.modify) and isinstance(expr, ss.expressions.Func) and expr.name in ss.expressions.comparisons and m.op == 'multiply'
-                if not simple or m.holding or m.start is not None or m.stop is not None or m.frac is not None or m.when is not None or not m.constant_amount:
+                if not simple or m.holding or m.start is not None or m.stop is not None or m.frac is not None or m._when_date is not None or not m.constant_amount:
                     continue
                 if any(isinstance(leaf, ss.expressions.Count) and any(all(state is not own for own in graph.states.values()) for state in leaf.states) for leaf in expr.leaves):
                     continue
@@ -2310,7 +2310,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         kn = ss.solvers.numba.compartmental
         ng, nf, nt = self.n_groups, len(self.flows), mix.nt
         exposures = rates.exposures
-        by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, 'where', None) is not None for m in self.net_mods) or any(self.prog_rtrs) or self.saturates # Contacts by exposure and group: see set_contacts()
+        by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, '_who_now', None) is not None for m in self.net_mods) or any(self.prog_rtrs) or self.saturates # Contacts by exposure and group: see set_contacts()
         frac = mix.frac
         frac.sort_indices() # A full matrix of entries is read as one, in order (see ss.solvers.numba.compartmental.frac())
         setlist = list(rates.sets)
@@ -2858,7 +2858,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def mod_values(self):
         """ What the modifiers are worked out from, beyond their amounts (see `par_values()`): when they act, on whom, and how; to tell whether the tables of the last run still hold """
-        keys = ['op', 'amount', 'efficacy', 'frac', 'start', 'stop', 'when', 'where', 'hold', 'until', 'networks']
+        keys = ['op', 'amount', 'efficacy', 'frac', 'start', 'stop', '_when_date', '_who_now', 'hold', 'until', 'networks']
         out = []
         for mods in self.sim.modifiers.values():
             for m in mods:
@@ -2904,11 +2904,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     sim.t.ti = 0
                     return None
                 steps.update(first_step(lambda: sim.t.now('year') + 1e-9 >= year) for year in m.amount.years(sim))
-            if m.when is not None: # A condition on time alone, read once for each step
+            if m._when_date is not None: # A condition on time alone, read once for each step
                 on = []
                 for ti in range(start, stop):
                     sim.t.ti = min(ti, self.mod.t.npts - 1)
-                    on.append(ss.conditions.holds_now(m.when, sim))
+                    on.append(ss.conditions.holds_now(m._when_date, sim))
                 steps.update((start + 1 + np.flatnonzero(np.diff(on))).tolist())
             for val in [m.start, m.stop]:
                 if val is not None:

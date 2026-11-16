@@ -373,7 +373,7 @@ class Graph:
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
 
-            undriven = tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state
+            undriven = tr.dur is None and tr.p is None and tr._trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state
             if undriven and tr.rate is None and not tr.undriven: # What would it mean? A transition that nothing moves people along is written @ 0
                 arrow = tr._arrow.replace(' -> ', ' >> ')
                 if not tr.source:
@@ -758,13 +758,13 @@ class Graph:
                 tr.const, tr.terms = linear(tr.rate)
             if tr._inflow:
                 self.inflows.append(tr)
-            if tr._immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr._split): # dur=0 with who=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until who= holds instead)
-                tr.trigger = ss.on(tr.where)
+            if tr._immediate and tr._who_now is not None and tr._trigger is None and (tr.p is None or tr._split): # dur=0 with who=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until who= holds instead)
+                tr._trigger = ss.on(tr._who_now)
             for state in tr.source:
                 exits = self.exits[state.name]
                 if tr.contact:
                     exits.contact.append(tr)
-                elif tr.trigger is not None: # Moved as soon as its condition holds, or its event happens: see ss.on
+                elif tr._trigger is not None: # Moved as soon as its condition holds, or its event happens: see ss.on
                     exits.triggered.append(tr)
                 elif tr.p is not None and not tr._split: # One branch of several out of this state
                     exits.branches.append(tr)
@@ -836,8 +836,8 @@ class Graph:
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr._check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the fraction of its people who move; a split with ss.stay or ss.dead is a split, though neither is a state
-                raise ValueError(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr._inflow else "one branch of several with p="}; '
+            if tr._trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr._trigger.outcome)): # On an outcome, p= is the fraction of its people who move; a split with ss.stay or ss.dead is a split, though neither is a state
+                raise ValueError(f'"{name}" is triggered by {tr._trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr._inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr._arrow} | B" with p=[...].')
             for inc in [c for c in ss.expressions.nodes([tr.rate, tr.dur] + sc.tolist(tr.p)) if isinstance(c, ss.conditions.Cond) and c.op == 'incidence']: # A flow over a window, in a rate, would be a delay equation
                 flow = inc.args[0]
@@ -930,7 +930,7 @@ class Graph:
             if isinstance(a.value, dict) and all(ss.expressions.is_event(key) for key in a.value): # A value for each event
                 a.by_event = [(ss.expressions.events_in(key, self), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
             elif isinstance(a.value, dict):
-                if a.on is not None:
+                if a.when is not None:
                     errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no when='
                     raise ValueError(errormsg)
                 a.cases = [(names_of(key), as_expr(val)) for key,val in a.value.items()]
@@ -940,7 +940,7 @@ class Graph:
                     raise ValueError(errormsg)
             elif a.kind in ['recorded', 'derived'] and not isinstance(a.value, ss.Dist):
                 a.value = as_expr(a.value)
-            a.events = [] if a.on is None else ss.expressions.events_in(a.on, self)
+            a.events = [] if a.when is None else ss.expressions.events_in(a.when, self)
         for obj in self.attrs.values():
             for e in obj.events:
                 kind, target, dst = e.args

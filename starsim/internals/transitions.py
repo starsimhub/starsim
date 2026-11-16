@@ -556,7 +556,12 @@ class Transition(Nameable):
         self.p_rest = None # What the rest is, once its module is built (see ss.graph.Graph.resolve_transitions())
         p = None if p is notgiven else p
         self._given = (source, dest) # As given, for a transition made again with the keywords after @ (I >> R @ dict(dur=ss.days(8), p=None))
-        where = None if who is None else check_who(who, 'a transition')
+        if isinstance(who, ss.interventions.at_age):
+            errormsg = f'who= of a transition is who it applies to, a condition on people (e.g. who=ss.person.age >= 5); {who} reaches people as they reach an age, which is an event: use ss.Event(S >> I, who={who})'
+            raise TypeError(errormsg)
+        self.who = None if who is None else check_who(who, 'a transition') # As given (a path as ss.ref())
+        self.when = when # As given; what it decides is worked out below (self._trigger, self._who_now)
+        where = self.who
         trigger, delay = None, None
         if when is not None and not isinstance(when, on) and (rate is not None or dur is not None) and ss.conditions.on_population(when): # With a rate or dwell time, a condition on the population says when it applies (sir.I.n > 1000): the rate is 0 while it does not hold
             where = ss.conditions.join('&', [where, ss.conditions.as_cond(when)])
@@ -596,15 +601,15 @@ class Transition(Nameable):
         self.dest = None
         self.flow_given = None # A rate written as the whole flow (e.g. beta*S*I/N), which the graph divides by the source (see ss.expressions.per_person())
         self.p = None
-        self.trigger = None if trigger is None else ss.on(trigger)
+        self._trigger = None if trigger is None else ss.on(trigger)
         if delay is not None:
-            self.trigger.delay = as_expr(delay) # A time drawn for each person when the event happens to them: see ss.solvers.Agents.triggered()
+            self._trigger.delay = as_expr(delay) # A time drawn for each person when the event happens to them: see ss.solvers.Agents.triggered()
         self.rate = None if rate is None else as_expr(rate)
         self.dur = None if dur is None else as_expr(dur)
         self.stages = stages
         self.name = name
         self.label = label
-        self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
+        self._who_now = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
@@ -629,7 +634,7 @@ class Transition(Nameable):
                 if srcs is not None:
                     self.move_from[dim] = srcs
                     at = ss.conditions.Cond('dim', dim) == srcs[0] if len(srcs) == 1 else ss.conditions.Cond('dim', dim).isin(srcs) # Only people at a level they move from
-                    self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
+                    self._who_now = at if self._who_now is None else ss.conditions.as_cond(self._who_now) & at
                 self.move[dim] = level
         if per_strain is True:
             errormsg = "per_strain=True of a transition is per_strain='each' (an outcome for each strain carried), or per_strain='first' (each strain its own rate, the first to happen moving on alone)"
@@ -859,12 +864,12 @@ class Transition(Nameable):
 
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, a dict of the transition's keywords is those (`@ dict(dur=ss.days(8), p=0.002)`), and anything else is a rate """
-        if self.rate is not None or self.dur is not None or self.trigger is not None:
+        if self.rate is not None or self.dur is not None or self._trigger is not None:
             errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
             raise TypeError(errormsg)
         if isinstance(driver, on): # People move as soon as it holds, or when it happens
             new = self._copy()
-            new.trigger = driver
+            new._trigger = driver
             return new
         value = driver.value if isinstance(driver, par) else driver
         if isinstance(value, dict) and value and all(isinstance(key, str) for key in value):
@@ -1007,8 +1012,8 @@ class Transition(Nameable):
 
     @property
     def _driver_str(self):
-        if self.trigger is not None:
-            return repr(self.trigger)
+        if self._trigger is not None:
+            return repr(self._trigger)
         elif self.dur is not None:
             return f'dur = {value_str(self.dur.raw)}'
         elif self.rate is not None:

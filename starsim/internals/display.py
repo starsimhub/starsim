@@ -478,8 +478,8 @@ def describe_graph(graph, sim=None, out=None):
                 add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}', f'Exposure through the {"networks" if len(sim.pars.networks) else "contact matrices"}')
             for text in (route_lines(mod, tr, sim) if sim is not None else []):
                 add('', text)
-        elif tr.trigger is not None:
-            add(name, f'{tr._arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
+        elif tr._trigger is not None:
+            add(name, f'{tr._arrow}   on {getattr(tr._trigger.x, "__name__", tr._trigger.x)} ({"when it happens" if tr._trigger.event else "as soon as it holds"}, in the same step)')
         elif tr.undriven:
             movers = ss.solvers.deliveries.movers(sim, mod.name, name) if sim is not None else None
             add(name, f'{tr._arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
@@ -640,15 +640,15 @@ def diagram_links(sim):
                 links.append(sc.objdict(src=other, state=state, dst=home, tr=tr, label=mod.name, mod=mod))
     for mod in sim.declared: # A transition triggered by another disease's state or transition
         for name,tr in mod.graph.transitions.items():
-            if tr.trigger is None:
+            if tr._trigger is None:
                 continue
             ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name)
             if ev is not None: # By a transition: from the state it goes to
                 dest = declared[ev.mod].graph.transitions[ev.tr].dest if ev.mod in declared else None
                 if dest:
                     links.append(sc.objdict(src=ev.mod, state=dest[0].name, dst=mod.name, tr=name, label=f'on {ev.mod}.{ev.tr}', mod=None))
-            elif not tr.trigger.event and isinstance(tr.trigger.x, ss.conditions.Cond):
-                for other,state in ss.conditions.leaf_states(tr.trigger.x):
+            elif not tr._trigger.event and isinstance(tr._trigger.x, ss.conditions.Cond):
+                for other,state in ss.conditions.leaf_states(tr._trigger.x):
                     other = ss.conditions.modname(other)
                     if other in declared and other != mod.name and state in declared[other].graph.states:
                         links.append(sc.objdict(src=other, state=state, dst=mod.name, tr=name, label=f'when {other}.{state}', mod=None))

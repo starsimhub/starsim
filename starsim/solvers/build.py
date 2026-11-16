@@ -52,23 +52,23 @@ def resolve_path_triggers(sim):
     """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
-            if tr.trigger is not None:
-                x = ss.conditions.resolve_paths(tr.trigger.x, sim)
-                if x is not tr.trigger.x:
-                    delay = tr.trigger.delay
+            if tr._trigger is not None:
+                x = ss.conditions.resolve_paths(tr._trigger.x, sim)
+                if x is not tr._trigger.x:
+                    delay = tr._trigger.delay
                     if ss.conditions.has_event(x):
                         x, cond = ss.conditions.split_where(x)
                         if cond is not None:
-                            tr.where = cond if tr.where is None else ss.conditions.as_cond(tr.where) & ss.conditions.as_cond(cond)
+                            tr._who_now = cond if tr._who_now is None else ss.conditions.as_cond(tr._who_now) & ss.conditions.as_cond(cond)
                     elif delay is not None:
                         raise ValueError(f'when= of "{mod.name}.{name}" is {x!r}, a condition, which moves people as soon as it holds, so it takes no delay (a delay is the time after an event, as when=ss.on(event, delay=...))')
-                    tr.trigger = ss.on(x)
-                    tr.trigger.delay = delay
-            if isinstance(tr.where, ss.conditions.Cond):
-                where = ss.conditions.resolve_paths(tr.where, sim)
-                if where is not tr.where and ss.conditions.has_event(where):
+                    tr._trigger = ss.on(x)
+                    tr._trigger.delay = delay
+            if isinstance(tr._who_now, ss.conditions.Cond):
+                where = ss.conditions.resolve_paths(tr._who_now, sim)
+                if where is not tr._who_now and ss.conditions.has_event(where):
                     raise TypeError(f'who= of "{mod.name}.{name}" says who it applies to, a condition; {where!r} is an event (a path to a transition), which triggers it, so give it as when=')
-                tr.where = where
+                tr._who_now = where
     return
 
 
@@ -416,9 +416,9 @@ def init_where(sim):
                 sim.pars.connectors[key] = modifier
     for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
         for name,tr in mod.graph.transitions.items():
-            where = getattr(tr, 'where', None)
+            where = getattr(tr, '_who_now', None)
             key = f'where_{mod.name}_{name}'
-            if where is not None and key not in sim.pars.connectors and tr.trigger is None: # A trigger takes who= into its condition
+            if where is not None and key not in sim.pars.connectors and tr._trigger is None: # A trigger takes who= into its condition
                 if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
                     sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
                     sim.pars.connectors[key].on_rate = True

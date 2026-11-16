@@ -1078,7 +1078,7 @@ class Pregnancy(Demographics, ss.Disease):
             reasons += [f'{name} is a prenatal network' for name,net in nets.items() if isinstance(net, ss.PrenatalNet)]
             for mod in sim.declared:
                 for name,tr in mod.graph.transitions.items():
-                    if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
+                    if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, '_who_now', None), tr._trigger] + sc.tolist(tr.p)):
                         reasons.append(f'ss.mother in {mod.name}.{name}')
             for key in ['interventions', 'connectors']:
                 for mod in sim.pars[key].values():

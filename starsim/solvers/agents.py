@@ -397,8 +397,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
         self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
-        self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
-        self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
+        self.triggers = [tr for tr in graph.transitions.values() if tr._trigger is not None and not tr._trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
+        self.trigger_mods = set().union(*[ss.conditions.module_refs(tr._trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
         self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
         self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
@@ -497,7 +497,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for p in graph.spread_pars():
             self.spread[id(p)] = f'par_{p.name}'
             arrs.append(ss.FloatArr(f'par_{p.name}', default=ss.transitions.numeric_dist(p.raw, self.convert), label=f'Value of {p.name}'))
-        self.delays = {tr.name:tr.trigger.delay for tr in self.triggers if tr.trigger.delay is not None} # when=ss.on(event, delay=): each person's time after it (see triggered())
+        self.delays = {tr.name:tr._trigger.delay for tr in self.triggers if tr._trigger.delay is not None} # when=ss.on(event, delay=): each person's time after it (see triggered())
         for name in self.delays:
             arrs.append(ss.TimeArr(f'ti_after_{name}', label=f'Scheduled time of {name}, after its event'))
         self.tf_dists = {name:dist for name,tf in graph.transfers.items() if (dist := self.transfer_dist(tf, per_agent=self.agent_values)) is not None} # A transfer whose dur= is a distribution: each person's time is drawn when they can first move, and they move when it is up (see step_transfers())
@@ -553,7 +553,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.listed = [state.name for state in graph.people_states if self.competing[state.name] or self.exits_of[state.name]] # The states whose agents step_state() goes through
         for name,tr in graph.transitions.items():
             add(f'dst_{name}', ss.random())
-            if tr.trigger is not None and tr.trigger.outcome:
+            if tr._trigger is not None and tr._trigger.outcome:
                 add(f'trig_{name}', ss.random()) # Who of the people of the outcome move: see ss.solvers.deliveries.trigger_moves()
             add(f'mix_{name}', ss.random())
             if carriage and tr.contact:
@@ -687,7 +687,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def lifelong_mods(self, mods):
         """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `who=ss.person.female`), so each person's multiplier stays the same for the whole run """
-        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and not m.holding and m.frac is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
+        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m._when_date is None and not m.holding and m.frac is None and sc.isnumber(m.amount) and m._who_now is not None and self.is_fixed(m._who_now) for m in mods)
 
     def mult(self, kind, name, uids):
         """ The multiplier on a quantity for some agents, from its modifiers """
@@ -695,7 +695,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if mods and kind == 'transition' and self.lifelong_mods(mods): # For these agents only
             out = 1.0
             for m in mods:
-                out = out*np.where(self.selector.select(m.where)[uids] > 0, m.amount, 1.0)
+                out = out*np.where(self.selector.select(m._who_now)[uids] > 0, m.amount, 1.0)
             return out
         out = self.mult_raw(kind, name)
         return out if np.ndim(out) == 0 else out[uids]

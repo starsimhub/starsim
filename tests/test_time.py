@@ -307,7 +307,7 @@ def test_schedule():
         ev = ss.Event(sir.S >> sir.R, p=0.1, when=ss.schedule(every=every, start='2000-01-31'), name='e')
         sim = ss.Sim(sir, interventions=[m, ev], start='2000-01-01', stop='2000-06-01', unit='day', verbose=0).init()
         steps = list(ss.schedule(every=every, start='2000-01-31').init(sim).steps)
-        assert list(np.flatnonzero(sim.interventions.m.when.mask)) == steps == sorted(sim.interventions.e.round_tis)
+        assert list(np.flatnonzero(sim.interventions.m._when_date.mask)) == steps == sorted(sim.interventions.e.round_tis)
         if every == 7:
             assert np.all(np.diff(steps) == 7)
         else:

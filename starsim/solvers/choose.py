@@ -292,9 +292,9 @@ class MixedNetworks(ss.ndict):
 def clocks_of(mod):
     """ The clocks (`X.time_in`, `(A | B).time_in`, `X.progress`) that a module's transitions, attributes, amounts, or conditions read """
     graph = getattr(mod, 'graph', None)
-    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
+    objs = [[tr.rate, tr.dur, tr.p, getattr(tr, '_who_now', None), getattr(tr._trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
     objs += [a if a.kind == 'derived' else a.value for a in getattr(graph, 'attrs', {}).values()] # A derived attribute, through what it is worked out from; one set at an event, through its value
-    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'trigger', 'coverage']]
+    objs += [getattr(mod, key, None) for key in ['amount', '_who_now', '_trigger', 'coverage']]
     return ss.expressions.clocks_in(objs)
 
 
@@ -568,13 +568,13 @@ def joint_groups(sim):
                 join(home, other, f'"{mod.name}" acts on {home} by a state of {other}')
     for mod in sim.declared: # A trigger on another disease's state: the compartments where it holds are those of the joint states
         for tr in mod.graph.transitions.values():
-            ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name) if tr.trigger is not None else None
+            ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name) if tr._trigger is not None else None
             if ev is not None: # A trigger on another disease's transition: a synchronized flow, in the joint states
                 join(mod.name, ev.mod, f'{mod.name}.{tr.name} is triggered by {ev.mod}.{ev.tr}')
                 continue
-            if tr.trigger is None or tr.trigger.event or not isinstance(tr.trigger.x, ss.conditions.Cond):
+            if tr._trigger is None or tr._trigger.event or not isinstance(tr._trigger.x, ss.conditions.Cond):
                 continue
-            for other,state in ss.conditions.leaf_states(tr.trigger.x):
+            for other,state in ss.conditions.leaf_states(tr._trigger.x):
                 other = ss.conditions.modname(other)
                 if other in links and other != mod.name and state in sim._declared_module(other).graph.states:
                     join(mod.name, other, f'{mod.name}.{tr.name} is triggered by a state of {other}')
@@ -820,7 +820,7 @@ def several_givers(sim):
     """ A step triggered by a product delivered by several steps: the union of their people """
     deliveries = [mod for mod in sim.gathered if isinstance(mod, ss.Event)]
     for mod in deliveries:
-        for leaf in ss.conditions.event_leaves(mod.trigger) if isinstance(mod.trigger, ss.conditions.Cond) else []:
+        for leaf in ss.conditions.event_leaves(mod._trigger) if isinstance(mod._trigger, ss.conditions.Cond) else []:
             name = ss.conditions.modname(leaf.args[0]) if leaf.op == 'event' else None
             givers = [d.name for d in deliveries if d.product is not None and d.product.name == name]
             if len(givers) > 1 and name not in [d.name for d in deliveries]:
@@ -835,14 +835,14 @@ def says_itself(sim, mod):
 
 def bad_age(sim, mod):
     """ `at_age=` with no age group starting at the age (see `ss.Event._age_reason()`) """
-    reason = mod._age_reason(sim) if isinstance(mod, ss.Event) and mod.at_age is not None else None
+    reason = mod._age_reason(sim) if isinstance(mod, ss.Event) and mod._at_age is not None else None
     return dict(reason=reason) if reason else None
 
 
 def group_conditions(sim, mod):
     """ A condition of a delivery or a modifier (with `at_age=`, apart from the age) that no group can answer """
-    aged = isinstance(mod, ss.Event) and mod.at_age is not None
-    conds = [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['trigger', 'eligible', 'where'] if not (key == 'where' and getattr(mod, 'graph', None) is not None)]
+    aged = isinstance(mod, ss.Event) and mod._at_age is not None
+    conds = [mod._who_given if aged and key == '_who_now' else getattr(mod, key, None) for key in ['_trigger', '_who_now']]
     return [dict(reason=reason) for cond in conds for reason in ss.conditions.group_reasons(cond, sim)[:1]]
 
 
@@ -866,7 +866,7 @@ def own_arrays(sim, mod):
 
 def reads_mother(sim, mod):
     """ Each person's mother, in a transition """
-    return next((dict(tr=tr) for tr in mod.graph.transitions.values() if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p))), None)
+    return next((dict(tr=tr) for tr in mod.graph.transitions.values() if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, '_who_now', None), tr._trigger] + sc.tolist(tr.p))), None)
 
 
 def uid_functions(sim, mod):
@@ -961,7 +961,7 @@ def dwell_changer(sim, mod, tr):
 
 def trigger_kind(sim, mod, tr):
     """ Whether a transition's trigger is an event only agents record, or one only they can follow, or neither: moved when a delivery's outcome happens, or a synchronized flow of another module's transition """
-    trig = tr.trigger
+    trig = tr._trigger
     if trig is None or trig.outcome:
         return None
     elif trig.event:
@@ -985,8 +985,8 @@ def same_people_dwells(sim, mod):
     for name,exits in mod.graph.exits.items():
         dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
         if len(dwells) > 1 and not exits.branches:
-            wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
-            if all(getattr(tr, 'where', None) is not None for tr in dwells) and len(set(wheres)) < len(wheres): # The same who= for both
+            wheres = [repr(getattr(tr, '_who_now', None)) for tr in dwells]
+            if all(getattr(tr, '_who_now', None) is not None for tr in dwells) and len(set(wheres)) < len(wheres): # The same who= for both
                 yield dict(name=name, first=dwells[0].name, second=dwells[1].name, names=sc.strjoin(tr.name for tr in dwells))
 
 
@@ -1043,8 +1043,8 @@ capabilities = [ # What decides between agents and compartments (see init_capabi
     Rule('graph', split_bins, AGENTS, 'a value in "{mod.name}" is given by bins of {dim} that split the model\'s groups ({labels}), which only agents read, for each person; give it by the model\'s groups to run as compartments', 'property: people.{dim}'),
     Rule('transition', far_dwell, ASKED, '"{tr.name}" has a {kind} dwell time{how}', 'dwell time: {tr.name} ({kind})'),
     Rule('transition', dwell_changer, AGENTS, 'the modifier "{changer.name}" changes the dwell time of "{tr.name}", a distribution, which is laid out once as compartments', 'modifier: {changer.name}'),
-    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'event', AGENTS, '"{tr.name}" is triggered by {tr.trigger}, an event that only agents record, which runs as agents for now', 'transition: {tr.name}'),
-    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'code', AGENTS, '"{tr.name}" is triggered by {tr.trigger}, which only agents can follow', 'transition: {tr.name}'),
+    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'event', AGENTS, '"{tr.name}" is triggered by {tr._trigger}, an event that only agents record, which runs as agents for now', 'transition: {tr.name}'),
+    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'code', AGENTS, '"{tr.name}" is triggered by {tr._trigger}, which only agents can follow', 'transition: {tr.name}'),
     Rule('transition', needs_age, ASKED, '"{tr.name}" is a death rate by age, from a life table, which needs each person\'s age (or a stratification by age)', 'transition: {tr.name}'),
     Rule('graph', same_people_dwells, AGENTS, '"{first}" and "{second}" are non-exponential dwell times out of "{name}" for the same people, each with a who=', 'dwell times: out of {name} ({names})'),
     Rule('graph', varying_transfers, AGENTS, 'the transfer "{name}" has a {kind} dur= with parameters by group or person, drawn for each person', 'transfer: {name} ({kind})'),
@@ -1102,9 +1102,9 @@ def modifier_steps(mod):
         return isinstance(cond, ss.conditions.Cond) and (cond.op == op or (cond.op not in ss.conditions.leaves and any(has_op(arg, op) for arg in cond.args)))
     if mod.hold is not None or mod.until is not None:
         return 'a modifier with until=, which remembers whether it is on'
-    elif callable(mod.where) and not isinstance(mod.where, ss.conditions.Cond):
+    elif callable(mod._who_now) and not isinstance(mod._who_now, ss.conditions.Cond):
         return 'a modifier with a function as its who='
-    elif has_op(mod.where, 'incidence'):
+    elif has_op(mod._who_now, 'incidence'):
         return 'a modifier with a condition on incidence over a period, which is counted in Python'
     elif callable(mod.amount) and not isinstance(mod.amount, ss.parameters.TimeValue):
         return 'a modifier with a function as its amount'
@@ -1182,8 +1182,8 @@ compiled = [ # What stops the compiled backend taking a whole run in one call: s
     Rule('sim', lambda sim: [dict(mod=mod) for mod in sim.interventions() if mod.t.npts != sim.t.npts][:1], STEPPED, '"{mod.name}" has a timestep of its own'), # Whatever the kernels could otherwise take of it
     Rule('declared', flow_births, STEPPED, '"{tr.name}" is a birth driven by a flow (ss.birth(when=)), added at each step'),
     Rule('declared', lambda sim, mod: dict(sync=mod.engine.syncs[0]) if mod.engine.syncs else None, STEPPED, '"{sync.mod.name}.{sync.otr.name}" is a synchronized flow of "{mod.name}.{sync.tr.name}"'), # Recorded in the other module after each step
-    Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
-    Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step
+    Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr._trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
+    Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr._trigger}, which is applied at each step'), # Moved in Python at the end of each step
     Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has until=, a function as its who= or amount, or changes a value that varies by person)'),
     Rule('declared', lambda sim, mod: mod.custom_transmit, STEPPED, '"{mod.name}" has a transmit() of its own, which is called at each step'),
     Rule('declared', lambda sim, mod: bool(mod.engine.net_mods), STEPPED, 'a modifier changes the contacts of a network'), # The contacts are set once for a whole run
@@ -1231,7 +1231,7 @@ fixed = [ # The same, for what cannot change once the sim is initialized
     Rule('declared', lambda sim, mod: dict(name=mod.graph.funcs.keys()[0]) if mod.graph.funcs else None, STEPPED, '"{name}" of "{mod.name}" is called each step'),
     Rule('declared', step_function, STEPPED, '"{name}" of "{mod.name}" is a function of the sim, so is called once a step and held through it (so an ODE run is only first order in dt)'),
     Rule('declared', changing_transfer, STEPPED, 'the rate of the transfer "{tf.name}" of "{mod.name}" {how}'),
-    Rule('declared', later_trigger, STEPPED, '"{tr.name}" of "{mod.name}" is triggered by {tr.trigger}, so moves people between steps'),
+    Rule('declared', later_trigger, STEPPED, '"{tr.name}" of "{mod.name}" is triggered by {tr._trigger}, so moves people between steps'),
     Rule('declared', lambda sim, mod: mod.t.npts != sim.t.npts, STEPPED, '"{mod.name}" has a timestep of its own'),
 ]
 

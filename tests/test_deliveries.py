@@ -396,7 +396,7 @@ def test_delay_cycle():
         entry = ss.screen(ss.Diagnostic(specificity=1, name='dx0'), when=[2001], name='entry')
         retest = ss.screen(ss.Diagnostic(specificity=1, name='dx1'), when=ss.on(entry.negative, delay=delay), name='retest')
         confirm = ss.screen(ss.Diagnostic(specificity=1, name='dx2'), when=retest.negative, name='confirm')
-        retest.trigger = entry.negative | (confirm.negative if loop == 'confirm' else retest.negative)
+        retest._trigger = entry.negative | (confirm.negative if loop == 'confirm' else retest.negative)
         return ss.Sim(sis, interventions=[entry, confirm, retest], start=2000, stop=2005, dt=ss.months(1), n_agents=500, solver='abm', verbose=0).run()
     for loop in ['confirm', 'self']: # Through a step that follows it, and through itself
         res = make(loop).results
@@ -406,7 +406,7 @@ def test_delay_cycle():
     assert np.array_equal(np.flatnonzero(res.retest.delivered)[:3], [13, 14, 15])
     a = ss.screen(ss.Diagnostic(), when=ss.schedule(every=7), name='a') # Without a delay, a cycle raises
     b = ss.screen(ss.Diagnostic(), when=a.positive, name='b')
-    a.trigger = b.positive
+    a._trigger = b.positive
     with pytest.raises(ValueError):
         ss.Sim(make_sir(), interventions=[a, b], **kw)
     return res
