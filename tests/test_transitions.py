@@ -392,8 +392,9 @@ def test_time():
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.dead @ 0.01, name='mixed'), **kw).init()
     deaths = ss.death(rate=10, rate_per=1000) # But the deaths of everyone, as ss.Deaths reads them: per year, with a note (not a warning: it is the usual spelling)
     assert ss.birth(rate=0.03).rate.raw == ss.birth(rate=30, rate_per=1000).rate.raw == ss.birth(rate=ss.peryear(30), rate_per=1000).rate.raw == ss.peryear(0.03) # Per person, unless rate_per says
-    with pytest.warns(RuntimeWarning, match='rate_per=1000'): # A rate is never read as per 1,000 from its size, but one above 1 per person per year is warned about
-        assert ss.death(rate=ss.perday(0.005)).rate.raw == ss.perday(0.005) # 1.8 per year (Starsim read this as per 1,000, after converting it to per year)
+    with pytest.raises(ValueError, match='rate_per=1000'): # A rate is never read as per 1,000 from its size, but one above 1 per person per year is an error
+        ss.death(rate=ss.perday(0.005)) # 1.8 per year (Starsim read this as per 1,000, after converting it to per year)
+    assert ss.death(rate=ss.perday(0.005), rate_per=1).rate.raw == ss.perday(0.005) # Unless rate_per says so
     mixed = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=deaths, **kw).init()
     assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and any('bare number, so taken as per 1000 people per year' in note for note in mixed.notes)
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit

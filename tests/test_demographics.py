@@ -445,16 +445,17 @@ def test_period_rates():
 
 @sc.timer()
 def test_rate_per():
-    """ Rates of births, deaths, conceptions, and migration are per person unless rate_per= says otherwise, with a warning for a rate that looks per 1,000; and they are read from the parameters at init """
+    """ Rates of births, deaths, conceptions, and migration are per person unless rate_per= says otherwise, with an error for a rate that looks per 1,000; and they are read from the parameters at init """
     sc.heading('Testing rate_per, and changing the rates after a module is made...')
     kw = dict(n_agents=2000, start=2000, stop=2005, verbose=0)
-    for rate, per, warns in [(0.02, None, False), (20, None, True), (20, 1000, False), (2, 1, False), (ss.peryear(20), None, True), (ss.perday(0.005), None, True)]:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
-            births = ss.Sim(demographics=ss.Births(birth_rate=rate, rate_per=per), **kw).init().demographics.births
-        assert births.pars.rate_per == sc.ifelse(per, 1) # Never guessed from the size
-        assert any('rate_per=1000' in str(x.message) for x in w) == warns, f'{rate}, rate_per={per}: a warning only for a rate above 1 per person per year, without rate_per'
-    with pytest.warns(RuntimeWarning, match='rate_per=1000'):
+    for rate, per, raises in [(0.02, None, False), (20, None, True), (20, 1000, False), (2, 1, False), (ss.peryear(20), None, True), (ss.perday(0.005), None, True)]:
+        make = lambda: ss.Sim(demographics=ss.Births(birth_rate=rate, rate_per=per), **kw).init().demographics.births
+        if raises: # A rate above 1 per person per year, without rate_per
+            with pytest.raises(ValueError, match='rate_per=1000'):
+                make()
+        else:
+            assert make().pars.rate_per == sc.ifelse(per, 1) # Never guessed from the size
+    with pytest.raises(ValueError, match='rate_per=1000'):
         ss.death(rate=10)
 
     # A place's UN rates: per 1,000 (births, fertility, migration) or per person (deaths by age), which is known, so no warning, and another rate_per is an error
@@ -466,8 +467,7 @@ def test_rate_per():
         ss.Births(birth_rate='Kenya', rate_per=1)
 
     # A typed rate per day is per person: 0.005 a day is about 1.8 a year (read as per 1,000 before, after it was converted to per year)
-    with pytest.warns(RuntimeWarning, match='per person per year'):
-        sim = ss.Sim(demographics=ss.Deaths(death_rate=ss.perday(0.005)), **kw).run()
+    sim = ss.Sim(demographics=ss.Deaths(death_rate=ss.perday(0.005), rate_per=1), **kw).run() # rate_per=1 says it is meant, since above 1 per person per year is otherwise an error
     assert sim.results.alive[-1] < 0.01*kw['n_agents']
 
     # The rates are read when the sim is initialized, so a change to the parameters after the module is made counts

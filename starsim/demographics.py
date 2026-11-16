@@ -87,17 +87,17 @@ def rate_per_of(per, rates, name):
     How many people the rates of `ss.Births`, `ss.Deaths`, `ss.Pregnancy`, `ss.birth()`, `ss.death()`, or
     `ss.migration()` are per: `rate_per` as given, or else 1 (per person). The unit is never guessed from the size of
     the rates. But rates of births, deaths, conceptions, and migration are well below 1 per person per year, so if
-    `rate_per` is not given and the rates are above 1 per year (the median, for a table or time series), this warns
-    that they are read as per person: give `rate_per=1000` if they are per 1,000 people, or `rate_per=1` if per person
-    is meant (which silences the warning).
+    `rate_per` is not given and the rates are above 1 per year (the median, for a table or time series), this raises,
+    since they are almost certainly per 1,000 people (which would otherwise kill or make a thousand times too many): give
+    `rate_per=1000` if they are per 1,000 people, or `rate_per=1` if per person is meant.
 
     Data that a place name loads are not read by this: the module says how many people they are per (the UN's crude
     rates and fertility rates are per 1,000, and its death rates by age, `mx`, per person).
 
     Args:
-        per (float): `rate_per` as given: None for per person (with the warning), 1000 for per 1,000, 1 for per person
-        rates (number/rate/timeseries/dataframe): the rates, or rate data, for the warning
-        name (str): what the rates are, for the warning (e.g. "birth_rate of ss.Births")
+        per (float): `rate_per` as given: None for per person (checked), 1000 for per 1,000, 1 for per person
+        rates (number/rate/timeseries/dataframe): the rates, or rate data, to check
+        name (str): what the rates are, for the error (e.g. "birth_rate of ss.Births")
     """
     check_rate_per(per, name)
     if per is not None:
@@ -105,8 +105,9 @@ def rate_per_of(per, rates, name):
     size = rate_size(rates)
     if size is not None and size > 1:
         many = not (sc.isnumber(rates) or isinstance(getattr(rates, 'raw', rates), ss.Rate))
-        ss.warn(f'The {name} is {size:.4g} per person per year{" (the median)" if many else ""}, more than 1, which is high for a rate per person; it is read as per person. '
-                f'If it is per 1,000 people, give rate_per=1000; if per person is meant, give rate_per=1, which silences this warning.')
+        errormsg = (f'The {name} is {size:.4g} per person per year{" (the median)" if many else ""}, more than 1, which is far too high for a rate per person. '
+                    f'If it is per 1,000 people, give rate_per=1000; if per person is meant, give rate_per=1.')
+        raise ValueError(errormsg)
     return 1
 
 
