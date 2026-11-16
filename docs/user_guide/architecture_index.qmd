@@ -91,7 +91,7 @@ What kind of module it is decides only where in each step it is called, and wher
 | Interventions | `ss.Intervention` | `sim.interventions` | `ss.vaccinate`, `ss.screen`, `ss.treat` (deliveries, which hold products) |
 | Connectors | `ss.Connector` | `sim.connectors` | `ss.modify` |
 | Analyzers | `ss.Analyzer` | `sim.analyzers` | `ss.infection_log`, or a function of the sim |
-| Custom | `ss.Module`, or anything that is none of the above | `sim.modules` | a module of your own |
+| Custom | `ss.Module`, or anything that is none of the above | `sim.custom` | a module of your own |
 
 A module can be more than one kind: `ss.Pregnancy` is both a demographic module and a declared disease, so it adds people and has states and transitions; a delivery such as `ss.screen` is an intervention that is also a source of events (the people it reached, `screening`, and its outcomes, `screening.positive`), which other deliveries can be triggered by. A product (`ss.Vaccine`) is a module too, but it has no step of its own: it is held by the delivery that gives it, and listed by `sim.products()`.
 
@@ -116,11 +116,11 @@ full = ss.Sim(
     verbose  = 0,
 )
 full.init()
-for mod in full.module_list:
+for mod in full.modules:
     print(f'{mod.name:15} {type(mod).__name__}')
 ```
 
-`sim.module_list` lists every module of the sim in the order they are initialized: demographics, connectors, networks, interventions, products, diseases, custom modules (`sim.modules`), and analyzers. (The vaccine is there because the delivery made it.) The order in which they are stepped is different: see [the order of each step](running_sim.qmd#the-order-of-a-step).
+`sim.modules` lists every module of the sim in the order they are initialized: demographics, connectors, networks, interventions, products, diseases, custom modules (`sim.custom`), and analyzers. (The vaccine is there because the delivery made it.) The order in which they are stepped is different: see [the order of each step](running_sim.qmd#the-order-of-a-step).
 
 ### How modules find each other
 
@@ -194,7 +194,7 @@ class Exposure(ss.Module):
         self.days_infectious[infectious] += 1
 
 for cls in [None, Alarm, Exposure]:
-    sim = ss.Sim(make_sir(), modules=cls() if cls else None, unit='day', stop=ss.days(100), verbose=0) # Each module named after its class
+    sim = ss.Sim(make_sir(), cls() if cls else None, unit='day', stop=ss.days(100), verbose=0) # Each module named after its class
     sim.init()
     label = cls.__name__ if cls else 'No module'
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')

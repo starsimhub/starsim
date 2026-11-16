@@ -124,7 +124,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
     Returns the row of each time point and the time point each row starts at, or (None, None) for every time point.
     """
     columns = [] if sim.data is None else sim.data.columns
-    if npts*row_bytes <= budget or npts <= 2 or sim.pars.rescale: # With rescaling, the scale differs at each step, and is applied to each one
+    if npts*row_bytes <= budget or npts <= 2 or getattr(sim.solver, 'rescale', False): # With rescaling, the scale differs at each step, and is applied to each one
         return None, None
     elif any('[' in str(col) for col in columns): # Data by group, which are compared with the results at each step
         return None, None
@@ -1633,9 +1633,9 @@ class Engine(Telling, Effects):
         if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth: # Exact only for rates that are constant within a step
             what = 'solver="gillespie"' if isinstance(sim.solver, ss.solvers.gillespie) else 'Tau-leaping'
             msg = f'{what} holds values that vary in time for each step, at its middle'
-            if sim.pars.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
-            ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None)
+            if ss.options.approximations == 'error':
+                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
+            ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
         euler = isinstance(sim.solver, ss.solvers.ode) and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
@@ -2274,7 +2274,7 @@ class Engine(Telling, Effects):
 
     def with_unrepresented(self):
         """
-        The number in each state (and by group), as the results count them: with dynamic rescaling (rescale=True), including the people no agent stands for yet
+        The number in each state (and by group), as the results count them: with dynamic rescaling (`ss.solvers.abm(rescale=True)`), including the people no agent stands for yet
 
         Each agent stands for `scale` people; the people no agent stands for (`sim.results.unrepresented`, see `ss.Sim.rescale()`) are
         like the agents, and are shared out as the agents alive are, in agents (as the other counts are, before they are scaled). For a
@@ -2282,7 +2282,7 @@ class Engine(Telling, Effects):
         module (e.g. `ss.Pregnancy`), each state has its fraction. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
-        if not isinstance(sim.solver, ss.solvers.abm) or not sim.pars.rescale or 'unrepresented' not in sim.results:
+        if not isinstance(sim.solver, ss.solvers.abm) or not sim.solver.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
         n_alive = sim.people._n_agents_alive()
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents

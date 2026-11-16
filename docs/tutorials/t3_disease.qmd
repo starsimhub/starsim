@@ -280,7 +280,7 @@ Each case infects about 1.5 others on average in all three, but the more concent
 
 ### Counting each person's infections
 
-With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `keep_times=True` keeps each person's history, which only agents have:
+With waning immunity, people can be infected again and again. Measles immunity is lifelong, so this example switches to a cold-like respiratory infection: an SIRS model (R0 = 0.4 × 7 = 2.8) with immunity lasting 6 months on average. `ss.solvers.abm(keep_times=True)` keeps each person's history, which only agents have:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -289,7 +289,7 @@ recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
 waning    = R >> S @ ss.days(180) # Immune for 6 months on average
 cold = ss.Disease(infection, recovery, waning, init_prev=0.01)
 
-sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), keep_times=True, verbose=0)
+sirs = ss.Sim(cold, n_agents=5000, stop=ss.days(3*365), solver=ss.solvers.abm(keep_times=True), verbose=0)
 sirs.run()
 sirs.plot('cold.I')
 ```

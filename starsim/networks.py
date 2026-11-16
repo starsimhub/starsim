@@ -1911,7 +1911,7 @@ class SexualNet(DegreeNet):
 
 def find_pregnancy(net):
     """ The sim's `ss.Pregnancy`, which makes the edges of a prenatal or postnatal network; raises an error if it does not have exactly one """
-    pregs = [mod for mod in net.sim.module_list if isinstance(mod, ss.Pregnancy)]
+    pregs = [mod for mod in net.sim.modules if isinstance(mod, ss.Pregnancy)]
     if len(pregs) != 1:
         raise RuntimeError(f'{type(net).__name__} requires one ss.Pregnancy, which makes its edges; the sim has {len(pregs)}')
     return pregs[0]

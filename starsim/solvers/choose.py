@@ -41,6 +41,7 @@ class Solver:
     name = None # e.g. 'ode'
     options = {} # Each option's default, and the values it can take (None for any)
     example = None # e.g. "ss.solvers.ode(integrator='euler')"
+    rescale = even_draws = keep_times = record_people = False # The options of agents (see abm), which a compartmental run doesn't have (it records the results about people in its own way)
 
     def __init__(self, **kwargs):
         for key,(default, choices) in self.options.items():
@@ -129,14 +130,39 @@ class abm(Solver):
             - 'midstep' (the default): by steps, with those who arrive in a state during a step facing its rates for the rest of it, which is the more exact at a coarse step
             - 'wholestep': by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step; use it to match a model written as code
             - 'events': event by event in continuous time within each step (a prototype)
+
+        rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the fraction of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
+        even_draws (bool): space each call's random numbers evenly rather than independently (default False), for less variable runs; needs common random numbers (`ss.options.crn`)
+        keep_times (bool): for a declared disease, keep the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.n_times`, `.since`, and `.ever`), to read after the run (default False, to save memory: only those that the solver or the model needs are kept, and reading another raises an error)
+        record_people (bool): record the results about people (alive, female, birth, death, emigration, cbr, cmr, etc.) every step (default True); False saves a little time in a sim that doesn't need them
     """
     name = 'abm'
-    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
-    example = "ss.solvers.abm(step='events')"
+    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
+    example = "ss.solvers.abm(step='events', rescale=True)"
 
-    def __init__(self, *, step=None):
-        super().__init__(step=sc.ifelse(step, 'midstep'))
+    def __init__(self, *, step=None, rescale=False, even_draws=False, keep_times=False, record_people=True):
+        super().__init__(step=sc.ifelse(step, 'midstep'), rescale=rescale, even_draws=even_draws, keep_times=keep_times, record_people=record_people)
         self.named = step is not None # Whether the step was asked for, which overrides what a module's class suggests (see agent_solver())
+        check_rescale(rescale)
+
+
+rescale_options = dict(threshold=0.05, factor=1.2) # The options of dynamic rescaling, and their defaults: see ss.solvers.abm(rescale=)
+
+def check_rescale(val):
+    """ Dynamic rescaling is True, False, or a dict of its options (see `rescale_options`) """
+    if isinstance(val, (bool, np.bool_)):
+        return
+    if not isinstance(val, dict):
+        raise TypeError(f'ss.solvers.abm(rescale=) is True, False, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2), not {val!r}')
+    unknown = [key for key in val if key not in rescale_options]
+    if unknown:
+        raise TypeError(f'ss.solvers.abm(rescale=) has no option {sc.strjoin(unknown)}; its options are {sc.strjoin(rescale_options)}')
+    threshold, factor = val.get('threshold', rescale_options['threshold']), val.get('factor', rescale_options['factor'])
+    if not (0 < threshold < 1):
+        raise ValueError(f'ss.solvers.abm(rescale=dict(threshold={threshold})) is a fraction of the agents, between 0 and 1')
+    if not factor > 1:
+        raise ValueError(f'ss.solvers.abm(rescale=dict(factor={factor})) is the least factor the scale grows by, more than 1')
+    return
 
 
 def as_solver(solver):
@@ -341,20 +367,20 @@ def check_solver_options(sim):
     (see `init_compartments()`), so one sim can be run both ways
     """
     if isinstance(sim.solver, ss.solvers.abm):
+        if sim.solver.even_draws and not ss.options.crn:
+            raise ValueError('ss.solvers.abm(even_draws=True) needs common random numbers, but ss.options.crn is False')
         return
     how = f'solver={sim.pars.solver!r}' if sim.pars.solver != 'auto' else f'solver="auto" chose "{sim.solver}", since {sim.solver_reason}'
     pars = sim.pars
-    for key,given in [('n_agents', 'n_agents' in sim.given and 'total_pop' not in sim.given and getattr(sim, 'pop_from', None) is None and not isinstance(pars.n_agents, ss.par)), ('rescale', bool(pars.rescale)), ('even_draws', bool(pars.even_draws))]:
-        if given:
-            what = dict(n_agents='the number of agents; for the number of people, give total_pop=', rescale='dynamic rescaling, which changes how many people each agent stands for', even_draws='how the random numbers of agents are drawn')[key]
-            errormsg = f'{key}= is for agents ({what}), but this sim runs as compartments ({how}); give solver="abm" to run it as agents, or leave {key}= out'
-            raise ValueError(errormsg)
+    if 'n_agents' in sim.given and 'total_pop' not in sim.given and getattr(sim, 'pop_from', None) is None and not isinstance(pars.n_agents, ss.par):
+        errormsg = f'n_agents= is for agents (the number of agents; for the number of people, give total_pop=), but this sim runs as compartments ({how}); give solver="abm" to run it as agents, or leave n_agents= out'
+        raise ValueError(errormsg)
     return
 
 
 def gather_modules(sim):
     """ The sim's modules as given, as `sim.gathered` (the rules read these, not the modifiers `init_where()` adds), and the declared ones, as `sim.declared` """
-    sim.gathered = [mod for key in ss.modules.module_types() + ['modules'] for mod in sim.pars[key].values()]
+    sim.gathered = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values()]
     sim.declared = [mod for mod in sim.gathered if getattr(mod, 'graph', None) is not None]
     return
 
@@ -462,11 +488,10 @@ def init_compartments(sim, joints=None, mixing=None):
         for name,raw in spread:
             msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
             binned = f'{mod.name}.stratify({name}_group=ss.levels({{"low": 0.5, "high": 0.5}}, {name}=[0.5, 1.5]))' if name in ['rel_sus', 'rel_trans'] else f'a value by level, ss.by(group=[0.5, 1.5]), in place of the distribution, with {mod.name}.stratify(group={{"low": 0.5, "high": 0.5}})' # A multiplier for each level
-            if pars.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {binned}.')
+            if ss.options.approximations == 'error':
+                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {binned}.')
             else:
-                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approximations == 'allow' else None)
-    pars.record_people = False
+                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
     boxed = any(mod._boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
     if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)): # Levels that the deliveries and transfers need now the solver is known: see ss.Event.dims()
@@ -478,7 +503,7 @@ def init_compartments(sim, joints=None, mixing=None):
         sim.mixing = mixing
         mixing.say()
     else:
-        sim.mixing.init(approximations=pars.approximations)
+        sim.mixing.init(approximations=ss.options.approximations)
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
     pars.n_agents = None # No agents: the people are one row for each group (sim.groups.n_groups); the number of people is total_pop
@@ -597,7 +622,7 @@ def set_par_values(sim):
         for p in mod.graph.pars.values():
             if p.module is None or not any(p.module is m for m in sim.declared):
                 p.module = mod
-    coded = [mod for key in ss.modules.module_types() + ['modules'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
+    coded = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
     for mod in coded: # A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))): its code uses the value, and it is fitted and set by name as a parameter is
         if type(mod).__module__.partition('.')[0] == 'starsim': # Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
             continue
@@ -641,7 +666,13 @@ def set_par_values(sim):
             listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
             if key in ss.SimPars.names(): # A sim setting, given by value
                 listed += f' "{key}" is also a setting of the sim: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
-            raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. {listed}')
+            if not mods and key in abm.options: # An option of the agents
+                listed += f' "{key}" is an option of the agents: solver=ss.solvers.abm({key}=...).'
+            elif not mods and key in ss.options: # An option of Starsim, for every sim
+                listed += f' "{key}" is an option of Starsim: ss.options.{key} = ..., or for one sim, with ss.options.context({key}=...): sim.run().'
+            elif not mods and (near := ss.expressions.did_you_mean(key, sorted(ss.SimPars.names()))) != '.': # Perhaps a setting of the sim, misspelled
+                listed += f' Of the settings of the sim, {near[2:]}'
+            raise sc.KeyNotFoundError(f'"{key}" (given by keyword, or in pars=) {"is no setting of the sim or parameter of the model" if not mods else "is a parameter of more than one module"}. {listed}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
         if attrs is None:
             mods[0].pars.update({name:val})
@@ -763,7 +794,7 @@ def init_unit(sim):
     dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
     years = calendar == 'years' # A bare year as the start (or, with no start, as the stop)
     durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
-    mods = [mod for key in ss.modules.module_types() + ['modules'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
+    mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
     setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in sim.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
     def mod_units(mod):
         if mod in sim.declared: # Births and deaths of the population held by a disease (see init_flows()) are typed, and like demographics say nothing of the unit of its bare numbers
@@ -1447,13 +1478,13 @@ def split_bins(sim, mod):
 def beyond_stages(raw, exact, sim):
     """ Why Erlang stages cannot follow a time drawn from a distribution, as the end of a sentence, or None """
     cv = np.nan if exact else dwell_cv(raw, sim)
-    if sim.pars.approximations == 'error' and not exact:
-        return ', and approximations="error"'
+    if ss.options.approximations == 'error' and not exact:
+        return ', and ss.options.approximations="error"'
     return f' whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow' if cv > max_cv else None
 
 
 def far_dwell(sim, mod, tr):
-    """ A dwell time that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
+    """ A dwell time that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     raw = None if tr.dur is None else tr.dur.raw
     if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
         return None
@@ -1519,7 +1550,7 @@ def varying_transfers(sim, mod):
 
 
 def far_transfers(sim, mod):
-    """ A transfer's `dur=` that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
+    """ A transfer's `dur=` that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     for name,raw in timed_transfers(mod):
         shape = raw.pars.get('shape')
         how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape), sim)
@@ -1582,7 +1613,7 @@ def refused_mixing(sim):
     try:
         mixing = ss.solvers.Mixing(sim)
         mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approximations=sim.pars.approximations, solver=ode())
+        mixing.init(approximations=ss.options.approximations, solver=ode())
         sim.laid.mixing = mixing
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
@@ -1628,8 +1659,8 @@ def modifier_steps(mod):
 
 def own_steps(sim):
     """ A module with a step of its own: any written as code (an intervention, analyzer, connector, network, ...), or a modifier the engines cannot tabulate """
-    names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.module_list if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
-    others = [mod for mod in sim.module_list if mod.name in names and mod not in sim.declared]
+    names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
+    others = [mod for mod in sim.modules if mod.name in names and mod not in sim.declared]
     if not others:
         return None
     kinds = list(dict.fromkeys(modifier_steps(mod) if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
@@ -1780,11 +1811,10 @@ def auto_reasons(sim):
 
 
 def as_ode(sim, **kwargs):
-    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population; the settings of agents only (`rescale=`, `even_draws=`) are dropped too, since `sim.new(solver='ode')` would refuse them """
+    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population (the options of agents go with their solver) """
     if 'n_agents' in sim.given:
         kwargs = dict(n_agents=None, total_pop=sim.pars.total_pop) | kwargs
-    agents_only = {key:None for key in ['rescale', 'even_draws'] if key in sim.given or sim.pars.get(key)} # Settings of agents only (see ss.solvers.check_solver_options()), which an ODE would refuse
-    return sim.new(solver='ode', **(agents_only | kwargs))
+    return sim.new(solver='ode', **kwargs)
 
 
 def in_proportions(sim):

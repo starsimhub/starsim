@@ -34,7 +34,7 @@ The name is the solver with its defaults: `solver='ode'` is the same as `solver=
 
 A declared module can also set its own way of running as agents (`ss.Disease(..., solver=ss.solvers.abm(step='events'))`). Once the sim is initialized, `sim.solver` is the solver that runs, with its options, and `sim.describe()` says how each module runs, and why.
 
-The first four are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them, except agents by events, can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)). The settings that only agents take (`rescale=`, `even_draws=`, and `n_agents=` without `total_pop=`) are errors for a compartmental run, rather than ignored.
+The first four are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them, except agents by events, can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)). The options that only agents take are those of `ss.solvers.abm()` (`rescale=`, `even_draws=`, `keep_times=`, `record_people=`); `n_agents=` without `total_pop=` is an error for a compartmental run, rather than ignored.
 
 ## How Starsim chooses
 
@@ -238,7 +238,7 @@ for sim in msim.sims:
 
 With fixed contacts, the epidemic peaks later and lower, and infects fewer people, than random mixing at the same eight contacts a day.
 
-If the structure of contacts is part of the question (partnerships, households, contact tracing), use agents; if only the average number of contacts matters, compartments are enough. `approximations='error'` makes any such approximation an error instead of a note.
+If the structure of contacts is part of the question (partnerships, households, contact tracing), use agents; if only the average number of contacts matters, compartments are enough. `ss.options.approximations = 'error'` makes any such approximation an error instead of a note.
 
 ## Speed
 
@@ -279,7 +279,7 @@ The properties of each solver, for looking up (`ss.solvers.solver_names` lists t
 
 ## Appendix: what needs agents
 
-This appendix answers "will my model run as an ODE?", feature by feature, and then lists the rules Starsim checks. "Compartments" is any of the four compartmental solvers (`'ode'`, `'binomial'`, `'gillespie'`, `'tau'`) unless a cell names one. In each cell, **supported** means the solver runs it as written; **approximated** means it runs a simpler form and notes what it changed (an error with `approximations='error'`); and **unsupported** means it raises an `ss.CapabilityError` that says what to do. With `solver='auto'`, Starsim picks agents when a compartmental solver can't run the model as written, and `sim.solver_reason` says why ([How Starsim chooses](#how-starsim-chooses)).
+This appendix answers "will my model run as an ODE?", feature by feature, and then lists the rules Starsim checks. "Compartments" is any of the four compartmental solvers (`'ode'`, `'binomial'`, `'gillespie'`, `'tau'`) unless a cell names one. In each cell, **supported** means the solver runs it as written; **approximated** means it runs a simpler form and notes what it changed (an error with `ss.options.approximations = 'error'`); and **unsupported** means it raises an `ss.CapabilityError` that says what to do. With `solver='auto'`, Starsim picks agents when a compartmental solver can't run the model as written, and `sim.solver_reason` says why ([How Starsim chooses](#how-starsim-chooses)).
 
 ### People
 
@@ -365,7 +365,7 @@ rules = ss.solvers.solver_table()
 rules[rules.compartments == 'no'][['what']].style.hide(axis='index')
 ```
 
-And a model with any of these runs as agents under `solver='auto'`, but a compartmental solver asked for by name runs it, approximately, with a note (an error with `approximations='error'`):
+And a model with any of these runs as agents under `solver='auto'`, but a compartmental solver asked for by name runs it, approximately, with a note (an error with `ss.options.approximations = 'error'`):
 
 ```{python}
 rules[rules.compartments == 'if asked'][['what']].style.hide(axis='index')

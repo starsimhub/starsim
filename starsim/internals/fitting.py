@@ -1757,7 +1757,7 @@ def bounded_pars(probe, pars=None, unused=()):
     """
     fitted = sc.obj()
     if pars is not None: # A module by its default name, e.g. 'sir.beta' for an ss.SIR called measles
-        pars = [ss.utils.own_name(probe.module_list, name) for name in pars]
+        pars = [ss.utils.own_name(probe.modules, name) for name in pars]
     for mod in probe.declared:
         for name,p in mod.graph.pars.items():
             if id(p) in unused: # A parameter of a likelihood that is not used in this fit
@@ -1768,7 +1768,7 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if not isinstance(probe.solver, ss.solvers.abm) else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
-    coded = [(mod, name, p) for mod in list(probe.module_list) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
+    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
     for mod,name,p in coded:
         if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
             continue
@@ -1897,7 +1897,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     msim = ss.parallel(sim.new(verbose=0), pars={name:X[:, j].tolist() for j,name in enumerate(names)}, verbose=False) # The samples are not scenarios to list
     summaries = sc.obj()
     counts = set() # The counts of a state, by module and name
-    for mod in probe.module_list:
+    for mod in probe.modules:
         graph = getattr(mod, 'graph', None)
         states = [s.name for s in mod.auto_state_list] + (list(graph.states) if graph is not None else [])
         counts |= {(mod.name, state) for state in states}

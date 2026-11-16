@@ -438,7 +438,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
-        read = None if self.sim.pars.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have min_stay=
+        read = None if self.sim.solver.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have min_stay=
         clocks = [tuple(clock.names) for m in list(self.sim.declared) + list(self.sim.connectors()) + list(self.sim.interventions()) for clock in ss.solvers.choose.clocks_of(m)] # The clocks the sim's modules read (of this module's states or another's)
         clocks += ss.expressions.Clock.sets_of(mod) # And those made of this module's states for code to read, but no one else's: the names of states alone would match another module's, or one of an earlier sim
         clocked = {name for names in clocks for name in names} # The states a clock reads, whose times of entering are kept
@@ -831,7 +831,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     @property
     def total_pop(self):
-        """ The number of people the agents stand for now: with dynamic rescaling (rescale=True), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
+        """ The number of people the agents stand for now: with dynamic rescaling (`ss.solvers.abm(rescale=True)`), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
         return self.sim.pars.total_pop*self.scale/self.sim.pop_scale
 
     def init_post(self):

@@ -120,7 +120,7 @@ def same_objects(a, b):
 
 def even_out(rands, seed, ind):
     """
-    Evenly spaced uniforms in the same order as `rands`, for `ss.Sim(even_draws=True)`; not for the user
+    Evenly spaced uniforms in the same order as `rands`, for `ss.solvers.abm(even_draws=True)`; not for the user
 
     The smallest of n uniforms becomes (0 + v)/n, the next (1 + v)/n, and so on, with one offset v for the call. Each number
     is still exactly uniform, so every distribution keeps its shape, but together they have the mean and spread they should.
@@ -213,7 +213,7 @@ def seed_names(sim):
         return mod.default_name
 
     names = {}
-    for kind in ss.modules.module_types() + ['modules']:
+    for kind in ss.modules.module_types() + ['custom']:
         counts = collections.Counter()
         for mod in (getattr(sim, kind, None) or {}).values():
             if getattr(mod, '_name_source', 'class') == 'given':
@@ -227,7 +227,7 @@ def seed_names(sim):
 
 def seed_paths(sim, dists):
     """ The paths of a sim's distributions, which seed them, with each module's name replaced by the one that seeds it (see `seed_names()`) """
-    kinds = ss.modules.module_types() + ['modules']
+    kinds = ss.modules.module_types() + ['custom']
     names = seed_names(sim)
 
     def rename(path):
@@ -827,7 +827,7 @@ class Dist:
         # Handle the sim, module, and slots
         self.link_sim(sim)
         self.link_module(module)
-        self.even = self.sim is not None and bool(self.sim.pars.get('even_draws'))
+        self.even = self.sim is not None and bool(getattr(getattr(self.sim, 'solver', None), 'even_draws', False))
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot

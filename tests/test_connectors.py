@@ -438,12 +438,12 @@ def test_coded():
         pass
     for solver in ['abm', 'ode']:
         mods = [ss.modify('wealth.pars.rate', multiply=2, when=ss.schedule(start=2)), ss.modify('wealth.pars.rate', add=1, when=ss.schedule(start=4)), ss.modify('link.pars.rate', set=ss.timeseries({1: 3, 3: 4}), when=ss.schedule(start=1))]
-        sim = ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=[Link(name='link'), *mods], n_agents=100, total_pop=100, unit='year', stop=5, solver=solver, verbose=0).run()
+        sim = ss.Sim(Wealth(name='wealth'), diseases=ss.SIR(beta=ss.perday(0.1)), connectors=[Link(name='link'), *mods], n_agents=100, total_pop=100, unit='year', stop=5, solver=solver, verbose=0).run()
         wealth, link = sim.get_module('wealth'), sim.get_module('link')
         assert wealth.seen == [1, 1, 2, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4, 4], f'{solver}: {wealth.seen} and {link.seen}' # A step from each year 0 to 5
         assert wealth.pars.rate == 1
     with pytest.raises(ValueError, match='cannot differ between people'):
-        ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=ss.modify('wealth.pars.rate', multiply=2, who=ss.person.age > 5), n_agents=100, verbose=0).init()
+        ss.Sim(Wealth(name='wealth'), diseases=ss.SIR(beta=ss.perday(0.1)), connectors=ss.modify('wealth.pars.rate', multiply=2, who=ss.person.age > 5), n_agents=100, verbose=0).init()
     return
 
 

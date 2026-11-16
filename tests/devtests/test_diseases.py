@@ -43,9 +43,8 @@ def test_fetal_health(do_plot=do_plot):
         return np.nanmean(bw) # NaN on steps with no births
 
     # -- 1. Baseline (no disease) --
-    sim_baseline = ss.Sim(
+    sim_baseline = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
-        modules=ssl.mnch.FetalHealth(),
         networks=ss.PrenatalNet(),
         **sim_kw,
     )
@@ -70,11 +69,10 @@ def test_fetal_health(do_plot=do_plot):
     assert not np.isnan(res_fh.mean_birth_weight.resample('year').values).any() # And left out of a mean over time
 
     # -- 2. Disease only (no treatment) --
-    sim_disease = ss.Sim(
+    sim_disease = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
-        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -90,12 +88,11 @@ def test_fetal_health(do_plot=do_plot):
     assert ptb_disease > 3*ptb_baseline, f'Disease scenario should have several times the preterm births ({ptb_disease} against {ptb_baseline})' # About 5×; about 1.7× if the infection's shift of delivery is lost
 
     # -- 3. Disease + treatment --
-    sim_treated = ss.Sim(
+    sim_treated = ss.Sim(ssl.mnch.FetalHealth(),
         demographics=demog(),
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir'),
-        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -115,7 +112,7 @@ def test_fetal_health(do_plot=do_plot):
         fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 4))
 
         for sim, label in [(sim_baseline, 'Baseline'), (sim_disease, 'Disease'), (sim_treated, 'Treated')]:
-            fh = sim.modules['fetal_health']
+            fh = sim.custom['fetal_health']
             born = fh.birth_weight > 0
             ax0.hist(np.asarray(fh.birth_weight[born]), bins=30, alpha=0.4, label=label, edgecolor='k')
         ax0.axvline(2500, color='r', ls='--', label='LBW threshold')

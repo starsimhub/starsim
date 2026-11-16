@@ -427,7 +427,7 @@ def test_time():
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
         def step(self):
             self.n = self.sim.diseases.sir.ti_R.isclose(self.ti).sum() # A move reads as the step it happened in (see ss.TimeArr)
-    sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), keep_times=True, **kw).run() # For this sim (ss.options.keep_times for every sim)
+    sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), solver=ss.solvers.abm(keep_times=True), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.I, sir.results.I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
     assert sim.diseases.sir.recovery.n_times.values.sum() == sim.results.sir.recovery.sum() # And the history of every transition, to read after the run
     S, I, R = ss.states('S I R')
@@ -500,7 +500,7 @@ def test_auto():
     assert isinstance(ss.Sim(make_sir(), networks='random', stop=10, **kw).init().solver, ss.solvers.abm)
     assert isinstance(ss.Sim(make_sir(), demographics=ss.Births(), start=2000, stop=2010, **kw).init().solver, ss.solvers.abm)
 
-    # A dwell time that is not exponential is run as Erlang stages, unless approximations='error'
+    # A dwell time that is not exponential is run as Erlang stages, unless ss.options.approximations is 'error'
     S, I, R = ss.states('S I R')
     sir = ss.Disease(
         infection = ss.Transition(S, I, rate=0.3 * I),
@@ -511,9 +511,10 @@ def test_auto():
     assert isinstance(sim.solver, ss.solvers.ode)
     assert len(sim.diseases[0].engine.state_comps['I']) == 4 # (10/5)² stages
     assert any('Erlang' in note for note in sim.notes)
-    assert isinstance(ss.Sim(sir, stop=100, approximations='error', **kw).init().solver, ss.solvers.abm)
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(sir, stop=100, approximations='error', solver='ode', **kw).init()
+    with ss.options.context(approximations='error'):
+        assert isinstance(ss.Sim(sir, stop=100, **kw).init().solver, ss.solvers.abm)
+        with pytest.raises(ss.CapabilityError):
+            ss.Sim(sir, stop=100, solver='ode', **kw).init()
 
     # A distribution on beta varies between agents, so agents are chosen; a compartmental run uses its mean
     S, I, R = ss.states('S I R')
@@ -525,10 +526,11 @@ def test_auto():
     ode = ss.Sim(spread, stop=100, solver='ode', **kw).run()
     assert np.allclose(ode.results.sir.I, ss.Sim(make_sir(), stop=100, solver='ode', **kw).run().results.sir.I)
     assert any('distribution across people' in note for note in ode.notes)
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(spread, stop=100, approximations='error', solver='ode', **kw).init()
-    with pytest.raises(ss.CapabilityError, match='approximations="error": RandomNet approximated'): # A network has no exact compartmental form, so the ODE approximates it
-        ss.Sim(make_sir(), networks='random', stop=10, approximations='error', solver='ode', **kw).init()
+    with ss.options.context(approximations='error'):
+        with pytest.raises(ss.CapabilityError):
+            ss.Sim(spread, stop=100, solver='ode', **kw).init()
+        with pytest.raises(ss.CapabilityError, match='approximations="error": RandomNet approximated'): # A network has no exact compartmental form, so the ODE approximates it
+            ss.Sim(make_sir(), networks='random', stop=10, solver='ode', **kw).init()
 
     # A mixing pool of some people needs agents
     pool = ss.MixingPool(source=ss.person.age < 15, target=ss.person.age >= 15)
@@ -1349,8 +1351,8 @@ def test_value():
             sir = self.sim.diseases.sir
             self.probs.append([self.pars.death.to_prob(), self.pars.death_ts.to_prob()]) # The same code, whichever form the rate is given in
             self.read = [self.pars.bites, 1*self.pars.f, np.exp(self.pars.em) - 1, float(self.pars.em), self.pars.em > 0, 2*self.pars.death_ts, 1*sir.pars.beta, float(sir.pars.beta)]
-    sim = ss.Sim(ss.SIR(beta=0.3), modules=Mosquitoes(), interventions=ss.modify('sir.pars.beta', set=0.1, when=ss.schedule(start='2001-01-01')), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
-    mosq = [m for m in sim.module_list if isinstance(m, Mosquitoes)][0]
+    sim = ss.Sim(ss.SIR(beta=0.3), Mosquitoes(), interventions=ss.modify('sir.pars.beta', set=0.1, when=ss.schedule(start='2001-01-01')), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
+    mosq = [m for m in sim.modules if isinstance(m, Mosquitoes)][0]
     bites, f, em, em_float, positive, death2, beta, raw = mosq.read
     assert isinstance(bites, ss.perday) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, np.expm1(2/365)) and np.isclose(em_float, 2/365) and positive
     probs = np.array(mosq.probs)
@@ -1646,7 +1648,7 @@ def test_noise():
 
 @sc.timer()
 def test_approximations():
-    sc.heading('Testing that each approximation follows approximations=: a note with "note", kept quietly with "allow", an error with "error" (and agents under "auto")')
+    sc.heading('Testing that each approximation follows ss.options.approximations: a note with "note", kept quietly with "allow", an error with "error" (and agents under "auto")')
     def noisy():
         S, I, R = ss.states('S I R')
         return dict(diseases=ss.Disease(ss.Transition(S, I, rate=0.3*I, noise=0.1), I >> R @ ss.days(10), init_prev=0.01, name='sir'))
@@ -1656,13 +1658,16 @@ def test_approximations():
         S, I, R = ss.states('S I R')
         return dict(diseases=ss.Disease(S >> I @ 0.3*I, I >> R @ ss.constant(ss.days(2.5)), init_prev=0.01, name='sir'))
     for make, word in [(noisy, 'noise'), (boxed, 'plateau'), (delayed, 'agents round')]:
-        sim = lambda solver, approximations: ss.Sim(**make(), total_pop=1000, stop=ss.days(10), unit='day', solver=solver, approximations=approximations, verbose=0)
+        def sim(solver, approximations, run=True):
+            with ss.options.context(approximations=approximations):
+                sim = ss.Sim(**make(), total_pop=1000, stop=ss.days(10), unit='day', solver=solver, verbose=0)
+                return sim.run() if run else sim.init()
         for approximations in ['note', 'allow']:
-            ode = sim('ode', approximations).run()
-            assert any(word in note for note in ode.notes), (word, ode.notes) # Kept either way (it was said whatever approximations= was)
+            ode = sim('ode', approximations)
+            assert any(word in note for note in ode.notes), (word, ode.notes) # Kept either way (it was said whatever the option was)
         with pytest.raises(ss.CapabilityError, match='approximations="error"'):
-            sim('ode', 'error').run()
-        assert isinstance(sim('auto', 'error').init().solver, ss.solvers.abm) # Auto runs it as written instead
+            sim('ode', 'error')
+        assert isinstance(sim('auto', 'error', run=False).solver, ss.solvers.abm) # Auto runs it as written instead
     return
 
 if __name__ == '__main__':

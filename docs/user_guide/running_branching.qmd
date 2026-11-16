@@ -148,16 +148,16 @@ static.run();
 
 ### Dynamic rescaling
 
-With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the fraction of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
+With `solver=ss.solvers.abm(rescale=True)`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the fraction of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
 
 ```{python}
 sir = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start, as above
-dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=True, label='Dynamic')
+dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), solver=ss.solvers.abm(rescale=True), label='Dynamic')
 dynamic.run()
 dynamic.results.pop_scale.plot()
 ```
 
-The number of people per agent (`sim.results.pop_scale`) grows from 1 to 200. The threshold and the factor are options: `rescale=dict(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Rescaling is for agents only. Here are the three runs:
+The number of people per agent (`sim.results.pop_scale`) grows from 1 to 200. The threshold and the factor are options: `rescale=dict(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Here are the three runs:
 
 ```{python}
 import matplotlib.pyplot as plt

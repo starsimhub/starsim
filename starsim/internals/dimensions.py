@@ -819,8 +819,8 @@ class Groups(sc.prettyobj):
         sim = self.sim
         if not self.sim_strats or sim.declared:
             return
-        mods = [mod for key in ss.modules.module_types() + ['modules'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module)]
-        if any(getattr(res, 'strata', None) is not None for mod in sim.module_list for res in mod.results.values()):
+        mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module)]
+        if any(getattr(res, 'strata', None) is not None for mod in sim.modules for res in mod.results.values()):
             return
         byvals = [val for mod in mods for val in [*mod.pars.values(), *vars(mod).values()] if isinstance(val, ss.by)] # Its parameters, and options such as a delivery's coverage
         unused = [strat.name for strat in self.sim_strats if not any(strat.name in val.dims for val in byvals)]

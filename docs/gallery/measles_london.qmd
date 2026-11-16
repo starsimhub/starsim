@@ -178,10 +178,10 @@ def euler_step(S, E, I, beta, pop, births, noise, rng, rates):
     return rec
 
 def make_coded(n=1, euler=euler_step, **kwargs):
-    return ss.Sim(modules=He2010(n=n, euler=euler), start=start, stop=stop, dt=ss.days(1), verbose=0, **kwargs)
+    return ss.Sim(He2010(n=n, euler=euler), start=start, stop=stop, dt=ss.days(1), verbose=0, **kwargs)
 
 sims = ss.parallel([make_coded(rand_seed=seed) for seed in range(6)]).sims
-totals = [pars.rho*np.sum(s.modules.he2010.recoveries) for s in sims]
+totals = [pars.rho*np.sum(s.custom.he2010.recoveries) for s in sims]
 print(f'Reported cases over 21 years: {np.mean(totals):,.0f} ± {np.std(totals):,.0f}')
 ```
 

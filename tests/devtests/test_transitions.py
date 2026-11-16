@@ -436,8 +436,7 @@ def test_outcomes():
     named = ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5)), rand_seed=2, **pars).run() # A parameter of the model's by name, and a sim setting by keyword
     assert named.results.sir.I.max() < 0.5*res.I.max() and named.pars.rand_seed == 2
     assert ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5), rand_seed=2), **pars).pars.rand_seed == 2 # A setting of the sim in pars= too, as in Starsim 3
-    with pytest.raises(TypeError, match='pars=dict'): # And a parameter of the model given as a keyword says to give it in pars=
-        ss.Sim(make(0.3), dur_I=ss.days(5), **pars)
+    assert ss.Sim(make(0.3), dur_I=ss.days(5), **pars)._par_values == dict(dur_I=ss.days(5)) # And a parameter of the model given as a keyword, as in pars=
 
     short = ss.Sim(make(0.3), data=df, **(pars | dict(stop='2020-03-01'))).init()
     assert any('outside the simulated period' in note for note in short.notes) # Data that the comparison leaves out is noted
@@ -450,7 +449,7 @@ def test_outcomes():
     renamed = ss.SimData(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
-    with pytest.raises(KeyError, match='pars= has a value for "betta", which matches no parameter'):
+    with pytest.raises(KeyError, match='"betta" \\(given by keyword, or in pars=\\) is no setting of the sim or parameter of the model'):
         ss.Sim(make(0.3), pars=dict(betta=0.2), **pars).init()
     assert ss.expressions.did_you_mean('betta', ['sir.beta', 'sir.dur']) == '; did you mean sir.beta?' # The closest only, matched without the module's name
     with pytest.raises(ValueError): # A value outside its bounds

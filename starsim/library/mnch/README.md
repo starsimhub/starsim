@@ -32,11 +32,10 @@ sim = ss.Sim(
 )
 
 # Fetal health example
-sim = ss.Sim(
+sim = ss.Sim(ssl.mnch.FetalHealth(),
     diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
     connectors=ssl.mnch.fetal_infection(),
     interventions=ssl.mnch.treat_pregnant(disease='sir'),
-    modules=ssl.mnch.FetalHealth(),
     demographics=ss.Pregnancy(),
     networks=[ss.PrenatalNet(), ss.RandomNet()],
 )

@@ -141,8 +141,8 @@ def test_trait_ode():
     sim = make(solver='ode').run()
     assert np.allclose(sim.results.sir.I, make(trait=False, solver='ode').run().results.sir.I) and any('uses its mean' in note for note in sim.notes)
     assert isinstance(make().init().solver, ss.solvers.abm)
-    with pytest.raises(ss.CapabilityError, match='approximations="error"'):
-        make(solver='ode', approximations='error').init()
+    with pytest.raises(ss.CapabilityError, match='approximations="error"'), ss.options.context(approximations='error'):
+        make(solver='ode').init()
     return
 
 

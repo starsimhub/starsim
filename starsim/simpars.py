@@ -9,8 +9,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-approximations = ['note', 'allow', 'error'] # What a sim does with each approximation a solver makes: see ss.Sim(approximations=)
-rescale_options = dict(threshold=0.05, factor=1.2) # The options of dynamic rescaling, and their defaults: see ss.Sim(rescale=)
 
 
 def flatten(items):
@@ -38,8 +36,6 @@ class SimPars(ss.Pars):
         # Population parameters
         self.n_agents  = 10e3 # The number of agents, if the model runs as agents: more give less noise, but run slower
         self.total_pop = None # The number of people (default: one per agent); each agent stands for total_pop/n_agents of them (sim.pop_scale)
-        self.rescale   = False # Whether to rescale the agents dynamically: True, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2) (see ss.Sim)
-        self.record_people = True # Whether to record the results about people (alive, died, etc.) every step; False saves a little time and memory
 
         # Simulation parameters
         self.start     = None  # Start of the simulation: a date or a year gives it a calendar (default 2000 for a model in years, else 0)
@@ -47,16 +43,11 @@ class SimPars(ss.Pars):
         self.dur       = None  # The length of the run, e.g. ss.years(10) or a bare number (in years with a calendar of years, else in the sim's unit): the stop is the start plus it, or with a stop and no start, the start is the stop minus it
         self.dt        = None  # The timestep, in the sim's unit (default 1): smaller is more accurate, but slower
         self.rand_seed = 1     # The random seed, from which every module's random numbers are drawn, so the same seed gives the same results; if None, the seed is not reset
-        self.even_draws = False # Whether to space each call's random numbers evenly for agents, for less variable runs (see ss.Sim)
-        self.crn        = None  # Whether to use common random numbers, for this sim only (None: ss.options.crn, True by default)
-        self.keep_times = None  # Whether a declared disease run as agents keeps the time of entering every state, and the history of every transition; off by default to save memory (None: ss.options.keep_times)
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm() (see ss.Sim)
+        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm() (e.g. ss.solvers.abm(rescale=True); see ss.Sim)
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
-        self.approximations = 'note' # What to do when a solver approximates part of the model: 'note' prints a note; 'allow' keeps the note in sim.notes without printing it; 'error' makes it an error
-        self.require_compiled = False # Whether to raise an error if a compartmental sim can't be run whole, in one compiled call, and would instead run step by step in plain Python (which can be 100 times slower); useful for keeping a fit or a large batch of runs fast
         self.stratify   = None   # Properties of people to stratify every module by, e.g. dict(age=[0, 15, 65])
         self.group_results = None # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.solvers.group_rows())
 
@@ -121,7 +112,8 @@ class SimPars(ss.Pars):
         return cls._names
 
     def _reset_modules(self):
-        """ Empty the list of modules of each kind (`modules` for those of no standard kind, which are given with `modules=`, with modules of any kind) """
+        """ Empty the list of modules of each kind (`custom` for those of no standard kind, and `modules` for those given to the sim as arguments, to be sorted by kind) """
+        self.custom        = ss.ndict()
         self.demographics  = ss.ndict()
         self.connectors    = ss.ndict()
         self.networks      = ss.ndict()
@@ -153,35 +145,9 @@ class SimPars(ss.Pars):
         self.validate_agents()
         if self.step_order not in ['type', 'given']:
             raise ValueError(f"step_order={self.step_order!r} is not 'type' or 'given'")
-        if self.approximations not in approximations:
-            raise ValueError(f'approximations={self.approximations!r} is not one of {sc.strjoin(approximations)}')
-        if self.crn is not None and not isinstance(self.crn, (bool, np.bool_)):
-            raise TypeError(f'crn= is True or False (or None, for ss.options.crn), not {self.crn!r}')
-        if self.even_draws and not sc.ifelse(self.crn, ss.options.crn):
-            raise ValueError('even_draws=True needs common random numbers, but crn is False (give crn=True, or set ss.options.crn = True)')
-        if self.keep_times is None:
-            self.keep_times = ss.options.keep_times
         self.solver = ss.solvers.as_solver(self.solver) # A solver by name is the solver itself, e.g. 'ode' is ss.solvers.ode(); the one that runs, if 'auto', is chosen when the sim is initialized (see ss.solvers.choose_solver())
-        self.validate_rescale()
         if self.total_pop is None: # One person per agent
             self.total_pop = self.n_agents
-        return
-
-    def validate_rescale(self):
-        """ Dynamic rescaling is True, False, or a dict of its options (see `rescale_options`) """
-        val = self.rescale
-        if isinstance(val, (bool, np.bool_)):
-            return
-        if not isinstance(val, dict):
-            raise TypeError(f'rescale= is True, False, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2), not {val!r}')
-        unknown = [key for key in val if key not in rescale_options]
-        if unknown:
-            raise TypeError(f'rescale= has no option {sc.strjoin(unknown)}; its options are {sc.strjoin(rescale_options)}')
-        threshold, factor = val.get('threshold', rescale_options['threshold']), val.get('factor', rescale_options['factor'])
-        if not (0 < threshold < 1):
-            raise ValueError(f'rescale=dict(threshold={threshold}) is a fraction of the agents, between 0 and 1')
-        if not factor > 1:
-            raise ValueError(f'rescale=dict(factor={factor}) is the least factor the scale grows by, more than 1')
         return
 
     def validate_whole(self):
@@ -235,14 +201,16 @@ class SimPars(ss.Pars):
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
         for source, mod in modules:
             if source == 'modules': # Sorted by kind
-                modkey = next((key for key, modclass in modmap.items() if isinstance(mod, modclass)), 'modules') # Of no standard kind: kept in sim.modules
+                modkey = next((key for key, modclass in modmap.items() if isinstance(mod, modclass)), 'custom') # Of no standard kind: kept in sim.custom
             else: # Where they were given
                 modkey = source
             self.validate_name(mod, modkey, names)
             if mod.has_product and not any(mod.product is p for p,d in products): # Products share the same namespaces; the same product can be used by more than one intervention
                 products.append((mod.product, mod))
             self[modkey].append(mod)
-        for i,mod in enumerate([mod for source,mod in modules if source == 'modules'] + [mod for source,mod in modules if source != 'modules']):
+        order = [mod for source,mod in modules if source == 'modules'] + [mod for source,mod in modules if source != 'modules']
+        order.sort(key=lambda mod: getattr(mod, '_model_index', np.inf)) # The model's modules (given to the sim as arguments) first, in the order given
+        for i,mod in enumerate(order):
             mod._given_index = i # Its place in the order given, for step_order='given': see ss.Loop.collect_given()
         for product, delivery in products: # Named after all the other modules, so that a product named for its kind ("treatment") never takes a name the user gave a module
             self.validate_name(product, 'products', names, delivery=delivery)
@@ -319,9 +287,11 @@ class SimPars(ss.Pars):
         """
         out = []
         modmap = ss.modules.module_map() # The base class of each kind, e.g. ss.Disease
-        modmap['modules'] = ss.Module # Enable passing in modules of any type via `Pars(modules=[...])`
+        modmap['modules'] = ss.Module # Modules of any kind, to sort by kind (those given to the sim as arguments)
+        modmap['custom'] = ss.Module # Modules of no standard kind, kept where they are given (custom=)
         supported_modules = ss.modules.find_modules() # Each individual module class option, e.g. ss.SIR
         supported_modules['modules'] = sc.obj({k:v for vv in supported_modules.values() for k,v in vv.items()})
+        supported_modules['custom'] = supported_modules['modules']
 
         for modkey, ssmoddict in supported_modules.items():
 

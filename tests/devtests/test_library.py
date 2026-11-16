@@ -51,12 +51,12 @@ def test_mnch():
     sims.sepsis = sim
 
     # Fetal health: infection during pregnancy should restrict growth
-    sim = ss.Sim(diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
-                 connectors=ssl.mnch.fetal_infection(), modules=ssl.mnch.FetalHealth(),
+    sim = ss.Sim(ssl.mnch.FetalHealth(), diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
+                 connectors=ssl.mnch.fetal_infection(), 
                  interventions=ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2001)),
                  networks=networks(), **mnch_pars)
     sim.run()
-    fh = sim.modules.fetal_health
+    fh = sim.custom.fetal_health
     n_treated = sim.interventions.treat_pregnant.ti_treated.notnan.sum()
     n_weighed = fh.birth_weight.notnan.sum()
     print(f'  Newborns weighed: {n_weighed:n}; LBW: {fh.lbw.sum():n}; treated: {n_treated:n}')

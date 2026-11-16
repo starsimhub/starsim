@@ -45,11 +45,12 @@ First, run both scenarios with common random numbers turned off, so that the ran
 ```{python}
 pars = dict(n_agents=20, stop=ss.days(3), rand_seed=16, verbose=0)
 
-print('Everyone fishes')
-ss.Sim(Fishing(), crn=False, **pars).run()
+with ss.options.context(crn=False):
+    print('Everyone fishes')
+    ss.Sim(Fishing(), **pars).run()
 
-print('Person 0 is banned')
-ss.Sim(Fishing(banned=[0]), crn=False, **pars).run();
+    print('Person 0 is banned')
+    ss.Sim(Fishing(banned=[0]), **pars).run();
 ```
 
 Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned: fewer people fishing, more fish caught, which is impossible. That is the noise. Now the same with common random numbers, as Starsim runs by default:
@@ -190,9 +191,9 @@ The key is the agent's *slot*, a persistent index: an agent's uniform for a give
 
 Common random numbers pair the draws, not the outcomes. In an epidemic, an intervention changes who infects whom, and the two scenarios drift apart, more so for a large change or late in an epidemic. A network can undo the pairing too: `ss.RandomNet` pairs people up from the whole population, so one death or birth in a scenario changes many people's contacts, and `ss.RandomNet(method='safe')` is the version that keeps them (see [Networks](library_networks.qmd), whose [appendix](library_networks.qmd#appendix-every-library-network) says which of the library's networks keep them). Nor do they cover sampling without replacement or joint draws across agents. In a stochastic compartmental run there are no people to pair, so two scenarios start from the same draws but drift apart once their counts differ. So common random numbers can reduce the number of runs needed to see a difference, but don't replace running several seeds: see [Scenarios](running_scenarios.qmd#comparing-scenarios-with-many-runs).
 
-`ss.Sim(crn=False)` turns them off for one sim, e.g. to check how much they help in a given model (compare the spread of the paired differences over a few seeds with `crn` on and off); `ss.options.crn = False` turns them off for every sim. Even turned off, each person draws from each distribution in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios.
+`ss.options.crn = False` turns them off, and `with ss.options.context(crn=False):` for the runs inside it only, e.g. to check how much they help in a given model (compare the spread of the paired differences over a few seeds with `crn` on and off). Even turned off, each person draws from each distribution in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios.
 
-With agents, `ss.Sim(even_draws=True)` also makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time: in a simple SIR, the variance of the final size between runs fell 3 to 10 times. It changes the model slightly (small outbreaks die out less often, and a peak can shift by around 10%) and runs slower, so it suits comparing scenarios better than estimating absolute numbers; it has no effect on compartmental solvers.
+With agents, `solver=ss.solvers.abm(even_draws=True)` also makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time: in a simple SIR, the variance of the final size between runs fell 3 to 10 times. It changes the model slightly (small outbreaks die out less often, and a peak can shift by around 10%) and runs slower, so it suits comparing scenarios better than estimating absolute numbers; it has no effect on compartmental solvers.
 
 ### Run identity
 

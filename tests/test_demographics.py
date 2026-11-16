@@ -151,7 +151,7 @@ def test_module_adding():
     demographics = [births, deaths]
     with pytest.raises(TypeError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.peryear(0.01)).run()
-    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], record_people=False, verbose=0).run() # Without people's results
+    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], solver=ss.solvers.abm(record_people=False), verbose=0).run() # Without people's results
     assert sim.results.deaths.death.sum() > 0
     return demographics
 
@@ -695,13 +695,13 @@ def test_birth_death_hooks():
         def step(self):
             pass
 
-    sim = ss.Sim(modules=[Watch(), ss.Births(birth_rate=30, rate_per=1000), ss.Deaths(death_rate=20, rate_per=1000)], n_agents=1000, start=2000, stop=2010, verbose=0).run()
+    sim = ss.Sim([Watch(), ss.Births(birth_rate=30, rate_per=1000), ss.Deaths(death_rate=20, rate_per=1000)], n_agents=1000, start=2000, stop=2010, verbose=0).run()
     assert sim.watch.births == sim.results.births.birth.sum() > 0
     assert sim.watch.deaths == sim.results.death.sum() > 0
-    sim = ss.Sim(modules=Watch(), demographics=[ss.birth(rate=0.03), ss.death(rate=0.02)], n_agents=1000, start=2000, stop=2010, verbose=0).run() # Declared births tell the modules too
+    sim = ss.Sim(Watch(), demographics=[ss.birth(rate=0.03), ss.death(rate=0.02)], n_agents=1000, start=2000, stop=2010, verbose=0).run() # Declared births tell the modules too
     assert sim.watch.births == sim.results.birth.sum() > 0
     for fetus in [False, True]:
-        sim = ss.Sim(modules=[Watch(), ss.Pregnancy(fertility_rate=0.04, fetal_agents=fetus)], n_agents=1000, start=2000, stop=2005, verbose=0).run()
+        sim = ss.Sim([Watch(), ss.Pregnancy(fertility_rate=0.04, fetal_agents=fetus)], n_agents=1000, start=2000, stop=2005, verbose=0).run()
         assert sim.watch.births == sim.results.pregnancy.birth.sum() > 0
     return sim
 

@@ -172,7 +172,7 @@ class Mixing(Telling):
                 terms = self.partnerships(net)
                 what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim._unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
                 if approximations == 'error':
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approximations="error": {what}. Run with solver="abm".')
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and ss.options.approximations="error": {what}. Run with solver="abm".')
                 self.tell(ss.note, what, sim=sim, verbose=0 if approximations == 'allow' else None)
                 self.terms.extend(terms)
             elif isinstance(net, ss.Network):
@@ -185,7 +185,7 @@ class Mixing(Telling):
                 lasts = net.pars.get('dynamic', True) # Edges that change, each of which transmits at most once in a step (see edge_dur())
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim._unit_name} ({source}){", each transmitting at most once in a step" if lasts else ""}'
                 if approximations == 'error':
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approximations="error": {what}. Run with solver="abm".')
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and ss.options.approximations="error": {what}. Run with solver="abm".')
                 else:
                     self.tell(ss.note, what, sim=sim, verbose=0 if approximations == 'allow' else None)
                 self.terms.append(sc.obj(kind='homogeneous', contacts=contacts, name=net.name, edges=net if lasts else None))

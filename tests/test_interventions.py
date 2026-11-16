@@ -273,7 +273,8 @@ def test_modify_fast_paths():
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, rate=ss.peryear(0.5)), require_compiled=True, **kw).run().complete
+    with ss.options.context(require_compiled=True):
+        assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, rate=ss.peryear(0.5)), **kw).run().complete
 
     # An amount or share that varies in time is not taken for a dated one
     series = ss.timeseries({30: 1.0, 100: 0.2})
@@ -283,14 +284,15 @@ def test_modify_fast_paths():
         sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()
         assert sim.diseases.sir.engine.changing_steps(0, 365) is None
 
-    # With require_compiled=True, what would fall back to Python raises an error instead
+    # With ss.options.require_compiled, what would fall back to Python raises an error instead
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), require_compiled=True, **kw)
-    assert make(when=ss.schedule(start='2026-03-01')).run().complete and make(when=sir.I.n >= 20_000).run().complete
-    for mod in [dict(when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
-        with pytest.raises(ss.CapabilityError, match='require_compiled'):
-            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), require_compiled=True, **kw).run()
+    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), **kw)
+    with ss.options.context(require_compiled=True):
+        assert make(when=ss.schedule(start='2026-03-01')).run().complete and make(when=sir.I.n >= 20_000).run().complete
+        for mod in [dict(when=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
+            with pytest.raises(ss.CapabilityError, match='require_compiled'):
+                ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), **kw).run()
 
     # A comparison of counts is part of the rate: the same as writing it there
     beta = ss.par(0.3, name='beta')

@@ -323,7 +323,7 @@ example.pars
 | An expression given to the disease (`prevalence = I/N`) | A result, named after its variable or keyword; in a class body, one whose name starts with `_` is a helper, not a result | |
 | `ss.unborn`, `ss.dead`, `ss.outside`, `ss.stay` | Outside the model: where births come from, where deaths go, and where people arrive from or leave to alive; `ss.stay`, as one destination of a split, keeps people where they are | |
 | `ss.birth()` and `ss.death()` with no state | A birth into the first state, and a death from every state of people | `ss.birth(S, ...)`, `ss.death(I, ...)` |
-| The sim's own results | `alive`, `birth`, `death`, `emigration`, `cbr`, and `cmr` (and, as agents, `female`) | `record_people=False` on the sim |
+| The sim's own results | `alive`, `birth`, `death`, `emigration`, `cbr`, and `cmr` (and, as agents, `female`) | `solver=ss.solvers.abm(record_people=False)` |
 | A result of code named `new_...`, `n_...`, `cum_...`, or `...prevalence` | A flow, a stock, a stock, and a ratio; with none of these and no `kind=`, a flow if an integer, else a ratio, with a warning | `kind=` |
 | Each `ss.BoolArr` of a module written as code, and each alias given as a function | A result of the same name, the number for whom it is true | `ss.BoolArr(result=False)`, for no result |
 | `ss.AgentDisease` | The states `susceptible` and `infected` (with `infectious` an alias of `infected`), and the results `prevalence` and `infection`; a test detects `infected`, and a treatment calls `clear_infection()` | A state `infectious` of its own, as `ssl.AgentSEIR` has |

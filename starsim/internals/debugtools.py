@@ -7,7 +7,6 @@ Used with: agents and compartments; declared and coded modules
 """
 import sys
 import inspect
-import contextlib
 import platform
 import numpy as np
 import numba as nb
@@ -67,19 +66,13 @@ class Profile(sc.profile):
         return
 
     def unwrapped(self, name):
-        """ The sim's method itself, not its wrappers (e.g. the one that applies the sim's own options; see `options()`), which line_profiler would warn about """
+        """ The sim's method itself, not its wrappers (e.g. `ss.utils.outermost()`), which line_profiler would warn about """
         return inspect.unwrap(getattr(type(self.sim), name)).__get__(self.sim)
-
-    def options(self):
-        """ The sim's own options (e.g. `ss.Sim(crn=False)`), applied around what is profiled, as the sim applies them around its methods """
-        crn = self.sim.pars.get('crn')
-        return ss.options.context(crn=crn) if crn is not None else contextlib.nullcontext()
 
     def profile_init(self):
         """ Handle sim init -- both run it and profile it """
         if not self.sim.initialized:
-            with self.options():
-                self.init_prof = sc.profile(self.unwrapped('init'), follow=self.ss_follow, verbose=False, skipzero=True)
+            self.init_prof = sc.profile(self.unwrapped('init'), follow=self.ss_follow, verbose=False, skipzero=True)
         else:
             errormsg = 'Cannot profile initialization of already initialized sim'
             raise RuntimeError(errormsg)
@@ -103,9 +96,8 @@ class Profile(sc.profile):
         else:
             self.follow = self.ss_follow
 
-        # Run the profiling on the sim run, with the sim's own options
-        with self.options():
-            super().run(disp=disp)
+        # Run the profiling on the sim run
+        super().run(disp=disp)
 
         # Add initialization to the other timings
         if self.init_prof:

@@ -501,10 +501,10 @@ def test_boolarr_result():
         hidden = ss.BoolArr(default=True, result=False)
         grid = ss.BoolArr(columns=2, result=False)
         def step(self): pass
-    sim = ss.Sim(n_agents=50, modules=Flags(), dur=2, verbose=0).run()
+    sim = ss.Sim(Flags(), n_agents=50, dur=2, verbose=0).run()
     assert 'counted' in sim.results.flags and 'hidden' not in sim.results.flags and 'grid' not in sim.results.flags
     assert sim.results.flags.counted[-1] == sim.results.alive[-1]
-    assert not (~sim.modules.flags.counted).result, 'A new array is not a result'
+    assert not (~sim.custom.flags.counted).result, 'A new array is not a result'
     with pytest.raises(ValueError, match='result=False'): # Several columns can make no result
         ss.BoolArr('x', columns=2)
     with pytest.raises(AttributeError, match='ss.BoolArr'): # Starsim 3's name

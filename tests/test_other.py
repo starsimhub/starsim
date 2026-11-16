@@ -215,7 +215,7 @@ class Counter(ss.Module):
     assert any(line == 7 and 'should give kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which is guessed from the dtype, with a warning
     scope = {}
     exec(new.replace('update_results', 'record_events').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
-    sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
+    sim = ss.Sim(scope['Counter'](), n_agents=100, start=0, stop=10, verbose=0).run()
     assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
     # Renames, verbose, and Starsim 3's diseases written as code
@@ -228,7 +228,7 @@ class Counter(ss.Module):
     todo = migrate_text('sir = ss.SIR(beta=0.1)')[2]
     assert any('ssl.AgentSIR' in note for _,note in todo) and any('probability per step' in note for _,note in todo) # A use of ss.SIR is flagged, not rewritten, and so is its bare beta, now per day
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
-    assert migrate_text("for mod in sim.modules: sim.profile()\nprint(sys.modules)")[0] == "for mod in sim.module_list: sim.perf_profile()\nprint(sys.modules)" # Starsim 3's sim.modules was every module
+    assert migrate_text("for mod in sim.modules: sim.profile()\nprint(sys.modules)")[0] == "for mod in sim.modules: sim.perf_profile()\nprint(sys.modules)" # sim.modules is every module, as in Starsim 3
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
     path = sc.path('notes.qmd') # Only its suffix is read
@@ -240,7 +240,11 @@ class Counter(ss.Module):
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
     assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
-    assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net)"
+    assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net, copy_inputs=False)"
+    assert migrate_text("sim = ss.Sim(modules=[a, b], n_agents=10)")[0] == "sim = ss.Sim([a, b], n_agents=10)" # The modules are given as arguments
+    assert migrate_text("sim = ss.Sim(n_agents=10, rescale=True)")[0] == "sim = ss.Sim(n_agents=10, solver=ss.solvers.abm(rescale=True))" # An option of the agents
+    assert 'as arguments' in migrate_text("sim = ss.Sim(n_agents=10, modules=a)")[2][0][1] # Not the first argument: flagged
+    assert migrate_text("sim = ss.Sim(n_agents=10, custom=a)")[0] == "sim = ss.Sim(n_agents=10, custom=a)" # custom= is as it was
     todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
     assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names

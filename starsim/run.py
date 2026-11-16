@@ -893,7 +893,7 @@ class Branching(sc.prettyobj):
         return ss.return_fig(fig, **kw.return_fig)
 
 
-def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):
+def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None, options=None):
     """
     Run one sim, as `run_each()` does: labeled by its position if it has no label, and shrunk afterwards if `shrink`
 
@@ -907,6 +907,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.display.RunsProgress`)
         globaldict (dict): a dict shared with the other runs (given by `sc.parallelize()`, or by `run_each()` when run in a loop)
         show (func): what shows the progress, when run in this process
+        options (dict): the options of Starsim to run with (`ss.options`), e.g. those set in the process that started this worker
     """
     if copy_sim:
         sim = sim.copy()
@@ -914,7 +915,8 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         sim.label = f'Sim {ind}'
     if track:
         sim.progress = ss.display.Frac(sim, globaldict, ind, show)
-    sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
+    with ss.options.context(**(options or {})):
+        sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if track:
         globaldict[ind] = 1.0
         if show is not None:
@@ -944,6 +946,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
     """
     kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if workers != 1:
+        kwargs['options'] = {key:val for key,val in ss.options.items() if not ss.utils.same_value(val, ss.options.orig_options.get(key))} # Those set here, which a worker started afresh would not have (e.g. ss.options.crn = False)
         par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.solvers.backends.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
         with ss.solvers.backends.kernels.starting_workers(par_args['start_method']):
             P = sc.Parallel(ss.solvers.backends.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread

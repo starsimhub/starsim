@@ -406,10 +406,10 @@ class People:
         and the crude birth and mortality rates (`cbr` and `cmr`, per 1,000 people per year), worked out from them when the
         sim is finalized (see `ss.solvers.crude_rates()`).
 
-        With `sim.pars.record_people=False`, there are none of these (and `record_states()` and
+        With `ss.solvers.abm(record_people=False)` (or a compartmental run, which records them in its own way), there are none of these (and `record_states()` and
         `record_events()` are skipped in the loop), which saves a little time and memory.
         """
-        if not self.sim.pars.get('record_people', True):
+        if not getattr(self.sim.solver, 'record_people', False):
             return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = [ss.Result(state.name, label=state.label, kind='stock', **kw) for state in self.auto_state_list]
@@ -761,7 +761,7 @@ class People:
             sim = self.sim
             mods = [disease for disease in sim.diseases() if isinstance(disease, ss.Disease)]
             mods += [mod for mod in getattr(sim, 'declared', []) if all(mod is not m for m in mods)] # A declared disease given as another kind of module: its agents leave its states as well
-            mods += [mod for mod in sim.module_list if type(mod).on_death is not ss.Module.on_death and all(mod is not m for m in mods)]
+            mods += [mod for mod in sim.modules if type(mod).on_death is not ss.Module.on_death and all(mod is not m for m in mods)]
             if sim.initialized: # Kept once the modules are all there
                 self._death_mods = mods
         return mods
@@ -771,7 +771,7 @@ class People:
         self.count_births(children)
         if len(children):
             parents = None
-            for mod in self.sim.module_list:
+            for mod in self.sim.modules:
                 if type(mod).on_birth is not ss.Module.on_birth:
                     if parents is None:
                         parents = ss.uids(self.parent.raw[children])

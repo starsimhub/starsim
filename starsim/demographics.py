@@ -950,8 +950,8 @@ class Pregnancy(Demographics, ss.Disease):
         Args:
             sim (Sim): the sim being initialized
         """
-        declared = [tr for mod in sim.module_list if isinstance(mod, Flows) for tr in mod.transitions]
-        if any(isinstance(mod, Births) for mod in sim.module_list) or any(tr.per_capita and not tr.migration for tr in declared):
+        declared = [tr for mod in sim.modules if isinstance(mod, Flows) for tr in mod.transitions]
+        if any(isinstance(mod, Births) for mod in sim.modules) or any(tr.per_capita and not tr.migration for tr in declared):
             ss.warn(f'{self.name} makes births, and so does the sim\'s ss.Births or ss.birth(): the two add up. Keep only one, unless both are meant.')
         pars = self.pars
         if self.fertility_data is not None:

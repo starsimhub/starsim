@@ -59,7 +59,7 @@ class Loop:
         3. all modules:       start_step()     # Initialize the modules, including the random number distribution
         4. people:            record_states()  # Record the basic states at the start of the step
         5. all modules:       record_states()  # Record each module's states at the start of the step
-        6. sim.modules:       step()           # Run any custom modules
+        6. sim.custom:        step()           # Run any custom modules
         7. sim.demographics:  step()           # Update the demographics, including adding new agents
         8. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
         9. sim.connectors:    step()           # Run the connectors
@@ -180,28 +180,28 @@ class Loop:
         # Move the time to the step about to be taken, so that it is the same in every function of the step: the sim's time,
         # with that of the modules on its timeline; a module with a timeline of its own moves its own. The first step is at the
         # time the sim starts at, so these are not called then (see make_plan())
-        self.shared_timelines = [mod.t for mod in sim.module_list if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
+        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
         self += sim.advance # Note special __iadd__() method above, which appends these to the funcs list
-        for mod in sim.module_list:
+        for mod in sim.modules:
             if not self._on_sim_time(mod):
                 self += mod.advance
 
         # Collect the start_steps
         self += sim.start_step
-        for mod in sim.module_list:
+        for mod in sim.modules:
             if self._keep(mod.start_step):
                 self += mod.start_step
 
         # Record the state at the start of the step. A module's record_states() is skipped only when it is the inherited
         # base method and the module has no auto-generated boolean-state results to count (see _null_record())
-        if sim.pars.get('record_people', True): # People results can be opted out for lightweight sims
+        if sim.solver.record_people: # People results can be opted out for lightweight sims
             self += sim.people.record_states
-        for mod in sim.module_list:
+        for mod in sim.modules:
             if self._keep(mod.record_states):
                 self += mod.record_states
 
         # Rescale the population if needed
-        if sim.pars.rescale:
+        if sim.solver.rescale:
             self += sim.rescale
 
         if sim.pars.step_order == 'given': # Each module steps in the order it was given in (analyzers still last, after the results)
@@ -214,9 +214,9 @@ class Loop:
             self += sim.people.step_die
 
         # Record what happened in the step
-        if sim.pars.get('record_people', True):
+        if sim.solver.record_people:
             self += sim.people.record_events
-        for mod in sim.module_list:
+        for mod in sim.modules:
             if self._keep(mod.record_events):
                 self += mod.record_events
 
@@ -226,7 +226,7 @@ class Loop:
                 self += ana.step
 
         # Clean up dead agents, and perform other housekeeping tasks
-        for func in [mod.finish_step for mod in sim.module_list] + [sim.people.finish_step]:
+        for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
             if self._keep(func):
                 self += func
         self += sim.finish_step
@@ -242,7 +242,7 @@ class Loop:
         """ The steps of the modules, each kind at its place in the loop (the default; see `ss.Loop`) """
 
         # Update any nonspecific modules
-        for mod in sim.modules():
+        for mod in sim.custom():
             self += mod.step
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
@@ -278,7 +278,7 @@ class Loop:
 
     def collect_given(self, sim):
         """ The steps of the modules in the order they were given in, with `ss.Sim(step_order='given')`; a disease takes its state changes and then its step together, and analyzers still step last """
-        mods = [mod for mod in sim.module_list if not isinstance(mod, (ss.Analyzer, ss.Product))]
+        mods = [mod for mod in sim.modules if not isinstance(mod, (ss.Analyzer, ss.Product))]
         mods.sort(key=lambda mod: getattr(mod, '_given_index', np.inf)) # Modules added later (e.g. by sim.add_module()) after those given, by kind
         for mod in mods:
             if isinstance(mod, ss.Disease):
@@ -366,7 +366,7 @@ class Loop:
             self.abs_numvecs[key] = sim.t.yearvec
 
         # Handle all other modules
-        for mod in sim.module_list:
+        for mod in sim.modules:
             self.abs_tvecs[mod.name] = mod.t.tvec
             self.abs_numvecs[mod.name] = mod.t.yearvec
 

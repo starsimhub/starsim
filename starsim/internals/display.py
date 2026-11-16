@@ -110,7 +110,7 @@ class Progress:
 def start_lines(sim, notes=()):
     """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
     t = sim.t
-    mods = list(sim.diseases.keys()) or [mod.name for mod in sim.module_list]
+    mods = list(sim.diseases.keys()) or [mod.name for mod in sim.modules]
     when = f'{ss.utils.time_str(t.tvec[0], None)} to {ss.utils.time_str(t.tvec[-1], None)}' if t.is_absolute else f'{ss.utils.time_str(t.tvec[0], sim, plural=True)} to {ss.utils.num_str(t.tvec[-1])}' # On the timeline's own axis, though stop may be given in another unit (e.g. ss.weeks(8))
     stop = t.stop.to_year() if isinstance(t.stop, ss.date) else t.stop.years if isinstance(t.stop, ss.Duration) else None
     if stop is not None and stop - t.yearvec[-1] > 1e-6: # The stop is not a whole number of steps from the start, so the run ends at the last step before it
@@ -951,10 +951,11 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', joint_states=[])
+        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, solver='ode', branching=False), unit=None, _unit_name='day', joint_states=[])
         engine = ss.solvers.Compartmental(mod, mock)
-        engine.init_dwells()
-        engine.build_layout()
+        with ss.options.context(approximations='allow'): # Only laid out, not run, so its approximations are not said
+            engine.init_dwells()
+            engine.build_layout()
 
     def comp_name(ind):
         comp = engine.comps[ind]
@@ -1073,7 +1074,7 @@ def what_modifies(sim, target):
     if not sim.initialized:
         sim.init()
     mod, kind, name = ss.connectors.parse_target(target)
-    modname = ss.utils.own_name(sim.module_list, mod) if isinstance(mod, str) else mod.name # A module by its default name too, e.g. 'sir' for an ss.SIR called measles
+    modname = ss.utils.own_name(sim.modules, mod) if isinstance(mod, str) else mod.name # A module by its default name too, e.g. 'sir' for an ss.SIR called measles
     coded = not any(mod.name == modname for mod in sim.declared) and isinstance(sim.diseases.get(modname), ss.Disease)
     if modname in sim.all_networks(): # The contacts of a network
         kind = 'par'
@@ -1106,7 +1107,7 @@ def describe_sim(sim):
     sim._init_quietly() # The run says its start line when it is run
     pars = sim.pars
     unit = sim._unit_name
-    mods = list(sim.module_list)
+    mods = list(sim.modules)
     desc = Description()
     add = desc.add
     named = getattr(sim, 'named_people', None)
@@ -1220,8 +1221,8 @@ def describe_sim(sim):
             whole = sim._compiled_reason()
             joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.joint_states)
             add('Solver', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
-        tabulated = [mod.name for mod in sim.module_list if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
-        python = [mod.name for mod in sim.module_list if mod.name in stepped and mod.name not in declared + tabulated]
+        tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
+        python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]
         if tabulated:
             add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
         if python:

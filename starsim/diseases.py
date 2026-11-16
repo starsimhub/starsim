@@ -809,7 +809,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.engine.define()
         needs = ss.solvers.deliveries.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
         self.remembered = [name for mod,name in needs if mod == self.name and name in self.graph.transitions] # Transitions whose memory something reads, e.g. tb.diagnosis.since
-        if self.abm and (sim.pars.keep_times if isinstance(sim, ss.Sim) else ss.options.keep_times): # Or every transition's, to read after the run
+        if self.abm and getattr(getattr(sim, 'solver', None), 'keep_times', False): # Or every transition's, to read after the run
             self.remembered += [name for name in self.graph.transitions if name not in self.remembered]
         events = sim.__dict__.get('_memory_events', {}) if needs else {}
         self.remembered_events = {key:events[(mod, key)].spec() for mod,key in needs if mod == self.name and (mod, key) in events} # Other events whose memory something reads, e.g. sir.I.enter.ever: what the engine asks of each move (see ss.solvers.Agents.record())

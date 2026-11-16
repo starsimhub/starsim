@@ -129,7 +129,7 @@ sim = ss.Sim(flu, interventions=measure, **pars)
 sim.describe()
 ```
 
-The `Solver` line under "Results and running" in `sim.describe()` says why a run is taken a step at a time, and `require_compiled=True` on the sim makes that an error instead.
+The `Solver` line under "Results and running" in `sim.describe()` says why a run is taken a step at a time, and `ss.options.require_compiled = True` makes that an error instead.
 
 ## Performance
 

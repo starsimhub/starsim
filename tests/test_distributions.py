@@ -696,10 +696,10 @@ def test_even_draws():
     assert np.allclose(np.diff(np.sort(even)), 1/1000)
     assert 0 < even.min() < 1/1000 and even.max() < 1
 
-    def final_size(seed, **kwargs):
-        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver='abm', diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02), **kwargs).run()
+    def final_size(seed, even):
+        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver=ss.solvers.abm(even_draws=even), diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02)).run()
         return sim.results.sir.S[-1]
-    plain, spaced = [np.std([final_size(seed, even_draws=even) for seed in range(8)]) for even in [False, True]]
+    plain, spaced = [np.std([final_size(seed, even) for seed in range(8)]) for even in [False, True]]
     assert spaced < plain, f'Evenly spaced draws should reduce the spread of final sizes, but it went from {plain} to {spaced}'
     return
 

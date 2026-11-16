@@ -196,10 +196,10 @@ def test_seasonal_steps():
         out[solver] = np.mean([run[0] for run in runs])
         assert str(runs[0][1]) == solver
         assert np.isclose(out[solver], ode, rtol=0.04), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
-    with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within a step
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'): # Exact only for rates that are constant within a step
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
-        ss.Sim(sis, solver='gillespie', approximations='error', unit='day', stop=100, **kw).init()
+        ss.Sim(sis, solver='gillespie', unit='day', stop=100, **kw).init()
 
     # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]

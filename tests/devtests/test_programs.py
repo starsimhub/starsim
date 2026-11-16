@@ -83,12 +83,12 @@ def test_priority():
         assert np.allclose(by[0:first, 2], 500) and by[0:first, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
 
-    # A score per agent: under an explicit compartmental solver it is ignored with a note; with approximations='error' it is an error; left to choose, the model runs as agents
+    # A score per agent: under an explicit compartmental solver it is ignored with a note; with ss.options.approximations='error' it is an error; left to choose, the model runs as agents
     uids = lambda sir: lambda sim, uids: -uids
     keyed = make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
     assert any('priority ignored' in note for note in keyed.notes)
-    with pytest.raises(ss.CapabilityError):
-        make(priority=uids, solver='ode', approximations='error', total_pop=50_000, stop=10, **kw).run()
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'):
+        make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
     assert isinstance(make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver, ss.solvers.abm)
     lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
     got = lowest.people.has_vaccine.raw[:10_000].astype(bool)

@@ -179,7 +179,7 @@ from IPython.display import HTML
 
 sim = ss.Sim(Boids(), n_agents=200, stop=200)
 sim.init()
-boids = sim.modules.boids # A module of no standard kind, kept in sim.modules: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
+boids = sim.custom.boids # A module of no standard kind, kept in sim.custom: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
 frames = []
 for step in range(0, 201, 3):
     sim.run(until=step)

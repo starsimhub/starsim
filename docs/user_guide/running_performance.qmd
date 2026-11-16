@@ -30,10 +30,11 @@ for mod in [masks, late]:
     print(how[0].strip())
 ```
 
-The first runs in one call: a condition on a count is worked out in the compiled code, as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_compiled=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
+The first runs in one call: a condition on a count is worked out in the compiled code, as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, set `ss.options.require_compiled = True` (here just for one sim): a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
 
 ```{python}
-sim = ss.Sim(sir, interventions=masks, require_compiled=True, **pars).run() # Fine: the whole run is one call
+with ss.options.context(require_compiled=True):
+    sim = ss.Sim(sir, interventions=masks, **pars).run() # Fine: the whole run is one call
 ```
 
 What can be taken in one call, and what can't:
@@ -86,7 +87,7 @@ An agent-based run takes time in proportion to the number of agents and the numb
 - **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
 - **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
 - **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many (see [On a cluster](#on-a-cluster) for running many sims at once).
-- **Common random numbers.** `ss.Sim(crn=False)` (or `ss.options.crn = False`, for every sim) gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
+- **Common random numbers.** `ss.options.crn = False` (or `with ss.options.context(crn=False):` around one run) gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
 
 ### Code of your own
 

@@ -14,13 +14,13 @@ and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` keeps
 its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
-way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), `ss.BoolState` (now `ss.BoolArr`) and `ss.BoolArr` (now `ss.BoolArr(result=False)`, since Starsim 4's makes a result by default), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
+way), `ss.uids.cat()` (now `ss.uids.concatenate()`), `ss.BoolState` (now `ss.BoolArr`) and `ss.BoolArr` (now `ss.BoolArr(result=False)`, since Starsim 4's makes a result by default), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_n=20`, and `dur_inf=10` is
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3; with none, `rate_per=1000` is added to `ss.Births`, `ss.Deaths`, and `ss.Pregnancy` given a rate, since Starsim 3's were per 1,000 by default and Starsim 4's are per person), `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `death`, `cum_deaths` is `death.cum`, and `new_emigrants` is `emigration`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), `sim.modules` (every module, now `sim.module_list`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `death`, `cum_deaths` is `death.cum`, and `new_emigrants` is `emigration`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `modules=` of the sim (now the arguments, `ss.Sim(modules)`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -550,11 +550,16 @@ def migrate_ast(text, analyzers=None):
                     edits.add(kw, "method='uniform'", "uniform_targets=True of ss.RandomNet is method='uniform'")
                 elif kw.value.value is False:
                     remove_kw(call, kw, 'uniform_targets=False of ss.RandomNet is the default')
-            elif kw.arg == 'custom' and func == 'ss.Sim':
-                if any(k.arg == 'modules' for k in call.keywords):
-                    found.append((kw.lineno, 'custom= of ss.Sim is gone: put these modules in modules=, which keeps those of no standard type in sim.modules'))
+            elif kw.arg == 'rescale' and func == 'ss.Sim':
+                if 'solver' not in [k.arg for k in call.keywords] and kw.value.lineno == kw.value.end_lineno == kw.lineno: # On one line, with no solver given: give it to the agents
+                    edits.replace(kw.lineno, kw.col_offset, kw.value.end_col_offset, f'solver=ss.solvers.abm(rescale={ast.unparse(kw.value)})', 'rescale= of ss.Sim is an option of the agents: solver=ss.solvers.abm(rescale=...)')
                 else:
-                    edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len('custom'), 'modules', 'custom= of ss.Sim is modules=, which keeps the modules of no standard type in sim.modules')
+                    found.append((kw.lineno, 'rescale= of ss.Sim is an option of the agents: give it as solver=ss.solvers.abm(rescale=...)'))
+            elif kw.arg == 'modules' and func == 'ss.Sim':
+                if not call.args and kw is call.keywords[0] and kw.value.lineno == kw.lineno: # The first argument, so it can simply be given by position
+                    edits.replace(kw.lineno, kw.col_offset, kw.value.col_offset, '', 'modules= of ss.Sim is gone: modules of any kind are given as arguments, sorted by kind')
+                else:
+                    found.append((kw.lineno, 'modules= of ss.Sim is gone: give these modules as arguments, first, e.g. ss.Sim([...], n_agents=...), which sorts them by kind (or those of no standard kind as custom=)'))
             elif kw.arg == 'debug' and func in ['ss.MultiSim', 'ss.parallel'] and isinstance(kw.value, ast.Constant):
                 if kw.value.value is True:
                     edits.add(kw, 'workers=1', f'debug=True of {func} is workers=1 (one after another in this process)')
@@ -568,9 +573,6 @@ def migrate_ast(text, analyzers=None):
                     remove_kw(call, kw, 'dur=0 of ss.RandomNet is the default (its contacts last one step)')
                 else:
                     found.append((kw.lineno, f'dur={kw.value.value} of ss.RandomNet is in the sim\'s unit; give the unit, e.g. dur=ss.years({kw.value.value})'))
-            elif kw.arg == 'copy_inputs':
-                if remove_kw(call, kw, 'copy_inputs= is removed: a sim always copies the modules it is given'):
-                    found.append((kw.lineno, 'a sim copies the modules it is given (copy_inputs= is removed): read them, and their results, from the sim (sim.diseases.sir, sim.analyzers.myanalyzer), not from the objects given'))
 
     # Keywords of deliveries, modifiers, and transitions: on= of a modifier is who=, and when= is when it happens; ss.change() is ss.modify() of a time series
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
@@ -672,13 +674,11 @@ def migrate_ast(text, analyzers=None):
             edits.add(node.value, agent_bases[name], f'Starsim 3\'s ss.{name}, written as code, is {agent_bases[name]}')
             uses_ssl = True
 
-    # The sim's modules: Starsim 3's sim.modules was every module, which is sim.module_list (sim.modules is now those of no standard kind); and sim.profile() is sim.perf_profile()
+    # sim.profile() is sim.perf_profile()
     not_sims = {'sys', 'sc', 'ss', 'ssl', 'np', 'pd', 'cProfile', 'importlib'} # Names whose .modules or .profile is not a sim's
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id not in not_sims and isinstance(node.ctx, ast.Load):
-            if node.attr == 'modules':
-                edits.replace(node.end_lineno, node.end_col_offset - len('modules'), node.end_col_offset, 'module_list', 'Starsim 3\'s sim.modules was every module, which is sim.module_list; sim.modules is now the modules of no standard kind')
-            elif node.attr == 'profile':
+            if node.attr == 'profile':
                 edits.replace(node.end_lineno, node.end_col_offset - len('profile'), node.end_col_offset, 'perf_profile', 'sim.profile() is sim.perf_profile()')
 
     text, notes = edits.apply()

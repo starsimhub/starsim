@@ -155,7 +155,7 @@ Starsim 3 had one method, `update_results()`, called after the step, so its stoc
 
 ## The order of a step
 
-The order in which the loop (`starsim/internals/loop.py`) calls the modules in each step, and why, is on [Running sims](running_sim.qmd#the-order-of-a-step); the rows referred to below are that table's. The plan can be printed, changed, and profiled ([Reading the loop](architecture_index.qmd#reading-the-loop)). In a compartmental run with nothing that needs a step of its own, the whole run is one call to the *kernels* ([Engines and transmission](architecture_engines.qmd#the-engines)); `sim.describe()` says why a run is stepped instead, and `require_compiled=True` makes that an error.
+The order in which the loop (`starsim/internals/loop.py`) calls the modules in each step, and why, is on [Running sims](running_sim.qmd#the-order-of-a-step); the rows referred to below are that table's. The plan can be printed, changed, and profiled ([Reading the loop](architecture_index.qmd#reading-the-loop)). In a compartmental run with nothing that needs a step of its own, the whole run is one call to the *kernels* ([Engines and transmission](architecture_engines.qmd#the-engines)); `sim.describe()` says why a run is stepped instead, and `ss.options.require_compiled = True` makes that an error.
 
 ### Per-module timesteps
 

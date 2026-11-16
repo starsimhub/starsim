@@ -1513,7 +1513,7 @@ class Delivery(Event):
             out.append(f'"{self.name}" is delivered for several diseases (disease=[...]), which only agents follow; a product keyed by the diseases (e.g. efficacy=dict(hpv16=0.9, hpv18=0.9)) has a compartmental form')
         if takes_uids(self.priority):
             reason = f'priority= of "{self.name}" takes uids'
-            out.append(ss.modules.Preference(reason) if sim.pars.approximations != 'error' else reason)
+            out.append(ss.modules.Preference(reason) if ss.options.approximations != 'error' else reason)
         return out
 
     def init_pre(self, sim):
@@ -1535,7 +1535,7 @@ class Delivery(Event):
             raise ValueError(errormsg)
         if self._boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is self.product) is self: # Once for the product
             b = self.product.boxcar_form
-            ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None) # With approximations="error", refused by the product's agent_reasons()
+            ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None) # With approximations="error", refused by the product's agent_reasons()
         return
 
     def _find_disease(self, sim):
@@ -1798,9 +1798,9 @@ class Delivery(Event):
                 keys = [np.broadcast_to(np.where(selector.select(item) > 0, 0.0, 1.0) if is_cond(item) else -np.asarray(self._score(item), dtype=float), selector.shape).ravel() for item in items]
                 key = np.unique(np.column_stack(keys), axis=0, return_inverse=True)[1].reshape(selector.shape) # The rank of each, item by item
         except ss.CapabilityError:
-            if selector.abm or strict or self.sim.pars.approximations == 'error':
+            if selector.abm or strict or ss.options.approximations == 'error':
                 raise
-            ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim, verbose=0 if self.sim.pars.approximations == 'allow' else None)
+            ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim, verbose=0 if ss.options.approximations == 'allow' else None)
             return None
         return np.broadcast_to(np.asarray(key, dtype=float), selector.shape)
 

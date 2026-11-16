@@ -70,7 +70,7 @@ class Costs(ss.Analyzer):
 
     def init_results(self):
         super().init_results()
-        names = [mod.name for mod in self.sim.module_list if self.deliveries and mod is not self and 'cost' in mod.results]
+        names = [mod.name for mod in self.sim.modules if self.deliveries and mod is not self and 'cost' in mod.results]
         names += [path.replace('.', '_') for path in self.unit_costs]
         names += ['fixed'] if self.fixed is not None else []
         self.define_results(*[ss.Result(name, kind='flow') for name in names + ['total']]) # Costs in each step; filled in again after the sim's results are scaled
@@ -79,7 +79,7 @@ class Costs(ss.Analyzer):
     def fill(self, ind=slice(None)):
         """ Work out the costs of some time points """
         res = self.results
-        for mod in self.sim.module_list:
+        for mod in self.sim.modules:
             if mod.name in res and mod is not self:
                 res[mod.name][ind] = mod.results.cost[ind]
         for path, unit_cost in self.unit_costs.items():

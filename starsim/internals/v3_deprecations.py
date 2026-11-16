@@ -21,15 +21,16 @@ replaced = {
     # ss.Sim(): the settings of the sim
     ('Sim', '__init__', 'birth_rate'): 'declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000 people per year, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
     ('Sim', '__init__', 'death_rate'): 'declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000 people per year, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
-    ('Sim', '__init__', 'rescale_threshold'): 'give it to dynamic rescaling, e.g. rescale=dict(threshold=0.05)',
-    ('Sim', '__init__', 'rescale_factor'): 'give it to dynamic rescaling, e.g. rescale=dict(factor=1.2)',
+    ('Sim', '__init__', 'rescale'): 'dynamic rescaling is an option of the agents: solver=ss.solvers.abm(rescale=True)',
+    ('Sim', '__init__', 'rescale_threshold'): 'give it to dynamic rescaling, an option of the agents: solver=ss.solvers.abm(rescale=dict(threshold=0.05))',
+    ('Sim', '__init__', 'rescale_factor'): 'give it to dynamic rescaling, an option of the agents: solver=ss.solvers.abm(rescale=dict(factor=1.2))',
+    ('Sim', '__init__', 'use_aging'): 'use aging= (by default, agents age if anyone is born or dies)',
     ('Sim', '__init__', 'pop_scale'): 'give the number of people (total_pop=) and of agents (n_agents=); sim.pop_scale is then the people each agent stands for, total_pop/n_agents',
 
     # sim.run(), and the sim's attributes
     ('Sim', 'run', 'shrink'): 'call sim.shrink() after the run',
     ('Sim', 'run', 'profile'): "sim.perf_profile(kind='loop') runs it recording how long each call of the loop takes (then sim.loop.plot_cpu())",
     ('Sim', None, 'profile'): "use sim.perf_profile(), which takes kind='line' (the default), 'function', or 'loop' (a profile of the likelihood is ss.fitting.likelihood_profile())",
-    ('Sim', None, 'custom'): 'the modules of no standard kind, given with modules=, are sim.modules; every module of the sim is sim.module_list',
     ('Sim', None, 'summary'): 'use sim.summarize(), which makes the table of each result over the run',
     ('Sim', None, 'cprofile'): "use sim.perf_profile(kind='function')",
     ('People', None, 'n_alive'): 'the number of people alive is people.n (as agents, the people they stand for), and the number of agents alive is people.alive.count()',

@@ -219,7 +219,7 @@ def check_applied(sim):
     from its graph (`unapplied()`), and a module written as code from what its own code reads (`ss.solvers.Effects.unapplied_par()`, and for a disease `ss.solvers.Undeclared.unapplied()`).
     A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
     """
-    modules = {mod.name:mod for mod in sim.module_list}
+    modules = {mod.name:mod for mod in sim.modules}
     for (modname, kind, name), mods in sim.modifiers.items():
         if not mods:
             continue
@@ -479,7 +479,7 @@ class modify(Connector):
             raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}" does not belong to a module yet. A modifier of a module\'s own quantities is a member of it; otherwise build the module first, then use e.g. sir.pars.beta.')
         modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
         if isinstance(self.target_module, str): # A module by its default name, e.g. 'randomnet.pars.n_contacts' for the only ss.RandomNet (see ss.utils.find_module())
-            modname = self.target_module = ss.utils.own_name(sim.module_list, modname)
+            modname = self.target_module = ss.utils.own_name(sim.modules, modname)
         mods = {mod.name:mod for mod in sim.declared}
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
         kind, name = self.target_kind, self.target_name
@@ -487,7 +487,7 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {mod.name:mod for mod in sim.module_list if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
+        coded = {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
         people = {key:[] if key not in sim.diseases else ['rel_sus', 'rel_trans'] for key in coded} # What a disease written as code has for each person, as well as its parameters
         options += [f'{key}.{path}' for key,mod in coded.items() for path in [*[f'pars.{k}' for k in mod.pars], *people[key]]]
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
@@ -549,7 +549,7 @@ class modify(Connector):
     def init_post(self):
         """ A parameter of a module written as code with no engine of its own (an `ss.Module` or `ss.Connector`), whose code reads it from `self.pars`: written there at the start of each step, as the engine of a disease written as code does """
         super().init_post()
-        mod = next((mod for mod in self.sim.module_list if mod.name == self.target_module), None)
+        mod = next((mod for mod in self.sim.modules if mod.name == self.target_module), None)
         if self.target_kind == 'par' and getattr(mod, 'engine', None) is None and self.target_name in getattr(mod, 'pars', {}) and self.target_name != 'n_contacts':
             self.writer = ss.solvers.Effects(mod, self.sim)
             self.writer.init_pars()

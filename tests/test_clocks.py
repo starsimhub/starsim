@@ -53,8 +53,7 @@ def test_clocks():
     S, B, C, D = ss.states('S B C D') # A split when taken reads the dwell just completed (HPV: CIN from the time in P)
     long = 1.0*(B.time_in >= ss.days(5))
     d = ss.Disease(S, B, C, D, sb=S >> B @ ss.perday(0.05), split=ss.Transition(B, {C: long, D: None}, dur=ss.days(5)), name='d')
-    with ss.options.context(keep_times=True): # The times of entering C and D are read below
-        s = ss.Sim(d, n_agents=2000, unit='day', stop=60, **kw).run().diseases.d
+    s = ss.Sim(d, n_agents=2000, unit='day', stop=60, solver=ss.solvers.abm(keep_times=True), **kw).run().diseases.d # The times of entering C and D are read below
     c, dd = s.C.uids, s.D.uids
     assert len(c) > 100 and len(dd) > 100
     assert np.all(s.ti_C[c] - s.ti_B[c] >= 5) and np.all(s.ti_D[dd] - s.ti_B[dd] < 5)

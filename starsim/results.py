@@ -2018,7 +2018,7 @@ def check_data(sim, df, die=False):
         df (dataframe): the data
         die (bool): whether a column that matches no result is an error
     """
-    options = [f'{mod.name}.{key}' for mod in sim.module_list for key,res in mod.results.items() if isinstance(res, ss.Result)]
+    options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
         if col in ss.SimData.time_cols and match_column(sim, col) is None: # A time column kept beside the index (e.g. Covasim's "date"), not a result
             continue
@@ -2035,7 +2035,7 @@ def check_data(sim, df, die=False):
                 raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
                                            f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with group_results=[...].')
         if match_column(sim, col) is None:
-            several = [mod.name for mod in sim.module_list if name in mod.results and isinstance(mod.results[name], ss.Result)]
+            several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
                 msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.SimData(..., aliases=dict(...)).'
             else:

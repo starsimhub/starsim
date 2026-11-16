@@ -408,7 +408,7 @@ def test_sim_start_stop_dur():
 
     # With a calendar, a duration other than the sim's own stop is that long after the start: until=, a module's start=, and the keys of a periodic ss.timeseries
     assert ss.Sim(start=2000, stop=2030, **kw).run(until=ss.years(5)).t.ti == 5 # Stops after the step that starts 5 years in
-    sim = ss.Sim(start='2020-01-15', stop='2021-01-01', dt=ss.days(1), modules=ss.Module(name='late', start=ss.days(200)), **kw).init()
+    sim = ss.Sim(ss.Module(name='late', start=ss.days(200)), start='2020-01-15', stop='2021-01-01', dt=ss.days(1), **kw).init()
     assert sim.late.t.start == ss.date('2020-08-02') and ss.connectors.to_time(sim, ss.months(3)) == ss.date('2020-04-15')
     monthly = lambda: ss.timeseries({ss.years(k/12): ss.peryear(1 + k % 12) for k in range(13)}, interpolation='linear', period=ss.years(1)) # As starsim-malaria's ms.monthly()
     for pars in [dict(start=2000, stop=2003), dict(start='2020-03-01', stop='2022-01-01', dt=ss.days(7)), dict(stop=ss.days(800), dt=ss.days(1))]:
@@ -448,14 +448,14 @@ def test_schedule():
                     self.log[key].append(str(self.now))
             self.log.weekly += self.weekly.due()
 
-    sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.days(1), start='2010-01-01', stop='2012-01-01', verbose=0).run()
+    sim = ss.Sim(Clinic(), n_agents=10, dt=ss.days(1), start='2010-01-01', stop='2012-01-01', verbose=0).run()
     log = sim.clinic.log
     assert log.poll == ['2010-04-01', '2010-07-01', '2010-10-01', '2011-01-01', '2011-04-01', '2011-07-01', '2011-10-01', '2012-01-01'] # A step from each day, the last included
     assert log.campaigns == ['2010-01-01', '2011-06-15']
     assert log.new_year == ['2010-01-01', '2011-01-01', '2012-01-01']
     assert log.weekly == 105
 
-    sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted
+    sim = ss.Sim(Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted
     assert sim.clinic.log.weekly == 53
 
     # A duration is a time, that long after the start (from 0 with no calendar), with at= or in a list; by position it could be how often (every=) too, so it is an error

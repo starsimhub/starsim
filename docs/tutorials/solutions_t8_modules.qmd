@@ -141,7 +141,7 @@ pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(
 
 def susceptibility(sim):
     """ Each person's susceptibility: 1 minus their antibody level """
-    return 1 - sim.modules.antibodies.level
+    return 1 - sim.custom.antibodies.level
 
 protection = ss.modify(cold.rel_sus, multiply=susceptibility)
 variants = {

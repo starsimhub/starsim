@@ -689,7 +689,7 @@ class CompartmentalDelivery(sc.prettyobj):
         product = d.product
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d._routine or (d._in_rounds and d.trigger is None)
-        watched = d.name in [ss.utils.own_name(sim.module_list, ss.conditions.modname(leaf.args[0])) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
+        watched = d.name in [ss.utils.own_name(sim.modules, ss.conditions.modname(leaf.args[0])) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
         fixed = d.coverage is None or sc.isnumber(d.coverage) or isinstance(d.coverage, ss.by)
         typed = d.rate is None or (isinstance(d.rate, ss.TimePar) and not d._in_rounds) # A rate among those eligible, the same fraction at each step
         static = ss.conditions.is_static(d.eligible, sim) and fixed and typed

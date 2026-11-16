@@ -277,7 +277,7 @@ class Cond:
         sim = getattr(mod, 'sim', None)
         if sim is None and getattr(mod, '_given', False):
             errormsg = (f'{self!r} has no values: "{mod.name}" was given to a sim, which runs a copy of each module it is given (so it can be given to other sims). '
-                        f'Read the one that ran from the sim, e.g. sim.{mod.name}, or make the sim with copy_modules=False to run the modules themselves')
+                        f'Read the one that ran from the sim, e.g. sim.{mod.name}, or make the sim with copy_inputs=False to run the modules themselves')
             raise ValueError(errormsg)
         if sim is None or not sim.initialized:
             errormsg = f'{self!r} has no values yet: cond[uids] and cond.values are for a condition on a module in a sim that has been initialized'
@@ -290,7 +290,7 @@ class Cond:
         try:
             out = self.eval(selector)
         except (KeyError, AttributeError) as e: # E.g. the memory of a declared transition that nothing in the model reads (tb.diagnosis.since), which is not kept
-            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); make the sim with ss.Sim(..., keep_times=True) to keep it') from e
+            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); make the sim with ss.Sim(..., solver=ss.solvers.abm(keep_times=True)) to keep it') from e
         out = np.asarray(out)
         if out.ndim == 0:
             out = np.full(sim.people.uid.len_tot, out[()])
@@ -1139,7 +1139,7 @@ class Selector(sc.prettyobj):
             return self.mod
         mods = sim.__dict__.setdefault('_modules_by_name', {}) # Kept on the sim (each leaf of each condition asks, every step)
         if name not in mods: # By its name, else its default name (see ss.utils.find_module())
-            mods[name] = ss.utils.find_module(sim.module_list, name, error=sc.KeyNotFoundError)
+            mods[name] = ss.utils.find_module(sim.modules, name, error=sc.KeyNotFoundError)
         return mods[name]
 
     def in_states(self, names):

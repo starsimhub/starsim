@@ -24,8 +24,8 @@ def compiled_reasons(engine):
     out = []
     if not ss.options.crn: # The agent engine then draws from each distribution in turn (dist.rvs()), as its other compiled passes do (see Agents.crn_key())
         out.append('no common random numbers (ss.options.crn=False)')
-    if sim.pars.get('even_draws'):
-        out.append('evenly spaced draws (even_draws=True)')
+    if sim.solver.even_draws:
+        out.append('evenly spaced draws (ss.solvers.abm(even_draws=True))')
     if sim.groups.n_groups > 1:
         out.append('groups')
     if engine.held is not None or sim.pars.branching:

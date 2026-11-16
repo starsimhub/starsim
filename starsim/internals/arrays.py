@@ -1092,7 +1092,7 @@ class TimeArr(FloatArr):
 
 class Unkept(BaseArr):
     """
-    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.Sim(keep_times=True)`)
+    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.solvers.abm(keep_times=True)`)
 
     Setting it does nothing, and reading it raises an `AttributeError` that says how to keep it.
     It takes no memory, and is not one of the module's states.
@@ -1105,7 +1105,7 @@ class Unkept(BaseArr):
     def unkept(self):
         """ The error for reading it """
         errormsg = (f'{self.mod.name}.{self.name} is not kept, since the solver does not need it (to save memory).\n'
-                    f'     Declare the state with ss.State(keep_time=True) to keep it, or make the sim with ss.Sim(..., keep_times=True) to keep the time of entering every state.')
+                    f'     Declare the state with ss.State(keep_time=True) to keep it, or make the sim with ss.Sim(..., solver=ss.solvers.abm(keep_times=True)) to keep the time of entering every state.')
         return AttributeError(errormsg)
 
     @property
@@ -1449,7 +1449,7 @@ class BoolArr(Arr):
         while many are in it understates the mean; so are those who died in it, or left it other than by the
         disease's transitions. Those placed in it at the start (e.g. seeded cases in I) count from the start of the run.
         The engine keeps when each person last left every state whose time of entering is kept, so this works whenever
-        that time is, e.g. for any state with a dwell time (otherwise, see `ss.options.keep_times`).
+        that time is, e.g. for any state with a dwell time (otherwise, see `ss.solvers.abm(keep_times=True)`).
         """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:

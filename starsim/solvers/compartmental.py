@@ -577,9 +577,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
             dw.exact = False
             what = f'{sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)'
-            approximations = self.sim.pars.approximations
+            approximations = ss.options.approximations
             if approximations == 'error': # As for one dwell time (see note_stages())
-                raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}" and approximations="error".\n'
+                raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}" and ss.options.approximations="error".\n'
                                          f'     It has a {dw.family} dwell time that differs by group, which would be approximated by {what}.\n'
                                          f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
             self.tell(ss.note, f'{name} has a {dw.family} dwell time that differs by group, approximated by {what}', sim=self.sim, verbose=0 if approximations == 'allow' else None)
@@ -600,7 +600,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.held_stages[name] = dw
             return
         sim = self.sim
-        approximations = sim.pars.approximations
+        approximations = ss.options.approximations
         unit = f' {sim._unit_name}s'
         std = dw.mean/np.sqrt(dw.k)
         if f'{std:.3g}' == f'{dw.std:.3g}':
@@ -609,7 +609,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             kept = f'mean {dw.mean:n}{unit} kept; std {std:.3g}{unit}, against {dw.std:.3g}{unit} given'
         what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} ({kept})'
         if approximations == 'error':
-            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}" and approximations="error".\n'
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}" and ss.options.approximations="error".\n'
                                      f'     It has a {dw.family} dwell time, which would be approximated by {what}.\n'
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
@@ -621,7 +621,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return
 
     def check_noise(self):
-        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, and by tau-leaping once a leap, so a transition must be one flow; the ODE leaves it out (see `init_program()`), or with approximations="error" refuses it """
+        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, and by tau-leaping once a leap, so a transition must be one flow; the ODE leaves it out (see `init_program()`), or with ss.options.approximations="error" refuses it """
         for tr in self.graph.transitions.values():
             if tr.noise is None:
                 continue
@@ -632,8 +632,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 why = 'a disease tracked jointly with another'
             elif sum(flow.tr is tr and flow.expr is not None for flow in self.flows) > 1:
                 why = 'a transition that is several flows (from several states or compartments, or for each strain), which would each draw their own'
-            elif isinstance(self.solver, ss.solvers.ode) and self.sim.pars.approximations == 'error': # Otherwise left out, with a note (see init_program())
-                why = f'solver="{self.solver}" and approximations="error", since the ODE would leave it out (its mean, 1)'
+            elif isinstance(self.solver, ss.solvers.ode) and ss.options.approximations == 'error': # Otherwise left out, with a note (see init_program())
+                why = f'solver="{self.solver}" and ss.options.approximations="error", since the ODE would leave it out (its mean, 1)'
             if why:
                 raise ss.CapabilityError(f'"{self.mod.name}.{tr.name}" has noise on its rate (noise=), which cannot run with {why}.\n'
                                          f'     Run with solver="binomial", or without noise=.')
@@ -659,9 +659,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             unit = self.sim._unit_name
             dt = float(self.convert(dur))/x
             said = f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean)'
-            approximations = self.sim.pars.approximations
+            approximations = ss.options.approximations
             if approximations == 'error':
-                raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.solver}" and approximations="error": {said}.\n'
+                raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.solver}" and ss.options.approximations="error": {said}.\n'
                                          f'     Run with solver="abm", use a step that divides it, or allow the approximation.')
             self.tell(ss.note, f'{said}; a step that divides it makes it exact', sim=self.sim, verbose=0 if approximations == 'allow' else None)
         return n
@@ -1955,7 +1955,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.kernel_rng = self.make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
         noisy = [tr.name for tr in self.graph.transitions.values() if tr.noise is not None]
         if noisy and isinstance(self.solver, ss.solvers.ode):
-            ss.note(f'"{self.mod.name}" runs as an ODE, which leaves out the noise on the rate of {sc.strjoin(noisy)} (its mean, 1); solver="binomial" draws it', sim=self.sim, verbose=0 if self.sim.pars.approximations == 'allow' else None) # With approximations="error", refused by check_noise()
+            ss.note(f'"{self.mod.name}" runs as an ODE, which leaves out the noise on the rate of {sc.strjoin(noisy)} (its mean, 1); solver="binomial" draws it', sim=self.sim, verbose=0 if ss.options.approximations == 'allow' else None) # With ss.options.approximations="error", refused by check_noise()
         return
 
     def inline_modifiers(self):
@@ -2833,8 +2833,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     out[a-start:b-start] = t[a-start:b-start] if len(t) > 1 else t[0]
             grouped = [True]*4
         else: # Modifiers that could change at any step: work out every part of the program at each step (and stage), with them applied
-            if sim.pars.require_compiled:
-                raise ss.CapabilityError(f'require_compiled=True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
+            if ss.options.require_compiled:
+                raise ss.CapabilityError(f'ss.options.require_compiled is True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
             rows = []
             for ti in range(start, stop):
                 sim.t.ti = mod.t.ti = min(ti, npts - 1) # The step from ti, which is step ti (see ss.loop.Loop)

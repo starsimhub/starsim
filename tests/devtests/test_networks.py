@@ -117,8 +117,8 @@ def test_partners():
     # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
         ss.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approximations='error', verbose=0).run()
+    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'):
+        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, verbose=0).run()
     ring = ss.Sim(sis, networks=ssl.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
@@ -347,13 +347,13 @@ def test_partnership_approx():
         ratio = prev('ode')/np.mean([prev('abm', seed) for seed in range(1 if name == 'gono' else 4)], axis=0) # One run is enough for the weekly gono, whose ratios are far from its bounds (0.18-0.26 and 0.11-0.13 over 8 seeds)
         assert at10[0] < ratio[0] < at10[1] and at20[0] < ratio[1] < at20[1], f'{name}: {ratio}'
 
-    # The other compartmental solvers use the same force of infection; approximations='error' raises, sides need a dimension, and 'auto' keeps agents
+    # The other compartmental solvers use the same force of infection; ss.options.approximations='error' raises, sides need a dimension, and 'auto' keeps agents
     hiv = cases['hiv'][2]
     ode = run('ode', **sc.dcp(hiv)).run().results.d.I[-1]
     for solver in ['binomial', 'gillespie']: # Stochastic, in 5,000 people
         assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.I[-1], ode, rtol=0.1), solver
-    with pytest.raises(ss.CapabilityError, match='abm'):
-        run('ode', approximations='error', **sc.dcp(hiv)).init()
+    with pytest.raises(ss.CapabilityError, match='abm'), ss.options.context(approximations='error'):
+        run('ode', **sc.dcp(hiv)).init()
     with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
         ss.Sim(sis(0.01), networks=ss.SexualNet(), solver='ode', verbose=0).init()
     assert isinstance(run('auto', **sc.dcp(hiv)).init().solver, ss.solvers.abm)

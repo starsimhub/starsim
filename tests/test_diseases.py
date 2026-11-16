@@ -1052,8 +1052,8 @@ def test_rel_dists():
         assert abs(vals.mean() - 1) < 0.15 and abs(vals.std()/std - 1) < 0.25, f'{key} should be drawn for each person'
     totals = [ss.Sim(ss.SIR(beta=0.1, name='sir', **kw), total_pop=2000, stop=40, solver='ode', verbose=0).run().results.sir.infection.sum() for kw in [dict(), dict(rel_trans=ss.constant(2))]]
     assert totals[1] > 3*totals[0], 'A compartmental run should use the mean of rel_trans'
-    with pytest.raises(ss.CapabilityError, match='rel_sus=\\[0.5, 1.5\\]'):
-        ss.Sim(ss.SIR(rel_sus=ss.gamma(shape=0.5, scale=2)), total_pop=1000, solver='ode', approximations='error', verbose=0).init()
+    with pytest.raises(ss.CapabilityError, match='rel_sus=\\[0.5, 1.5\\]'), ss.options.context(approximations='error'):
+        ss.Sim(ss.SIR(rel_sus=ss.gamma(shape=0.5, scale=2)), total_pop=1000, solver='ode', verbose=0).init()
     with pytest.raises(TypeError, match='a distribution'):
         ss.SIR(rel_sus=0.5)
     agent = ssl.AgentSIR(rel_trans=ss.gamma(shape=0.5, scale=2), name='x')

@@ -99,7 +99,7 @@ def make_cold(dur_imm=ss.days(180)):
     waning    = R >> S @ dur_imm
     return ss.Disease(infection, recovery, waning, init_prev=0.01, name='cold')
 
-pars = dict(n_agents=5000, stop=ss.days(3*365), unit='day', keep_times=True, verbose=0)
+pars = dict(n_agents=5000, stop=ss.days(3*365), unit='day', solver=ss.solvers.abm(keep_times=True), verbose=0)
 sims = {
     '1 month':   ss.Sim(make_cold(ss.months(1)), **pars),
     '6 months':  ss.Sim(make_cold(ss.months(6)), **pars),

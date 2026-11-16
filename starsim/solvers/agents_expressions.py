@@ -297,7 +297,7 @@ class Expressions:
                 raise ValueError(errormsg)
             arr = mod[self.sets[key]]
         if isinstance(arr, ss.arrays.Unkept):
-            errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or make the sim with ss.Sim(..., keep_times=True)'
+            errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or make the sim with ss.Sim(..., solver=ss.solvers.abm(keep_times=True))'
             raise ValueError(errormsg)
         start = np.asarray(arr.raw[uids], dtype=float)
         ti = self.ti

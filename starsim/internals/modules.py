@@ -453,7 +453,7 @@ class Module(Base):
     def check_not_given(self, action):
         """ Raise if this module was given to a sim, which runs its own copy, so that `action` on this one would never be seen """
         if getattr(self, '_given', False):
-            kind = next((key for key,cls in module_map().items() if isinstance(self, cls)), 'modules')
+            kind = next((key for key,cls in module_map().items() if isinstance(self, cls)), 'custom')
             errormsg = (f'{action} on "{self.name}", which was given to a sim: the sim runs its own copy, so it would never be used. '
                         f'Do it before making the sim, or on the sim\'s copy, sim.{kind}.{self.name}, after sim.init()')
             raise RuntimeError(errormsg)
@@ -614,7 +614,7 @@ class Module(Base):
         `name` is taken from the function's name.
 
         This is the mechanism behind "function-based" interventions and analyzers:
-        passing a function to `interventions=`, `analyzers=`, or `modules=`
+        passing a function to `interventions=` or `analyzers=`, or to the sim as an argument
         automatically calls `from_func()` on the appropriate class
         (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
         you don't need to call this method directly. Call it explicitly when you want

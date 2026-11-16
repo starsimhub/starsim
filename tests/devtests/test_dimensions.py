@@ -675,7 +675,8 @@ def test_mixing():
     for net in [ss.RandomNet(n_contacts=10, name='net'), ss.MixingPool(n_contacts=10, name='net')]:
         alone = make_net(net, n_agents=30_000).run().results.sir.infection.cum.by('patch').values[-1]
         assert alone[0] > 10_000 and alone[1] == alone[2] == 0
-        ode, abm = [make_net(sc.dcp(net), commute, **pars).run().results.sir.infection.cum.by('patch').values[-1] for pars in [dict(solver='ode', approximations='allow'), dict(n_agents=30_000)]]
+        with ss.options.context(approximations='allow'):
+            ode, abm = [make_net(sc.dcp(net), commute, **pars).run().results.sir.infection.cum.by('patch').values[-1] for pars in [dict(solver='ode'), dict(n_agents=30_000)]]
         assert np.allclose(abm, ode, rtol=0.05) and ode[2] > 1000
 
     # An explicit contact matrix over the places is used whatever the dimension is called

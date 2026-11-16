@@ -199,8 +199,10 @@ def _():
     d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), default_state='A', name='d').stratify(ever={False: 1, True: 0})
     ode(d, stratify=dict(age=[0, 30]), stop=1).init()
 
-@trigger('which approximations="error" does not allow', ss.CapabilityError)
-def _(): ss.Sim(sir(beta=ss.seasonal(mean=0.15, amplitude=0.5)), solver='gillespie', approximations='error', unit='day', stop=10, **kw).init()
+@trigger('which ss.options.approximations="error" does not allow', ss.CapabilityError)
+def _():
+    with ss.options.context(approximations='error'):
+        ss.Sim(sir(beta=ss.seasonal(mean=0.15, amplitude=0.5)), solver='gillespie', unit='day', stop=10, **kw).init()
 
 @trigger('sir.ti_R is not kept', AttributeError)
 def _(): ss.Sim(sir(), n_agents=100, stop=5, **kw).run().diseases.sir.ti_R.notnan

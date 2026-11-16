@@ -423,7 +423,7 @@ def test_repeated_uids():
                 uids = ss.uids(np.array([0, 0, 1, 0]))
                 self.out = [self.r.rvs(uids), self.r.rvs(uids, repeats=True), self.ch.rvs(uids, repeats=True)]
 
-    sims = [ss.Sim(n_agents=10, modules=M(), dt=ss.days(1), start='2010-01-01', stop='2010-01-03', verbose=0).run() for i in range(2)]
+    sims = [ss.Sim(M(), n_agents=10, dt=ss.days(1), start='2010-01-01', stop='2010-01-03', verbose=0).run() for i in range(2)]
     same, apart, chosen = sims[0].m.out
     assert same[0] == same[1] == same[3] # By default, as its slot
     assert len(set(apart[[0, 1, 3]])) == 3 # Each repeat its own
@@ -501,7 +501,7 @@ def test_crn_code_moves():
             def step(self):
                 if move:
                     ss.move(self.sim.diseases.sir.R >> self.sim.diseases.sir.W, uids=moved)
-        sim = ss.Sim(sir, interventions=Mover(name='mover'), networks='random', n_agents=2000, start=0, stop=60, rand_seed=3, keep_times=True, verbose=0).run()
+        sim = ss.Sim(sir, interventions=Mover(name='mover'), networks='random', n_agents=2000, start=0, stop=60, rand_seed=3, solver=ss.solvers.abm(keep_times=True), verbose=0).run()
         return sim.diseases.sir
 
     def check():

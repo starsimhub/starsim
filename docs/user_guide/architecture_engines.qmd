@@ -61,7 +61,7 @@ Sim: sir, 10,000 people, as an ODE, days 0 to 100
 
 Each ingredient has one standard approximation (lasting partnerships use the Anderson–May partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
 
-By default each approximation prints a note; `approximations='allow'` keeps the notes without printing them, and `approximations='error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
+By default each approximation prints a note; `ss.options.approximations = 'allow'` keeps the notes without printing them, and `'error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
 
 ### What decides which engine runs a model
 
