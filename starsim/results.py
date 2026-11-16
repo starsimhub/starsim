@@ -1471,6 +1471,11 @@ class Results(ss.ndict):
         super().append(result, key=key)
         return
 
+    @property
+    def all_results(self):
+        """ Iterator over all results, skipping any nested values """
+        return iter(res for res in self.values() if isinstance(res, Result))
+
     def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, **kwargs):
         """
         Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
