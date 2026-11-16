@@ -441,3 +441,18 @@ if __name__ == '__main__':
     test_rate()
 
     T.toc()
+
+
+def test_renamed_hooks():
+    """ Code written for the old names fails loudly rather than silently doing nothing """
+    with pytest.raises(TypeError, match='record_events'):
+        class Old(ss.Analyzer):
+            def record_flows(self):
+                pass
+    class Who(ss.Intervention):
+        def __init__(self):
+            super().__init__()
+            self.who = ss.person.age < 15
+    with pytest.raises(AttributeError, match='eligible'):
+        Who()
+    assert ss.Intervention(who=ss.person.age < 15).who is not None

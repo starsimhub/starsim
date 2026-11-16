@@ -323,6 +323,9 @@ class Module(Base):
             errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_states(), for the results that are the state at '
                         f'the start of the step (e.g. a count of a state), and record_events(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop, and https://docs.starsim.org/v3v4 for help migrating from Starsim 3')
             raise TypeError(errormsg)
+        renamed = {k: v for k, v in dict(record_stocks='record_states', record_flows='record_events').items() if k in cls.__dict__}
+        if renamed:
+            raise TypeError(f'{cls.__name__} defines {sc.strjoin(f"{k}()" for k in renamed)}, which Starsim no longer calls: rename to {sc.strjoin(f"{v}()" for v in renamed.values())}')
         return
 
     def __init__(self, name=None, label=None, pars=None, **kwargs):

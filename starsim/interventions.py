@@ -45,6 +45,15 @@ class Intervention(ss.Module):
     """
     timepar_skip = ['eligible_when'] # Its schedule and condition refer to other modules, which hold their own time parameters (see Module.link_timepars())
 
+    @property
+    def who(self):
+        """ Who it can reach, as given by `who=`: see `eligible` """
+        return self.eligible
+
+    @who.setter
+    def who(self, value):
+        raise AttributeError(f'Who {type(self).__name__} can reach is self.eligible (or who= when it is made), not self.who')
+
     def __init__(self, *args, who=None, when=None, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', kwargs)
         super().__init__(*args, **kwargs)
