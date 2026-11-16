@@ -354,7 +354,7 @@ def compile_status():
     """
     rust = ss.solvers.backends.rust
     N = ss.solvers.numba
-    parts = {'the compartmental solvers':N.compartmental.step, 'the agent solver':N.passes.bounds, 'the draws':N.draws.uniform} # One function for each file, since a file's functions go out of date together
+    parts = {'the compartmental solvers':N.compartmental.step, 'the agent solver':N.passes.bounds, 'the draws':N.draws.key} # One function for each file, since a file's functions go out of date together; not one inlined everywhere (e.g. uniform), which is never compiled on its own
     cold = [part for part,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())]
     if rust.on:
         backend = 'rust'
