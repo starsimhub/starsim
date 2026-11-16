@@ -15,7 +15,8 @@ import numpy as np
 import numba as nb
 import starsim as ss
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
-from ..solvers.backends import draws, cache as _cache
+from ..solvers.numba import draws
+from ..solvers.backends import compiling
 sps = sc.lazyimport('scipy.stats') # A third of the time `import starsim` would take, which most runs never use: see scipy_dist
 ss_int = ss.dtypes.int
 
@@ -50,18 +51,14 @@ def occurrences(slots):
     occ = np.empty(len(s), dtype=np.int64)
     occ[order] = idx - np.maximum.accumulate(np.where(new, idx, 0))
     return occ
-_cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
+compiling.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
 @nb.jit(cache=True)
 def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
-    Fill `out` with one uniform in (0, 1) per slot via a counter-based (splitmix64) hash keyed
-    by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale, and
-    `ss.solvers.backends.draws` for the hash (`key()` and `crn_uniform()`), which the kernels share.
+    Fill `out` with one uniform in (0, 1) per slot (see `hash_uniforms()`, and `ss.solvers.numba.draws` for the hash); not for the user
 
-    `out` carries the target float dtype (Numba specializes on it), and (shift, scale) select the
-    mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64. Matching the mantissa to the
-    float width keeps every value representable and strictly < 1.
+    `out` carries the float dtype, and (shift, scale) the mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64.
     """
     key = draws.key(seed, ind) # A per-draw key, from the distribution seed and the draw index
     for i in range(slots.shape[0]):
@@ -71,18 +68,18 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
 
 def inverse(name, rands, *pars, big=None, fallback=None):
     """
-    The inverse CDF of a distribution at the uniforms rands, compiled (by `ss.solvers.backends.draws`, exact); not for the user
+    The inverse CDF of a distribution at the uniforms rands, compiled (by `ss.solvers.numba.draws`, exact); not for the user
 
     Args:
-        name (str): the distribution in `ss.solvers.backends.draws.many`
+        name (str): the distribution in `ss.solvers.numba.draws.many`
         rands (array): the uniforms
         pars (list): its parameters, each a number or an array (one value per uniform)
-        big (array): where the draws are not by inversion in `ss.solvers.backends.draws` (means above its `INV_MAX`), so are taken from fallback instead, to stay monotone in the uniform
+        big (array): where the draws are not by inversion in `ss.solvers.numba.draws` (means above its `INV_MAX`), so are taken from fallback instead, to stay monotone in the uniform
         fallback (func): the inverse CDF to use there, as a function of the uniforms and the indices of the draws
     """
     u = np.asarray(rands, dtype=np.float64)
     pars = [float(p) if isinstance(p, (int, float)) or np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
-    out = ss.solvers.backends.draws.many[name](*pars, u, np.empty(len(u)))
+    out = ss.solvers.numba.draws.many[name](*pars, u, np.empty(len(u)))
     if big is not None and np.any(big):
         inds = np.flatnonzero(np.broadcast_to(big, u.shape))
         out[inds] = fallback(u[inds], inds)
@@ -142,20 +139,12 @@ def even_out(rands, seed, ind):
 
 def hash_uniforms(seed, ind, slots, dtype=None, even=False):
     """
-    Generate one uniform random number in (0, 1) per slot via a counter-based (splitmix64)
-    hash keyed by (seed, ind); not for the user.
+    One uniform random number in (0, 1) per slot, by a counter-based (splitmix64) hash keyed by (seed, ind); not for the user
 
-    This is the engine behind Starsim's common random numbers (CRN). Because each output
-    depends only on its slot (plus the per-draw key), the same slot always yields the same
-    value regardless of how many other agents are drawn -- so structural differences between
-    scenarios don't ripple into unrelated agents. It generates exactly `len(slots)` numbers.
-
-    The result is returned at `dtype` (default `ss.dtypes.float`) so the CRN path matches the
-    dtype of the native draw path (`Dist.rand`). The mantissa width is matched to the float
-    width (24-bit for float32, 53-bit for float64) so every value stays strictly < 1 -- a plain
-    float64->float32 cast would round the largest values up to exactly 1.0 and break the [0, 1)
-    contract (e.g. `expon.ppf(1.0)` is inf).
-    With `even`, the numbers of the call are evenly spaced (see `even_out()`).
+    This is the engine of common random numbers: each value depends only on its slot and the key, so the same slot
+    gets the same value however many other agents are drawn. The values are at `dtype` (default `ss.dtypes.float`),
+    with the mantissa width matched to it, so every value stays strictly below 1 (a cast from float64 to float32
+    could round up to 1.0, e.g. making `expon.ppf()` infinite). With `even`, they are evenly spaced (see `even_out()`).
     """
     if dtype is None:
         dtype = ss.dtypes.float
@@ -274,7 +263,7 @@ class Dists(sc.prettyobj):
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
-        if sim is None and obj is not None and isinstance(obj, ss.Sim):
+        if sim is None and isinstance(obj, ss.Sim):
             sim = obj
         self.sim = sim
         self.initialized = False
@@ -283,10 +272,8 @@ class Dists(sc.prettyobj):
     def keys(self):
         """ Return the keys of the Dist objects """
         if self.dists is None:
-            errormsg = 'Dists object is not initialized'
-            raise ValueError(errormsg)
-        else:
-            return self.dists.keys()
+            raise ValueError('Dists object is not initialized')
+        return self.dists.keys()
 
     def init(self, obj=None, base_seed=None, sim=None, force=False):
         """
@@ -296,12 +283,10 @@ class Dists(sc.prettyobj):
         """
         if base_seed is not None:
             self.base_seed = base_seed
-        sim = sim if (sim is not None) else self.sim
-        obj = obj if (obj is not None) else self.obj
-        if sim is None and obj is not None and isinstance(obj, ss.Sim):
+        sim = sc.ifelse(sim, self.sim)
+        obj = sc.ifelse(obj, self.obj, sim)
+        if sim is None and isinstance(obj, ss.Sim):
             sim = obj
-        if obj is None and sim is not None:
-            obj = sim
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
@@ -338,19 +323,14 @@ class Dists(sc.prettyobj):
         """ Check that no two distributions share the same seed """
         checked = dict()
         for dist in self.dists.values():
-            seed = dist.seed
-            if seed in checked.keys():
-                raise ss.errors.DistSeedRepeatError(checked[seed], dist)
-            else:
-                checked[seed] = dist
+            if dist.seed in checked:
+                raise ss.errors.DistSeedRepeatError(checked[dist.seed], dist)
+            checked[dist.seed] = dist
         return
 
     def jump(self, to=None, delta=1, force=False):
         """ Advance all RNGs, e.g. to call "to", by jumping """
-        out = sc.autolist()
-        for dist in self.dists.values():
-            out.append(dist.jump(to=to, delta=delta, force=force))
-        return out
+        return [dist.jump(to=to, delta=delta, force=force) for dist in self.dists.values()]
 
     def jump_dt(self, ti=None, force=False):
         """
@@ -359,17 +339,11 @@ class Dists(sc.prettyobj):
         Args:
             ti (int): if specified, jump to this timestep (default: current sim timestep)
         """
-        out = sc.autolist()
-        for dist in self.dists.values():
-            out.append(dist.jump_dt(ti=ti, force=force))
-        return out
+        return [dist.jump_dt(ti=ti, force=force) for dist in self.dists.values()]
 
     def reset(self):
         """ Reset each RNG """
-        out = sc.autolist()
-        for dist in self.dists.values():
-            out += dist.reset()
-        return out
+        return [dist.reset() for dist in self.dists.values()]
 
     def clear_run_caches(self):
         """ Clear rebuildable per-run caches from each managed distribution """
@@ -430,47 +404,26 @@ class Dist:
     translated to SciPy's or NumPy's names inside (`sync_pars()`), and a keyword a distribution
     doesn't take is a `TypeError` when it is made.
 
-    Distributions scale in different ways, such as converting between time units, given by `scaling`.
-    Some distributions can't be scaled at all (e.g. `ss.beta_dist()`, whose values are fractions).
-    For distributions that can be scaled, some distributions can only be (linearly)
-    scaled *before* the random numbers are generated (called "predraw"), some can only be
-    scaled after (called "postdraw"), and some can be scaled in either way (both).
+    How a distribution is scaled (e.g. converted between time units) is given by `scaling`, one of:
 
-    For example, a normal distribution is both since 2*Normal(a, b) = Normal(2*a, 2*b).
-    A Poisson distribution is "predraw" since 2*Poisson(λ) ≠ Poisson(2*λ), and
-    there is no way to get the correct shape of a different Poisson distribution
-    once the numbers have been drawn. Finally, distributions with unitless shape
-    parameters as well as parameter that can have units (e.g. a gamma distribution
-    with shape and scale parameters) are referred to as "postdraw" since scaling
-    all input parameters is invalid (i.e. 2*Gamma(shape, scale) ≠ Gamma(2*shape, 2*scale)),
-    but they can still be scaled (i.e. 2*Gamma(shape, scale) = Gamma(1*shape, 2*scale)).
+        - ['predraw', 'postdraw']: either, e.g. `ss.normal()`, since 2*Normal(a, b) = Normal(2*a, 2*b)
+        - 'predraw': only its parameters, before the draw, e.g. `ss.poisson()`, since 2*Poisson(λ) ≠ Poisson(2*λ)
+        - 'postdraw': only its values, after the draw, e.g. `ss.gamma()`, whose shape has no unit (2*Gamma(shape, scale) = Gamma(shape, 2*scale))
+        - None: not at all, e.g. `ss.beta_dist()`, whose values are fractions
 
-    So `scaling` is one of:
+    By default, a distribution is initialized by its sim, so its random numbers are reproducible; to use one on its own,
+    give `strict=False`, or call `dist.init(force=True)`. A distribution with a unit (e.g. `ss.erlang(k=4, mean=ss.days(10))`)
+    draws in that unit outside a sim, with neither.
 
-        - 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
-        - 'predraw' (before the draw, e.g. `ss.poisson()`)
-        - ['predraw', 'postdraw'] (either, e.g. `ss.normal()`)
-        - None (not at all, e.g. `ss.beta_dist()`)
-
-    Note: by default, `ss.Dist` is initialized with an `ss.Sim` object to ensure
-    random number reproducibility. You can override this with either `ss.Dist(strict=False)`
-    on creation, or `dist.init(force=True)` after creation. A distribution with a unit (e.g.
-    `ss.erlang(k=4, mean=ss.days(10))`) draws in that unit outside a sim, with neither.
-
-    Although it's possible in theory to define a custom distribution (i.e., not
-    one from NumPy or SciPy), in practice this is difficult. The distribution needs
-    to have both a way to return random variates (easy), as well as the probability
-    point function (inverse CDF). In addition, the distribution must be able to
-    take a NumPy RNG as its bit generator. It's easier to just use a default Dist
-    (e.g., ss.random()), and then take its output as input (i.e., quantiles) for
-    whatever custom distribution you want to create.
+    For a custom distribution (not one of NumPy's or SciPy's), it is easiest to take the values of `ss.random()`
+    as quantiles, since a distribution needs an inverse CDF and must draw from a NumPy generator.
 
     Args:
         dist (rv_generic): optional; a `scipy.stats` distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
         unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
-        round (bool/str): if 'random', round each value up or down to an integer at random, in proportion to how close it is (so the mean is kept); if 'nearest', round to the nearest integer; if False, don't round (see `dist.rvs()`)
+        round (bool/str): if 'random', round each value up or down to an integer at random, in proportion to how close it is (so the mean is kept); if True or 'nearest', round to the nearest integer; if False, don't round (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int/str): the seed offset, in place of the one from its path in the sim (e.g. `offset='hiv_art'`), so that its draws stay the same if it moves (e.g. to another module); it must be unique within the sim. If None (the default), the path in the sim is hashed for it
         strict (bool): if True, require initialization
@@ -521,6 +474,7 @@ class Dist:
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognormal(); None means no check
     unitless_pars = None # Parameters that cannot have time units, e.g. ('shape',) for ss.weibull(); None means no check
     prob_pars = None # Parameters that are probabilities, e.g. ('p',) for ss.bernoulli(): a rate given for one is the chance in a step (rate*dt), where for any other it is the number of events in the step (rate.to_events(dt))
+    scipy_pars = None # SciPy's name for each parameter, e.g. dict(loc='mean', scale='std') for ss.normal(); None if they are the same (see sync_pars())
     renamed = None # SciPy's or NumPy's names that a distribution takes as others, e.g. dict(loc='mean', scale='std') for ss.normal(), for the error
     hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
@@ -652,13 +606,7 @@ class Dist:
         return
 
     def preserve_timepars(self, kwargs):
-        """
-        Preserve time units when a timepar parameter is updated with a plain number
-
-        For example, if a distribution was created with `mean=ss.years(5)` and is then
-        updated with `mean=6`, the new value should be `ss.years(6)` rather than a bare 6
-        (which would be interpreted as 6 timesteps). Modifies `kwargs` in place.
-        """
+        """ Keep the time unit of a parameter set to a plain number, in place: `mean=6` for `mean=ss.years(5)` is `ss.years(6)`, not 6 steps """
         for key,new in kwargs.items():
             old = self.pars.get(key)
             if isinstance(old, ss.TimePar) and not isinstance(new, ss.TimePar):
@@ -763,11 +711,7 @@ class Dist:
             force (bool): whether to jump even if already past `to`, or with `ss.options.crn=False`
         """
 
-        # Under crn=False, jumping is pure waste: the RNG stream advances naturally on each
-        # draw, giving fresh, valid, same-seed-reproducible numbers without a reseed. Skip it
-        # (keeping the dist callable). This is the single gate that neutralizes every jump path
-        # under crn=False -- auto-jumps in rvs(), Module.start_step, and the manual jumps in
-        # networks.py / multi_random. force=True (explicit reset / manual jump) still jumps.
+        # Under crn=False, the generator advances with each draw, so jumping is skipped (for every caller), unless forced
         if not ss.options.crn and not force:
             return self.state
 
@@ -1128,15 +1072,7 @@ class Dist:
                     pass
 
     def check_unitless_pars(self):
-        """
-        Check that parameters that must be dimensionless have not been given time units
-
-        Some distribution parameters are inherently unitless, such as the shape parameter
-        of `ss.weibull()` or `ss.gamma()`; these are listed in the distribution's
-        `unitless_pars` attribute. Supplying a timepar for these is always an error, since
-        scaling them by `dt` would change the shape of the distribution rather than its
-        location or spread. Distributions with `unitless_pars = None` are not checked.
-        """
+        """ Raise if a parameter that has no unit (`unitless_pars`, e.g. the shape of `ss.weibull()`) is given one, since scaling it by `dt` would change the shape """
         if self.unitless_pars is None: # Nothing to check
             return
 
@@ -1152,19 +1088,9 @@ class Dist:
 
     def harmonize_par_units(self):
         """
-        Ensure that parameters that share dimensions also share time units
-
-        Some distributions have several parameters with the same dimensions (e.g. the
-        mean and standard deviation of `ss.lognormal()`); these are listed in the
-        distribution's `unit_pars` attribute. Supplying units for only some of them is
-        the expected usage, since the units of the others follow from it: for example,
-        `ss.lognormal(mean=ss.years(10))` means the same thing as
-        `ss.lognormal(mean=ss.years(10), std=ss.years(1))`. Any plain numbers are
-        therefore converted to the same timepar as their siblings. (Without this, they
-        would be interpreted as numbers of timesteps, and would give different answers
-        for different values of `dt`.) Mixing durations and rates cannot be resolved
-        this way, so it raises an exception. Distributions with `unit_pars = None` are
-        not checked.
+        Give the parameters that share a dimension (`unit_pars`, e.g. the mean and std of `ss.lognormal()`) the same time unit:
+        plain numbers take the unit of the others, so `ss.lognormal(mean=ss.years(10), std=1)` has `std=ss.years(1)` (not one step);
+        mixing durations and rates raises
         """
         if self.unit_pars is None: # Nothing to check, e.g. the parameters have different dimensions
             return
@@ -1263,9 +1189,10 @@ class Dist:
         return
 
     def sync_pars(self):
-        """ Perform any necessary synchronizations or transformations on distribution parameters; not for the user """
-        self.update_dist_pars()
-        return self._pars
+        """ The parameters as SciPy takes them (see `scipy_pars`), which the SciPy distribution is updated with; not for the user """
+        spars = self._pars if self.scipy_pars is None else {k:self._pars[v] for k,v in self.scipy_pars.items()}
+        self.update_dist_pars(spars)
+        return spars
 
     def update_dist_pars(self, pars=None):
         """ Update SciPy distribution parameters; not for the user """
@@ -1290,6 +1217,8 @@ class Dist:
             rvs = rvs_func(size=self._size, **self._pars)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
+        elif type(self)._ppf is not Dist._ppf: # A distribution with its own inverse CDF
+            rvs = self._ppf(self.rand(self._size))
         else:
             errormsg = 'Dist.rvs() failed: no valid NumPy/SciPy function found in this Dist. Has it been created and initialized correctly?'
             raise ValueError(errormsg)
@@ -1305,13 +1234,18 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
-    def _ready(self, what):
-        """ Process the parameters for `mean()`, `std()`, `ppf()`, and `cdf()`, which need values rather than functions of the sim; not for the user """
+    def _check_init(self):
+        """ Raise if not initialized; but outside a sim, a distribution with a unit draws in it with no setup (one in a sim is initialized by it); not for the user """
         if not self.initialized:
-            if self.sim is None and self.module is None and self.own_dt() is not None: # As for rvs(): outside a sim, a distribution with a unit works in it with no setup
+            if self.sim is None and self.module is None and self.own_dt() is not None:
                 self.init(force=True)
             else:
                 raise ss.errors.DistNotInitializedError(self)
+        return
+
+    def _ready(self, what):
+        """ Process the parameters for `mean()`, `std()`, `ppf()`, and `cdf()`, which need values rather than functions of the sim; not for the user """
+        self._check_init()
         if any(callable(v) and not isinstance(v, type) for v in self.pars.values()): # A type (e.g. a dtype) is not a function of the sim
             errormsg = f'{self} has a parameter that is a function, so it has no single {what}: draw from it instead, e.g. dist.rvs(uids)'
             raise ValueError(errormsg)
@@ -1397,16 +1331,11 @@ class Dist:
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
-            round (bool/str): if 'random', round up or down at random based on how close the value is; if 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
+            round (bool/str): if 'random', round up or down at random based on how close the value is; if True or 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
             repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers, except for `ss.choice` and `ss.histogram`, whose repeats are drawn after every slot)
         """
-        # Check for readiness
-        if not self.initialized:
-            if self.sim is None and self.module is None and self.own_dt() is not None: # Outside a sim, a distribution with a unit draws in it with no setup (one in a sim is initialized by it)
-                self.init(force=True)
-            else:
-                raise ss.errors.DistNotInitializedError(self)
+        self._check_init()
 
         # Figure out size, UIDs, and slots
         size, slots = self.process_size(n)
@@ -1424,9 +1353,7 @@ class Dist:
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
             raise ValueError(errormsg)
 
-        # Store the pre-call state. Only needed to support CRN reset() or an explicit
-        # rvs(reset=True) resample; under crn=False (and no reset) the per-draw PCG64
-        # state-dict copy is pure overhead, so skip it.
+        # Store the pre-call state, for reset(): not needed under crn=False with no reset
         if reset or ss.options.crn:
             self.make_history()
 
@@ -1436,9 +1363,7 @@ class Dist:
         # Actually get the random numbers
         occ = occurrences(np.asarray(slots)) if repeats and slots is not None else None # Each slot's occurrence in the call, if any repeats
         if slots is not None and self._use_ppf is not False:
-            # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
-            # Generates exactly len(uids) numbers while preserving CRN.
-            # (choice/histogram set _use_ppf=False and keep the native path below.)
+            # Common random numbers: one hashed uniform per slot, keyed by (seed, ind); ss.choice(replace=False) sets _use_ppf=False for the native path below
             rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
             if occ is not None: # Each repeat from a stream of its own, as each call is
                 for k in range(1, occ.max() + 1):
@@ -1499,7 +1424,7 @@ class Dist:
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.solvers.backends.passes.infect()`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.solvers.numba.passes.infect()`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
         are being recorded), in which case `rvs()` is called instead.
@@ -1553,19 +1478,20 @@ class Dist:
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """
-        if round is True or round == 'stochastic': # Starsim 3's spellings
-            errormsg = f"round={round!r} is from Starsim 3: use round='random' to round each value up or down at random (keeping the mean), or round='nearest'. See {ss.v3_deprecations.guide} for help migrating from Starsim 3"
+        if round is True: # The simplest rounding
+            return 'nearest'
+        if round == 'stochastic': # Starsim 3's spelling
+            errormsg = f"round='stochastic' is from Starsim 3: use round='random' to round each value up or down at random (keeping the mean). See {ss.v3_deprecations.guide} for help migrating from Starsim 3"
             raise ValueError(errormsg)
         if round not in [None, False, 'random', 'nearest']:
-            errormsg = f"Invalid rounding option {round!r}: must be 'random' (up or down at random, keeping the mean), 'nearest', or False"
+            errormsg = f"Invalid rounding option {round!r}: must be True or 'nearest' (to the nearest integer), 'random' (up or down at random, keeping the mean), or False"
             raise ValueError(errormsg)
         return round
 
     def round_rvs(self, rvs, round):
         """ Round the values (in timesteps, for durations); usually called via `dist.rvs(round='random')` """
-        if round == 'nearest':
+        if self.validate_round(round) == 'nearest':
             return np.round(rvs).astype(ss_int)
-        self.validate_round(round)
         return self.randround(rvs, slots=self._slots)
 
     def randround(self, rvs, slots=None):
@@ -1590,13 +1516,8 @@ class Dist:
         diststr = ''
         if classname == 'Dist':
             if self.dist is not None:
-                try:
-                    diststr = f'dist={self.dist.name}, '
-                except Exception:
-                    try: # What is wrong with you, SciPy -- after initialization, it moves here
-                        diststr = f'dist={self.dist.dist.name}, '
-                    except Exception:
-                        diststr = f'dist={type(self.dist)}'
+                name = getattr(self.dist, 'name', None) or getattr(getattr(self.dist, 'dist', None), 'name', None) # A frozen SciPy distribution has it on its dist
+                diststr = f'dist={name}, ' if name else f'dist={type(self.dist)}'
             elif self.distname is not None:
                 diststr = f'dist={self.distname}, '
         out = dict(
@@ -1610,12 +1531,7 @@ class Dist:
 
     def clear_run_cache(self):
         """ Clear transient callable/draw caches without unlinking the distribution """
-        self._callable_args = None
-        self._callable_keys = None
-        self._uids = None
-        self._slots = None
-        self._n = None
-        self._size = None
+        self._callable_args = self._callable_keys = self._uids = self._slots = self._n = self._size = None
         return
 
     def shrink(self, max_arr_size=100):

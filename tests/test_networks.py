@@ -1,5 +1,5 @@
 """
-Test networks
+Test networks and mixing pools
 """
 
 # %% Imports and settings
@@ -11,474 +11,140 @@ import numpy as np
 import networkx as nx
 import starsim as ss
 import starsim.library as ssl
-import scipy.stats as sps
-import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
 
 sc.options.interactive = False # Assume not running interactively
-# ss.options.warnings = 'error' # For additional debugging
 
 small = 100
 medium = 1000
 
-# %% Define the tests
 
-@sc.timer()
-def test_manual():
-    sc.heading('Testing manual networks')
-
-    # Make completely abstract layers
-    n_edges = 10_000
-    n_agents = medium
-    p1 = np.random.randint(n_agents, size=n_edges)
-    p2 = np.random.randint(n_agents, size=n_edges)
-    beta = np.ones(n_edges)
-    nw1 = ss.Network(p1=p1, p2=p2, weight=beta, label='rand')
-
-    # Create a maternal network
-    sim = ss.Sim(n_agents=n_agents, demographics='pregnancy')
-    sim.init()
-    nw2 = ss.PrenatalNet()
-    nw2.init_pre(sim)
-    nw2.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
-
-    # Tidy
-    o = sc.obj(nw1=nw1, nw2=nw2)
-    return o
-
-
-@sc.timer()
-def test_random():
-    sc.heading('Testing random networks')
-
-    # Manual creation
-    nw1 = ss.Sim(n_agents=small, networks=ss.RandomNet()).init().networks[0] # The sim's copy, initialized
-
-    # Automatic creation as part of sim
-    s2 = ss.Sim(n_agents=small, networks='random').init()
-    nw2 = s2.networks[0]
-
-    # Increase the number of contacts
-    nwdict = dict(type='random', n_contacts=20)
-    s3 = ss.Sim(n_agents=small, networks=nwdict).init()
-    nw3 = s3.networks[0]
-
-    # Checks
-    assert np.array_equal(nw1.p2, nw2.p2), 'Implicit and explicit creation should give the same network'
-    assert len(nw3) == len(nw2)*2, 'Doubling n_contacts should produce twice as many contacts'
-    s4 = ss.Sim(n_agents=small, diseases='sir', networks=ss.RandomNet(n_contacts=0)).run() # No contacts, no edges (it was a ZeroDivisionError)
-    assert len(s4.networks[0]) == 0 and s4.results.sir.infection.sum() == 0
-
-    # Tidy
-    o = sc.obj(nw1=nw1, nw2=nw2, nw3=nw3)
-    return o
-
-
-@sc.timer()
-def test_randomfast():
-    sc.heading("Testing the (default, fast) RandomNet vs method='exact'")
-    n_contacts = 10
-
-    s1 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts, method='exact'), rand_seed=1).init()
-    s2 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
-    nw1 = s1.networks[0]
-    nw2 = s2.networks[0]
-
-    # Same number of edges as method='exact', and the mean degree matches n_contacts
-    assert len(nw1) == len(nw2), "RandomNet should produce the same number of edges as method='exact'"
-    deg = np.bincount(np.concatenate([np.asarray(nw2.p1), np.asarray(nw2.p2)]), minlength=medium)
-    assert np.isclose(deg.mean(), n_contacts, rtol=0.05), f'Mean degree should be ~{n_contacts}, not {deg.mean()}'
-
-    # The fast version has variable (Poisson-like) degree, unlike method='exact''s fixed degree
-    deg1 = np.bincount(np.concatenate([np.asarray(nw1.p1), np.asarray(nw1.p2)]), minlength=medium)
-    assert deg1.std() == 0, "method='exact' should have fixed degree"
-    assert deg.std() > 1, 'RandomNet should have variable degree'
-
-    # Reproducible given the same seed
-    s3 = ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=n_contacts), rand_seed=1).init()
-    assert np.array_equal(nw2.p2, s3.networks[0].p2), 'RandomNet should be reproducible for a fixed seed'
-
-    # With uniform targets, the variance in degree is lower: about n_contacts/2 from the sources plus n_contacts/2 from the targets (as in Covasim v3)
-    n = 10_000
-    s4 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=ss.poisson(20), method='uniform'), rand_seed=1).init()
-    nw4 = s4.networks[0]
-    deg4 = np.bincount(np.concatenate([np.asarray(nw4.p1), np.asarray(nw4.p2)]), minlength=n)
-    assert np.isclose(deg4.mean(), 20, rtol=0.05), f'Mean degree should be ~20, not {deg4.mean()}'
-    assert np.isclose(deg4.var(), 15, rtol=0.1), f'Degree variance with uniform targets should be ~15, not {deg4.var()}'
-
-    # Self-loops are made by default, and dropped with remove_self_loops=True
-    loops = []
-    for remove in [False, True]:
-        e = ss.Sim(n_agents=50, networks=ss.RandomNet(method='exact', remove_self_loops=remove), rand_seed=1).init().networks[0].edges
-        loops.append((e.p1 == e.p2).sum())
-    assert loops[0] > 0 and loops[1] == 0, f'remove_self_loops=True should drop the edges joining an agent to itself, not leave {loops[1]} of {loops[0]}'
-
-    o = sc.obj(nw1=nw1, nw2=nw2, nw4=nw4)
-    return o
-
-
-@sc.timer()
-def test_randomsafe():
-    sc.heading('Testing the RandomSafe network')
-
-    def auid_similarity(s1, s2):
-        """ Compute similarity between UID lists """
-        auids1 = s1.people.auids
-        auids2 = s2.people.auids
-        similarity = sc.similarity(auids1, auids2)
-        return similarity
-
-    # Set up a sim with some small number of births and deaths
-    pars = sc.obj(n_agents=small, dur=ss.years(5), verbose=False)
-    births = ss.Births(birth_rate=ss.peryear(0.005))
-    simil = sc.obj()
-
-    # Confirm that non-safe networks diverge immediately
-    s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
-    s2 = ss.Sim(pars, networks='random', label='random-births', demographics=births).run()
-
-    n1 = s1.networks[0].to_edgelist()
-    n2 = s2.networks[0].to_edgelist()
-    simil.uid = auid_similarity(s1, s2)
-    simil.rand = sc.similarity(n1, n2)
-    print(f'Similarity in UIDs after {pars.dur} with/without births:\n{simil.uid:%}')
-    print(f'Similarity for random networks after {pars.dur}:\n{simil.rand:%}\n')
-    assert simil.rand < 0.5, 'Random networks were more similar than expected'
-
-    # Confirm that safe networks don't
-    s3 = ss.Sim(pars, networks=ss.RandomNet(method='safe'), label='safe-nobirths').run()
-    s4 = ss.Sim(pars, networks=ss.RandomNet(method='safe'), label='safe-births', demographics=births).run()
-
-    n3 = s3.networks[0].to_edgelist()
-    n4 = s4.networks[0].to_edgelist()
-    simil.uid2 = auid_similarity(s3, s4)
-    simil.safe = sc.similarity(n3, n4)
-    print(f'Similarity in UIDs after {pars.dur} with/without births:\n{simil.uid2:%}')
-    print(f'Similarity for random-safe networks after {pars.dur}:\n{simil.safe:%}\n')
-    assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
-
-    # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
-    n = 20_000
-    s5 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=20, method='safe'), rand_seed=1).init()
-    nw5 = s5.networks[0]
-    deg5 = np.bincount(np.concatenate([np.asarray(nw5.p1), np.asarray(nw5.p2)]), minlength=n)
-    assert deg5.max() < 40, f'No agent should have many more than 20 contacts, but agent {deg5.argmax()} has {deg5.max()}'
-
-    o = sc.obj(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
-    return o
-
-
-@sc.timer()
-def test_random_stratified():
-    """ Test that RandomNet reproduces the mixing structure of a risk-stratified network (issue #1399) """
-    sc.heading('Testing RandomNet with risk stratification')
-    n = 20_000
-    fracs = [0.75, 0.20, 0.05]
-    contacts = np.array([0.25, 0.93, 8.55]) # Realized degree per risk group
-    rng = np.random.default_rng(1)
-    group = rng.choice([0, 1, 2], size=n, p=fracs)
-    n_contacts = ss.constant(value=lambda self, sim, uids: contacts[group[np.asarray(uids)]])
-
-    def measure(net):
-        sim = ss.Sim(n_agents=n, networks=net, rand_seed=1, verbose=0).init()
-        nw = sim.networks[0]
-        p1, p2 = np.asarray(nw.p1), np.asarray(nw.p2)
-        deg = np.bincount(np.concatenate([p1, p2]), minlength=n)
-        degrees = np.array([deg[group == g].mean() for g in range(3)])
-        core = np.mean((group[p1] == 2) & (group[p2] == 2)) # Fraction of edges within the high-risk core
-        return degrees, core
-
-    exact_deg, exact_core = measure(ss.RandomNet(n_contacts=n_contacts, method='exact'))
-    fast_deg, fast_core = measure(ss.RandomNet(n_contacts=n_contacts))
-    print(f'Requested degrees:      {contacts}')
-    print(f'Exact degrees: {exact_deg}, core edge fraction: {exact_core:n}')
-    print(f'RandomNet degrees:      {fast_deg}, core edge fraction: {fast_core:n}')
-
-    # The realized degree per risk group must match what was requested, not just on average
-    assert np.allclose(fast_deg, contacts, rtol=0.1), f'RandomNet degrees {fast_deg} do not match requested {contacts}'
-    assert np.allclose(fast_deg, exact_deg, rtol=0.1), f'RandomNet degrees {fast_deg} do not match the exact method {exact_deg}'
-
-    # Most edges should involve the high-risk core on both ends, as with method='exact'
-    assert np.isclose(fast_core, exact_core, rtol=0.1), f'RandomNet core clustering {fast_core:n} does not match the exact method {exact_core:n}'
-
-    o = sc.obj(exact_deg=exact_deg, fast_deg=fast_deg, exact_core=exact_core, fast_core=fast_core)
-    return o
-
-
-@sc.timer()
-def test_network_uids():
-    """ Test that all networks form edges between valid UIDs, not positional indices (issue #1418) """
-    sc.heading('Testing that network edges reference valid UIDs')
-    netclasses = [ss.RandomNet, lambda: ss.RandomNet(method='exact'), lambda: ss.RandomNet(method='safe')]
-    out = sc.obj()
-    for netclass in netclasses:
-        name = netclass.__name__
-        # A sim with births and deaths, so the UIDs of living agents are not contiguous
-        sim = ss.Sim(n_agents=medium, networks=netclass(), diseases='sis', demographics=True, start=2000, stop=2005, rand_seed=1, verbose=0).run()
-        nw = sim.networks[0]
-        alive = set(sim.people.auids.tolist())
-        refs = set(np.concatenate([np.asarray(nw.p1), np.asarray(nw.p2)]).tolist())
-        invalid = ss.uids(sorted(refs - alive))
-        if nw.one_step: # Edges that last one step keep those who died in the last step, until the next step would end them
-            invalid = invalid[sim.people.ti_dead.raw[invalid] != sim.t.ti]
-        print(f'{name}: {len(nw)} edges, {len(invalid)} references to non-living agents')
-        assert not len(invalid), f'{name} formed edges with {len(invalid)} non-living agents: {invalid[:10]}'
-        assert isinstance(nw.p1, ss.uids), f'{name}.p1 should be ss.uids, not {type(nw.p1)}'
-        assert isinstance(nw.p2, ss.uids), f'{name}.p2 should be ss.uids, not {type(nw.p2)}'
-        out[name] = sim
-    return out
-
-
-@sc.timer()
-def test_erdosrenyi():
-    sc.heading('Testing Erdos-Renyi network (ssl.StaticNet with p=)')
-
-    def test_ER(n, p, nw, alpha=0.01):
-        """
-        Because each edge exists i.i.d. with probability p, the degree
-        distribution of an Erdos-Renyi network should be binomially distributed.
-        Here, we test if the observed degree distribution, f_obs, matches the
-        expected distribution, f_exp, which comes from the binomial probability
-        mass function from the scipy stats library.
-
-        Args:
-            n (int): number of agents
-            p (float): edge probability
-            nw (Network): The network to test
-            alpha (float): The test significance level
-
-        Returns:
-            Chi-Squared p-value and asserts if the statistical test fails,
-            indicating that the observed degree distribution is unlikely to come
-            from the correct binomial.
-        """
-        p12 = np.concatenate([nw.edges['p1'], nw.edges['p2']]) # p1 and p2 are the UIDs of agents, used here to determine degree
-        upper = sps.binom.ppf(n=n-1, p=p, q=0.999) # Figure out the 99.9th percentile expected upper bound on the degree
-        bins = np.arange(upper+1) # Create bins
-        counts = np.histogram(p12, bins=np.arange(n+1))[0] # Count how many times each agent is connected
-        f_obs = np.histogram(counts, bins=bins)[0] # Form the degree distribution
-        pp = sps.binom.pmf(bins[:-1], n=n, p=p) # Computed the theoretical probability distribution
-        f_exp = f_obs.sum()*pp / pp.sum() # Scale
-        if f_obs.sum() and f_exp.sum(): # Skip if zero
-            p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
-            assert not p_value < alpha
-        else:
-            p_value = 1.0
-        return p_value
-
-    # Manual creation
-    p = 0.1
-    nw1 = ss.Sim(n_agents=small, networks=ssl.networks.StaticNet(p=p)).init().networks[0] # The sim's copy, initialized
-    test_ER(small, p, nw1)
-
-    # Automatic creation as part of sim
-    ss.register_modules(ssl.networks)
-    s2 = ss.Sim(n_agents=small, networks=dict(type='static', p=p)).init()
-    nw2 = s2.networks[0]
-
-    # Larger example with higher p
-    p=0.6
-    nwdict = dict(type='static', p=p)
-    s3 = ss.Sim(n_agents=medium, networks=nwdict).init()
-    nw3 = s3.networks[0]
-    test_ER(medium, p, nw3)
-
-    # Checks
-    assert np.array_equal(nw1.p2, nw2.p2), 'Implicit and explicit creation should give the same network'
-
-    # Tidy
-    o = sc.obj(nw1=nw1, nw2=nw2, nw3=nw3)
-    return o
-
-
-@sc.timer()
-def test_disk():
-    sc.heading('Testing Disk network')
-
-    # Visualize the path of agents
-    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=ssl.networks.DiskNet()).init()
-    nw1 = s1.networks[0]
-
-    if sc.options.interactive:
-        fig, ax = plt.subplots()
-        vdt = nw1.pars.v * s1.t.dt
-
-        colors = sc.vectocolor(np.linspace(0, 1, s1.pars.n_agents))
-        ax.scatter(nw1.x, nw1.y, s=50, c=colors)
-        for i in range(s1.t.npts):
-            ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
-            ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
-            ax.set_aspect('equal', adjustable='box')
-            s1.run_one_step()
-
-    # Simulate SIR on a DiskNet
-    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.per(0.05, unit=ss.years(1)))
-    s2 = ss.Sim(n_agents=1000, networks=nw2, diseases='sir').init() # This initializes the network; enough agents that the epidemic doesn't die out at the start
-    s2.run()
-    assert len(s2.networks[0]) > 0 and s2.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
-
-    if sc.options.interactive:
-        s2.plot()
-        plt.show()
-
-    return s1, s2
-
-
-@sc.timer()
-def test_static():
-    sc.heading('Testing static networks')
-
-    # Create with p
-    p = 0.2
-    n = 100
-    nc = p*n
-    nw1 = ss.Sim(n_agents=n, networks=ssl.StaticNet(p=p)).init().networks[0]
-
-    # Create with n_contacts
-    nw2 = ss.Sim(n_agents=n, networks=ssl.StaticNet(n_contacts=nc)).init().networks[0]
-
-    # Check
-    assert len(nw1) == len(nw2), 'Networks should be the same length'
-    target = n*n*p/2
-    assert target/2 < len(nw1) < target*2, f'Network should be approximately length {target}'
-
-    # Tidy
-    o = sc.obj(nw1=nw1, nw2=nw2)
-    return o
-
-
-@sc.timer()
-def test_null():
-    sc.heading('Testing NullNet...')
-    people = ss.People(n_agents=small)
-    network = ssl.networks.NullNet()
-    sir = ss.SIR(dur_inf=10, beta=0.1)
-    sim = ss.Sim(diseases=sir, people=people, networks=network)
-    sim.run()
-    net = sim.networks.nullnet
-    assert len(net) == small and np.all(net.edges.weight == 0) and (net.edges.p1 == net.edges.p2).all(), 'Expected one zero-weight self-edge per agent'
-    return sim
+def degree(nw, n):
+    """ The number of edges of each agent """
+    return np.bincount(np.concatenate([np.asarray(nw.p1), np.asarray(nw.p2)]), minlength=n)
 
 
 def make_dhs_data(n=100, include_sexes=False):
-    """ Helper to construct synthetic household data """
-    age_strings = []
-    sex_strings = []
-    for i in range(n):
-        household_size = np.random.randint(1, 6)
-        ages = np.random.randint(0, 80, household_size)
-        age_strings.append(sc.strjoin(ages))
-        if include_sexes:
-            sexes = np.random.choice([1, 2], household_size)  # DHS convention: 1=male, 2=female
-            sex_strings.append(sc.strjoin(sexes))
+    """ Synthetic household data, as from the DHS: the ages (and sexes, 1=male, 2=female) of the members of each household """
+    ages, sexes = [], []
+    for size in np.random.randint(1, 6, n):
+        ages.append(sc.strjoin(np.random.randint(0, 80, size)))
+        sexes.append(sc.strjoin(np.random.choice([1, 2], size)))
+    data = sc.dataframe(hh_id=np.arange(n), ages=ages)
     if include_sexes:
-        return sc.dataframe(hh_id=np.arange(n), ages=age_strings, sexes=sex_strings)
-    return sc.dataframe(hh_id=np.arange(n), ages=age_strings)
+        data['sexes'] = sexes
+    return data
 
 
-@sc.timer()
+# %% Networks of agents
+
+def test_random():
+    sc.heading('Testing random networks')
+    nw1 = ss.Sim(n_agents=small, networks=ss.RandomNet()).init().networks[0]
+    nw2 = ss.Sim(n_agents=small, networks='random').init().networks[0]
+    nw3 = ss.Sim(n_agents=small, networks=dict(type='random', n_contacts=20)).init().networks[0]
+    assert np.array_equal(nw1.p2, nw2.p2), 'Implicit and explicit creation should give the same network'
+    assert len(nw3) == len(nw2)*2, 'Doubling n_contacts should produce twice as many contacts'
+
+    # The default (fast) method has the mean degree of method='exact', but a variable (Poisson-like) degree
+    make = lambda **kw: ss.Sim(n_agents=medium, networks=ss.RandomNet(n_contacts=10, **kw), rand_seed=1).init().networks[0]
+    exact, fast = make(method='exact'), make()
+    deg = degree(fast, medium)
+    assert len(exact) == len(fast) and np.isclose(deg.mean(), 10, rtol=0.05)
+    assert degree(exact, medium).std() == 0 and deg.std() > 1
+    assert np.array_equal(fast.p2, make().p2), 'RandomNet should be reproducible for a fixed seed'
+
+    # With uniform targets, the variance in degree is about n_contacts/2 from the sources plus n_contacts/2 from the targets (as in Covasim v3)
+    n = 10_000
+    deg4 = degree(ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=ss.poisson(20), method='uniform'), rand_seed=1).init().networks[0], n)
+    assert np.isclose(deg4.mean(), 20, rtol=0.05) and np.isclose(deg4.var(), 15, rtol=0.1), (deg4.mean(), deg4.var())
+
+
+def test_randomsafe():
+    sc.heading('Testing the RandomSafe network')
+    pars = dict(n_agents=small, dur=ss.years(5), verbose=False)
+    births = ss.Births(birth_rate=ss.peryear(0.005))
+    for method, similar in [(None, False), ('safe', True)]: # With a few births, ordinary random networks diverge; safe ones don't
+        net = lambda: ss.RandomNet(method=method) if method else ss.RandomNet()
+        n1 = ss.Sim(pars, networks=net()).run().networks[0].to_edgelist()
+        n2 = ss.Sim(pars, networks=net(), demographics=births).run().networks[0].to_edgelist()
+        assert (sc.similarity(n1, n2) > 0.5) == similar, f'method={method}: similarity {sc.similarity(n1, n2):%}'
+
+
+def test_library_networks():
+    sc.heading('Testing the disk, null, and cluster networks')
+    sim = ss.Sim(n_agents=medium, networks=ssl.networks.DiskNet(r=0.15, v=ss.per(0.05, unit=ss.years(1))), diseases='sir').run()
+    assert len(sim.networks[0]) > 0 and sim.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
+
+    sim = ss.Sim(diseases=ss.SIR(dur_inf=10, beta=0.1), n_agents=small, networks=ssl.networks.NullNet()).run()
+    net = sim.networks.nullnet
+    assert len(net) == small and np.all(net.edges.weight == 0) and (net.edges.p1 == net.edges.p2).all(), 'Expected one zero-weight self-edge per agent'
+
+    net = ssl.ClusterNet(cluster_size=ss.poisson(5), who=(ss.person.age >= 18) & (ss.person.age < 65))
+    sim = ss.Sim(n_agents=medium, networks=net).init()
+    net = sim.networks[0]
+    ages = sim.people.age
+    assert np.array_equal(net.cluster[net.p1], net.cluster[net.p2]) # Edges are only within clusters
+    assert np.all(ages[net.members] >= 18) and np.all(ages[net.members] < 65) # Only within the age range
+    sizes = np.bincount(net.cluster[net.cluster.notnan].astype(int))
+    assert len(net) == (sizes*(sizes-1)/2).sum() # Clusters are fully connected
+
+
 def test_household():
     sc.heading('Testing HouseholdNet...')
-    dhs_data = make_dhs_data(n=small)
+    household = ssl.networks.HouseholdNet(dhs_data=make_dhs_data(n=small, include_sexes=True), dynamic=False)
+    sim = ss.Sim(n_agents=small, diseases='sis', networks=household).run()
+    assert np.all(np.isfinite(sim.networks[0].household_ids[:]))
 
-    # Test ssl.networks.HouseholdNet (static)
-    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False)
-    sim = ss.Sim(n_agents=small, diseases='sis', networks=household)
-    sim.run()
-
-    # Check that household_ids are assigned
-    assert np.all(np.isfinite(household.household_ids[:]))
-
-    # Test with sexes provided
-    dhs_data_sex = make_dhs_data(include_sexes=True)
-    household2 = ssl.networks.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
-    sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
-    sim2.run()
-
-    # With the default household data, households have more than one member
-    sim3 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'), demographics=ss.Pregnancy(), start=2000, stop=2010, verbose=0).run()
-    hh_ids = sim3.networks.householdnet.household_ids
-    sizes = np.bincount(hh_ids[hh_ids.notnan].astype(int)) # Unborn agents have no household
-    sizes = sizes[sizes > 0]
-    assert len(sizes) > 1 and sizes.mean() > 1 and len(sim3.networks.householdnet) > 0
-
-    return sim
-
-
-@sc.timer()
-def test_dynamic_household():
-    sc.heading('Testing dynamic HouseholdNet...')
-    dhs_data = make_dhs_data(n=medium)
-
-    household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=True)
-    preg = ss.Pregnancy()
-    sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=preg)
-    sim.run()
-    household, preg = sim.networks[0], sim.demographics[0] # The sim's copies, which ran
-
-    # All delivered agents should have household IDs; undelivered embryos should not.
-    # Agents born in the sim with age >= dt have been through at least one full step
-    # after delivery, so add_births() must have assigned them a household ID.
-    # Agents with age < dt at the end may be undelivered embryos whose age crossed
-    # zero only due to the end-of-step aging in finish_step.
+    # Dynamic: all delivered agents have household IDs. Agents born in the sim with age >= dt have been through at least one full step
+    # after delivery; those with age < dt may be undelivered embryos whose age crossed zero only due to the end-of-step aging
+    household = ssl.networks.HouseholdNet(dhs_data=make_dhs_data(n=medium), dynamic=True)
+    sim = ss.Sim(n_agents=medium, diseases='sis', networks=household, demographics=ss.Pregnancy()).run()
     ppl = sim.people
-    hids = household.household_ids[:]
-    born_in_sim = ppl.parent.notnan
-    delivered = ~born_in_sim | (ppl.age >= sim.t.dt_year)
-    assert np.all(np.isfinite(hids[delivered.uids])), 'Some delivered agents are missing household IDs'
-
-    return sim
+    delivered = ~ppl.parent.notnan | (ppl.age >= sim.t.dt_year)
+    assert np.all(np.isfinite(sim.networks[0].household_ids[delivered.uids])), 'Some delivered agents are missing household IDs'
 
 
-@sc.timer()
-def test_other():
-    sc.heading('Other network tests...')
+def test_hybrid():
+    sc.heading('Testing hybrid networks')
+    sis = ss.SIS(beta=dict(h=0.1, s=0.05, w=0.05, c=0.02)) # Per-network beta
+    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ssl.HybridNet(n_contacts=dict(c=10, s=0)), verbose=0).run()
+    nets = sim.networks
+    assert list(nets.keys()) == ['h', 's', 'w', 'c'] # Expanded into four networks
+    assert nets.c.pars.n_contacts.pars.value == 10 and isinstance(nets.w, ssl.ClusterNet) # Partial update of n_contacts; clusters by default
+    assert len(nets.s) == 0 and len(nets.w) > 0 # No contacts is an empty network
 
-    print('Testing a sexual network between men')
-    msm = ss.SexualNet(between='mm', participation=0.3)
-    sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=msm)
-    sim.run()
-    msm = sim.networks[0] # The sim's copy, which ran
-    assert len(msm) and sim.people.male.raw[msm.edges.p1].all() and sim.people.male.raw[msm.edges.p2].all()
-
-    print('Testing other network methods')
-    msm.validate()
-    inds1 = msm.get_inds([0])
-    contacts = msm.find_contacts(inds1['p1'])
-    assert contacts[0] == inds1['p2']
-    inds2 = msm.pop_inds([0])
-    assert inds1 == inds2
-
-    return msm
+    # Covasim's transmissibility on each layer, as a disease's beta by network, with random schools and workplaces
+    sim3 = ss.Sim(n_agents=small, diseases=ss.SIR(beta=ssl.HybridNet.betas()), networks=ssl.HybridNet(clustered=False, method='uniform'), unit='day', stop=30, verbose=0).run()
+    assert sim3.results.sir.infection.sum() > 0 and np.all(sim3.people.age[sim3.networks.s.members] < 22) # Schools are age-restricted
 
 
-@sc.timer()
 def test_edge_ops():
-    sc.heading('Testing network edge operations')
+    sc.heading('Testing network edge operations, a sexual network between men, and a maternal network')
     df = sc.dataframe(p1=[0, 1, 2, 3], p2=[1, 2, 3, 4])
     net = ss.Network(name='mynet').from_df(df) # Create from a dataframe
-    assert net.name == 'mynet' and len(net) == 4
-    assert np.array_equal(net.edges.p1, df.p1)
-
-    # Find contacts (both directions, including the agents themselves if they're each other's contacts), as an array or a set
-    net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
-    assert np.array_equal(net2.find_contacts([1,3]), [1,2,3])
-    assert ss.networks.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
-    assert net.weight.sum() == 4 # The weight defaults to 1
-
+    assert net.name == 'mynet' and len(net) == 4 and net.weight.sum() == 4 # The weight defaults to 1
     net.from_df(dict(p1=[0, 1], p2=[1, 2], weight=[1, 2])) # Replace the edges with a dict of arrays
     assert net['weight'][1] == 2
-    with pytest.raises(TypeError, match='weight='): # Starsim 3's name for the weight
-        ss.Network(p1=[0], p2=[1], beta=[1.0])
-
     net.remove_edges(net.p1 == 0) # Remove edges by mask
     assert len(net) == 1 and net.p1[0] == 1
     net.remove_edges([0]) # ...or by index
     assert len(net) == 0
-    ss.RandomNet().validate() # A network with no edges yet is valid
-    return net
+    assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
+    with pytest.raises(ValueError):
+        ss.RandomNet(n_contact=5) # A typo is not an edge column
+
+    sim = ss.Sim(diseases=dict(type='sis', beta=0.5), networks=ss.SexualNet(between='mm', participation=0.3)).run()
+    msm = sim.networks[0]
+    assert len(msm) and sim.people.male.raw[msm.edges.p1].all() and sim.people.male.raw[msm.edges.p2].all()
+
+    sim = ss.Sim(n_agents=medium, demographics='pregnancy').init()
+    nw = ss.PrenatalNet()
+    nw.init_pre(sim)
+    nw.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
+    assert len(nw) == 3
 
 
-@sc.timer()
 def test_one_way():
     sc.heading('Testing a network that transmits one way (one_way=True)')
     reached = {}
@@ -491,68 +157,19 @@ def test_one_way():
         reached[one_way] = np.flatnonzero(~sim.diseases.sir.S.values)
     assert reached[False].min() < 50 < reached[False].max() # Both ways from person 50
     assert reached[True].min() == 50 < reached[True].max() # Only from p1 to p2
-    return reached
 
 
-@sc.timer()
 def test_dynamic():
     sc.heading('Testing static (dynamic=False) networks')
-    kw = dict(n_agents=small, diseases='sis', verbose=0)
-    sim = ss.Sim(networks=ss.RandomNet(dynamic=False), **kw).init()
+    kw = dict(networks=ss.RandomNet(dynamic=False), n_agents=small, diseases='sis', stop=2002, verbose=0)
+    sim = ss.Sim(**kw).init()
     p1 = sim.networks[0].p1.copy()
     sim.run()
     assert np.array_equal(p1, sim.networks[0].p1) # Static edges don't change
-
-    sim = ss.Sim(networks=ss.RandomNet(dynamic=False), demographics=True, stop=2010, **kw).run()
-    assert sim.networks[0].members.max() < small # Agents born during the sim are not added
-    return sim
+    sim = ss.Sim(demographics=ss.Births(birth_rate=ss.peryear(0.05)), **kw).run()
+    assert sim.people.uid.max() >= small and sim.networks[0].members.max() < small # Agents born during the sim are not added
 
 
-@sc.timer()
-def test_cluster():
-    sc.heading('Testing cluster networks')
-    net = ssl.ClusterNet(cluster_size=ss.poisson(5), who=(ss.person.age >= 18) & (ss.person.age < 65))
-    sim = ss.Sim(n_agents=medium, networks=net).init()
-    net = sim.networks[0] # The sim's copy, initialized
-    ages = sim.people.age
-    clusters = net.cluster[net.p1]
-    assert np.array_equal(clusters, net.cluster[net.p2]) # Edges are only within clusters
-    assert np.all(ages[net.members] >= 18) and np.all(ages[net.members] < 65) # Only within the age range
-    sizes = np.bincount(net.cluster[net.cluster.notnan].astype(int))
-    assert len(net) == (sizes*(sizes-1)/2).sum() # Clusters are fully connected
-    return net
-
-
-@sc.timer()
-def test_hybrid():
-    sc.heading('Testing hybrid networks')
-    sis = ss.SIS(beta=dict(h=0.1, s=0.05, w=0.05, c=0.02)) # Per-network beta
-    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ssl.HybridNet(n_contacts=dict(c=10)), verbose=0)
-    sim.run()
-    nets = sim.networks
-    assert list(nets.keys()) == ['h', 's', 'w', 'c'] # Expanded into four networks
-    assert np.all(sim.people.age[nets.s.members] < 22) # Schools are age-restricted
-    assert nets.h.edges.weight[0] == 1.0 # The beta of each network is the disease's
-    assert nets.c.pars.n_contacts.pars.value == 10 and nets.w.pars.cluster_size.pars.mean == 16 # Partial update of n_contacts: a number is the same for everyone, as in ss.RandomNet
-    assert isinstance(nets.s, ssl.ClusterNet) and isinstance(nets.w, ssl.ClusterNet) # Clusters by default
-    constant = ss.Sim(n_agents=small, networks=ssl.HybridNet(n_contacts=dict(s=ss.constant(20))), verbose=0).init().networks.s
-    assert constant.pars.cluster_size.pars.value == 21 # A cluster of 21 gives 20 contacts each
-    closed = ss.Sim(n_agents=small, diseases='sis', networks=ssl.HybridNet(n_contacts=dict(s=0)), verbose=0).run()
-    assert len(closed.networks.s) == 0 and len(closed.networks.w) > 0 # No contacts is an empty network
-
-    # As in Covasim v3, use random schools and workplaces, and choose the targets of edges uniformly
-    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HybridNet(clustered=False, method='uniform'), verbose=0).init()
-    assert all(sim2.networks[k].pars.method == 'uniform' for k in ['s', 'w', 'c'])
-
-    # Covasim's transmissibility on each layer, as a disease's beta by network
-    betas = ssl.HybridNet.betas(ss.perday(0.02))
-    assert list(betas) == ['h', 's', 'w', 'c'] and np.isclose(betas['h'].value, 0.06) and np.isclose(betas['c'].value, 0.006) and ssl.HybridNet.rel_betas['s'] == 0.6
-    sim3 = ss.Sim(n_agents=small, diseases=ss.SIR(beta=ssl.HybridNet.betas()), networks=ssl.HybridNet(), unit='day', stop=30, verbose=0).run()
-    assert sim3.results.sir.infection.sum() > 0
-    return sim
-
-
-@sc.timer()
 def test_bare_units():
     sc.heading("Testing that a bare number in a network's dur= is in the sim's unit, and a single duration a mean")
     sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), dur=ss.days(10), verbose=0)
@@ -560,441 +177,19 @@ def test_bare_units():
         warnings.simplefilter('error') # Nothing to warn of: one rule
         nets = [sim(net).init().networks[0] for net in [ss.SexualNet(dur=5), ss.SexualNet(dur=ss.days(5)), ss.DegreeNet(dur=5, acts=ss.perday(1))]]
     assert all(net.mean_dur == 5 for net in nets) # Each 5 days at daily steps, ending at a constant rate, as for ss.DegreeNet
-    with warnings.catch_warnings():
-        warnings.simplefilter('error') # A mean of one step: each lasts one step, with no division by zero
-        sim(ss.SexualNet(dur=ss.days(1))).run()
-    assert isinstance(ss.SexualNet().pars.dur, ss.lognormal) and ss.SexualNet(dur=ss.years(15)).pars.dur == ss.years(15) # The default, written out, is itself; one duration is a mean
-    for dur in [5, ss.days(5)]: # Random contacts that last, a bare number in the sim's unit too
-        s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=dur), dt=ss.days(1), dur=ss.days(10), verbose=0).init()
-        net = s.networks[0]
-        before = set(zip(net.p1.tolist(), net.p2.tolist()))
-        s.run_one_step()
-        assert before == set(zip(net.p1.tolist(), net.p2.tolist())) and np.all(net.edges.dur == 4)
-    return
+    s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=5), dt=ss.days(1), dur=ss.days(10), verbose=0).init()
+    net = s.networks[0]
+    before = set(zip(net.p1.tolist(), net.p2.tolist()))
+    s.run_one_step()
+    assert before == set(zip(net.p1.tolist(), net.p2.tolist())) and np.all(net.edges.dur == 4) # Random contacts that last, a bare number in the sim's unit too
 
 
-@sc.timer()
-def test_certain_transmission():
-    sc.heading('A probability of 1 per contact (an infinite rate) transmits to every contact, and a bare beta on a network is a rate')
-    def infected(beta):
-        S, I = ss.states('S I')
-        si = ss.Disease(infection=S >> I @ beta*I, init_prev=0.3, name='si')
-        sim = ss.Sim(si, networks=ss.RandomNet(n_contacts=2, dynamic=False), n_agents=5000, unit='week', dt=ss.weeks(1), stop=1, rand_seed=1, verbose=0).init()
-        before = sim.diseases.si.I.raw.copy()
-        e = sim.networks[0].edges
-        k = np.bincount(e.p2[before[e.p1]], minlength=len(before)) + np.bincount(e.p1[before[e.p2]], minlength=len(before)) # Infectious contacts of each person
-        at_risk = (k > 0) & ~before
-        with warnings.catch_warnings():
-            warnings.simplefilter('error') # It was a RuntimeWarning and no infections
-            sim.run(until=sim.t.timevec[0]) # The first step only
-        return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
-    assert infected(ss.probperweek(1))[0] == 1
-    frac, k = infected(0.3)
-    assert np.isclose(frac, np.mean(1 - np.exp(-0.3*k)), atol=0.03) # A rate per contact, not a probability of 0.3
-    return
-
-
-def chance(beta, acts=ss.constant(ss.peryear(1)), dt=ss.years(1), steps=1, connectors=None, net=None, n=40_000, f2m=False, seed=1):
-    """ The chance that a partnership with an infectious partner transmits over some steps, measured over many lasting partnerships (from men to women, or with f2m=True, women to men) """
-    S, I = ss.states('S I')
-    si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.5, name='si')
-    net = net or ss.SexualNet
-    net = net(dur=ss.constant(ss.years(100)), participation=ss.bernoulli(p=1.0), debut=ss.constant(0), acts=acts)
-    sim = ss.Sim(si, networks=net, connectors=connectors, n_agents=n, start=2000, stop=2000 + steps*dt.years, dt=dt, rand_seed=seed, verbose=0).init()
-    e = sim.networks[0].edges
-    female = sim.people.female.raw
-    men, women = np.where(female[e.p1], e.p2, e.p1), np.where(female[e.p1], e.p1, e.p2)
-    src, trg = (women, men) if f2m else (men, women)
-    before = sim.diseases.si.I.raw.copy()
-    sim.run()
-    at_risk = before[src] & ~before[trg]
-    return sim.diseases.si.I.raw[trg[at_risk]].mean()
-
-
-class Couples(ss.SexualNet):
-    """ Every man and woman in a couple, for life, with a fixed number of acts per step (acts=) """
-    def __init__(self, acts=2, **kwargs):
-        super().__init__(**kwargs)
-        self.n_acts = acts
-    def add_pairs(self):
-        self.participant[self.sim.people.auids] = True
-        m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
-        n = min(len(m), len(f))
-        self.append(p1=m[:n], p2=f[:n], weight=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, float(self.n_acts)))
-        return
-
-
-@sc.timer()
-def test_beta_readings():
-    sc.heading('Testing how a beta is read on networks with and without acts, and their directions')
-    kw = dict(n_agents=500, start=2000, stop=2002, verbose=0)
-    def sis(beta):
-        S, I = ss.states('S I')
-        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
-    mf = ss.SexualNet()
-    assert ss.SexualNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child']
-    assert ss.RandomNet().directions == []
-    assert Couples().directions == ['m2f', 'f2m'] and ss.SexualNet(between='mm').directions == [] # A sexual network of its own is between men and women unless it says otherwise; men only: one beta
-    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples', acts=2), **(kw | dict(n_agents=2000))).run() # Enough agents to infect someone in three steps
-    assert sim.results.sis.infection.sum() > 0
-    with pytest.raises(ValueError, match="between='mf'"):
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.SexualNet(between='mm'), **kw).init()
-    assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
-    with pytest.raises(TypeError, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
-        ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ValueError, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
-        ss.Sim(sis(dict(sexualnet=[0.3, 0.15])), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ValueError): # No act to be per
-        ss.Sim(sis(ss.peract(0.01)), networks='random', **kw).init()
-    with pytest.raises(ValueError, match='f2m'): # Every direction needs a value ...
-        ss.Sim(sis(ss.peract(m2f=0.01)), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ValueError, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01, m2m=0.02)), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ValueError):
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.DegreeNet(name='needles', dur=ss.years(1), acts=ss.probpermonth(0.5)), **kw).init() # A probability per unit time is not a number of acts
-    with pytest.raises(ValueError, match='A probability per act must be between 0 and 1'):
-        ss.peract(1.5)
-    with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step
-        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(mean=ss.freqperyear(80))), **kw).init()
-    with pytest.raises(ValueError, match='probability'): # A probability is not a number of acts
-        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.probperyear(0.8)), **kw).init()
-    for acts in [ss.freqperyear(80), ss.peryear(80)]: # A frequency is a number of acts per unit time, and a rate is taken as one
-        net = ss.Sim(sis(ss.peract(0.01)), networks=ss.DegreeNet(dur=ss.years(1), acts=acts), **kw).init().networks[0]
-        assert np.isclose(net.acts_per_step, 80*net.t.dt.years)
-
-    # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
-    S, I = ss.states('S I')
-    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(m2f=0.01, f2m=0.005), prenatalnet=ss.peryear(0.5)) * I), init_prev=0.1, name='hiv')
-    sim = ss.Sim(hiv, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(), **kw).run()
-    assert sim.results.hiv.I[-1] > 0
-    return
-
-
-@sc.timer()
-def test_peract_describe():
-    sc.heading('Testing how a probability per act is described')
-    def make(beta):
-        S, P, EL = ss.states('S P EL')
-        syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
-                          latent=ss.Transition(P, EL, dur=ss.years(1)), clear=ss.Transition(EL, S, dur=ss.years(2)), init=dict(P=0.05), name='syph')
-        condoms = ss.modify(syph.infection, efficacy=0.5, frac=ss.timeseries({2000: 0.05, 2020: 0.3}), network='sexualnet', name='condoms')
-        return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
-    sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
-    text = sim.diseases.syph.describe()
-    for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
-        assert line in text, line
-    return
-
-
-@sc.timer()
-def test_beta_default():
-    sc.heading('Testing a beta for each route with a default for the routes it does not name')
-    kw = dict(n_agents=1000, stop=2, verbose=0)
-    m2f = ss.par(0.06, name='m2f')
-    def make(**betas):
-        S, I = ss.states('S I')
-        return ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='d')
-
-    # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
-    sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.PrenatalNet()], demographics='pregnancy', **kw).run()
-    assert sim.results.d.I[-1] > 0
-    assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
-    assert 'beta on prenatalnet' in sim.diseases.d.describe()
-
-    # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
-    with pytest.raises(ValueError):
-        ss.Sim(make(sexualnet=ss.peract(0.01), prenatalnet=0, msm=ss.peract(0.1)), networks=[ss.SexualNet(), ss.PrenatalNet()], **kw).init()
-    with pytest.raises(ValueError):
-        ss.Sim(make(sexualnet=ss.peract(0.01)), networks=[ss.SexualNet(), ss.PrenatalNet()], **kw).init()
-
-    # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
-    def pools(solver, **betas):
-        nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
-        S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
-        sim = ss.Sim(sir, networks=nets, total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=1, verbose=0)
-        return sim.run().results.sir.R.values
-    res = {}
-    for solver in ['abm', 'ode']:
-        res[solver] = pools(solver, pool=ss.perday(0.03), home=ss.perday(0.02))
-        assert np.array_equal(res[solver], pools(solver, pool=ss.perday(0.03), school=ss.perday(0.1), default=ss.perday(0.02))), solver
-        assert np.array_equal(res[solver], pools(solver, pool=ss.perday(0.03), default=ss.par(ss.perday(0.02), name='other'))), solver
-    assert np.isclose(res['abm'][-1], res['ode'][-1], rtol=0.15), (res['abm'][-1], res['ode'][-1])
-
-    # With no networks (homogeneous mixing), the default is the beta, and with none, that is an error
-    sim = ss.Sim(make(sexualnet=ss.peract(0.01), default=ss.peryear(2)), **kw).run()
-    assert sim.results.d.I[-1] > 0
-    with pytest.raises(ValueError):
-        ss.Sim(make(sexualnet=ss.peract(0.01)), **kw).run()
-
-    # A disease written as code reads the default too
-    sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
-    assert sim.results.agentsis.prevalence[-1] > 0 and any('msm' in note for note in sim.notes)
-    assert sim.diseases.agentsis.engine.code_betas()['sexual'] == [0, 0]
-    return
-
-
-def test_per_act_beta():
-    """ A bare beta on a network with acts is a probability per act, so it does not depend on dt or the unit """
-    sc.heading('Testing per-act beta on a sexual network')
-    def run(dt, unit='year', beta=0.003):
-        S, I = ss.states('S I')
-        si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
-        mf = ss.SexualNet(acts=ss.constant(ss.peryear(96)))
-        sim = ss.Sim(si, networks=mf, n_agents=3000, start='2000-01-01', stop='2005-01-01', unit=unit, dt=dt, verbose=0, rand_seed=1).run()
-        return sim.results.si.infection.sum()
-    weekly, monthly, quarterly = [run(dt) for dt in [ss.weeks(1), ss.months(1), ss.months(3)]]
-    assert monthly == run(ss.months(1), unit='month'), 'Infections should not depend on the unit'
-    assert max(weekly, monthly, quarterly) < 1.3*min(weekly, monthly, quarterly), f'Infections should not depend on dt: {weekly}, {monthly}, {quarterly}'
-    return
-
-
-def test_condoms():
-    """ A sexual network's edges carry the share of acts with a condom, which a modifier of the transmission on that route reads """
-    sc.heading('Testing condoms on a sexual network')
-    class CondomNet(ss.SexualNet):
-        def add_pairs(self):
-            super().add_pairs()
-            self.edges.condoms[:] = self.pars.frac
-            return
-    def make(frac=0.0, eff=0.8, seed=1):
-        S, I = ss.states('S I')
-        si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
-        net = CondomNet(name='mf', acts=ss.constant(ss.peryear(50)))
-        net.define_pars(frac=frac)
-        condoms = ss.modify(si.infection, efficacy=eff, frac=lambda net: net.edges.condoms, network='mf', name='condoms')
-        return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=seed)
-    sim = make(frac=0.5).init()
-    mf, si = sim.networks.mf, sim.diseases.si
-    assert np.all(mf.edges.condoms == 0.5)
-    assert 1*si.pars.beta == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
-    none, half, full = [sum(make(frac=s, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) for s in [0.0, 0.5, 1.0]] # Over a few seeds, since the numbers are small
-    assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
-    assert sum(make(frac=1.0, eff=0.0, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) == none, 'With no efficacy, condoms do nothing'
-    plain = ss.Sim(diseases=ss.SIS(beta=dict(mf=0.05)), networks=ss.SexualNet(name='mf'), n_agents=500, verbose=0).run() # append() without condoms
-    assert len(plain.networks.mf.edges.condoms) == len(plain.networks.mf)
-    return
-
-
-def test_coded_declared_transmission():
-    """ A disease written as code and a declared one, run as agents, infect the same people over the same contacts with the same seed """
-    sc.heading('Testing that coded and declared diseases transmit the same way')
-    class SI(ss.AgentDisease):
-        def __init__(self, beta, **kwargs):
-            super().__init__(**kwargs)
-            self.define_pars(beta=beta)
-        def set_prognoses(self, uids, sources=None):
-            super().set_prognoses(uids, sources)
-            self.infected[uids] = True
-            return
-
-    def pairs(coded, beta, net, mods=None):
-        S, I = ss.states('S I')
-        si = SI(beta=beta, name='si') if coded else ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0, name='si')
-        sim = ss.Sim(diseases=si, networks=net, connectors=mods, analyzers=ss.infection_log(), n_agents=2000, start=2000, stop=2003, verbose=0, rand_seed=3).init()
-        seeds = ss.uids(np.arange(0, 2000, 10)) # The same people infected at the start
-        si = sim.diseases.si
-        if coded:
-            si.set_prognoses(seeds, sources=-1)
-        else:
-            si.S[seeds] = False
-            si.I[seeds] = True
-        df = sim.run().analyzers[0].to_df()
-        df = df[df.source >= 0].sort_values('target')
-        return list(zip(df.source, df.target, df.t))
-
-    # Over a random network, with and without modifiers of its contacts and of the transmission on it
-    random = lambda: ss.RandomNet(n_contacts=4)
-    mods = lambda target: [ss.modify(target, multiply=0.5, network='randomnet'), ss.modify('randomnet.pars.n_contacts', multiply=0.6)]
-    plain = pairs(True, ss.peryear(0.3), random())
-    assert len(plain) > 100 and plain == pairs(False, ss.peryear(0.3), random())
-    modified = pairs(True, ss.peryear(0.3), random(), mods('si.rel_sus')) # A disease written as code has no transmission to name, so a modifier on a route is of its rel_sus
-    assert 0 < len(modified) < 0.6*len(plain) and modified == pairs(False, ss.peryear(0.3), random(), mods('si.infection'))
-    # Over a sexual network with acts (in which the same couples form whatever the disease, and whatever people's ages, which differ when a disease is declared), with a probability per act in each direction
-    beta = ss.peract(m2f=0.1, f2m=0.05)
-    couples = lambda: Couples(name='mf', debut=ss.constant(0), acts=4)
-    directed = pairs(True, beta, couples())
-    assert len(directed) > 50 and directed == pairs(False, beta, couples())
-    assert pairs(True, beta, couples(), [ss.modify('si.rel_sus', multiply=0, network='mf')]) == [] # No transmission on that route
-    with pytest.raises(ValueError, match='rel_sus'):
-        pairs(True, beta, Couples(name='mf', acts=4), [ss.modify('si.rel_trans', multiply=0, network='mf')])
-    return
-
-
-@sc.timer()
-def test_route_par():
-    sc.heading('Testing a modifier of a parameter on one route, which acts on every transmission that the parameter scales')
-    def run(mods):
-        S, I, R = ss.states('S I R')
-        beta = ss.par(ss.peryear(3.0))
-        sir = ss.Disease(infection=S >> I @ beta*I, reinfection=R >> I @ 0.5*beta*I, recovery=I >> R @ ss.years(0.5), init_prev=0.05, name='sir')
-        nets = [ss.RandomNet(name='a', n_contacts=3), ss.RandomNet(name='b', n_contacts=3)]
-        sim = ss.Sim(diseases=sir, networks=nets, connectors=mods, n_agents=1000, start=2000, stop=2003, rand_seed=1, verbose=0).run()
-        return sim.results.sir.infection.sum(), sim.results.sir.reinfection.sum()
-    by_par = run(ss.modify('sir.pars.beta', multiply=0.2, network='b'))
-    assert by_par == run([ss.modify(f'sir.{tr}', multiply=0.2, network='b') for tr in ['infection', 'reinfection']])
-    assert by_par[0] < run(None)[0]
-    return by_par
-
-
-@sc.timer()
-def test_beta_by_person():
-    sc.heading('Testing a beta per act that differs between the people who would be infected')
-    def make(beta):
-        S, I = ss.states('S I')
-        return ss.Disease(infection=S >> I @ beta * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
-    def male_infections(beta):
-        sim = ss.Sim(make(beta), networks=ss.SexualNet(), n_agents=2000, stop=3, rand_seed=1, verbose=0).run()
-        d = sim.diseases.d
-        return np.count_nonzero(d.I & sim.people.male & (d.ti_I > 0)) # Infected during the run, not seeded
-
-    # By the sex of the susceptible, as by direction: men are infected only by f2m, so with f2m = 0 never
-    m2f = ss.par(0.2, name='m2f')
-    assert male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.0))) == 0
-    assert male_infections(ss.peract(m2f=0.2, f2m=0.1)) == male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.5)))
-    return
-
-
-def test_infection_sources():
-    sc.heading('Testing who infected whom, for a module\'s own code (engine.sources())')
-    found = []
-    def check(sim):
-        d = sim.diseases.d
-        new = d.infection.uids | d.mtct.uids
-        sources, nets = d.engine.sources(new)
-        found.append((len(new), np.count_nonzero(~np.isnan(sources))))
-    S, I = ss.states('S I')
-    d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(prenatalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
-    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
-    n_new, n_found = np.sum(found, axis=0)
-    assert n_new > 0 and n_found == n_new # Each infection over a network has its source, whichever transmission it was by
-    return sim
-
-
-def test_transmit_candidates():
-    sc.heading('Testing that the edges that might transmit are found exactly, by a byte for each agent for many edges, or directly for a few')
-    rng = np.random.default_rng(1)
-    n = 1000
-    rel_trans = np.where(rng.random(n) < 0.2, rng.random(n), 0).astype(np.float32)
-    rel_sus = np.where(rng.random(n) < 0.7, 1.0, 0.0)
-    rel_sus[:5] = np.nan # A candidate, ruled out later by the chance itself
-    for n_edges in [50, 5000]: # Under an eighth of the agents, read directly
-        p1, p2 = rng.integers(n, size=(2, n_edges))
-        found = ss.solvers.backends.passes.candidates(p1, p2, rel_trans, rel_sus)
-        for (src, trg), inds in zip([(p1, p2), (p2, p1)], found):
-            assert np.array_equal(inds, np.flatnonzero((rel_trans[src] != 0) & (rel_sus[trg] != 0))), f'Wrong candidates with {n_edges} edges'
-        index = ss.solvers.backends.passes.edge_index(p1, p2, n)
-        for keep in [0.01, 0.2]: # From the infectious, then (with few susceptible) from the susceptible
-            sus = np.where(rng.random(n) < keep, rel_sus, 0)
-            done, *indexed = ss.solvers.backends.passes.candidates_indexed(rel_trans, sus, True, *index, n_edges)
-            assert done and all(np.array_equal(a, b) for a,b in zip(indexed, ss.solvers.backends.passes.candidates(p1, p2, rel_trans, sus))), f'Expected the same candidates by the edges of each agent, with {n_edges} edges'
-    return
-
-
-def test_edge_index():
-    sc.heading('Testing that a static network transmits and traces by the edges of each agent, as by a pass over all its edges, and makes a random graph as NetworkX does')
-    p1, p2 = ssl.networks.theoretical.random_graph(500, 0.02, np.random.default_rng(2))
-    edges = np.array(nx.fast_gnp_random_graph(500, 0.02, seed=np.random.default_rng(2)).edges())
-    assert np.array_equal(np.column_stack([p1, p2]), edges), 'Expected the same random graph as NetworkX makes from the same random numbers'
-    S, I, X = ss.states('S I X')
-    sis = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> S @ 0.2, quarantine=I >> X @ 0.05, init_n=dict(I=20), name='sis')
-    tracing = ss.Delivery(I >> X, when=sis.quarantine, coverage=0.5, trace='net')
-    sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
-    runs = []
-    for frac in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
-        with mock.patch.object(ss.solvers.backends.passes, 'index_frac', frac):
-            runs.append(sim.new().run())
-    assert runs[1].networks.net.agent_edges.lists is not None, 'Expected a static network to make the edges of each agent'
-    assert all(np.array_equal(runs[0].results.sis[k], runs[1].results.sis[k]) for k in 'SIX'), 'Expected the same results by the edges of each agent'
-    net = runs[1].networks.net
-    inds = np.arange(0, 2000, 7)
-    assert np.array_equal(net.find_contacts(inds), ss.networks.find_contacts(net.edges.p1, net.edges.p2, inds, as_array=True)), 'Expected the same contacts by the edges of each agent'
-    return runs
-
-
-@sc.timer()
-def test_shared_pass():
-    sc.heading('Testing that transmissions from different states over one network, worked out in one pass, infect whom each would alone')
-    S, I, R = ss.states('S I R')
-    foi = ss.peryear(3)*I
-    sir = ss.Disease(infection=S >> I @ foi, reinfection=R >> I @ 0.4*foi, recovery=I >> R @ ss.peryear(2), init=dict(I=0.05, R=0.3), name='sir')
-    sim = ss.Sim(diseases=sir, networks=ss.RandomNet(n_contacts=5), n_agents=medium, start=2000, stop=2002, dt=ss.years(0.1), verbose=0)
-    sim.run(until='2001-01-01')
-    eng = sim.diseases.sir.engine
-    pairs = [(tr, src) for tr in eng.graph.transmissions for src in tr.source]
-    rng = sim.diseases.sir.trans_rng
-    ind = rng.dists[0].ind
-    together = eng.transmit_together(pairs)
-    assert together is not None and sum(map(len, together)) > 0, 'Expected the two transmissions to be worked out together, and to infect someone'
-    for (tr,src),uids in zip(pairs, together):
-        rng.jump(to=ind, force=True) # The draws the pass had, for each transmission alone
-        assert np.array_equal(uids, eng.transmit(tr, src)), f'Expected {tr.name} to infect the same people in the shared pass as alone'
-    return together
-
-
-
-@sc.timer()
-def test_network_saturation():
-    sc.heading('Testing that an ODE on a sparse network matches the agents, whose edges each transmit at most once in a step')
-    K, b, dur, dt = 2, 3.0, 0.25, 1/12 # Few contacts, each with a large chance of transmitting in a month
-    def make(solver, net, beta=b, n=5_000):
-        sis = ss.SIS(beta=ss.peryear(beta), dur_inf=ss.years(dur), init_prev=0.1)
-        sim = ss.Sim(diseases=sis, networks=net, n_agents=n, total_pop=n, start=2000, stop=2020, dt=ss.months(1), solver=solver, verbose=0)
-        sim.run()
-        return sim.results.sis.prevalence[-120:].mean() # The last 10 years
-
-    # The ODE's equilibrium is that of mass action with the transmission the agents' edges give: K·(1 − e^(−b·dt))/dt
-    ode = make('ode', ss.RandomNet(n_contacts=K))
-    expected = 1 - 1/(K*(-np.expm1(-b*dt)/dt)*dur)
-    assert np.isclose(ode, expected, rtol=0.01), f'{ode = :.4f}, but the per-step transmission over each edge gives {expected:.4f}'
-
-    # The agents on that sparse network differ from the ODE as they do on a dense one (where mass action holds), apart from saturation
-    sparse = make('abm', ss.RandomNet(n_contacts=K))/ode
-    dense = make('abm', ss.RandomNet(n_contacts=60), beta=b*K/60)/make('ode', ss.RandomNet(n_contacts=60), beta=b*K/60)
-    assert abs(sparse - dense) < 0.08, f'agents ÷ ODE is {sparse:.3f} on the sparse network but {dense:.3f} on the dense one' # About 0.25 apart without the correction
-
-    # Each flow saturates by its own rate, and each source state by its own coefficient: a reinfection at a quarter of the rate, from a state half as infectious
-    def make2(solver, K, b, n=5_000, sus=1.0):
-        S, A, I, R = ss.states('S A I R')
-        beta = ss.peryear(b)
-        dis = ss.Disease(infection=ss.Transition(S, A, rate=beta*(0.5*A + I)), reinfection=ss.Transition(R, A, rate=0.25*beta*(0.5*A + I)),
-                         progression=ss.Transition(A, I, rate=ss.peryear(4)), recovery=ss.Transition(I, R, rate=ss.peryear(4)), init_prev=0.1, name='d')
-        mods = ss.modify('d.rel_sus', multiply=sus) if sus != 1 else None
-        sim = ss.Sim(diseases=dis, networks=ss.RandomNet(n_contacts=K), connectors=mods, n_agents=n, total_pop=n, start=2000, stop=2030, dt=ss.months(1), solver=solver, verbose=0).run()
-        return sim.results.d.prevalence[-120:].mean()
-    sparse2 = make2('abm', 3, 6.0)/make2('ode', 3, 6.0)
-    dense2 = make2('abm', 60, 6.0*3/60)/make2('ode', 60, 6.0*3/60)
-    assert abs(sparse2 - dense2) < 0.08, f'agents ÷ ODE is {sparse2:.3f} on the sparse network but {dense2:.3f} on the dense one' # About 0.5 apart with one factor per exposure, from its first flow
-
-    # Every factor of an edge's hazard is in the exponent, so a modifier of rel_sus is the same as that factor in beta
-    halved = make2('abm', 3, 12.0, n=2000, sus=0.5)
-    assert halved > 0 and np.isclose(halved, make2('abm', 3, 6.0, n=2000), rtol=1e-6), halved
-    return ode, sparse, dense
-
-@sc.timer()
-def test_who_compartmental():
-    sc.heading('A network among some people (who=) has no compartmental form, and a network prints before it has edges')
-    with pytest.raises(ss.CapabilityError, match='who='):
-        ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), solver='ode', verbose=0).init()
-    sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), n_agents=200, stop=2002, verbose=0).init()
-    assert isinstance(sim.solver, ss.solvers.abm)
-    assert 'no edges yet' in str(ss.SexualNet()) and 'p1' in str(sim.networks.randomnet)
-    return sim
-
-
-@sc.timer()
 def test_network_args():
-    """ A subclass that wraps step() keeps its parameters, and one with a step() of its own forms its own partnerships; an unknown keyword raises, naming the valid ones; a bare number is a duration on every network """
-    sc.heading('Testing network arguments')
+    """ A subclass that wraps step() keeps its parameters, and one with a step() of its own forms its own partnerships """
+    sc.heading('Testing network subclasses')
     class Wrapped(ss.SexualNet):
         def step(self):
             return super().step()
-    net = Wrapped(n_contacts=0.5, dur=ss.years(2))
-    assert net.pars.n_contacts == 0.5 and 'match' in net.pars
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, n_agents=300, stop=2002, verbose=0).run()
-    assert len(sim.networks[0])
-
-    # A subclass with a step() of its own forms its own partnerships: the base forms none, not even those it starts with, unless it calls super().step()
     class Own(ss.SexualNet):
         def step(self):
             self.end_pairs()
@@ -1011,57 +206,279 @@ def test_network_args():
             assert len(net) == 10 and set(net.p1) == set(range(10)), 'Only its own partnerships'
         else:
             assert np.isclose(net.results.mean_degree[0], 0.5, rtol=0.25), f'{cls.__name__} starts at the target'
-    with pytest.raises(ss.CapabilityError, match='step'): # Compartments can't follow a step() of its own
-        ss.Sim(networks=Own(n_contacts=0.5, dur=ss.years(2)), solver='binomial', diseases=ss.SIS(beta=ss.peract(0.01)), total_pop=1000, verbose=0).init()
-    with pytest.raises(ValueError, match='n_contacts'): # A typo is not an edge column
-        ss.RandomNet(n_contact=5)
-    with pytest.raises(ValueError, match='edges=dict'):
-        ss.Network(p1=[0], p2=[1], n_contact=5)
-    assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
-    sim = ss.Sim(networks=ss.PostnatalNet(dur=2), demographics=ss.Pregnancy(), n_agents=300, dur=2, verbose=0).run() # A bare number, in the sim's unit
-    return sim
+
+    # A network among some people (who=), or with a step() of its own, has no compartmental form
+    for net in [Own(n_contacts=0.5, dur=ss.years(2)), ss.RandomNet(who=ss.person.age < 30)]:
+        with pytest.raises(ss.CapabilityError):
+            ss.Sim(networks=net, solver='binomial', diseases=ss.SIS(beta=ss.peract(0.01)), total_pop=1000, verbose=0).init()
+
+
+# %% Transmission over networks
+
+class Couples(ss.SexualNet):
+    """ Every man and woman in a couple, for life, with a fixed number of acts per step (acts=) """
+    def __init__(self, acts=2, **kwargs):
+        super().__init__(**kwargs)
+        self.n_acts = acts
+    def add_pairs(self):
+        self.participant[self.sim.people.auids] = True
+        m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
+        n = min(len(m), len(f))
+        self.append(p1=m[:n], p2=f[:n], weight=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, float(self.n_acts)))
+        return
+
+
+def test_certain_transmission():
+    sc.heading('A probability of 1 per contact (an infinite rate) transmits to every contact, and a bare beta on a network is a rate')
+    def infected(beta):
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=S >> I @ beta*I, init_prev=0.3, name='si')
+        sim = ss.Sim(si, networks=ss.RandomNet(n_contacts=2, dynamic=False), n_agents=5000, unit='week', dt=ss.weeks(1), stop=1, rand_seed=1, verbose=0).init()
+        before = sim.diseases.si.I.raw.copy()
+        e = sim.networks[0].edges
+        k = np.bincount(e.p2[before[e.p1]], minlength=len(before)) + np.bincount(e.p1[before[e.p2]], minlength=len(before)) # Infectious contacts of each person
+        at_risk = (k > 0) & ~before
+        sim.run(until=sim.t.timevec[0]) # The first step only
+        return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
+    assert infected(ss.probperweek(1))[0] == 1
+    frac, k = infected(0.3)
+    assert np.isclose(frac, np.mean(1 - np.exp(-0.3*k)), atol=0.03) # A rate per contact, not a probability of 0.3
+
+
+def test_beta_readings():
+    sc.heading('Testing how a beta is read on networks with and without acts, and their directions')
+    kw = dict(n_agents=500, start=2000, stop=2002, verbose=0)
+    def sis(beta):
+        S, I = ss.states('S I')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
+    assert ss.SexualNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child'] and ss.RandomNet().directions == []
+    assert Couples().directions == ['m2f', 'f2m'] and ss.SexualNet(between='mm').directions == [] # A sexual network of its own is between men and women unless it says otherwise; men only: one beta
+    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples', acts=2), **(kw | dict(n_agents=2000))).run()
+    assert sim.results.sis.infection.sum() > 0
+    assert 'per act' in sim.diseases.sis.describe()
+    assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
+    with pytest.raises(TypeError): # A rate per unit time times acts per unit time is not a hazard
+        ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
+    with pytest.raises(ValueError): # Every direction needs a value
+        ss.Sim(sis(ss.peract(m2f=0.01)), networks=ss.SexualNet(), **kw).init()
+    for acts in [ss.freqperyear(80), ss.peryear(80)]: # A frequency is a number of acts per unit time, and a rate is taken as one
+        net = ss.Sim(sis(ss.peract(0.01)), networks=ss.DegreeNet(dur=ss.years(1), acts=acts), **kw).init().networks[0]
+        assert np.isclose(net.acts_per_step, 80*net.t.dt.years)
+
+    # Mother-to-child networks transmit one way, so one value is enough; a library disease names routes the sim may not have, which take the default
+    m2f = ss.par(0.06, name='m2f')
+    S, I = ss.states('S I')
+    rate = dict(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), prenatalnet=ss.peryear(0.5), msm=ss.peract(0.1), default=0)
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=rate * I), init_prev=0.1, name='hiv')
+    sim = ss.Sim(hiv, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(), **kw).run()
+    assert sim.results.hiv.I[-1] > 0 and any('msm' in note for note in sim.notes)
+
+    # With no networks (homogeneous mixing), the default is the beta; a disease written as code reads the default too
+    S, I = ss.states('S I')
+    d = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(0.01), default=ss.peryear(2)) * I), init_prev=0.1, name='d')
+    assert ss.Sim(d, **kw).run().results.d.I[-1] > 0
+    sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
+    assert sim.results.agentsis.prevalence[-1] > 0 and sim.diseases.agentsis.engine.code_betas()['sexual'] == [0, 0]
+
+
+def test_route_par():
+    sc.heading('Testing a modifier of a parameter on one route, which acts on every transmission that the parameter scales')
+    def run(mods):
+        S, I, R = ss.states('S I R')
+        beta = ss.par(ss.peryear(3.0))
+        sir = ss.Disease(infection=S >> I @ beta*I, reinfection=R >> I @ 0.5*beta*I, recovery=I >> R @ ss.years(0.5), init_prev=0.05, name='sir')
+        nets = [ss.RandomNet(name='a', n_contacts=3), ss.RandomNet(name='b', n_contacts=3)]
+        sim = ss.Sim(diseases=sir, networks=nets, connectors=mods, n_agents=1000, start=2000, stop=2003, rand_seed=1, verbose=0).run()
+        return sim.results.sir.infection.sum(), sim.results.sir.reinfection.sum()
+    by_par = run(ss.modify('sir.pars.beta', multiply=0.2, network='b'))
+    assert by_par == run([ss.modify(f'sir.{tr}', multiply=0.2, network='b') for tr in ['infection', 'reinfection']])
+    assert by_par[0] < run(None)[0]
+
+
+def test_beta_by_person():
+    sc.heading('Testing a beta per act that differs between the people who would be infected, and who infected whom')
+    def male_infections(beta):
+        S, I = ss.states('S I')
+        d = ss.Disease(infection=S >> I @ beta * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
+        sim = ss.Sim(d, networks=ss.SexualNet(), n_agents=2000, stop=3, rand_seed=1, verbose=0).run()
+        d = sim.diseases.d
+        return np.count_nonzero(d.I & sim.people.male & (d.ti_I > 0)) # Infected during the run, not seeded
+
+    # By the sex of the susceptible, as by direction: men are infected only by f2m, so with f2m = 0 never
+    m2f = ss.par(0.2, name='m2f')
+    assert male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.0))) == 0
+    assert male_infections(ss.peract(m2f=0.2, f2m=0.1)) == male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.5)))
+
+    # Each infection over a network has its source (engine.sources()), whichever transmission it was by
+    found = []
+    def check(sim):
+        d = sim.diseases.d
+        new = d.infection.uids | d.mtct.uids
+        sources, nets = d.engine.sources(new)
+        found.append((len(new), np.count_nonzero(~np.isnan(sources))))
+    S, I = ss.states('S I')
+    d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(prenatalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
+    ss.Sim(d, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
+    n_new, n_found = np.sum(found, axis=0)
+    assert n_new > 0 and n_found == n_new
+
+
+def test_edge_index():
+    sc.heading('Testing that a static network transmits and traces by the edges of each agent, as by a pass over all its edges, and makes a random graph as NetworkX does')
+    p1, p2 = ssl.networks.theoretical.random_graph(500, 0.02, np.random.default_rng(2))
+    edges = np.array(nx.fast_gnp_random_graph(500, 0.02, seed=np.random.default_rng(2)).edges())
+    assert np.array_equal(np.column_stack([p1, p2]), edges), 'Expected the same random graph as NetworkX makes from the same random numbers'
+    S, I, X = ss.states('S I X')
+    sis = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> S @ 0.2, quarantine=I >> X @ 0.05, init_n=dict(I=20), name='sis')
+    tracing = ss.Delivery(I >> X, when=sis.quarantine, coverage=0.5, trace='net')
+    sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
+    runs = []
+    for frac in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
+        with mock.patch.object(ss.solvers.numba.passes, 'index_frac', frac):
+            runs.append(sim.new().run())
+    assert runs[1].networks.net.agent_edges.lists is not None, 'Expected a static network to make the edges of each agent'
+    assert all(np.array_equal(runs[0].results.sis[k], runs[1].results.sis[k]) for k in 'SIX'), 'Expected the same results by the edges of each agent'
+
+
+def test_network_saturation():
+    sc.heading('Testing that an ODE on a sparse network matches the agents, whose edges each transmit at most once in a step')
+    K, b, dur, dt = 2, 3.0, 0.25, 1/12 # Few contacts, each with a large chance of transmitting in a month
+    sis = ss.SIS(beta=ss.peryear(b), dur_inf=ss.years(dur), init_prev=0.1)
+    sim = ss.Sim(diseases=sis, networks=ss.RandomNet(n_contacts=K), total_pop=5000, start=2000, stop=2020, dt=ss.months(1), solver='ode', verbose=0).run()
+    ode = sim.results.sis.prevalence[-120:].mean()
+    expected = 1 - 1/(K*(-np.expm1(-b*dt)/dt)*dur) # Mass action with the transmission the agents' edges give: K·(1 − e^(−b·dt))/dt
+    assert np.isclose(ode, expected, rtol=0.01), f'{ode = :.4f}, but the per-step transmission over each edge gives {expected:.4f}'
+
+    # Each flow saturates by its own rate, and each source state by its own coefficient: a reinfection at a quarter of the rate, from a state half as infectious.
+    # The agents on a sparse network differ from the ODE as they do on a dense one (where mass action holds), apart from saturation
+    def make(solver, K, b, n=5_000):
+        S, A, I, R = ss.states('S A I R')
+        beta = ss.peryear(b)
+        dis = ss.Disease(infection=ss.Transition(S, A, rate=beta*(0.5*A + I)), reinfection=ss.Transition(R, A, rate=0.25*beta*(0.5*A + I)),
+                         progression=ss.Transition(A, I, rate=ss.peryear(4)), recovery=ss.Transition(I, R, rate=ss.peryear(4)), init_prev=0.1, name='d')
+        sim = ss.Sim(diseases=dis, networks=ss.RandomNet(n_contacts=K), n_agents=n, total_pop=n, start=2000, stop=2030, dt=ss.months(1), solver=solver, verbose=0).run()
+        return sim.results.d.prevalence[-120:].mean()
+    sparse = make('abm', 3, 6.0)/make('ode', 3, 6.0)
+    dense = make('abm', 60, 6.0*3/60)/make('ode', 60, 6.0*3/60)
+    assert abs(sparse - dense) < 0.08, f'agents ÷ ODE is {sparse:.3f} on the sparse network but {dense:.3f} on the dense one'
+
+
+# %% Mixing pools and contact matrices
+
+def test_mixing_pools():
+    """ A MixingPool with defaults and by sex; MixingPools by group; and a disease written as code against a declared one """
+    sc.heading('Testing mixing pools...')
+    sim = ss.Sim(n_agents=medium, diseases='sir', networks=ss.MixingPool()).run()
+    assert sim.results.sir.infection.sum() > 0
+    mp = ss.MixingPool(source=lambda sim: sim.people.female, target=lambda sim: sim.people.male, n_contacts=ss.poisson(mean=4)) # Female to male (only)
+    sim = ss.Sim(n_agents=medium, diseases=ss.SIR(init_prev=lambda sim, uids: 0.05*sim.people.female[uids]), networks=mp).run()
+    new = sim.diseases.sir.ti_I > 0
+    assert new.any() and sim.people.male[new].all() # All new infections should be in men
+    groups = dict(Female=lambda sim: sim.people.female, Male=lambda sim: sim.people.male)
+    sim = ss.Sim(n_agents=medium, diseases='sir', networks=ss.networks.MixingPools(n_contacts=np.array([[1.4, 0.5], [1.2, 0.7]]), source=groups, target=groups)).run()
+    assert sim.results.sir.infection.sum() > 0
+    with pytest.raises(TypeError): # A mixing pool takes no beta=, which is the disease's to say
+        ss.MixingPool(beta=1.0)
+
+    # The hazard is multiplied by the share infectious before it is a probability, for a disease written as code as for a declared one
+    S, I, R = ss.states('S I R')
+    pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=5000, dur=ss.days(150), verbose=0)
+    coded = ss.Sim(ssl.AgentSIR(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='sir'), **pars).run()
+    declared = ss.Sim(ss.Disease(S >> I @ 0.4*I, I >> R @ ss.days(7), init_prev=0.01, name='sir'), **pars).run()
+    sizes = coded.results.sir.recovered[-1], declared.results.sir.R[-1]
+    assert np.isclose(*sizes, rtol=0.03), sizes
+
+
+def test_layers():
+    sc.heading('Testing contact layers with a beta for each, under both engines')
+    def run(beta, solver, layers=('home', 'school')):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
+        nets = [ss.contacts('Kenya', layer=layer) for layer in layers]
+        sim = ss.Sim(sir, networks=nets, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100, solver=solver, total_pop=10_000, verbose=0, **(dict(n_agents=10_000) if solver == 'abm' else {}))
+        return sim.run().results.sir.infection.cum[-1]
+    ode = run(dict(home=0.03, school=0.02), 'ode')
+    assert np.isclose(run(dict(home=0.03, school=0.02), 'abm'), ode, rtol=0.1)
+    assert np.isclose(run(dict(home=0.03, school=0.0), 'ode'), run(0.03, 'ode', layers=['home'])) < 0.9*ode # No transmission at school is home contacts only
+    with pytest.raises(ValueError): # A route with no key
+        run(dict(home=0.03), 'abm')
+
+
+def test_matrix():
+    """ A matrix of numbers, or one distribution of matrices, makes no pool for each pair of groups, and gives the epidemic those pools would """
+    sc.heading('Testing MixingPools with a matrix...')
+    groups = dict(young=ss.person.age < 30, old=ss.person.age >= 30)
+    run = lambda n: ss.Sim(ss.SIS(init_prev=0.02, beta=ss.perday(0.05)), networks=ss.networks.MixingPools(source=groups, target=groups, n_contacts=n), n_agents=5000, unit='day', stop=40, solver='abm', verbose=0).run()
+    matrix = np.array([[3.0, 1], [1, 2]])
+    sims = [run(matrix), run(np.vectorize(lambda v: ss.uniform(v, v), otypes=[object])(matrix))] # A distribution makes a pool for each pair, here with the same contacts for everyone
+    assert len(sims[0].networks[0].pools) == 0 and len(sims[1].networks[0].pools) == 4
+    assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.05)
+
+    matrix = np.array([[2.4, 0.9], [0.5, 1.6]])
+    sims = [run(ss.poisson(matrix)), run(np.vectorize(ss.poisson, otypes=[object])(matrix))]
+    net = sims[0].networks[0]
+    assert len(net.pools) == 0 and len(sims[1].networks[0].pools) == 4
+    auids = sims[0].people.auids
+    contacts = net.contacts_0.raw[auids][sims[0].people.age.raw[auids] < 30] # Each young person's contacts with the young: a Poisson of mean 2.4
+    assert np.isclose(contacts.mean(), 2.4, rtol=0.1) and np.isclose(contacts.var(), 2.4, rtol=0.2)
+    assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.1)
+
+    # Through ss.contacts(), from a country's table of contacts a day, in a sim by week
+    sim = ss.Sim(ss.SIS(beta=ss.perday(0.02)), networks=ss.contacts(ss.poisson(ss.data.contacts('Kenya'))), n_agents=2000, unit='week', stop=4, verbose=0).run()
+    assert sim.networks[0].contact_scale == 7 and len(sim.networks[0].pools) == 0
+
+    # A matrix given by position alone is over the stratification with as many levels, as if given by name; with none or several, it is an error
+    C = [[10, 3, 1], [3, 5, 2], [1, 2, 4]]
+    def run_strat(net, **strata):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(10), init_prev=0.01, name='sir').stratify(**strata)
+        return ss.Sim(sir, networks=net, unit='day', stop=30, verbose=0).run().results.sir.I[:]
+    assert np.allclose(run_strat(ss.contacts(C), age=[0, 15, 65], patch=['n', 's']), run_strat(ss.contacts(age=C), age=[0, 15, 65], patch=['n', 's']))
+    with pytest.raises(ValueError, match='each have 2 levels'):
+        run_strat(ss.contacts([[1, 2], [2, 1]]), sex=['f', 'm'], patch=['n', 's'])
+
+    # A disease whose beta on a pool is 0 does not spread there
+    S, I = ss.states('S I')
+    make = lambda name, beta: ss.Disease(S >> I @ dict(pool=beta)*I, I >> S @ ss.days(10), init_prev=0.05, name=name)
+    sim = ss.Sim(diseases=[make('a', 0.1), make('b', 0)], networks=ss.MixingPool(n_contacts=4, name='pool'), n_agents=1000, unit='day', stop=20, solver='abm', verbose=0).run()
+    assert sim.results.a.infection.sum() > 10 and sim.results.b.infection.sum() == 0
+
+
+def test_counts():
+    """ A contact matrix acts on what the rate says: the share of each group (beta*I), the number in each (beta*I.n), or that over everyone (beta*I.frac), as compartments and as agents """
+    sc.heading('Testing what a contact matrix acts on...')
+    beta, split, pop = np.array([[10, 0.1], [0.1, 1]]), np.array([0.2, 0.8]), 10_000 # Keeling & Rohani's Program 3.1, on shares of everyone
+    def make(rate, solver='ode', **kwargs):
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=S >> I @ rate(S, I), recovery=I >> S @ ss.peryear(1), init=dict(I=0.01), name='sis').stratify(risk={'high':split[0], 'low':split[1]})
+        sim = ss.Sim(sis, networks=ss.contacts(risk=beta), total_pop=pop, stop=15, unit='year', dt=0.05, solver=solver, verbose=0, **kwargs).run()
+        return np.array([sim.results.sis.I.select(risk=risk).values for risk in ['high', 'low']])/pop
+    t = np.arange(0, 15.01, 0.05)
+    solve = lambda w: solve_ivp(lambda t, I: (beta @ (w*I))*(split - I) - I, [0, 15], 0.01*split, t_eval=t, rtol=1e-10, atol=1e-12).y
+    frac = make(lambda S, I: I.frac)
+    assert np.abs(frac - solve(1)).max() < 1e-4
+    assert np.abs(make(lambda S, I: (ss.by(risk=[2, 1])*I).n/pop) - solve(np.array([2, 1]))).max() < 1e-4 # A weighted count, also acted on by the matrix
+    assert np.allclose(make(lambda S, I: I.n/(S + I).total), frac, rtol=1e-9) # The same, as counts over the population
+    assert make(lambda S, I: I)[:, -1].sum() > 2*frac[:, -1].sum() # On the share of each group, which is more
+    agents = make(lambda S, I: I.n/pop, solver='abm', n_agents=pop)
+    assert np.allclose(agents[:, -1], frac[:, -1], rtol=0.1)
+
+    # A count inside a function of the rate modifies it by the total, and is not met: three groups mixing evenly are one group
+    def capped(groups):
+        S, I, R = ss.states('S I R')
+        slowdown = 1 - 0.5*np.clip(I.n/2000, 0, 1) # As MEmilio's capacity to test and trace
+        d = ss.Disease(infection=S >> I @ ss.perday(0.3)*slowdown*I, recovery=I >> R @ ss.perday(0.1), init_n=dict(I=30), name='d')
+        nets = None
+        if groups:
+            d.stratify(age=['0', '1', '2'])
+            nets = ss.contacts(age=np.full((3, 3), 1/3))
+        return ss.Sim(d, networks=nets, total_pop=10_000, unit='day', stop=100, verbose=0).run().results.d.R[-1]
+    assert np.isclose(capped(True), capped(False))
 
 
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
     T = sc.timer()
-
-    # Run tests
-    man  = test_manual()
-    rand = test_random()
-    fast = test_randomfast()
-    safe = test_randomsafe()
-    strat = test_random_stratified()
-    nuids = test_network_uids()
-    stat = test_static()
-    erdo = test_erdosrenyi()
-    disk = test_disk()
-    null = test_null()
-    hh   = test_household()
-    ehh  = test_dynamic_household()
-    oth  = test_other()
-    ops  = test_edge_ops()
-    oneway = test_one_way()
-    dyn  = test_dynamic()
-    clus = test_cluster()
-    hyb  = test_hybrid()
-    bare = test_bare_units()
-    acts = test_per_act_beta()
-    cond = test_condoms()
-    same = test_coded_declared_transmission()
-    rpar = test_route_par()
-    read = test_beta_readings()
-    peract = test_peract_describe()
-    default = test_beta_default()
-    person = test_beta_by_person()
-    sources = test_infection_sources()
-    cand = test_transmit_candidates()
-    index = test_edge_index()
-    shared = test_shared_pass()
-    certain = test_certain_transmission()
-    sat = test_network_saturation()
-    test_who_compartmental()
-    args = test_network_args()
-
+    for name, test in list(globals().items()):
+        if name.startswith('test_'):
+            test()
     T.toc()

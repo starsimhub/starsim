@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer; restructured on Nov 12 by AI after the docs review, with antibodies boosted by each infection as the example that needs a value for each person, and the disease and network written as code as advanced sections
+  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer; restructured on Nov 12 by AI after the docs review, with antibodies boosted by each infection as the example that needs a value for each person, and the disease and network written as code as advanced sections; the table of base classes replaced by a link on Nov 15 by AI
 ---
 
 **When people hear about an outbreak, some of them go and get vaccinated. How much does that slow the outbreak down, and what limits it?**
@@ -94,17 +94,7 @@ The sim still runs as an ODE, since the function keeps nothing for each person. 
 
 ## A module as a class
 
-A module written as a class fixes all three. It inherits from one of Starsim's module types (here `ss.Intervention`), so that it runs at the right point in each step:
-
-| Base class | Use for | Added to the sim via |
-|---|---|---|
-| `ss.Disease`, `ss.AgentDisease` | Disease natural history and transmission | `diseases=` |
-| `ss.Network` | Who contacts whom | `networks=` |
-| `ss.Demographics` | Births, deaths, migration | `demographics=` |
-| `ss.Intervention` | Actions that change the simulation | `interventions=` |
-| `ss.Analyzer` | Recording results without changing anything | `analyzers=` |
-| `ss.Connector` | Interactions between modules | `connectors=` |
-| `ss.Module` | Anything that doesn't fit the others | `custom=` (or as an argument) |
+A module written as a class fixes all three. It inherits from one of Starsim's module types (here `ss.Intervention`), so that it runs at the right point in each step; the others are in [Choosing a base class](../user_guide/building_modules.qmd#choosing-a-base-class).
 
 The module has:
 
@@ -158,7 +148,7 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.S.n` is the number of people in `S` now (and `measles.S.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases, so it reads the last step's cases (`self.ti-1`), and what it does applies to this step's transmission. (A stock is usually recorded in `record_states()`, at the start of a step; `remembered` is recorded in `step()` instead, since that is where it is updated, so each value is the memory that step used.) The sim works on its own copy of each module, so reach other modules through `self.sim`, not a variable from outside the class. The module is not assigned to a variable, so its results are under its class name in lower case, `sim.results.vaccinedemand` ([Names](../user_guide/building_writing.qmd#names)). [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
+`measles.S.n` is the number of people in `S` now (`.frac` the fraction), under every solver, and `ss.move(..., n=...)` moves a number of people rather than a fraction. A module that is not a disease steps before the diseases ([the order of each step](../user_guide/running_sim.qmd#the-order-of-a-step)), so it reads the last step's cases (`self.ti-1`), and acts on this step's transmission. `remembered` is recorded in `step()`, where it is updated, rather than in `record_states()`. The sim works on its own copy of each module, so reach other modules through `self.sim`. The module's results are under its class name in lower case, `sim.results.vaccinedemand` ([Names](../user_guide/building_writing.qmd#names)), and [Custom modules](../user_guide/building_modules.qmd#when-each-method-is-called) lists when Starsim calls each method.
 
 With parameters, one module serves every scenario: no response (a highest rate of 0), demand met in full, and clinics that can give at most 30 doses a day:
 

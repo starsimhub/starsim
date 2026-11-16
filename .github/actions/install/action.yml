@@ -8,7 +8,7 @@
 # were built from other source than is here, rather than falling back to Numba's.
 #
 # With `numba`, Numba's compiled kernels are restored too. The key is every file that mentions Numba, and
-# Numba checks each cached function against the contents of its files (see starsim/solvers/backends/cache.py),
+# Numba checks each cached function against the contents of its files (see starsim/solvers/backends/compiling.py),
 # so a cache is only used for the code it came from. A change to any of those files gives a new key, so the latest
 # cache for the same Python and Numba is restored instead, and only what changed recompiles; the job saves its
 # cache at the end even if it fails or times out, so that a slow run makes the next one faster. Scheduled runs always compile, as a check on this. The CPU

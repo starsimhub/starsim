@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, build, map_children
 
 __all__ = ['load_siminf', 'to_siminf']
 
@@ -373,11 +373,7 @@ def c_expr(text):
     text = re.sub(r'\((int|double)\)', '', text)
     node = ast.parse(text.strip(), mode='eval').body
     def visit(node):
-        for field,val in ast.iter_fields(node):
-            if isinstance(val, ast.AST):
-                setattr(node, field, visit(val))
-            elif isinstance(val, list):
-                setattr(node, field, [visit(v) if isinstance(v, ast.AST) else v for v in val])
+        map_children(node, visit)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             if node.func.id == 'pow' and len(node.args) == 2:
                 return ast.BinOp(node.args[0], ast.Pow(), node.args[1])

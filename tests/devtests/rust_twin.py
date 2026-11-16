@@ -3,7 +3,7 @@ Run every call to the compartmental kernels through both Numba's and Rust's, and
 
 A pytest plugin: Numba's kernels take the real arguments (so each sim goes on as with Numba), and Rust's take deep copies,
 then the results, every array the call changed, and the random generators' states are compared. Use it after changing
-ss.solvers.backends.kernels (and the Rust copy to match: see starsim/solvers/rust/README.md), over any tests, e.g.:
+ss.solvers.numba.compartmental (and the Rust copy to match: see starsim/solvers/rust/README.md), over any tests, e.g.:
 
     cd tests && python -m pytest -p devtests.rust_twin test_kernels.py test_dimensions.py devtests/test_gradients.py -n 2
 
@@ -15,7 +15,7 @@ import numpy as np
 import numba as nb
 import starsim as ss
 
-K = ss.solvers.backends.kernels
+K = ss.solvers.numba.compartmental
 names = K.entries + ['evaluate']
 calls = {} # The calls compared, by kernel
 
@@ -78,7 +78,7 @@ class Twin:
 def pytest_configure(config):
     ss.options.backend = 'numba' # Numba's, compiled, take the run; Rust's are called beside them
     pair = Twin()
-    K.choose = lambda seconds=0.0: pair
+    ss.solvers.backends.compiling.choose = lambda seconds=0.0: pair
     for mod in [ss.solvers.compartmental, ss.solvers.joint_states]:
         mod.choose_kernels = lambda owner, runs, seconds: pair
     return

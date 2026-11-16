@@ -8,7 +8,7 @@ import sciris as sc
 import starsim as ss
 from .engine import times
 from .agents import Agents
-from .backends import events as kernel
+from .numba import agent_events as kernel
 
 __all__ = ['Events']
 
@@ -19,7 +19,7 @@ class Events(Agents):
 
     It exists so that a model whose events are fast against a step (an epidemic on a network) needs neither small steps nor a pass over
     every edge in each of them. The engine is called once a step, as the agent engine is, and takes its agents through the step in one
-    compiled pass (`ss.solvers.backends.events.step_events()`): each agent's exit at its exact time (a dwell time drawn on entry, or the
+    compiled pass (`ss.solvers.numba.agent_events.step_events()`): each agent's exit at its exact time (a dwell time drawn on entry, or the
     competing rates out of its state), and the contacts of each infectious agent over the networks and mixing pools as a clock of its
     own, each thinned to its real hazard. Everything else (the networks, modifiers, rates, other modules) is held as it was at the start
     of the step, so the run is exact for values constant within each step; what the events change is read by the other modules at the
@@ -388,7 +388,7 @@ class Events(Agents):
         # The pass
         dt = self.dt
         t0 = self.ti*dt
-        seed = np.random.SeedSequence([int(self.dists.init.seed), int(self.step_key())]).generate_state(1, np.uint64)[0] # The step's key: by the module's seed and the step, so each agent's draws in it are its own (see backends.events.rand())
+        seed = np.random.SeedSequence([int(self.dists.init.seed), int(self.step_key())]).generate_state(1, np.uint64)[0] # The step's key: by the module's seed and the step, so each agent's draws in it are its own (see numba.agent_events.rand())
         e_a, e_tr, e_src, e_dst, e_t, e_by, e_rt, over = kernel.step_events(t0, t0 + dt, seed, state, self.ver, self.t_exit, self.exit_tr, fresh,
             self.haz_ptr, self.haz_tr, haz_rate, haz_row, rate_rows, self.br_ptr, self.br_tr, self.br_cum, self.tm_ptr, self.tm_tr,
             self.dw_kind, self.dw_k, self.dw_mean, self.dw_row, pool, self.dst_ptr, self.dst_state, self.dst_cum, self.inf_tr,

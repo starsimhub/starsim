@@ -283,6 +283,8 @@ website:
           contents:
             - href: api/solvers.agents.qmd
               text: agents
+            - href: api/solvers.build.qmd
+              text: build
             - href: api/solvers.choose.qmd
               text: choose
             - href: api/solvers.compartmental.qmd
@@ -425,6 +427,7 @@ quartodoc:
       desc: The engines that run declared models, as compartments or as agents.
       contents:
         - solvers.agents
+        - solvers.build
         - solvers.choose
         - solvers.compartmental
         - solvers.deliveries

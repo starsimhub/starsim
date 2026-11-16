@@ -17,7 +17,7 @@ A state such as `alive`, `female`, or a disease's `I` is an `ss.BoolArr`, an arr
 
 1. **Growth**: as people are born or arrive, the arrays grow, in chunks rather than one agent at a time, so that adding agents is cheap.
 2. **Indexing**: agents who die or leave stay in the arrays, so that what happened to them can still be looked up, but are left out of counts, sums, and means.
-3. **Random values**: a state's default can be a distribution (e.g. `ss.BoolArr('urban', default=ss.bernoulli(p=0.3))`), so each new agent draws its own value, with [common random numbers](mechanics_random.qmd) so that two runs give each agent the same draw.
+3. **Random values**: a state's default can be a distribution (e.g. `ss.BoolState('urban', default=ss.bernoulli(p=0.3))`), so each new agent draws its own value, with [common random numbers](mechanics_random.qmd) so that two runs give each agent the same draw.
 
 Every agent has a **UID** (a unique identifier): a whole number, given in order from 0 as agents are made. An agent's UID never changes, and isn't reused after the agent dies, so a UID can be used to look up any agent, alive or dead.
 
@@ -185,7 +185,7 @@ print('Mean age of the infectious, every 10 days:', sim.results.ageofinfectious.
 
 ## Arrays with several columns
 
-Sometimes each person needs several values of the same kind, such as their immunity to each of several strains ([strains](building_diseases.qmd) keep immunity like this). An array with `columns=` has one row per agent and one column per value, and grows as agents are born like any other; in a module, it is defined like any state, e.g. `self.define_states(ss.FloatArr('sus', columns=['wild', 'mutant'], default=1.0))` (an `ss.BoolArr` with columns needs `result=False`, since a result is one number per step). The first index picks agents, by the rules above, and the second picks columns, by position or by name:
+Sometimes each person needs several values of the same kind, such as their immunity to each of several strains ([strains](building_diseases.qmd) keep immunity like this). An array with `columns=` has one row per agent and one column per value, and grows as agents are born like any other; in a module, it is defined like any state, e.g. `self.define_states(ss.FloatArr('sus', columns=['wild', 'mutant'], default=1.0))` (an `ss.BoolState` can't have columns, since its result is one number per step; use `ss.BoolArr`). The first index picks agents, by the rules above, and the second picks columns, by position or by name:
 
 ```{python}
 imm = ss.FloatArr('imm', columns=['wild', 'mutant'], default=0, mock=5) # A stand-alone array of 5 agents
@@ -225,7 +225,8 @@ The kinds of array that hold what agents are and have (see [Arrays](../api/inter
 
 | Array | Holds | Default |
 |---|---|---|
-| `ss.BoolArr` | True or false, with `.uids` for the agents for whom it is true. Its module records the number for whom it is true as a result, as for `alive`, `female`, or a disease's `I` as agents; with `result=False`, it is a flag used inside a module (such as `preterm`), with no result | False |
+| `ss.BoolArr` | True or false, with `.uids` for the agents for whom it is true: a flag used inside a module (such as `preterm`), with no result | False |
+| `ss.BoolState` | As `ss.BoolArr`, for a state people are in that is worth counting (such as `alive`, `female`, or a disease's `I` as agents): its module records the number for whom it is true as a result | False |
 | `ss.FloatArr` | A number, such as an age or a relative risk | NaN |
 | `ss.IntArr` | A whole number, such as a count | -999999 (for none, since whole numbers have no NaN) |
 | `ss.TimeArr` | The step on which something happened (such as `ti_dead`) | NaN |

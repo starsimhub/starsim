@@ -1,6 +1,6 @@
 """
 Not for the user: the agent engine with its moves compiled (`ss.solvers.Compiled`): a declared graph laid out once as tables, whose
-moves of a step are one call (see `ss.solvers.backends.moves.step_moves()`)
+moves of a step are one call (see `ss.solvers.numba.agent_moves.step_moves()`)
 
 Used with: agents; declared modules
 """
@@ -10,7 +10,7 @@ import sciris as sc
 import starsim as ss
 from .agents import Agents
 from .agents_moving import ROUNDS, ROUND_MAX
-from .backends import moves as kernel
+from .numba import agent_moves as kernel
 
 __all__ = ['Compiled', 'compiled_reasons']
 
@@ -47,7 +47,7 @@ def compiled_reasons(engine):
         for tr in engine.competing.get(name, []):
             if getattr(tr, 'min_stay', None) is not None:
                 out.append(f'{tr.name}: a competing rate with a minimum stay')
-    if not engine.scheduled and not any(tr.trigger is not None for tr in graph.transitions.values() if not tr.contact):
+    if not engine.scheduled and not any(tr._trigger is not None for tr in graph.transitions.values() if not tr.contact):
         out.append('nothing scheduled (every exit is a competing rate, which the agent engine draws in a compiled pass already)')
     for tr in graph.transitions.values():
         if tr.migration:
@@ -60,7 +60,7 @@ def compiled_reasons(engine):
             out.append(f'{tr.name}: a destination that is not a state of people')
         if tr.contact:
             continue
-        if tr.trigger is not None:
+        if tr._trigger is not None:
             if trigger_kind(engine, tr) is None:
                 out.append(f'{tr.name}: a trigger other than a time after an event of this module, an event of another module, or a condition on people')
         elif tr.name in engine.dwells:
@@ -76,9 +76,9 @@ def trigger_kind(engine, tr):
     of another module (whom it has happened to, found before each call); 'cond', at once while a condition on people holds (due for those
     in its source at the start of the step, and for anyone who enters it); None for one it does not take yet
     """
-    x = tr.trigger.x
+    x = tr._trigger.x
     delayed = tr.name in engine.delays
-    if tr.trigger.event:
+    if tr._trigger.event:
         spec = x.spec()
         if set(spec) != {'tr'}:
             return None
@@ -106,7 +106,7 @@ class Compiled(Agents):
     """
     The agent engine, with the moves of a step compiled: those that are not by contact are one call over the agents, and those after the
     step's infections another, each taking every agent whose time has come through its exits, splits, and moves after events, as the
-    same-step cascade does (see `ss.solvers.backends.moves`). Everything else is the agent engine's. A graph with what the call doesn't
+    same-step cascade does (see `ss.solvers.numba.agent_moves`). Everything else is the agent engine's. A graph with what the call doesn't
     take yet (see `compiled_reasons()`) runs on the agent engine itself. The call makes the draws the agent engine's moves would make, in
     the same rounds (see `Moving.new_round()`), so the two give the same numbers.
     """
@@ -141,7 +141,7 @@ class Compiled(Agents):
         k.trs, k.tid, k.names = trs, tid, [s.name for s in states]
         k.pos = ints([position.get(tr.name, nt) for tr in trs])
         rated = {tr.name for name in k.names for tr in self.competing.get(name, [])}
-        k.kind = ints([2 if tr.contact else 1 if tr.trigger is not None else 3 if tr.name in rated else 0 for tr in trs])
+        k.kind = ints([2 if tr.contact else 1 if tr._trigger is not None else 3 if tr.name in rated else 0 for tr in trs])
         k.split = np.array([bool(tr._split) for tr in trs])
         k.sched = np.array([s.name in self.scheduled for s in states])
         self.kdefer = [s.name for s in states if any(calls_back(self, tr) for tr in self.exits_of.get(s.name, []))] # Scheduled by the engine, after the call (see after_call())
@@ -170,7 +170,7 @@ class Compiled(Agents):
         k.dw = np.full(nt, -1, np.int64)
         k.aft = np.array([self.after_of(tr) for tr in trs], dtype=float)
         scheduled = {tr.name for e in self.exits_of.values() for tr in e} # Exits the call schedules; a competing rate is drawn by the engine's own pass (see leave()), so its dwell time is not read
-        k.has_dw = np.array([tr.name in self.dwells and tr.name in scheduled and not tr.contact and tr.trigger is None and not calls_back(self, tr) for tr in trs])
+        k.has_dw = np.array([tr.name in self.dwells and tr.name in scheduled and not tr.contact and tr._trigger is None and not calls_back(self, tr) for tr in trs])
         rescaled = {tr.name for nm in self.krescaled for i in self.rescaled_of(nm) for tr in [self.exits_of[nm][i]]}
         self.kmeans = {} # The transitions whose dwell times are exponential with a mean worked out each step (no distribution)
         k.adj = np.full(nt, -1, np.int64) # The multiplier on each dwell's rate (e.g. 0 outside its who=), worked out each step
@@ -190,8 +190,8 @@ class Compiled(Agents):
         k.comp_state = np.array([bool(self.competing.get(nm)) for nm in k.names]) # States with competing rates, which the agent engine draws (see step_state())
         k.has_late = np.array([nm in self.late for nm in k.names])
         k.halved = np.array([nm in self.halved for nm in k.names])
-        self.kevents = [tr for tr in trs if tr.trigger is not None and not tr.contact and trigger_kind(self, tr) == 'event'] # Taken as arrivals, found before each call (see event_arrivals())
-        trigs = [tr for tr in trs if tr.trigger is not None and not tr.contact and trigger_kind(self, tr) != 'event']
+        self.kevents = [tr for tr in trs if tr._trigger is not None and not tr.contact and trigger_kind(self, tr) == 'event'] # Taken as arrivals, found before each call (see event_arrivals())
+        trigs = [tr for tr in trs if tr._trigger is not None and not tr.contact and trigger_kind(self, tr) != 'event']
         k.tr_trig = ints([tid[tr.name] for tr in trigs])
         k.trig_dist = np.full(len(trigs), -1, np.int64)
         k.trig_fixed = np.ones(len(trigs), dtype=bool)
@@ -206,22 +206,22 @@ class Compiled(Agents):
                 k.trig_dist[g] = self.kadd_mean(('after', tr.name))
         after = [[] for _ in trs]
         for g, tr in enumerate(trigs):
-            if tr.trigger.event:
-                after[tid[tr.trigger.x.spec()['tr']]].append(g)
+            if tr._trigger.event:
+                after[tid[tr._trigger.x.spec()['tr']]].append(g)
         k.ae_ptr, k.ae_trig = ptr(after), ints([g for x in after for g in x])
         k.trig_where = np.full(len(trigs), -1, np.int64)
         k.trig_cond = np.full(len(trigs), -1, np.int64) # The column of the condition of a trigger on one
         k.lazy = np.zeros(nt, dtype=bool) # The splits whose fractions are worked out on demand, for the agents that take them (see lay_out_values())
         self.kwhere = []
         for g, tr in enumerate(trigs):
-            if tr.where is not None:
+            if tr._who_now is not None:
                 k.trig_where[g] = len(self.kwhere)
-                self.kwhere.append(tr.where)
-            if not tr.trigger.event:
+                self.kwhere.append(tr._who_now)
+            if not tr._trigger.event:
                 k.trig_cond[g] = len(self.kwhere)
-                self.kwhere.append(tr.trigger.x)
+                self.kwhere.append(tr._trigger.x)
         k.trigs = trigs
-        k.cond_trigs = [(g, [index[s.name] for s in tr.source if s.people and s.name in index]) for g, tr in enumerate(trigs) if not tr.trigger.event]
+        k.cond_trigs = [(g, [index[s.name] for s in tr.source if s.people and s.name in index]) for g, tr in enumerate(trigs) if not tr._trigger.event]
 
         # The columns of the table of fractions: each state's branches, and each split's destinations
         self.kedges = [] # (key, function of uids giving the cumulative fractions, one row per edge)
@@ -294,7 +294,7 @@ class Compiled(Agents):
         return len(self.kspecs) - 1
 
     def dist_pars(self, key, dist):
-        """ The parameters of a distribution, as the call takes them (SciPy's, see `ss.solvers.backends.moves.draw()`), each a number or a function giving one value per agent (by UID) """
+        """ The parameters of a distribution, as the call takes them (SciPy's, see `ss.solvers.numba.agent_moves.draw()`), each a number or a function giving one value per agent (by UID) """
         if isinstance(dist, ss.constant):
             names = ['value']
         elif type(dist) is ss.uniform:
@@ -523,7 +523,7 @@ class Compiled(Agents):
                 np.array([lefts[i] is not None for i in range(len(names))]), fdum(XT, f), fdum(XW, xw_dtype), TT)
 
     def crn_tables(self):
-        """ For the call's draws (see `ss.solvers.backends.moves.rand()`): the seed of each stream in each round, by the transition the round is for (the first column for none), as `round_seed()` gives it, and the width of its uniforms """
+        """ For the call's draws (see `ss.solvers.numba.agent_moves.rand()`): the seed of each stream in each round, by the transition the round is for (the first column for none), as `round_seed()` gives it, and the width of its uniforms """
         k = self.kplan
         m = max(len(k.streams), 1)
         RS = np.zeros((m, k.nt + 1), np.int64)
@@ -533,7 +533,7 @@ class Compiled(Agents):
             seed = dist.seed
             RS[r] = [self.round_seed(seed, None)] + [self.round_seed(seed, tr.name) for tr in k.trs]
             dtype = np.dtype(dist.hash_dtype or ss.dtypes.float)
-            ush[r], usc[r] = ss.solvers.backends.draws.crn_bits(dtype)
+            ush[r], usc[r] = ss.solvers.numba.draws.crn_bits(dtype)
             z32[r] = dtype.itemsize <= 4 # SciPy's ndtri of these is single precision (see ss.normal.ppf())
         self.kcrn[self._source] = (RS, ush, usc, z32)
         return self.kcrn[self._source]
@@ -781,8 +781,8 @@ class Compiled(Agents):
             uids = self.new_events(tr)
             if not len(uids):
                 continue
-            if tr.where is not None:
-                uids = uids[np.asarray(self.selector.select(tr.where), dtype=bool)[uids]]
+            if tr._who_now is not None:
+                uids = uids[np.asarray(self.selector.select(tr._who_now), dtype=bool)[uids]]
             for src in tr.source:
                 if src.people:
                     inside = np.asarray(uids[mod[src.name].raw[uids]], np.int64)
@@ -799,9 +799,9 @@ class Compiled(Agents):
         mod = self.mod
         for g, srcs in k.cond_trigs:
             tr = k.trigs[g]
-            holds = np.asarray(self.selector.select(tr.trigger.x), dtype=bool)
-            if tr.where is not None:
-                holds = holds & np.asarray(self.selector.select(tr.where), dtype=bool)
+            holds = np.asarray(self.selector.select(tr._trigger.x), dtype=bool)
+            if tr._who_now is not None:
+                holds = holds & np.asarray(self.selector.select(tr._who_now), dtype=bool)
             for i in srcs:
                 uids = np.flatnonzero(mod[k.names[i]].raw & holds)
                 if len(uids):

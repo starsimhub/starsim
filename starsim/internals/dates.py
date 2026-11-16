@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .time import Duration, factors, get_dur_class, get_unit_class, normalize_unit, Rate, valid_bases, wrong_dimension
+from .time import Duration, factors, get_dur_class, get_unit_class, normalize_unit, Rate, twelfths_of_a_day, wrong_dimension
 
 __all__ = ['DateArray', 'date', 'datedur']
 
@@ -251,7 +251,7 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, day_round=True, allow_zero=None, **kwargs):
         """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
-        single_year_arg = False
+        years = None
         if len(args) == 1:
             arg = args[0]
             if arg is None:
@@ -261,34 +261,20 @@ class date(pd.Timestamp):
             elif isinstance(arg, pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
-                single_year_arg = True
+                years = arg
             elif isinstance(arg, str) and is_float(arg): # e.g. '2020', a year; '2020.5' could be May 2020 or a decimal year, so is an error
                 if not float(arg).is_integer() or '.' in arg:
                     errormsg = f'ss.date({arg!r}) is ambiguous: a string with a decimal point could be a decimal year or a year and month (e.g. "2020.5" as May 2020); give a float for the decimal year, ss.date({float(arg)}), or a date for the month, e.g. "{arg.split(".")[0]}-05"'
                     raise ValueError(errormsg)
-                arg = float(arg)
-                single_year_arg = True
+                years = float(arg)
             elif isinstance(arg, ss.Duration): # e.g. ss.years(2020)
-                arg = arg.years
-                single_year_arg = True
-
-        # Handle converting a float year to a date
-        years = None
-        year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
-
-        if single_year_arg:
-            years = arg
-        if year_kwarg:
+                years = arg.years
+        elif len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs: # e.g. ss.date(year=2024.75)
             years = kwargs['year']
 
-        if years is not None:
+        if years is not None: # A float year
             return cls.from_year(years, day_round=day_round, allow_zero=allow_zero)
-
-        # Otherwise, proceed as normal
-        else:
-            self = super(date, cls).__new__(cls, *args, **kwargs)
-            self = cls._reset_class(self)
-            return self
+        return cls._reset_class(super(date, cls).__new__(cls, *args, **kwargs))
 
     @classmethod
     def _reset_class(cls, obj):
@@ -297,10 +283,7 @@ class date(pd.Timestamp):
         return obj
 
     def __reduce__(self):
-        # This function is internally used when pickling (rather than getstate/setstate)
-        # due to Pandas implementing C functions for this. We can wrap the Pandas unpickler
-        # with a function that wraps calls _reset_class to support unpickling date
-        # objects at the instance level
+        # Pickling uses this (Pandas implements it in C, not getstate/setstate), so wrap its unpickler to reset the class
         unpickling_func, args = super().__reduce__()
         return (self.__class__._rebuild, (self.__class__, unpickling_func, args))
 
@@ -684,7 +667,6 @@ class datedur(Duration):
     timepar_type = 'dur'
     timepar_subtype = 'datedur'
     units = ['years', 'months', 'weeks', 'days'] # The calendar units it takes
-    twelfths = dict(years=365*12, months=365, weeks=7*12, days=12) # Each unit in twelfths of a day, so that one calendar duration divided by another is exact, e.g. a year by a month is 12
 
     def __init__(self, value=None, **kwargs):
         super().__init__()
@@ -804,7 +786,7 @@ class datedur(Duration):
 
     def __truediv__(self, other):
         if isinstance(other, datedur): # Exactly, in twelfths of a day, e.g. a week by a day is 7
-            a, b = [sum(x.kwds.get(k, 0)*v for k,v in self.twelfths.items()) for x in [self, other]]
+            a, b = [sum(x.kwds.get(k, 0)*v for k,v in twelfths_of_a_day.items()) for x in [self, other]]
             return a/b
         elif isinstance(other, Duration):
             return self.years/other.years

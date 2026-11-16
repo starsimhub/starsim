@@ -88,7 +88,7 @@ class Stepping:
             listed = self.listed if sim.mixing.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
             members = self.census(listed) # Who is where before anyone moves, in one pass over the agents
         else: # Counted already: only those asked for are listed
-            members = {name:ss.uids(ss.solvers.backends.passes.flatnonzero(mod[name].raw)) for name in listed}
+            members = {name:ss.uids(ss.solvers.numba.passes.flatnonzero(mod[name].raw)) for name in listed}
         self.start = {name:vals.copy() for name,vals in self.live.items()}
         self.start_weighted = {state.name:self.weighted_count(state) for state in people_states} if sim.people.scale.weighted else None
         self._members = members
@@ -227,9 +227,9 @@ class Stepping:
             crn = self.crn_key(f'exit_{state.name}', u) if key is None and m else None
             if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
                 if same:
-                    pos, which = ss.solvers.backends.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
+                    pos, which = ss.solvers.numba.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
                 else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
-                    pos, which = ss.solvers.backends.passes.competing_agent_exits(u, self.sim.people.slot_raw(), *crn, p_exit[part], frac[part], hazards[:, part])
+                    pos, which = ss.solvers.numba.passes.competing_agent_exits(u, self.sim.people.slot_raw(), *crn, p_exit[part], frac[part], hazards[:, part])
                 leaving = np.zeros(m, dtype=bool)
                 leaving[pos] = True
                 for i,tr in enumerate(competing):
@@ -431,7 +431,7 @@ class Stepping:
         sim = self.sim
         ppl = sim.people
         lo, hi = tr.mother_ages
-        women = ss.solvers.backends.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, lo, hi).view(ss.uids)
+        women = ss.solvers.numba.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, lo, hi).view(ss.uids)
         women = women[~np.isin(women, new)]
         if not len(women):
             return

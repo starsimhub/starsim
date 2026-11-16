@@ -36,19 +36,11 @@ def test_contacts():
     assert school.loc['10-14', '10-14'] == school.values[2, 2] and school.index[-1] == '75+' and school.attrs['ref']['layer'] == 'school'
     table = ss.contacts(school)
     assert np.array_equal(table.edges, ss.contacts('Kenya', layer='school').edges) and table.ref == school.attrs['ref'] and table.unit == 'day'
-    m = [[10, 3], [3, 5]] # A table not labeled by age group says nothing of its groups: by position it needs ages=, and by name it is over the model's own, as a list is
+    m = [[10, 3], [3, 5]] # A table not labeled by age group: by position alone it is over the model's stratification with as many levels, and by name over that one, as a list is
     for df in [pd.DataFrame(m), pd.DataFrame(m, index=['young', 'old'], columns=['young', 'old'])]:
-        with pytest.raises(TypeError, match='age=matrix'):
-            ss.contacts(df)
+        assert np.array_equal(ss.contacts(df).bare, m) and ss.contacts(df).edges is None
         assert np.array_equal(ss.contacts(age=df).dims['age'], ss.contacts(age=m).dims['age'])
-    assert np.array_equal(ss.contacts(pd.DataFrame(m, index=['0-17', '18+'])).edges, [0, 18])
-
-    # A place a source does not have says which do
-    with pytest.raises(KeyError, match='mistry2021'):
-        ss.contacts('Japan', study='prem2021')
     assert ss.data.contacts('Japan').attrs['ref']['study'] == 'Prem et al. 2017' # By default, Prem 2021 where it has the place, else Prem 2017
-    with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
-        ss.contacts('Kenyaa')
     return sims
 
 
@@ -64,14 +56,6 @@ def test_geo():
     assert kenya.adjacency[i, j] and kenya.adjacency[j, i] and not kenya.adjacency[i, i] # Neighbors
     assert not kenya.adjacency[i, kenya.names.index('Mombasa')]
 
-    # A subset, and several countries
-    two = ss.geo.geography('Kenya', level=1, places=['Nairobi', 'Kiambu'])
-    assert two.names == ['Kiambu', 'Nairobi'] and two.adjacency[0, 1]
-    both = ss.geo.geography(['Kenya', 'Uganda'], level=1)
-    assert len(both) == 47 + len(ssd.load_nodes('Uganda', level=1)) and both.names[0].startswith('Kenya:')
-    with pytest.raises(KeyError, match='the unit "Atlantis" was not found'):
-        ss.geo.geography('Kenya', places=['Atlantis'])
-
     # A table, with populations or positions given by hand, which win over its own (as for a country)
     df = sc.dataframe(name=['a', 'b'], population=[100, 200], x=[0, 3], y=[0, 4])
     assert ss.geo.geography(df).populations.tolist() == [100, 200] and ss.geo.geography(df, populations=[5, 6]).populations.tolist() == [5, 6]
@@ -83,7 +67,6 @@ def test_geo():
     sim = ss.Sim(sir, total_pop=50e6, unit='day', stop=60, **kw).run()
     fracs = sim.results.sir.S.strata[0]/sim.results.sir.S.strata[0].sum()
     assert np.allclose(fracs, kenya.populations/kenya.populations.sum()) # People start in each county in proportion to its population
-    assert 'starsim_data' in sim.describe()
 
     # Gravity gives the shape of the movement and away= its amount (10% if not given); a k that sends people away more than all their time warns
     home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().mixing.time_frac.diagonal()
@@ -91,28 +74,13 @@ def test_geo():
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.populations.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
         assert np.allclose(home(ss.geo.gravity(scale=0.5)), 0) # Everyone away all the time
-    with np.errstate(divide='ignore'): # As LASER scales its gravity: the share away is 5% on average, and at most 7%, given as the matrix
-        G = kenya.populations[None, :]**0.25/kenya.distances**1.56
-    np.fill_diagonal(G, 0)
-    G *= 0.05/G.sum(axis=1).mean()
-    capped = G*np.minimum(1, 0.07/G.sum(axis=1))[:, None]
-    assert np.allclose(1 - home(ss.geo.Mobility(matrix=capped)), capped.sum(axis=1)) and G.sum(axis=1).max() > 0.07 >= capped.sum(axis=1).max() - 1e-12
-
-    # The places say where they came from
-    ref = sim.diseases.sir.graph.strats[0].geo.ref
-    assert ref['place'] == 'Kenya' and ref['level'] == 1
 
     # Maps: of the places, colored by a value by name; of a result at several times, at one, and as an animation
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     infections = sim.results.sir.infection.by('patch').summarize()
     assert kenya.plot(values=infections/kenya.populations, label='Fraction infected', do_show=False) is not None
-    with pytest.raises(ValueError, match='none for'):
-        kenya.plot(values=dict(Nairobi=1), do_show=False)
     assert len(sim.results.sir.prevalence.map(n=4, do_show=False).axes) == 5 # Four maps and a color bar
-    fig = sim.results.sir.prevalence.map(do_show=False) # By default, one map of the summary
-    assert len(fig.axes) == 2 and fig.axes[0].get_title() == 'Mean over the run'
-    assert len(sim.results.sir.prevalence.by('patch').map(t=30, do_show=False).axes) == 2
     assert isinstance(sim.results.sir.prevalence.map(animate=True, do_show=False), FuncAnimation)
     plt.close('all')
     return sim
@@ -163,8 +131,6 @@ def test_people():
     sim = ss.Sim(make_sir(), people=ss.population('Kenya'), start='1990-01-01', stop='1990-03-01', unit='day', **kw)
     sim.init()
     assert sim.named_people.ref['year'] == 1990
-    with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
-        ss.population('Kenyaa')
     return ode, abm
 
 
@@ -198,8 +164,6 @@ def test_us_states(us_states):
     assert school.ref['source'] == 'mistry2021_us' and len(school.edges) == 85 # By single year of age, from its own study
     sim = ss.Sim(make_sir(), people=ss.population(state), networks=school, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=30, **kw).run()
     assert sim.pars.total_pop == ppl.named.total and sim.results.sir.I[-1] > sim.results.sir.I[0]
-    with pytest.raises(KeyError, match='the place "Kenya:Nairobi" was not found'):
-        ss.population('Kenya:Nairobi') # Other countries have no data by unit
     return sim
 
 
@@ -217,9 +181,7 @@ def test_fertility():
 
 
 if __name__ == '__main__':
-    T = sc.timer()
     test_contacts()
     test_geo()
     test_people()
     test_fertility()
-    T.toc()

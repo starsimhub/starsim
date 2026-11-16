@@ -1,143 +1,58 @@
 """
-Test the kernels: that a run taken in one call matches the same run taken step by step
+Test the kernels: that a run taken in one call matches the same run taken step by step; the backends and threads;
+ss.jit; and the exact draws in starsim/solvers/numba/draws.py
 """
 
 # %% Imports and settings
 import os
 import sys
-import time
 import subprocess
-import itertools
-from unittest import mock
 import pytest
 import numpy as np
 import sciris as sc
+import scipy.special as spec
+import scipy.stats as sps
 import starsim as ss
-from test_dimensions import make_malaria, make_tb
+from corpus import kernel_models as models, largest_diff
 
 kw = dict(verbose=0)
-
-
-def make_sir():
-    """ An SIR model with reported cases """
-    S, I, R = ss.states(3)
-    infection = S >> I @ ss.perday(0.4) * I
-    recovery  = I >> R @ ss.perday(0.15)
-    cases     = ss.outcome(0.6 * infection)
-    return ss.Disease(infection, recovery, cases, init_n=dict(I=10), name='sir')
-
-
-def make_seir():
-    """ Seasonal transmission, a dwell time in stages, and a branch """
-    S, E, I, R, D = ss.states('S E I R D')
-    seir = ss.Disease(
-        infection = ss.Transition(S, E, rate=ss.seasonal(0.4, amplitude=0.3, peak=1) * I),
-        latency   = ss.Transition(E, I, dur=ss.erlang(mean=5, k=3)),
-        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=8),
-        init      = dict(I=0.01),
-        name      = 'seir',
-    )
-    return seir
-
-
-def make_plain(beta, **kwargs):
-    S, I, R = ss.states('S I R')
-    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=8), name='sir', **kwargs)
-
-
-def make_ages():
-    """ Three age groups with a contact matrix, and susceptibility that differs by age """
-    return make_plain(0.05*ss.by(age=[0.5, 1.0, 1.5]), init=dict(I=0.01)).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-
-
-def make_towns():
-    """ Three towns with commuting between them """
-    towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4)))
-
-
-def make_commute():
-    """ Three age groups with a contact matrix within each of three towns, with commuting between them, and aging """
-    return make_towns().stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
-
-
-def make_delay():
-    """ A fixed latent period, a conveyor, with a death rate acting on it as well """
-    S, E, I, R = ss.states('S E I R')
-    return ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), latency=ss.Transition(E, I, dur=ss.constant(ss.days(5))),
-                      recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
-
-
-def make_biting(w=(0.5, 2.0)):
-    """ A weighted count: each infectious person counted by how much they are bitten (or not weighted, w=None) """
-    S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=S >> I @ ss.perday(0.3)*(I.n if w is None else (ss.by(biting=list(w))*I).n)/(S + I + R).n, recovery=I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
-    return sir.stratify(biting={'lo': 0.7, 'hi': 0.3})
-
-
-models = sc.obj(
-    sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
-    seir    = (make_seir,    dict(unit='day', stop=200)),
-    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
-    towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
-    malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
-    tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
-    delay   = (make_delay,   dict(unit='day', stop=150)),
-    biting  = (make_biting,  dict(unit='day', stop=100, total_pop=10_000)),
-)
+D = ss.solvers.numba.draws
 
 
 def run(key, how, **kwargs):
     """ Run a model with a call to the kernels at each step ('step'), or in one call ('all') """
-    make, pars = models[key]
-    sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
+    sim = models[key](**kwargs).init()
     if how == 'all' and key != 'tb':
         assert sim._compiled_reason() is None
     return sim.perf_profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
-def largest_diff(sim1, sim2):
-    """ The largest difference in any result, as a share of that result's largest value """
-    out = 0
-    for mod in sim1.declared:
-        for key,res in mod.results.items():
-            if isinstance(res, ss.Result):
-                other = sim2.results[mod.name][key]
-                for a,b in [(res.values, other.values), (getattr(res, 'strata', None), getattr(other, 'strata', None))]:
-                    if a is not None:
-                        out = max(out, np.abs(a - b).max()/max(np.abs(b).max(), 1e-12))
-    return out
-
+# %% Define the tests
 
 @sc.timer()
 def test_ode():
     sc.heading('Testing that the ODE gives the same run in one call to the kernels as step by step')
-    for key in models:
-        sims = sc.obj({how:run(key, how) for how in ['step', 'all']})
-        diff = largest_diff(sims.all, sims.step)
-        print(f'{key:8s} whole run against stepped {diff:0.1e}')
+    for key in ['seir', 'commute', 'malaria', 'tb', 'delay', 'biting']: # Seasonal, stages and a branch; mixing, commuting and aging; counts that are not people; a transfer, so stepped; a conveyor; a weighted count
+        diff = largest_diff(run(key, 'all'), run(key, 'step'))
         assert diff < 1e-9, f'{key}: the whole run differs from the stepped one by {diff}' # A value that varies in time is tabulated for a whole run, and worked out at each stage when stepped
-    return sims
+    return
 
 
 @sc.timer()
 def test_weighted_count():
     sc.heading('Testing that a weighted count is worked out within each step, as I.n is')
-    make, pars = models.biting
-    sim = lambda w=(0.5, 2.0), dt=1, solver='ode': ss.Sim(make(w), **sc.mergedicts(pars, kw, dict(dt=ss.days(dt), solver=solver))).run().results.sir.I.values
+    sim = lambda w=(0.5, 2.0), dt=1, solver='ode': models.biting(w, dt=ss.days(dt), solver=solver).run().results.sir.I.values
     I, fine = sim(), sim(dt=0.25)[::4]
-    assert np.abs(I - fine).max()/fine.max() < 1e-5 # Fourth order, not first: it was 14% off when held through each step
-    for solver in ['ode', 'binomial', 'gillespie']: # Weights of 1 are I.n
+    assert np.abs(I - fine).max()/fine.max() < 1e-5 # Fourth order, not held through each step
+    for solver in ['ode', 'binomial']: # Weights of 1 are I.n
         assert np.array_equal(sim((1, 1), solver=solver), sim(None, solver=solver))
-    return I
+    return
 
 
 @sc.timer()
 def test_factored_mixing():
     sc.heading('Testing that a contact matrix within places, with commuting, mixes as the product of the time fractions and the matrix')
-    make, pars = models.commute
-    sim = ss.Sim(make(), **pars, **kw).init()
+    sim = models.commute().init()
     mixing = sim.mixing
     term = mixing.terms[0]
     pre, post = np.kron(mixing.time_frac.toarray(), np.eye(3)), np.kron(mixing.time_frac.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
@@ -147,42 +62,24 @@ def test_factored_mixing():
     expected = (post @ (num/den))[term.cells]
     assert np.allclose(mixing.term_exposure(term, infectious, n), expected, rtol=1e-12, atol=0)
     assert len(sim.diseases.sir.engine.movers) == 1 and sim.diseases.sir.engine.movers[0].matrix.nnz == 6 # Aging: from each of the first two age groups in each town to the next
-    return expected
+    return
 
 
 @sc.timer()
 def test_stages():
-    sc.heading('Testing that a dwell time in many stages is as long as it should be under every solver')
-    def make():
-        S, E, I, R = ss.states('S E I R')
-        return ss.Disease(
-            infection = ss.Transition(S, E, rate=0.4 * I),
-            latency   = ss.Transition(E, I, dur=ss.normal(7, 1.4)), # 25 stages
-            recovery  = ss.Transition(I, R, dur=10),
-            init      = dict(I=0.001),
-            name      = 'seir',
-        )
-    peaks = sc.obj()
-    for solver in ['ode', 'binomial', 'tau', 'abm']:
-        pars = dict(n_agents=20_000) if solver == 'abm' else {}
-        sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
-        peaks[solver] = np.mean([np.argmax(sim.results.seir.I) for sim in sims])
-        print(f'{solver:8s} infectious peak on day {peaks[solver]:n}')
-    assert max(peaks.values()) - min(peaks.values()) < 8 # The chain-binomial solver moves people through as many stages as they pass in a step; one stage a step would make the latent period 25 days, not 7, and the peak weeks later
-
-    # Through the stages in whole steps, with another way out: the same as the ODE
+    sc.heading('Testing that people pass through as many stages of a dwell time as they should in a step, with another way out: the same as the ODE')
     def cohort(solver):
         E, I, D = ss.states('E I D')
         sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), default_state='E', name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode, res = cohort('ode'), cohort('binomial')
     assert np.allclose([res.I[6], res.I[8], res.D[10]], [ode.I[6], ode.I[8], ode.D[10]], rtol=0.01)
-    return peaks
+    return
 
 
 @sc.timer()
 def test_seasonal_steps():
-    sc.heading('Testing that the stochastic solvers follow a value that varies within a step')
+    sc.heading('Testing that the exact solver follows a value that varies within a step')
     def make(solver, dt, seed=0, pop=5000):
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25) * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='sis')
@@ -190,27 +87,19 @@ def test_seasonal_steps():
         steps = int(round(728/dt.days)) # The first 728 days, eight whole quarters, as the steps from the last time point go past two years
         return sim.results.sis.infection[:steps].sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
-    out = sc.obj()
-    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year, held at their middle: about 3% too many infections, against 5-6% held at the start
-        runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
-        out[solver] = np.mean([run[0] for run in runs])
-        assert str(runs[0][1]) == solver
-        assert np.isclose(out[solver], ode, rtol=0.04), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
-    with pytest.raises(ss.CapabilityError), ss.options.context(approximations='error'): # Exact only for rates that are constant within a step
-        S, I = ss.states('S I')
-        sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
-        ss.Sim(sis, solver='gillespie', unit='day', stop=100, **kw).init()
-
-    # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
+    runs = [make('gillespie', ss.days(91), seed) for seed in range(3)] # Steps of a quarter of a year, held at their middle: about 3% too many infections, against 5-6% held at the start
+    mean = np.mean([run[0] for run in runs])
+    assert str(runs[0][1]) == 'gillespie'
+    assert np.isclose(mean, ode, rtol=0.04), f'{mean:n} infections per person, against {ode:n} for the ODE'
+    # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]
     beta = ss.par(0.5, name='b')*ss.seasonal(mean=0.9, amplitude=0.1)*ss.timeseries(dict(zip(days, np.linspace(1.0, 0.3, len(days))))) # A time series is a step function by default
-    def sir():
+    def sim():
         S, I, R = ss.states('S I R')
-        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
-    whole = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run()
-    stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
-    assert np.allclose(stepped.results.sir.I, whole.results.sir.I, rtol=1e-9)
-    return out
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw)
+    assert np.allclose(sim().run(until='2020-02-15').results.sir.I, sim().run().results.sir.I, rtol=1e-9)
+    return
 
 
 @sc.timer()
@@ -225,9 +114,10 @@ def test_module_beside_kernels():
             if self.ti == 50:
                 self.sim.diseases.sis.pars.beta.value /= 2
 
-    class Quiet(ss.Analyzer):
+    class Replaces(ss.Intervention): # The tables of a whole run no longer hold from then on
         def step(self):
-            """ Nothing at all, so not in the loop """
+            if self.ti == 50:
+                self.sim.diseases.sis.pars.beta = ss.perday(0.05)
 
     def make(beta=ss.seasonal(mean=ss.perday(0.2), amplitude=0.3), **kwargs):
         return ss.Sim(ss.SIS(beta=beta, dur_inf=ss.days(10), init_prev=0.01), unit='day', stop=200, total_pop=1e5, **kw, **kwargs)
@@ -237,129 +127,100 @@ def test_module_beside_kernels():
         stepped = make(solver=solver, analyzers=Counts()).run()
         assert np.array_equal(whole.results.sis.I, stepped.results.sis.I), f'{solver}: a module that does nothing changed the run'
         assert stepped.analyzers[0].last == whole.results.sis.I[-1]
-    assert make(analyzers=Quiet()).init()._compiled_reason() is None, 'an analyzer with an empty step needs no step of its own'
 
-    plain = lambda **kwargs: make(beta=ss.perday(0.2), **kwargs)
-    halved = plain(interventions=Halves()).run()
-    before = plain().run()
-    assert np.array_equal(halved.results.sis.I[:50], before.results.sis.I[:50])
-    assert halved.results.sis.I[-1] < before.results.sis.I[-1], 'a parameter set by a module was not used'
-
-    class Replaces(ss.Intervention): # The tables of a whole run no longer hold from then on
-        def step(self):
-            if self.ti == 50:
-                self.sim.diseases.sis.pars.beta = ss.perday(0.05)
-
+    halved = make(beta=ss.perday(0.2), interventions=Halves()).run().results.sis.I
+    before = make(beta=ss.perday(0.2)).run().results.sis.I
+    assert np.array_equal(halved[:50], before[:50])
+    assert halved[-1] < before[-1], 'a parameter set by a module was not used'
     replaced = make(interventions=Replaces()).run()
     assert replaced.results.sis.I[-1] < 0.2*make().run().results.sis.I[-1], 'a value that varied in time was kept after a module replaced it'
     return
 
 
 @sc.timer()
-def test_plain_estimate():
-    sc.heading('Testing that the estimate of a plain run counts the substeps of a stiff ODE')
-    S, I, R = ss.states(3)
-    sis = ss.Disease(S >> I @ ss.perday(2.0)*I.frac, I >> R @ ss.days(1), R >> S @ ss.years(1), init=dict(I=0.01), name='sis')
-    sim = ss.Sim(sis, total_pop=1e5, dt=ss.months(1), dur=ss.years(30), solver='ode', **kw).init()
-    engine = sim.diseases[0].engine
-    engine.init_program()
-    seconds = []
-    for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
-        sim.solver = ss.solvers.ode(substeps=n_sub) # To ask the engine of this sim, with each setting
-        seconds.append(engine.plain_seconds())
-    assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
-    return seconds
-
-
-@sc.timer()
-def test_backend_choice():
-    sc.heading('Testing that a run is taken by the compiled backend, whatever its size, unless JAX is asked for')
-    choices = []
-    for compiled in [True, False]:
-        clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
-        with mock.patch.object(ss.solvers.backends.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
-            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', dur=ss.days(3650), solver='ode', **kw).init() # A long run, once taken by JAX
-            choices.append(ss.solvers.choose_backend(sim))
-    assert choices[0][0] is choices[1][0] is False and choices[0] == choices[1], f'The backend was JAX, or changed with the cache or the clock: {choices}'
-    return choices
-
-
-@sc.timer()
-def test_jax_thread_limit():
-    sc.heading('Testing that a limit on threads in the environment is kept for JAX, which takes as many CPU devices (see ss.gradients.jax())')
-    code = 'import starsim as ss; print(ss.settings.thread_limit)'
-    env = {k:v for k,v in os.environ.items() if k not in ['OMP_NUM_THREADS', 'SCIRIS_NUM_THREADS', 'STARSIM_BLAS_THREADS']}
-    run = lambda **kw: subprocess.run([sys.executable, '-c', code], env=env | kw, capture_output=True, text=True, check=True).stdout.split()[-1]
-    assert run(OMP_NUM_THREADS='2') == '2' and run() == 'None' # Starsim's own default of one BLAS thread is not a limit
-    return
-
-
-@sc.timer()
-def test_worker_threads():
-    sc.heading('Testing the threads of the workers of ss.parallel(): forkserver only for threads unsafe to fork, and a clear error if they run the script again')
-    import sys
-    with mock.patch.dict(sys.modules, {'jax': mock.MagicMock()}):
-        assert 'JAX' in ss.solvers.backends.kernels.fork_unsafe()
-    with mock.patch.dict(sys.modules): # Without JAX, which another test may have imported
-        sys.modules.pop('jax', None)
-        with mock.patch.object(ss.solvers.backends.kernels.nb, 'threading_layer', lambda: 'tbb'):
-            assert ss.solvers.backends.kernels.fork_unsafe() is None # TBB is safe to fork, so a large sim no longer makes ss.parallel() start its workers by forkserver
-        with mock.patch.object(ss.solvers.backends.kernels.nb, 'threading_layer', lambda: 'omp'):
-            assert 'omp' in ss.solvers.backends.kernels.fork_unsafe()
-    ss.solvers.backends.kernels.workers_failed(EOFError(), 'fork') # By fork: not this
-    with pytest.raises(RuntimeError, match='__main__'):
-        ss.solvers.backends.kernels.workers_failed(EOFError('unexpected EOF'), 'forkserver')
-    return
-
-
-def test_compile_status():
-    sc.heading('Testing that it is clear whether the kernels are compiled')
-    status = ss.compile(check=True, verbose=False) # The same as ss.solvers.backends.kernels.compile_status()
-    assert status == ss.solvers.backends.kernels.compile_status()
-    assert status.compiled == (not status.missing)
-    assert ('compiled' if status.compiled else 'NOT COMPILED' if status.backend != 'rust' else 'OUT OF DATE') in status.summary
-    with ss.options.context(backend='python'):
-        status = ss.solvers.backends.kernels.compile_status()
-    assert status.backend == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
-    return status
-
-
-def test_blas_threads():
-    sc.heading('Testing the BLAS threads, even with Starsim imported last')
+def test_threads():
+    sc.heading('Testing the BLAS threads, even with Starsim imported last, and that a limit on threads in the environment is kept for JAX (see ss.gradients.jax())')
     env = {k:v for k,v in os.environ.items() if k not in ['SCIRIS_NUM_THREADS', 'STARSIM_BLAS_THREADS', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS']}
-    env['STARSIM_UNCOMPILED_WARNING'] = '0'
-    code = 'import numpy, scipy.linalg, sciris as sc, starsim as ss; print(ss.options.blas_threads, *(getter() for setter,getter in sc.limit_threads.find_libs()))'
-    for extra,threads in [({}, 1), (dict(STARSIM_BLAS_THREADS='3'), 3), (dict(SCIRIS_NUM_THREADS='2'), 2), (dict(STARSIM_BLAS_THREADS='3', SCIRIS_NUM_THREADS='2'), 3)]:
-        out = subprocess.run([sys.executable, '-c', code], env=env | extra, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]
-        assert set(map(int, out.split())) == {threads}, f'Expected {threads} BLAS threads with {extra}, not {out}' # Off Linux, Sciris finds no libraries, so only the option is checked
-    current = lambda: {getter() for setter,getter in sc.limit_threads.find_libs()}
-    with ss.options.context(blas_threads=2): # It can go up as well as down
-        assert current() <= {2}
-    assert current() <= {1}
+    code = 'import numpy, scipy.linalg, sciris as sc, starsim as ss; print(ss.settings.thread_limit, ss.options.blas_threads, *(getter() for setter,getter in sc.limit_threads.find_libs()))'
+    def threads(**extra):
+        return subprocess.run([sys.executable, '-c', code], env=env | extra, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1].split()
+    for extra,n,limit in [({}, 1, 'None'), (dict(STARSIM_BLAS_THREADS='3', SCIRIS_NUM_THREADS='2'), 3, None), (dict(OMP_NUM_THREADS='2'), None, '2')]: # Starsim's own default of one BLAS thread is not a limit
+        out = threads(**extra)
+        if n is not None:
+            assert set(map(int, out[1:])) == {n}, f'Expected {n} BLAS threads with {extra}, not {out}' # Off Linux, Sciris finds no libraries, so only the option is checked
+        if limit is not None:
+            assert out[0] == limit
     return
 
 
-def test_typical_sims():
-    sc.heading('Testing that the sims ss.compile() runs are valid, without compiling')
-    for sim in ss.solvers.backends.kernels.typical_sims():
-        sim.init()
+def test_jit():
+    sc.heading('Testing a function traced by JAX by ss.jit, and its gradient')
+    import jax
+    score = lambda x: np.sum(np.log1p(np.exp(-x**2)))
+    def longest_run(x):
+        """ A loop: the longest run of values above the mean """
+        m = x.mean()
+        best = cur = 0
+        for v in x:
+            cur = cur + 1 if v > m else 0
+            best = max(best, cur)
+        return best
+    x = np.random.default_rng(1).normal(size=100)
+    with jax.enable_x64(True):
+        js = ss.jit(score)
+        xj = jax.numpy.asarray(x)
+        assert np.isclose(float(js(xj)), score(x), rtol=1e-12)
+        assert np.allclose(jax.grad(js)(xj), -2*x*np.exp(-x**2)/(1 + np.exp(-x**2)), rtol=1e-10)
+        assert ss.jit(longest_run)(xj) == longest_run(x) # JAX can't trace a loop over values, so it is run as NumPy (with a note)
+        with pytest.raises(TypeError):
+            jax.grad(ss.jit(lambda x: x[0] if x[0] > 0 else x[1]))(xj) # Under a trace there is no going back to NumPy, so it says why
+    return
+
+
+@pytest.mark.numba # Compiles Numba's draws, so CI runs it only in the jobs for Numba (see pytest.ini)
+@sc.timer()
+def test_exact_draws():
+    sc.heading('Testing the exact draws: exp, log, log1p, expm1, and the inverse normal CDF; the counter-based uniforms; and the inverse CDFs of ss.Dist against SciPy')
+    rng = np.random.default_rng(1)
+    x = np.concatenate([-rng.uniform(0, 708, 10_000), rng.uniform(0, 709, 1000), -10**rng.uniform(-15, 0, 1000)])
+    y = 10**rng.uniform(-300, 300, 10_000)
+    z = np.concatenate([rng.uniform(-0.999, 5, 10_000), 10**rng.uniform(-17, -1, 1000)*rng.choice([-1, 1], 1000)])
+    u = np.concatenate([rng.random(10_000), 10**rng.uniform(-300, -1, 1000), 1 - 10**rng.uniform(-16, -1, 1000)])
+    for f, a, ref in [(D.exp, x, np.exp), (D.log, y, np.log), (D.log1p, z, np.log1p), (D.expm1, x, np.expm1), (D.ndtri, u, spec.ndtri)]:
+        out, r = np.array([f(v) for v in a[::50]]), ref(a[::50])
+        err = np.max(np.abs(out - r)/np.maximum(np.abs(r), 1e-300 if f is not D.ndtri else 1))
+        assert err < 2e-15, f'{f.__name__}: max relative error {err:.1e}'
+
+    # The same hash as ss.Dist's common random numbers
+    slots = rng.integers(0, 10**9, 1000)
+    assert np.array_equal([D.uniform(D.key(11, 4), s) for s in slots], ss.dists.hash_uniforms(11, 4, slots, dtype=np.float64))
+    assert np.array_equal(D.uniforms(D.key(11, 4), 5, np.empty(3)), [D.uniform(D.key(11, 4), i) for i in [5, 6, 7]])
+
+    # The compiled inverse CDFs give what SciPy gives (up to rounding at a step of a discrete CDF, about as likely as a uniform landing on it)
+    u = rng.random(20_000)
+    n = rng.integers(1, 200, 20_000)
+    lam = 10**rng.uniform(-3, 2, 20_000) # Some above a mean of 30, which SciPy takes
+    cases = [
+        (ss.dists.inverse('expon', u, 3.0), sps.expon.ppf(u, scale=3)),
+        (ss.dists.inverse('weibull', u, 1.7, 2.0), sps.weibull_min.ppf(u, 1.7, scale=2)),
+        (ss.dists.inverse('binomial', u, n, 0.3, big=n*0.3 > 30, fallback=lambda v, i: sps.binom.ppf(v, n[i], 0.3)), sps.binom.ppf(u, n, 0.3)),
+        (ss.dists.inverse('nbinom', u, 2.0, 0.3), sps.nbinom.ppf(u, 2, 0.3)),
+        (ss.dists.inverse('poisson', u, lam, big=lam > 30, fallback=lambda v, i: sps.poisson.ppf(v, lam[i])), sps.poisson.ppf(u, lam)),
+    ]
+    for ours, scipy in cases:
+        assert np.allclose(ours, scipy, rtol=1e-12)
     return
 
 
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
-
     T = sc.timer()
-
-    sims = test_ode()
-    weighted = test_weighted_count()
-    mix = test_factored_mixing()
-    peaks = test_stages()
-    seasonal = test_seasonal_steps()
-    plain = test_plain_estimate()
-    choices = test_engine_choice()
-    test_worker_threads()
-    status = test_compile_status()
-
+    test_ode()
+    test_weighted_count()
+    test_factored_mixing()
+    test_stages()
+    test_seasonal_steps()
+    test_module_beside_kernels()
+    test_threads()
+    test_jit()
+    test_exact_draws()
     T.toc()

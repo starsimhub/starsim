@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, merging two AI drafts. Merged on Nov 11 by AI with the agent-based diseases tutorial (A1), adapted from the Starsim 3 diseases tutorial, whose sections on chance, superspreading, and counting infections are now its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; the runs on chance merged into the superspreading example, with a link to Solvers and backends, on Nov 15 by AI
 ---
 
 The SIR model of [Tutorial 1](t1_intro.qmd) and [Tutorial 2](t2_model.qmd) is over within weeks, far faster than real measles. [Tutorial 2](t2_model.qmd) found that R0 and prior immunity decide how *many* people are infected. This tutorial asks: **what decides how *fast* an outbreak spreads?** It adds, one at a time, structure that most disease models need: a latent period, the distribution of a duration, waning immunity, and a branch (here, a small fraction die). It then names the parameters, checks the finished disease, and runs it as agents. By the end of this tutorial, you will be able to:
@@ -225,41 +225,18 @@ Everything above also runs as agents (with `n_agents=`, as in [Tutorial 1](t1_in
 
 ### Chance, and the first case
 
-In a deterministic ODE, an infection with a reproduction number above 1 always takes off. In reality, the first cases may recover before infecting anyone. Suppose 90% of the town is immune and one infectious person arrives. R0 is still 15, but the effective reproduction number at the start is R ≈ 1.9 × 8 × 0.1 ≈ 1.5: each case infects about 1.5 others. Here are 20 runs as agents, each with its own random seed, and the ODE for comparison:
+In a deterministic ODE, an infection with a reproduction number above 1 always takes off. In reality, the first cases may recover before infecting anyone. Suppose 90% of the town is immune and one infectious person arrives: R0 is still 15, but each case infects about R ≈ 1.9 × 8 × 0.1 ≈ 1.5 others. Theory says one case then dies out with a chance of 1/R, about 2 in 3, early in an outbreak in a large, well-mixed population with an exponential infectious period. [Whether an outbreak takes off](../user_guide/running_solvers.qmd#whether-an-outbreak-takes-off) shows this with many runs against the ODE; the first row below checks it too. This matters for questions about introductions: how likely an imported case is to start an outbreak.
+
+### People who differ: superspreading
+
+For many diseases, most cases infect few others or none, and a few infect many (superspreading). This is usually described by giving each person an infectiousness drawn from a gamma distribution with mean 1 and dispersion k: the smaller k, the more concentrated transmission is. A distribution given as `rel_trans=`, each person's relative infectiousness, is drawn once for each person. Here are 40 runs as agents of each, counting the runs with fewer than 20 infections as introductions that die out:
 
 ```{python}
 import numpy as np
 import matplotlib.pyplot as plt
 
-S, E, I, R = ss.states('S E I R')
-infection   = S >> E @ 1.9*I
-progression = E >> I @ ss.days(10)
-recovery    = I >> R @ ss.days(8)
-measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=1)) # 90% immune, and 1 case
-
 pars = dict(n_agents=5000, stop=ss.days(365), verbose=0)
-msim = ss.parallel(ss.Sim(measles, **pars), n_runs=20)
-msim.plot('measles.I', lines=True)
 
-ode = ss.Sim(measles, total_pop=5000, stop=ss.days(365), solver='ode', verbose=0)
-ode.run()
-ode.plot('measles.I')
-```
-
-The ODE always gives the same outbreak. As agents, some runs give one about as large, and the rest die out after a handful of cases. Counting runs with fewer than 20 infections:
-
-```{python}
-total = msim.results.measles.infection.values.sum(axis=1) # Total infections in each run
-print('Fraction of introductions that die out:', np.mean(total < 20))
-```
-
-Theory says one case dies out with a chance of 1/R, here about 2 in 3, close to the runs. This holds early in an outbreak in a large, well-mixed population, where each case's infections are independent and the infectious period is exponentially distributed, as here. This matters for questions about introductions: how likely an imported case is to start an outbreak.
-
-### People who differ: superspreading
-
-For many diseases, most cases infect few others or none, and a few infect many (superspreading). This is usually described by giving each person an infectiousness drawn from a gamma distribution with mean 1 and dispersion k: the smaller k, the more concentrated transmission is. A distribution given as `rel_trans=`, each person's relative infectiousness, is drawn once for each person:
-
-```{python}
 def make_sim(k=None):
     """ The measles model, with the infectiousness of each person drawn from a gamma distribution with shape k """
     S, E, I, R = ss.states('S E I R')

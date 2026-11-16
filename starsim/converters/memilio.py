@@ -18,8 +18,7 @@ priors=True)`.
 
 Writing the JSON: run as a script, this file runs where MEmilio's Python bindings
 (`memilio-simulation`) are installed, and needs neither Starsim nor Sciris, so it can
-be copied into any MEmilio environment. MEmilio's ODE models are fixed in C++, and a
-script only sets their parameters, so this runs the script as it is and records the
+be copied into any MEmilio environment. It runs the script as it is and records the
 model it simulates: the first call to `simulate()` or `simulate_flows()`, the first
 `Simulation` or `MobilitySimulation` that is advanced, or the first `ParameterStudy`
 or `GraphParameterStudy` that is run. Run it on a script, or on a function in one:
@@ -35,13 +34,10 @@ damping), and the run's times. For a graph, it is the first node's model, plus e
 node's model and each edge's mobility coefficients (`graph`); for a parameter study,
 also the number of runs (`study`).
 
-Exporting: `to_memilio(sim)` (`ss.export_to(sim, 'memilio')`) writes a sim whose
-compartmental form is an SIR or SEIR (a transmission proportional to the infectious over
-the total, and exponential stays) as a MEmilio script that builds MEmilio's `osir` or
-`oseir` in one age group, with the sim's rates in days and its initial numbers, and
-simulates it when run. Flows that these models do not have (births, deaths, waning) are
-listed as not exported; a model that is neither is refused. The script is read back as
-above (`python memilio.py exported.py model.json`).
+Exporting: `to_memilio(sim)` (`ss.export_to(sim, 'memilio')`) writes a sim whose compartmental
+form is an SIR or SEIR as a MEmilio script that builds MEmilio's `osir` or `oseir` in one age group
+and simulates it; flows these models do not have are listed as not exported, and any other model
+is refused. The script is read back as above (`python memilio.py exported.py model.json`).
 
 Used with: compartments; declared modules
 """

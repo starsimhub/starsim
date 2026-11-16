@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 4
   ai: 96
-  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; the section on looking inside a network replaced by a link on Nov 15 by AI
 ---
 
 **Who meets whom, and why does it matter?** So far, everyone in the town mixes equally. In reality, children have more contacts than adults, mostly with other children; people travel between towns; and some infections pass only between people who know each other, such as sexual partners. This tutorial goes from equal mixing, to a contact matrix between age groups, to movement between places, to contacts between particular people. The last part runs as agents.
@@ -359,25 +359,7 @@ msim.plot('measles.I')
 
 With someone new each day, the epidemic is nearly the same as with random mixing. With the same people every day, it is slower, since contacts are wasted on whoever infected you. Even so, almost everyone is infected, since measles passes along nearly every link. A network matters most when people have few, lasting contacts, each with a chance of infection well below one, as for sexually transmitted infections.
 
-### Looking inside a network
-
-A network's contacts are made when the sim is initialized. Here is one for 30 people, so that it can be plotted:
-
-```{python}
-small = ss.Sim(measles, networks=ss.RandomNet(n_contacts=3, dynamic=False), n_agents=30, stop=ss.days(10), verbose=0)
-small.init()
-net = small.networks.randomnet
-net.plot()
-```
-
-Networks are in `sim.networks`, each under its class name in lower case. Each edge has the UIDs of the two people (`p1` and `p2`), a transmission multiplier (`weight`), and a duration (`dur`). The edges can be converted to a dataframe (`to_df()`) or a NetworkX graph (`to_graph()`):
-
-```{python}
-print('Contacts of agent 0:', net.find_contacts([0]))
-
-df = net.to_df()
-df.loc[(df.p1 == 0) | (df.p2 == 0)] # The edges involving agent 0
-```
+Networks are in `sim.networks`, each under its class name in lower case; [Working with edges](../user_guide/populations_mixing.qmd#working-with-edges) shows how to plot one, find a person's contacts, and read its edges as a dataframe or a NetworkX graph.
 
 ## Sexual networks
 

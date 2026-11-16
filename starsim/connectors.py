@@ -201,8 +201,8 @@ def route_mult(engine, name, route, inds, trg):
         else:
             frac = at(np.asarray(m.frac_of(engine), dtype=float))
         mult = 1 - frac*(1 - amount)
-        if m.where is not None:
-            mask = engine.selector.select(m.where)
+        if m._who_now is not None:
+            mask = engine.selector.select(m._who_now)
             if m.holding:
                 mask = m.held_mask(mask, engine)
             mult = np.where(at(mask) > 0, mult, 1.0)
@@ -261,7 +261,7 @@ def unapplied(graph, modname, kind, name, mods):
         tr = graph.transitions.get(name)
         if tr is None: # A transfer, or one destination of a transition with several
             return None
-        if (not tr.source or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
+        if (not tr.source or not tr.people) and any(not isinstance(m, modify) or m._who_now is not None for m in mods): # A product's efficacy is for the people who hold it
             return f'"{name}" ({tr._arrow}) is {"an inflow" if not tr.source else "a transition of counts"}, which has no people for a condition on people (who=, or holding a product) to select. Give the modifier no who=, or a when= on time.'
         if kind == 'transition' and tr._split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
             dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dest)
@@ -395,7 +395,7 @@ class modify(Connector):
     """
     compartmental = True # It works on groups as well as on agents
 
-    timepar_skip = ['where', 'until', 'when', 'schedule', 'either', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
+    timepar_skip = ['who', 'when', '_who_now', 'until', '_when_date', '_schedule', '_either', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
     def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, frac=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
@@ -425,15 +425,16 @@ class modify(Connector):
             self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
         where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
+        self.who, self.when = where, when # As given; what they decide is worked out from them (self._who_now, self._schedule, ...)
         ss.conditions.check_not_time(where, 'ss.modify()')
         ss.conditions.check_who_people(where, 'ss.modify()')
-        self.start, self.stop, self.schedule, count, self.either = parse_when(when, start, stop) # A window, any steps within it (as an ss.schedule()), a condition on the population joined with &, and one joined with | (also on while it holds)
+        self.start, self.stop, self._schedule, count, self._either = parse_when(when, start, stop) # A window, any steps within it (as an ss.schedule()), a condition on the population joined with &, and one joined with | (also on while it holds)
         where = ss.conditions.join('&', [where, count]) # Both decide who it applies to now
-        self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
-        self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
+        self._who_now = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
+        self._when_date = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
         hold = until if isinstance(until, ss.Duration) or sc.isnumber(until) else None # A duration: held for at least this long
         until = None if hold is not None else until
-        if hold is not None and where is None and self.schedule is None:
+        if hold is not None and where is None and self._schedule is None:
             errormsg = f'until= of ss.modify() as a duration keeps the modifier on for a while after it applies to someone, so it needs who= or when= (with times, a function of the date, or a condition on the population)'
             raise ValueError(errormsg)
         if until is not None and where is None:
@@ -464,7 +465,7 @@ class modify(Connector):
         if self.target_module is None: # A quantity of its own; a target in another module (e.g. 'hiv.latency') stays there
             self.target_module = module
         self.target_name = getattr(self.target_name, 'name', self.target_name)
-        self.where = None if self.where is None else ss.conditions.as_cond(self.where)
+        self._who_now = None if self._who_now is None else ss.conditions.as_cond(self._who_now)
         self.name = self.label = name
         return
 
@@ -503,8 +504,8 @@ class modify(Connector):
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
         if not found:
             raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
-        if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
-            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
+        if kind == 'transition' and getattr(graph.transitions.get(name), '_trigger', None) is not None:
+            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name]._trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
         if kind == 'transition' and name in graph.transitions:
             ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
@@ -535,13 +536,13 @@ class modify(Connector):
         self.target_module, self.target_kind = modname, kind
         for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
-        ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
+        ss.conditions.check_clocks(self.amount, self._who_now, f'the modifier "{self.name}"')
         if self.start is not None and to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True) >= sim.t.npts: # A start after the end never starts it, e.g. in a sim run to an earlier stop
             ss.note(f'the modifier "{self.name}" starts after the end of the sim, so it never applies', sim=sim)
         if self.stop is not None:
             to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
-        self.when = None if self.schedule is None else Due(self.schedule, sim) # The steps it applies on
+        self._when_date = None if self._schedule is None else Due(self._schedule, sim) # The steps it applies on
         self.held = {}
         self.when_until = -1
         return
@@ -572,7 +573,7 @@ class modify(Connector):
     @property
     def timed(self):
         """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
-        return self.where is None and self.schedule is None and self.either is None and self.fixed_amount
+        return self._who_now is None and self._schedule is None and self._either is None and self.fixed_amount
 
     @property
     def holding(self):
@@ -582,7 +583,7 @@ class modify(Connector):
     @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        return self.inlined or (not self.holding and self.fixed_amount and self.either is None and ss.conditions.is_static(self.where, self.sim))
+        return self.inlined or (not self.holding and self.fixed_amount and self._either is None and ss.conditions.is_static(self._who_now, self.sim))
 
     @property
     def fixed_amount(self):
@@ -601,7 +602,7 @@ class modify(Connector):
 
     def marks(self):
         """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no steps within them (`when=`); else none """
-        if self.schedule is not None or (self.start is None and self.stop is None):
+        if self._schedule is not None or (self.start is None and self.stop is None):
             return []
         sim = self.sim
         timevec = sim.results.timevec
@@ -620,9 +621,9 @@ class modify(Connector):
         stop = to_time(sim, self.stop)
         if (start is not None and not reached(now, start)) or (stop is not None and reached(now, stop)):
             return False
-        if self.when is None:
+        if self._when_date is None:
             return True
-        on = ss.conditions.holds_now(self.when, sim) or (self.either is not None and ss.conditions.holds(self.either, sim)) # A condition joined to the schedule with |: on while it holds too
+        on = ss.conditions.holds_now(self._when_date, sim) or (self._either is not None and ss.conditions.holds(self._either, sim)) # A condition joined to the schedule with |: on while it holds too
         if self.hold is not None: # Held on for a while after
             if on:
                 self.when_until = sim.ti + self.hold_steps
@@ -675,7 +676,7 @@ class modify(Connector):
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
-        mask = None if self.where is None else engine.selector.select(self.where)
+        mask = None if self._who_now is None else engine.selector.select(self._who_now)
         amount = self.current(engine, mask=mask if not self.holding else None)
         if np.ndim(amount) and np.isnan(amount).any(): # A clock or an attribute read where it has no value: see ss.conditions.check_clocks()
             check = amount if mask is None else np.where(mask > 0, amount, 0.0)
@@ -718,20 +719,20 @@ class modify(Connector):
         if self.networks is not None:
             out += f'   network={sc.strjoin(self.networks)}'
         people, population = None, None
-        if self.where is not None:
-            people, population = ss.conditions.split_population(self.where) if isinstance(self.where, (ss.conditions.Cond, ss.expressions.Expr)) else (self.where, None)
+        if self._who_now is not None:
+            people, population = ss.conditions.split_population(self._who_now) if isinstance(self._who_now, (ss.conditions.Cond, ss.expressions.Expr)) else (self._who_now, None)
         if people is not None:
             out += f'   who={getattr(people, "__name__", people)}'
         window = ', '.join(f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None)
         when = None
-        if self.schedule is not None and self.schedule.when is None: # Its own repr has the window
-            when = f'{self.schedule}'
-        elif self.schedule is not None: # A function of the date
-            when = f'{getattr(self.schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
+        if self._schedule is not None and self._schedule.when is None: # Its own repr has the window
+            when = f'{self._schedule}'
+        elif self._schedule is not None: # A function of the date
+            when = f'{getattr(self._schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
         elif window:
             when = f'ss.schedule({window})'
-        if self.either is not None:
-            when = f'({when} | {self.either!r})'
+        if self._either is not None:
+            when = f'({when} | {self._either!r})'
         when = sc.strjoin([w for w in [when, population if population is None else repr(population)] if w is not None], sep=' & ')
         if when:
             out += f'   when={when}'

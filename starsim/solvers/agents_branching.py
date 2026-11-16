@@ -287,7 +287,7 @@ class Branching:
         rel_sus = mod.rel_sus.asnew(sus_raw, copy=False)
         new_cases = []
         pairs = [] # Who infected whom, where that is known, so the strain can be passed on
-        pools = any(isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) for nkey,route in routes)
+        pools = any(isinstance(route, ss.networks.PoolRoute) for nkey,route in routes)
         pool_hazard = [np.zeros(len(sus_raw)) for strain in strains] if pools else None
         any_pools = False
         by_strain = 1.0 # The infectiousness of each agent's strain
@@ -298,7 +298,7 @@ class Branching:
         for i,(nkey,route) in enumerate(routes):
             if on_route is not None and not on_route[i]: # Nothing on it to transmit (see carries())
                 continue
-            if isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) and mod not in route.diseases: # Not one of the diseases it is for
+            if isinstance(route, ss.networks.PoolRoute) and mod not in route.diseases: # Not one of the diseases it is for
                 continue
             if isinstance(route, ss.Network) and route.has_acts: # A probability per act, in each direction
                 if len(route):
@@ -325,7 +325,7 @@ class Branching:
                 for pair in self.over_network(i, route, rel_trans, route_sus.raw, [beta, beta], tr.name):
                     new_cases.append(pair[1])
                     pairs.append(pair)
-            elif isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
+            elif isinstance(route, ss.networks.PoolRoute) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
                 any_pools = True
                 groups = sim.groups.group_raw()
                 auids = sim.people.auids
@@ -341,7 +341,7 @@ class Branching:
                     frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
                     auids, expo = route.exposure(rel_trans*frac)
                     pool_hazard[k][auids] += ref*expo*route_sus.raw[auids]*mult(None, auids)
-            elif isinstance(route, (ss.MixingPool, ss.networks.MixingPools)): # Has no direction
+            elif isinstance(route, ss.networks.PoolRoute): # Has no direction
                 any_pools = True
                 for pool in (route.pools if isinstance(route, ss.networks.MixingPools) else [route]):
                     if len(pool.source_uids) and len(pool.target_uids):
@@ -483,7 +483,7 @@ class Branching:
             funcs = [raw for raw in leaves if callable(raw) and not isinstance(raw, (ss.Dist, ss.parameters.TimeValue))]
             spread = any(id(leaf) in self.spread for leaf in tr.rate.leaves if isinstance(leaf, ss.par)) # As does a distribution across people
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
-            per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.parameters.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
+            per_agent = any(m._who_now is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.parameters.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
             props = any(isinstance(leaf, (ss.expressions.Prop, ss.expressions.attr)) or (isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) and leaf.raw.on_people(self.sim)) for leaf in tr.rate.leaves) # As does a property or attribute of people
             self.by_groups[tr.name] = not spread and not per_agent and not props and not any(ss.utils.takes_uids(func) for func in funcs) and not ss.expressions.clocks_in(tr.rate) # A function of the agents, or a clock, can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
@@ -504,10 +504,10 @@ class Branching:
         adjust = (1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])*self.mult_raw('transition', tr.name)
         key = self.crn_key(f'mix_{tr.name}', mod[src.name].uids if check_draws else None)
         if key is not None: # The usual case: the draws are made in the same pass, so only the agents infected are listed
-            uids = ss.solvers.backends.passes.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
+            uids = ss.solvers.numba.passes.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
                                      float(self.mult_raw('rel_sus')), self.dt, sim.people.slot_raw(), *key)
             return ss.uids(uids)
-        uids, probs = ss.solvers.backends.passes.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
+        uids, probs = ss.solvers.numba.passes.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
                                                  float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float), float(self.mult_raw('rel_sus')), self.dt)
         uids = ss.uids(uids)
         return uids[self.draw(f'mix_{tr.name}', uids) < probs]

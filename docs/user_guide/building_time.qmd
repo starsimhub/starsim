@@ -88,14 +88,14 @@ Any two of the start, the stop, and the length define the third: `start=2000, du
 
 ### Choosing the step
 
-The ODE takes as many substeps as it needs, Gillespie and tau-leaping work in continuous time, and the chain binomial splits each step into substeps by default, so for these the step mostly sets how often results are recorded (and how often anything worked out once a step, such as a module written as code or a function of the sim, is updated). Agents, and the chain binomial with `ss.solvers.binomial(substeps=1)`, take each step whole, so a step that is long compared with the time people spend in a state changes the results. `sim.check_dt()` measures this by running the sim again with half the step and comparing each result:
+For the ODE, Gillespie, tau-leaping, and the chain binomial (which takes substeps), the step mostly sets how often results are recorded and modules act; agents take each step whole, so a step that is long compared with the time people spend in a state changes the results ([The length of a step](running_solvers.qmd#the-length-of-a-step)). `sim.check_dt()` measures this by running the sim again with half the step and comparing each result:
 
 ```{python}
 agents = ss.Sim(measles, n_agents=10_000, total_pop=100_000, start='2025-01-01', stop='2025-03-01', verbose=0)
 agents.check_dt()
 ```
 
-For measles as agents, a day is too long a step (`dt=ss.days(0.25)` is closer to right); slower infections can take much longer steps. Twenty years of daily steps is 7,300 steps; Starsim warns when a sim has very many, since a longer step (`dt=ss.weeks(1)`) is often enough. See [Solvers and backends](running_solvers.qmd#the-length-of-a-step).
+For measles as agents, a day is too long a step (`dt=ss.days(0.25)` is closer to right); slower infections can take much longer steps. Twenty years of daily steps is 7,300 steps; Starsim warns when a sim has very many, since a longer step (`dt=ss.weeks(1)`) is often enough.
 
 A module can have a step of its own, such as yearly births in a model with weekly transmission (`ss.Births(..., dt=ss.years(1))`), and the modules are run in order of time.
 

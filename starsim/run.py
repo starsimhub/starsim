@@ -11,7 +11,6 @@ import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
-plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 import starsim as ss
 
 
@@ -50,8 +49,7 @@ class MultiSim:
 
     Made and run by `ss.parallel()`, the way to run many sims; `ss.MultiSim(...)` with the same arguments,
     then `msim.run()`, does the same (and is the class to subclass). Each sim is run once unless `n_runs`,
-    `pars`, or `priors` is given: a single sim, `ss.MultiSim(sim)`, is one run, where in Starsim 3 it was run four
-    times by default (`ss.parallel(sim, n_runs=4)` for that). To make and initialize the sim of each run without running them, use
+    `pars`, or `priors` is given: a single sim, `ss.MultiSim(sim)`, is one run. To make and initialize the sim of each run without running them, use
     `msim.init_sims()`.
 
     Args:
@@ -381,8 +379,7 @@ class MultiSim:
             scenarios = list(dict.fromkeys(self.runs['scenario'])) if self.runs is not None else []
             n = len(self.runs) if self.runs is not None else len(self.sims)
             which = f' of {len(scenarios)} scenarios ({sc.strjoin(scenarios)})' if len(scenarios) > 1 else f' of "{scenarios[0]}"' if scenarios and scenarios[0] else ''
-            took = f'{self.timer.elapsed:.2g}' if self.timer.elapsed < 1 else f'{self.timer.elapsed:.1f}'
-            text = f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {took} s'
+            text = f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {ss.display.seconds_str(self.timer.elapsed)} s'
             if progress is not None:
                 progress.finish(text)
             else:
@@ -688,21 +685,14 @@ class MultiSim:
             for sim in sims[1:]:
                 seen = {(k.module, k.name) for k in keys}
                 keys += [res for res in ss.results.match_result_keys(sim.results, None).values() if get(sims[0], res, sim) is None and (res.module, res.name) not in seen]
-        n_cols,_ = sc.getrowscols(len(keys))
-        kw = ss.plot_args(kwargs, figsize=np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5), alpha=0.8, data_alpha=0.3, data_color='k')
+        kw = ss.results.grid_args(len(keys), kwargs)
         given = fig is not None
         withdata = next((sim for sim in sims if getattr(sim, 'data', None) is not None), None) if show_data else None
         data = ss.results.plot_data(withdata) if withdata is not None else {}
         several = not self.runs['scenario'].is_unique # Several runs of a scenario, drawn faintly, as with lines=True
         with ss.style(**kw.style):
-            if fig is None:
-                fig, axs = sc.getrowscols(len(keys), make=True, **kw.fig)
-                axs = axs.flatten() if isinstance(axs, np.ndarray) else axs
-            else:
-                axs = fig.axes
-            axs = axs if sc.isiterable(axs) else [axs]
-            cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
-            colors = {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(dict.fromkeys(scenarios))}
+            fig, axs = ss.results.grid_axes(len(keys), fig, kw)
+            colors = ss.results.cycle_colors(dict.fromkeys(scenarios))
             for ax,first in zip(axs, keys):
                 entry = data.get((first.module, first.name))
                 if entry is not None:
@@ -947,9 +937,9 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
     kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if workers != 1:
         kwargs['options'] = {key:val for key,val in ss.options.items() if not ss.utils.same_value(val, ss.options.orig_options.get(key))} # Those set here, which a worker started afresh would not have (e.g. ss.options.crn = False)
-        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.solvers.backends.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
-        with ss.solvers.backends.kernels.starting_workers(par_args['start_method']):
-            P = sc.Parallel(ss.solvers.backends.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+        par_args = sc.mergedicts({'ncpus': workers, 'start_method': ss.solvers.backends.workers.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
+        with ss.solvers.backends.workers.starting_workers(par_args['start_method']):
+            P = sc.Parallel(ss.solvers.backends.workers.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
                 if progress is not None:
@@ -960,7 +950,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
                 P.finalize()
             except BaseException as E:
                 P.close() # Without leaving the workers running, as sc.parallelize() does
-                ss.solvers.backends.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
+                ss.solvers.backends.workers.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
                 raise
         return P.results
     show = None if progress is None else progress.update
@@ -1111,9 +1101,8 @@ class MultiResults(ss.Results):
             return arr
 
         first = sims[0]
-        times = [sim.t.tvec for sim in sims]
-        if any(len(t) != len(times[0]) or np.any(t != times[0]) for t in times[1:]): # Results at different times cannot be stacked as runs of one thing
-            steps = sc.strjoin(f'"{sim.label}": {len(t)} steps of {sim.t.dt}' for sim,t in zip(sims, times))
+        if not same_times(sims): # Results at different times cannot be stacked as runs of one thing
+            steps = sc.strjoin(f'"{sim.label}": {len(sim.t.tvec)} steps of {sim.t.dt}' for sim in sims)
             raise ValueError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
         entries = {}
         for sim in sims: # Every result of any run, e.g. of an intervention only one scenario has
@@ -1148,15 +1137,15 @@ class MultiResults(ss.Results):
         inds = list(sc.toarray(inds))
         for modname,key,res in self.walk():
             pos = getattr(res, 'run_pos', None)
-            if pos is None:
-                sub = res.take(inds)
+            keep = None if pos is None else [(j, inds.index(p)) for j,p in enumerate(pos) if p in inds] # For a result of only some of the runs, those of them taken
+            if keep == []:
+                continue
+            sub = res.take(inds if keep is None else [j for j,_ in keep])
+            arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge)
+            if keep is None:
                 runs = sub.runs if runs is None else runs
-                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge)
-            else: # A result of only some of the runs: those of them taken
-                keep = [(j, inds.index(p)) for j,p in enumerate(pos) if p in inds]
-                if keep:
-                    sub = res.take([j for j,_ in keep])
-                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, runs=sub.runs, run_pos=[i for _,i in keep])
+            else:
+                arrays[modname, key].update(runs=sub.runs, run_pos=[i for _,i in keep])
         out = MultiResults.build(arrays, runs, timevec=self.get('timevec'))
         implicit = self._implicit # The results of each sim's one disease (see from_sims())
         if implicit is not None:
@@ -1396,7 +1385,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
     sim = runners[0]
-    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration, cbr, cmr), as one run gives them
+    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration), as one run gives them
         def get(mod, key):
             vals = join(values[mod.name, key]) if (mod.name, key) in values else None
             if vals is None or len(vals) != len(runs): # A result some runs don't have
@@ -1406,9 +1395,9 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             counts = ss.solvers.people_counts(sim, get)
         except KeyError:
             counts = None
-        if counts is not None and 'cbr' in sim.results:
-            counts.cbr, counts.cmr = ss.solvers.crude_rates(counts.birth, counts.death, counts.alive, ss.solvers.people_t(sim).dt_year)
         for key,vals in (counts or {}).items():
+            if key not in sim.results: # A flow that nothing in the sim makes (see Sim.drop_unused_flows())
+                continue
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')
     return RestartedSims(runners, sets, n_runs, seeds, given=starts is not None), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
@@ -1426,7 +1415,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
         pars (dict/list): sets of values of parameters to run each sim with, to compare them (a sweep): a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; see below
         priors (bool/dict): True to draw `n_runs` sets of values from the priors of the parameters, to carry the uncertainty in them into a projection; or the draws themselves (e.g. from a posterior); see below
-        kwargs (dict): how to run them; see below
+        kwargs (dict): how to run them: `workers` (the number of worker processes: by default one per CPU; 1 runs them one after another in this process, e.g. to debug a run), `until` and `verbose` (as for `sim.run()`), `shrink` (whether to shrink each sim after it runs, to save memory), `par_args` (passed to `sc.Parallel()`), and `run_args` (passed to each `sim.run()`)
 
     With `pars=`, each set of values is run `n_runs` times (default 1), with the same seeds for every set, and each set is a
     scenario of its own. The values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`), with each run's
@@ -1436,14 +1425,6 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
     over its bounds), on a Latin hypercube, and each is run once; draws can also be given, as for `pars=` (as `fit.project()`
     passes those of a posterior). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, each with a seed of
     its own (the sim's seed, plus 1, 2, ...), so quantiles over a scenario's runs include both the draws and chance.
-
-    How to run them, by keyword (see also `ss.MultiSim`):
-
-    - `workers`: the number of worker processes (by default, one per CPU); 1 runs them one after another in this process, e.g. on a shared machine, or to debug a run
-    - `until` and `verbose`: as for `sim.run()`
-    - `shrink`: whether to shrink each sim after it runs, to save memory (see `sim.shrink()`)
-    - `par_args`: passed to `sc.Parallel()`
-    - `run_args`: passed to each `sim.run()`
 
     Returns:
         A run MultiSim. Each result is available across the runs, with the label of each sim as its scenario, e.g. `msim.results.sir.I.quantiles([0.025, 0.5, 0.975])`.

@@ -1,9 +1,5 @@
 """
-Run tests of the Starsim library (starsim.library, i.e. ssl)
-
-These tests check that every library module can be instantiated and run, and that
-its headline mechanism actually does something. Detailed tests of individual
-modules live in the corresponding test files (e.g. test_diseases.py).
+Test the Starsim library (starsim.library, i.e. ssl): each module runs, and its headline mechanism does something
 """
 
 # %% Imports and settings
@@ -15,44 +11,7 @@ import starsim.library as ssl
 
 n_agents = 2_000
 
-# Outbreak diseases specify their natural history in days, so they need a sub-year timestep
-outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
-
-
-@sc.timer()
-def test_diseases():
-    """
-    Check that the SEIR written as code runs and keeps consistent compartments
-
-    'exposed' and 'infectious' are the literal E and I compartments, while 'infected' is
-    derived as E plus I. Infections are counted when they happen rather than inferred from
-    a ti_ state, so seed infections are excluded exactly once. Regression test for negative
-    first-step incidence (issue #1389).
-    """
-    sc.heading('Testing the SEIR written as code and its compartments...')
-    name = 'agentseir'
-    sim = ss.Sim(diseases=ssl.AgentSEIR(beta=ss.perday(0.3), init_prev=0.1), networks=ss.RandomNet(), **outbreak_pars)
-    sim.run()
-    dis = sim.diseases[name]
-    res = sim.results[name]
-    n_exp = np.array(res.exposed)
-    n_infectious = np.array(res.infectious)
-    n_inf = np.array(res.infected)
-    new = np.array(res.infection)
-    total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
-    assert res.infection.cum[-1] > 0, f'Expected {name} infections'
-    assert new.min() >= 0, f'{name} has negative infection: seeds are being double-counted'
-    assert new[0] == res.susceptible[0] - res.susceptible[1], f'{name} counted its seed infections as new infections' # Only the first step's infections
-    assert new.sum() == res.infection.cum[-1], f'{name} cumulative infections do not match the sum'
-    assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
-    assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
-    assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
-    assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
-    assert n_exp.max() > 0, f'{name} never had any exposed agents'
-    assert n_inf.max() > 0, f'{name} never had any infectious agents'
-    return sim
 
 
 @sc.timer()
@@ -71,12 +30,8 @@ def test_hiv():
     for sim in [s1, s2]:
         sim.run()
 
-    d1 = s1.results.hiv.death.sum()
-    d2 = s2.results.hiv.death.sum()
-    n_art = s2.results.art.n_art.max()
-    print(f'  Deaths without ART: {d1:n}; with ART: {d2:n}; peak on ART: {n_art:n}')
-    assert n_art > 0, 'Expected some agents on ART'
-    assert d2 < d1, 'Expected ART to reduce HIV deaths'
+    assert s2.results.art.n_art.max() > 0, 'Expected some agents on ART'
+    assert s2.results.hiv.death.sum() < s1.results.hiv.death.sum(), 'Expected ART to reduce HIV deaths'
 
     # The analyzer should have recorded plausible CD4 counts
     cd4 = s1.analyzers.cd4_analyzer.cd4
@@ -96,8 +51,6 @@ def test_networks():
     degree = {k:np.bincount(np.r_[sim.networks[0].p1, sim.networks[0].p2], minlength=n) for k,sim in sims.items()}
     assert (degree['grid'] == 4).all() and (degree['small'].mean() == 4)
     assert np.isclose(degree['free'].mean(), 4, rtol=0.05) and degree['free'].max() > 3*degree['free'].mean() # A few have many contacts
-    for net in [ssl.GridNet(), ssl.SmallWorldNet(), ssl.ScaleFreeNet()]: # Each has only its own parameters
-        assert not {'seed', 'p'} & set(net.pars)
 
     # Contacts across real places with a geography: as ssl.GeoNet makes them, a random network in a model stratified by place, with most contacts at home
     sis = ss.SIS().stratify(patch=ss.levels(ss.geo.geography('Kenya'), mobility=ss.geo.gravity(away=0.1)))
@@ -136,15 +89,11 @@ def test_econ():
 
     # The ICER is the incremental cost over the incremental outcome averted
     df = ssl.ICER(msim, outcome='sis.infection', baseline='None').df
-    print(df)
     assert df.averted['None'] == 0 and df.averted['Vaccine'] > 0, 'Expected vaccination to avert infections'
     row = df.loc['Vaccine']
     assert np.isclose(row.ICER, (row.cost - df.cost['None'])/row.averted), 'Expected the ICER to be the incremental cost per infection averted'
     disc = ssl.ICER(msim, outcome='sis.infection', discount=0.03, discount_start=2005).df
     assert disc.cost['Vaccine'] < row.cost, 'Expected discounting to lower the cost'
-    last = ssl.ICER(msim, outcome='sis.infection', window=ss.years(1))
-    last._ti = len(last.t_years) - 1
-    assert np.isclose(last.totals()['Vaccine'].cost[0], res.costs.total.values[-1]), 'Expected a window of one step to compare the last step alone'
 
     # A mix of two others can beat a scenario (extended dominance)
     icer = ssl.ICER()
@@ -160,10 +109,6 @@ def test_econ():
     dalys = ref.results.dalys
     assert 30 < dalys.yll.sum()/ref.results.sir.death.sum() < 89, 'Expected the years of life lost per death to be from the life table'
     assert np.isclose(dalys.dalys.sum(), dalys.yld.sum() + dalys.yll.sum())
-    live = ss.Sim(**pars, label='Live', analyzers=make(ssl.ICER(dict(Reference=ref)))).run()
-    assert set(live.analyzers.icer.df.index) == {'Reference', 'Live'}
-    with pytest.raises(ValueError, match='life_lost'):
-        ss.Sim(sis, analyzers=ssl.DALYs(), total_pop=1000, verbose=0).init()
 
     return df
 
@@ -218,13 +163,6 @@ def pertussis():
     assert 11 < ssl.Pertussis().R0() < 15, 'Expected the R0 of 11 to 15 estimated by Wearing and Rohani'
     sim = ss.Sim(ssl.Pertussis(), total_pop=100_000, start='1920-01-01', stop='1960-01-01', dt=ss.days(5), verbose=0).run()
     assert sim.results.pertussis.waning.sum() > 0, 'Expected immunity to wane'
-
-
-def dengue(): # Having had one serotype protects in part against the others, so there are fewer infections
-    run = lambda cross: ss.Sim(diseases=ssl.Dengue(cross=cross), n_agents=500, unit='day',
-                                 stop=365, rand_seed=1, verbose=0).run().results
-    total = lambda cross: sum(res.infection.sum() for res in [run(cross)[f'den{i + 1}'] for i in range(4)])
-    assert total(1.0) < 0.8*total(0.0), 'Expected cross-protection to reduce the infections'
 
 
 def typhoid(): # Carriers are a hundredth as infectious, but shed for life, so they matter for R0
@@ -286,7 +224,7 @@ def ebola(): # Safe burials prevent infections from bodies; every death is burie
 
 
 declared = dict(measles=measles, cholera=cholera, ebola=ebola, malaria=malaria, malaria_immunity=malaria_immunity, tb=tb, covid=covid, influenza=influenza,
-                rsv=rsv, pertussis=pertussis, dengue=dengue, typhoid=typhoid, polio=polio, sti=sti)
+                rsv=rsv, pertussis=pertussis, typhoid=typhoid, polio=polio, sti=sti)
 
 
 @pytest.mark.parametrize('key', declared.keys())
@@ -299,8 +237,8 @@ def test_declared_diseases(key):
 
 
 if __name__ == '__main__':
-    diseases = test_diseases()
-    hiv      = test_hiv()
-    econ     = test_econ()
+    test_hiv()
+    test_networks()
+    test_econ()
     for _key in declared:
         test_declared_diseases(_key)

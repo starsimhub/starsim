@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review
+  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review; the solver example replaced by a link to Solvers and backends on Nov 15 by AI
 ---
 
 This page is the mental model of Starsim on one page: what a model is made of, how it runs, and how Starsim decides whether to run it as compartments or as agents. For a hands-on start, see [T1 – Getting started](../tutorials/t1_intro.qmd).
@@ -121,44 +121,7 @@ The **solver** is the method that turns the model into numbers over time. There 
 | `'tau'` | Compartments, holding whole people | Many events at once (tau-leaping, close to exact) |
 | `'abm'` | Agents | Each person's events are random |
 
-By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals: a network of individual contacts, `n_agents=`, or a module written as code that keeps a value for each person. The sim says which it chose and why, and `solver=` overrides it; the options of a solver are given with its helper, e.g. `solver=ss.solvers.ode(integrator='euler')` (see [Solvers and backends](running_solvers.qmd)). Here is the same measles model run as an ODE and as agents, with two lengths of step:
-
-::: {.panel-tabset group="language"}
-## Python
-
-```{python}
-pars = dict(total_pop=100_000, stop=ss.days(50), verbose=0)
-sims = [
-    ss.Sim(measles, label='ODE', **pars),
-    ss.Sim(measles, n_agents=20_000, label='Agents, daily steps', **pars),
-    ss.Sim(measles, n_agents=20_000, dt=ss.days(0.25), label='Agents, quarter-day steps', **pars),
-]
-msim = ss.parallel(sims)
-for sim in sims:
-    print(sim.label, '-', sim.solver_reason)
-msim.plot('measles.I')
-```
-
-## R
-
-```r
-make_sim <- function(...) { # A sim with these settings, and any others given
-  Sim(measles, total_pop = 100000, stop = days(50), verbose = 0, ...)
-}
-sims <- list(
-  make_sim(label = "ODE"),
-  make_sim(n_agents = 20000, label = "Agents, daily steps"),
-  make_sim(n_agents = 20000, dt = days(0.25), label = "Agents, quarter-day steps")
-)
-msim <- parallel(sims)
-for (sim in sims) {
-  cat(sim$label, "-", sim$solver_reason, "\n")
-}
-msim$plot("measles.I")
-```
-:::
-
-With quarter-day steps, the agents follow the ODE closely: in a large, well-mixed population, the two are the same model. With daily steps, the agents' epidemic comes about three days late, since measles spreads so fast that a day is a long step for it (Starsim prints a note when a step may be too long, and `sim.check_dt()` measures how much it matters). Otherwise, the solvers differ where chance or individuals matter: in small populations, at the start of an outbreak, and with networks of particular contacts. [Solvers and backends](running_solvers.qmd) shows where, and which to use.
+By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals (a contact network, `n_agents=`, or a module written as code that keeps a value for each person). The sim says which it chose and why, and `solver=` overrides it. In a large, well-mixed population the solvers give the same answer; they differ where chance or individuals matter, and when the step is long for the model's rates. [Solvers and backends](running_solvers.qmd) explains how Starsim chooses, the options of each solver, and where they disagree.
 
 ## Further reading
 

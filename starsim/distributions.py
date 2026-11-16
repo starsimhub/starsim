@@ -19,11 +19,8 @@ def combine_rands(a, b):
     """
     Combine two arrays of random integers into one array of random numbers between 0 and 1, e.g. one for each pair of agents
 
-    See `ss.multi_random()`, which is the version to use in almost all cases.
-
-    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
-    [0, 1], so they raise an error rather than being cast, since casting would silently copy
-    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
+    See `ss.multi_random()`, which is the version to use in almost all cases. The inputs must be uint64 (signed integers
+    would give [-0.5, 0.5]); to reinterpret the bits of others without copying, use `arr.view(np.uint64)`.
 
     Args:
         a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)
@@ -39,6 +36,15 @@ def combine_rands(a, b):
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     return c / np.iinfo(np.uint64).max
+
+
+def candidates(dist, uids):
+    """ The UIDs to choose among, for `filter()`: by default, all active agents """
+    if uids is None:
+        return dist.sim.people.auids
+    elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
+        return uids.uids
+    return uids
 
 
 # The distributions, by name, for help messages
@@ -117,17 +123,12 @@ class normal(Dist):
         ```
     """
     renamed = dict(loc='mean', scale='std')
+    scipy_pars = renamed
     scaling = ['predraw', 'postdraw']
     unit_pars = ('mean', 'std')
     def __init__(self, mean=0.0, std=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='normal', dist='norm', mean=mean, std=std, **kwargs)
         return
-
-    def sync_pars(self):
-        """ Translate to SciPy's names """
-        spars = dict(loc=self._pars.mean, scale=self._pars.std)
-        self.update_dist_pars(spars)
-        return spars
 
     def make_rvs(self):
         return self.rng.normal(loc=self._pars.mean, scale=self._pars.std, size=self._size)
@@ -170,9 +171,6 @@ class truncnorm(Dist):
         a = sp_special.ndtr((p.low - p.mean)/p.std)
         b = sp_special.ndtr((p.high - p.mean)/p.std)
         return p.mean + p.std*sp_special.ndtri(a + rands*(b - a))
-
-    def make_rvs(self):
-        return self._ppf(self.rand(self._size))
 
     def _scipy(self):
         p = self._pars
@@ -236,7 +234,7 @@ class lognormal(Dist):
         if not self.log_form:
             return super().convert_timepars()
         for key, v in self._pars.items():
-            if isinstance(v, (ss.Duration, ss.Rate)) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], (ss.Duration, ss.Rate)):
+            if ss.dists.timepar_of(v) is not None:
                 errormsg = f'The log moments of ss.lognormal() ({key}={v}) are of the logarithm, so cannot have units; give mean= and std= with units instead, or a unit with unit='
                 raise NotImplementedError(errormsg)
 
@@ -297,22 +295,17 @@ class expon(Dist):
         ```
     """
     renamed = dict(scale='mean', lam='mean')
+    scipy_pars = dict(scale='mean')
     scaling = ['predraw', 'postdraw']
     def __init__(self, mean=1.0, **kwargs):
         super().__init__(distname='exponential', dist='expon', mean=mean, **kwargs)
         return
 
-    def sync_pars(self):
-        """ Translate to SciPy's names """
-        spars = dict(scale=self._pars.mean)
-        self.update_dist_pars(spars)
-        return spars
-
     def make_rvs(self):
         return self.rng.exponential(scale=self._pars.mean, size=self._size)
 
     def _ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.numba.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
         if not positive(scale):
             return super()._ppf(rands)
@@ -332,6 +325,7 @@ class poisson(Dist):
         mean (float): the mean of the distribution, often written λ (default 1.0)
     """
     renamed = dict(lam='mean', mu='mean')
+    scipy_pars = dict(mu='mean')
     scaling = 'predraw'
     def __init__(self, mean=1.0, **kwargs):
         super().__init__(distname='poisson', dist='poisson', mean=mean, **kwargs)
@@ -339,25 +333,13 @@ class poisson(Dist):
         self._ppf_cdf = None # Cached CDF for the fast ppf
         return
 
-    def sync_pars(self):
-        """ Translate to SciPy's names """
-        spars = dict(mu=self._pars.mean)
-        self.update_dist_pars(spars)
-        return spars
-
     def make_rvs(self):
         return self.rng.poisson(lam=self._pars.mean, size=self._size)
 
     def _ppf(self, rands):
         """
-        Fast inverse-CDF sampling for the common-random-number (ppf) path.
-
-        SciPy's generic discrete `ppf` is very slow (it root-finds per element),
-        and for CRN draws it is called every time an `ss.poisson` is sampled by
-        UID. For a scalar mean we instead precompute the CDF once and map each
-        uniform via `np.searchsorted`, which is 30-60x faster and produces
-        bitwise-identical results. An array-valued mean is inverted by `ss.solvers.backends.draws`
-        (SciPy's above a mean of 30, and for unusual values).
+        The inverse CDF: for a scalar mean, by `np.searchsorted()` on its CDF (computed once), 30-60x faster than SciPy's
+        generic discrete ppf and identical to it; an array of means by `ss.solvers.numba.draws` (SciPy's above a mean of 30, and for unusual values)
         """
         lam = self._pars.mean
         if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
@@ -368,7 +350,7 @@ class poisson(Dist):
                 self._ppf_lam = lam
             rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
         elif every(lam >= 0):
-            rvs = inverse('poisson', rands, lam, big=lam > ss.solvers.backends.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
+            rvs = inverse('poisson', rands, lam, big=lam > ss.solvers.numba.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
         else:
             rvs = self.dist.ppf(rands)
         return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
@@ -477,11 +459,11 @@ class nbinom(Dist):
         return super().sync_pars()
 
     def _ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30, and for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.numba.draws`); SciPy's above a mean of 30, and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n > 0) and every(p > 0) and every(p <= 1)):
             return super()._ppf(rands)
-        big = n*(1 - p)/p > ss.solvers.backends.draws.INV_MAX
+        big = n*(1 - p)/p > ss.solvers.numba.draws.INV_MAX
         return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
 
@@ -501,11 +483,11 @@ class binom(Dist):
         return
 
     def _ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.numba.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n >= 0) and every(n == np.floor(n)) and every(p >= 0) and every(p <= 1)):
             return super()._ppf(rands)
-        big = n*np.minimum(p, 1 - p) > ss.solvers.backends.draws.INV_MAX
+        big = n*np.minimum(p, 1 - p) > ss.solvers.numba.draws.INV_MAX
         return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
 
@@ -538,10 +520,8 @@ class randint(Dist):
 
     def convert_timepars(self):
         """ The bounds of a random integer can't have units """
-        timepar = (ss.Duration, ss.Rate)
-        for key, v in self._pars.items():
-            if isinstance(v, timepar) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], timepar):
-                raise NotImplementedError('randint parameters must be nondimensional')
+        if any(ss.dists.timepar_of(v) is not None for v in self._pars.values()):
+            raise NotImplementedError('randint parameters must be nondimensional')
 
     @property
     def hash_dtype(self):
@@ -578,19 +558,13 @@ class weibull(Dist):
     scaling = 'postdraw'
     unitless_pars = ('shape',)
     unit_pars = ('scale', 'loc')
+    scipy_pars = dict(c='shape', scale='scale', loc='loc')
     def __init__(self, shape=1.0, scale=1.0, *, loc=0.0, **kwargs):
         super().__init__(distname='weibull', dist='weibull_min', shape=shape, scale=scale, loc=loc, **kwargs)
         return
 
-    def sync_pars(self):
-        """ Translate to SciPy's names """
-        p = self._pars
-        spars = dict(c=p.shape, scale=p.scale, loc=p.loc)
-        self.update_dist_pars(spars)
-        return spars
-
     def _ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.numba.draws`); SciPy's for unusual parameters """
         kw = self.dist.kwds
         c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
         if not (every(np.asarray(c) > 0) and every(np.asarray(scale) > 0)):
@@ -627,6 +601,7 @@ class gamma(Dist):
     scaling = 'postdraw'
     unitless_pars = ('shape',)
     unit_pars = ('scale', 'loc')
+    scipy_pars = dict(a='shape', scale='scale', loc='loc')
     def __init__(self, shape=None, scale=None, *, loc=0.0, mean=None, std=None, **kwargs):
         if mean is not None or std is not None:
             if mean is None or std is None or shape is not None or scale is not None:
@@ -644,13 +619,6 @@ class gamma(Dist):
         if mean is not None:
             self.given = ('gamma', given)
         return
-
-    def sync_pars(self):
-        """ Translate to SciPy's names """
-        p = self._pars
-        spars = dict(a=p.shape, scale=p.scale, loc=p.loc)
-        self.update_dist_pars(spars)
-        return spars
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
@@ -759,10 +727,7 @@ class bernoulli(Dist):
             uids (array): the agents to choose among (default: all active agents)
             both (bool): if True, return the UIDs for both True and False
         """
-        if uids is None:
-            uids = self.sim.people.auids
-        elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
-            uids = uids.uids
+        uids = candidates(self, uids)
         bools = self.rvs(uids)
         return (uids[bools], uids[~bools]) if both else uids[bools]
 
@@ -780,17 +745,11 @@ class choose_n(Dist):
     Choose exactly n agents (without replacement) from a set of candidate UIDs
 
     Like `ss.bernoulli`, use the filter() method, which returns the chosen UIDs.
-    One random number is drawn per candidate (based on its slot), and the n
-    candidates with the smallest numbers are chosen. This means that if the
-    candidates change slightly (e.g. between two scenarios), most of the same
-    agents are still chosen (unlike e.g. `ss.choice(replace=False)`).
-
-    If weights are supplied, candidates are chosen with probability proportional
-    to their weight, via the Efraimidis–Spirakis key `(1-u)**(1/w)`. This is computed
-    as `-log(1-u)/w`, so the n smallest are chosen as before, and equal weights
-    give the same agents as no weights. Candidates with zero weight are never
-    chosen, so fewer than n UIDs are returned if fewer than n candidates have
-    nonzero weight.
+    One random number is drawn per candidate (by its slot), and the n with the smallest are chosen, so if the
+    candidates change slightly (e.g. between two scenarios), most of the same agents are still chosen (unlike
+    `ss.choice(replace=False)`). With weights, the key is `-log(1-u)/w` (Efraimidis–Spirakis), so candidates are chosen
+    in proportion to their weight, equal weights choose the same agents as none, and those of zero weight never are
+    (so fewer than n may be chosen).
 
     Args:
         n (int/func): the number of agents to choose (or a function returning it); if more than the number of candidates, all are chosen
@@ -814,9 +773,6 @@ class choose_n(Dist):
         super().__init__(distname='choose_n', n=n, weights=weights, **kwargs)
         self.die = die
         return
-
-    def make_rvs(self):
-        return self.rand(self._size)
 
     def _ppf(self, rands):
         return rands
@@ -843,10 +799,7 @@ class choose_n(Dist):
             uids (array): the agents to choose among (default: all active agents)
             both (bool): if True, also return the UIDs not chosen
         """
-        if uids is None:
-            uids = self.sim.people.auids
-        elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
-            uids = uids.uids
+        uids = candidates(self, uids)
         chosen = ss.uids(np.sort(uids[self._choose(uids)]))
         if both:
             return chosen, ss.uids(uids).remove(chosen)
@@ -891,12 +844,9 @@ class choice(Dist):
     """
     Random choice between discrete options
 
-    The probabilities can differ by agent: give `p` as a 2D array with one row
-    per agent drawn for (or a function returning one), and one column per choice.
-    Each row is normalized to sum to 1. Each agent's choice is found from their
-    own random number by the inverse CDF of their own row, so the draw is one
-    vectorized call, and keeps common random numbers: an agent's choice doesn't
-    depend on who else is drawn for, or on other agents' probabilities.
+    The probabilities can differ by agent: give `p` as a 2D array (or a function returning one) with a row per agent
+    drawn for, normalized to sum to 1, and a column per choice. Each agent's choice is from their own random number,
+    through their own row, so it keeps common random numbers.
 
     Args:
         a (int or array): the number of choices, or the choices themselves (default 2)
@@ -984,23 +934,15 @@ class histogram(Dist):
     """
     Draws from a histogram, uniform within each bin, e.g. ages from the number of people in each age group
 
-    Note: unlike other distributions, the parameters of this distribution can't
-    be modified after creation.
+    Unlike other distributions, its parameters can't be changed after it is made. The values can be normalized (sum
+    to 1) or not. If there are as many bins as values, they are left edges, and the last bin is as wide as the one
+    before (e.g. bins ending 40, 50 have a last edge of 60); with no bins, they are integers.
 
     Args:
         values (array): the probability (or count) of each bin
         bins (array): the edges of each bin
         density (bool): treat the histogram as a density instead of counts; only matters with unequal bin widths, see numpy.histogram and scipy.stats.rv_histogram for more information
         data (array): if supplied, compute the values and bin edges using this data and np.histogram() instead
-
-    Note: if the length of bins is equal to the length of values, they will be
-    interpreted as left bin edges, and one additional right-bin edge will be added
-    based on the difference between the last two bins (e.g. if the last two bins are
-    40 and 50, the final right edge will be added at 60). If no bins are supplied,
-    then they will be created as integers matching the length of the values.
-
-    The values can be supplied in either normalized (sum to 1) or un-normalized
-    format.
 
     Examples:
         ```python
@@ -1062,10 +1004,6 @@ class histogram(Dist):
         dist.parts = [part.hist for part in parts]
         dist.cdf_parts = [part.cdf_bins for part in parts]
         return dist
-
-    def make_rvs(self):
-        """ Draws without UIDs: the same inverse CDF as ppf(); not for the user """
-        return self._ppf(self.rand(self._size))
 
     def _scipy(self):
         """ SciPy's histogram distribution, as the draws are; none for one histogram for each group (see `by_group()`) """

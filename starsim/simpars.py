@@ -11,6 +11,11 @@ import starsim as ss
 
 
 
+def module_kind(mod, default='custom'):
+    """ The kind of a module, e.g. 'diseases' (see `ss.modules.module_map()`), or `default` for one of no standard kind """
+    return next((key for key,cls in ss.modules.module_map().items() if isinstance(mod, cls)), default)
+
+
 def flatten(items):
     """ Items given alone or in a list, with one level of lists inside it flattened, e.g. [sir, [vx1, vx2]] → [sir, vx1, vx2] """
     return [item for entry in sc.tolist(items) for item in (entry if isinstance(entry, list) else [entry])]
@@ -160,7 +165,7 @@ class SimPars(ss.Pars):
     def validate_agents(self):
         """ Make n_agents a whole number (the nearest, e.g. for a value a fit chose), and check it against the people given, if any """
         named = getattr(self.people, 'named', None)
-        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see ss.solvers.choose.init_named_people()
+        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see ss.solvers.build.init_named_people()
             self.n_agents = round(self.n_agents)
         elif self.people is not None:
             len_people = len(self.people)
@@ -200,10 +205,7 @@ class SimPars(ss.Pars):
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
         for source, mod in modules:
-            if source == 'modules': # Sorted by kind
-                modkey = next((key for key, modclass in modmap.items() if isinstance(mod, modclass)), 'custom') # Of no standard kind: kept in sim.custom
-            else: # Where they were given
-                modkey = source
+            modkey = module_kind(mod) if source == 'modules' else source # Sorted by kind (of no standard kind: kept in sim.custom), or where they were given
             self.validate_name(mod, modkey, names)
             if mod.has_product and not any(mod.product is p for p,d in products): # Products share the same namespaces; the same product can be used by more than one intervention
                 products.append((mod.product, mod))

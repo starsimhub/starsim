@@ -86,6 +86,11 @@ factors = sc.dictobj({base:sc.dictobj({k:twelfths_of_a_day[base]/v for k,v in tw
 # safe to apply to the numerator alone; everything else (np.exp, np.log, ...) raises
 unit_safe_ufuncs = {np.isnan, np.isinf, np.isfinite, np.sign, np.signbit}
 
+# Two-input ufuncs on a TimePar, as its operators: commutative ones by the TimePar's method, and others by the method if it is on the left, else the reflected one
+commutative_ufuncs = {np.add: '__add__', np.multiply: '__mul__', np.equal: '__eq__'}
+ordered_ufuncs = {np.subtract: ('__sub__', '__rsub__'), np.divide: ('__truediv__', '__rtruediv__'), np.less: ('__lt__', '__gt__'),
+                  np.greater: ('__gt__', '__lt__'), np.less_equal: ('__le__', '__ge__'), np.greater_equal: ('__ge__', '__le__')}
+
 
 #%% Typed arithmetic
 
@@ -206,49 +211,31 @@ class TimePar:
 
     @classmethod
     def _set_factors(cls):
-        """ Resets the default factors
-
-        For example, with base = 'year', years=1.0 and days=1/365. With base='day',
-        years=365.0 and days=1.0.
-        """
+        """ Set the conversion factors from the base, e.g. for base='days', years=1/365 and days=1 """
         if cls.base is not None:
             cls.factors = factors[cls.base]
         return
 
+    def _array_value(self):
+        """ The array of values; a TypeError for a scalar, so e.g. np.iterable() is False and NumPy doesn't iterate over it """
+        if self.is_scalar:
+            raise TypeError(f'{self!r} is a scalar')
+        return self.value
+
     def __iter__(self):
-        """ Iteration over array TimePars; raises TypeError for scalars so np.iterable() returns False """
-        if self.is_array:
-            return (self._new(v) for v in self.value)
-        else:
-            errormsg = f'{type(self)} is a scalar'
-            raise TypeError(errormsg)
+        return (self._new(v) for v in self._array_value())
 
     def __getitem__(self, index):
-        """ For indexing and slicing, e.g. TimePar[inds] """
-        if self.is_array:
-            return self._new(self.value[index]) # NB: this assumes that unit, base, etc are set correctly
-        else:
-            errormsg = f'{type(self)} is a scalar'
-            raise TypeError(errormsg)
+        return self._new(self._array_value()[index])
 
     def __setitem__(self, index, value):
-        """ For indexing and slicing, e.g. TimePar[inds] """
-        if self.is_array:
-            self.value[index] = value
-            return
-        else:
-            errormsg = f'{type(self)} is a scalar'
-            raise TypeError(errormsg)
+        self._array_value()[index] = value
 
     def __bool__(self):
         return True
 
     def __len__(self):
-        if self.is_scalar:
-            errormsg = f'{self} is a scalar' # This error is needed so NumPy doesn't try to iterate over the array
-            raise TypeError(errormsg)
-        else:
-            return len(self.value)
+        return len(self._array_value())
 
     def __hash__(self):
         """ Treat years as the "hash" (identity) of a TimePar """
@@ -262,6 +249,10 @@ class TimePar:
         """ Disallowed: converting a timepar to a float would silently discard its unit; see `Rate.__float__()` for the rate version """
         errormsg = f'Converting a TimePar to a float is ambiguous ({self!r}). Use tp.value for the raw value, tp.years for the value in years, and tp.to_dt() to convert to timesteps.'
         raise TypeError(errormsg)
+
+    def _valstr(self):
+        """ The value as shown in a repr: e.g. 2031.35, or an array """
+        return f'{self.value:g}' if self.is_scalar else f'{self.value}'
 
     def __format__(self, format_spec=''):
         """Delegate to the underlying value for format specifiers like :n, :g, :f, etc."""
@@ -294,21 +285,12 @@ class TimePar:
         else:
             tp_arg,o_arg = arg2,arg1
 
-        # Commutative operations
-        if   ufunc == np.add:      return tp_arg.__add__(o_arg)
-        elif ufunc == np.multiply: return tp_arg.__mul__(o_arg)
-        elif ufunc == np.equal:    return tp_arg.__eq__(o_arg)
-
-        # Non-commutative
-        elif ufunc == np.subtract:      return arg1.__sub__(arg2)     if use_left else arg2.__rsub__(arg1)
-        elif ufunc == np.divide:        return arg1.__truediv__(arg2) if use_left else arg2.__rtruediv__(arg1)
-        elif ufunc == np.less:          return arg1.__lt__(arg2)      if use_left else arg2.__gt__(arg1)
-        elif ufunc == np.greater:       return arg1.__gt__(arg2)      if use_left else arg2.__lt__(arg1)
-        elif ufunc == np.less_equal:    return arg1.__le__(arg2)      if use_left else arg2.__ge__(arg1)
-        elif ufunc == np.greater_equal: return arg1.__ge__(arg2)      if use_left else arg2.__le__(arg1)
-
-        # Otherwise raise an exception: this is likely to be a confusing error, so let's go into detail about it
-        else:
+        if ufunc in commutative_ufuncs:
+            return getattr(tp_arg, commutative_ufuncs[ufunc])(o_arg)
+        elif ufunc in ordered_ufuncs:
+            method, reflected = ordered_ufuncs[ufunc]
+            return getattr(arg1, method)(arg2) if use_left else getattr(arg2, reflected)(arg1)
+        else: # Likely to be a confusing error, so go into detail
             errormsg = f'''
 Cannot perform array operation "{ufunc}" on timepar {self}.
 
@@ -387,8 +369,7 @@ Examples:
 
     def _get_dt(self, dt=None):
         """ Return the timestep to resolve against, either supplied explicitly or set by the module """
-        if dt is None:
-            dt = self.default_dur
+        dt = sc.ifelse(dt, self.default_dur)
         if dt is None:
             errormsg = f'Cannot resolve {self!r} against a timestep, since no timestep was supplied and this timepar is not linked to a module. '
             errormsg += 'Timepars stored in a module\'s pars are linked automatically during initialization; otherwise, supply the timestep explicitly, e.g. tp.to_dt(ss.months(1)).'
@@ -513,11 +494,7 @@ class Duration(TimePar):
         return
 
     def __repr__(self):
-        if self.is_scalar:
-            valstr = f'{self.value:g}'  # e.g. 2031.35
-        else:
-            valstr = f'{self.value}' # e.g. 2000, or an array
-        return f'{self.base}({valstr})'
+        return f'{self.base}({self._valstr()})'
 
     def __str__(self):
         """ Same as repr, but show e.g. ss.days(1) as "day" """
@@ -592,19 +569,11 @@ class Duration(TimePar):
             return self._new(self.value - self.to_base(other), other=other)
         elif isinstance(other, Rate):
             incompatible(self, '-', other)
-        elif isinstance(other, ss.date) :
+        elif isinstance(other, ss.date) or (isinstance(other, ss.DateArray) and other.is_date):
             raise TypeError('Cannot subtract a date from a duration')
-        elif isinstance(other, ss.DateArray):
-            if other.is_date:
-                raise TypeError('Cannot subtract a date from a duration')
-            else:
-                return ss.DateArray(np.vectorize(self.__sub__)(other))
         elif is_number(other):
             incompatible(self, '-', other, 'A number has no unit of time; give it one, e.g. ss.days(1) + ss.days(2).')
-        elif isinstance(other, np.ndarray): # An array of durations
-            return self._new(self.value - np.array([self.to_base(val) for val in other]))
-        else:
-            return self._new(self.value - other)
+        return self + (-other) # As for addition, e.g. for an array of durations
 
     def __rsub__(self, other):
         if is_number(other):
@@ -709,9 +678,6 @@ class Duration(TimePar):
         return out
 
 
-
-
-
 class Rate(TimePar):
     """
     A value per unit of time, e.g. 2 per day: the base class of rates, probabilities, and frequencies
@@ -740,29 +706,23 @@ class Rate(TimePar):
                 errormsg = f'Cannot specify incompatible unit "{unit}" for a rate when base "{self.base}" is already specified'
                 raise ValueError(errormsg)
 
-        if unit is None:
-            if self.base is not None:
-                dur_class = get_dur_class(self.base)
-                self.unit = dur_class(1)
-            else:
-                if isinstance(self, ss.prob): # ss.prob is the only one for which not having a unit is fine
-                    self.unit = None
-                else:
-                    errormsg = f'ss.{type(self).__name__}({value}) needs a unit, e.g. ss.{type(self).__name__}({value}, "day") or ss.perday({value})'
-                    raise ValueError(errormsg)
+        if unit is None and self.base is not None:
+            self.unit = get_dur_class(self.base)(1)
+        elif unit is None and isinstance(self, ss.prob): # ss.prob is the only one for which not having a unit is fine
+            self.unit = None
+        elif unit is None:
+            errormsg = f'ss.{type(self).__name__}({value}) needs a unit, e.g. ss.{type(self).__name__}({value}, "day") or ss.perday({value})'
+            raise ValueError(errormsg)
         elif isinstance(unit, ss.Duration):
             self.unit = unit
         elif isinstance(unit, str):
-            dur_class = get_dur_class(unit)
-            self.unit = dur_class(1)
-        else: # e.g. number
-            self.unit = ss.years(unit) # Default of years
+            self.unit = get_dur_class(unit)(1)
+        else: # e.g. a number, in years
+            self.unit = ss.years(unit)
 
-        # Convert from one rate to another
-        if isinstance(value, Rate):
+        if isinstance(value, Rate): # Convert from one rate to another
             value = self._convert_rate(value)
-
-        if isinstance(value, list):
+        elif isinstance(value, list):
             value = np.array(value)
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
@@ -825,16 +785,11 @@ class Rate(TimePar):
 
     def to(self, unit):
         """
-        Convert this rate to one with a different denominator
+        Convert this rate to one with a different denominator: a rate class (e.g. `ss.permonth`), or a duration
+        unit (e.g. `'month'` or `ss.months`) for the rate class of the same kind (`ss.peryear(1).to('month')` is `permonth(0.0833)`)
 
-        As well as the rate classes (e.g. `ss.permonth`), a duration unit can be
-        supplied (e.g. `'month'` or `ss.months`), in which case the matching rate
-        class of the same subtype is used -- so `ss.peryear(1).to('month')` gives
-        `permonth(0.0833)`, while `ss.probperyear(1).to('month')` gives `probpermonth(...)`.
-
-        Note that for `ss.prob` the conversion is not linear, since a probability has to be
-        converted via the underlying rate: `ss.probperyear(0.5).to(ss.probpermonth)` gives
-        `probpermonth(0.0561)`, not `probpermonth(0.0417)`. This matches `prob.to_prob()`.
+        For `ss.prob`, the conversion is through the underlying rate, as for `prob.to_prob()`:
+        `ss.probperyear(0.5).to(ss.probpermonth)` is `probpermonth(0.0561)`, not 0.0417.
 
         Args:
             unit (str/type): the rate class or duration unit to convert to, e.g. `ss.permonth` or 'month'
@@ -860,17 +815,10 @@ class Rate(TimePar):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if name in ['Rate', 'prob', 'per', 'freq']: # If it's a base class, show the unit, e.g. Rate(3/years())
-            valstr = f'{self.value:g}' if self.is_scalar else f'{self.value}' # Can't use g format with arrays
-            unitstr = f'/{self.unit}' if self.unit is not None else '' # For unitless probabilities
-            out = f'{name}({valstr}{unitstr})'
-        else: # Otherwise, it's in the class name, e.g. peryear(3), probperyear(0.1), or freqperyear(80)
-            if self.is_scalar:
-                valstr = f'{self.value:g}'  # e.g. 2031.35
-            else:
-                valstr = f'{self.value}' # e.g. 2000, or an array
-            out = f'{name}({valstr})'
-        return out
+        unitstr = '' # The unit is in the class name, e.g. peryear(3), probperyear(0.1), or freqperyear(80)
+        if name in ['Rate', 'prob', 'per', 'freq'] and self.unit is not None: # A base class, so show the unit, e.g. Rate(3/years()); none for a unitless probability
+            unitstr = f'/{self.unit}'
+        return f'{name}({self._valstr()}{unitstr})'
 
     def __float__(self):
         """ Disallowed: a rate cannot be converted to a float without first resolving its denominator """
@@ -1038,46 +986,17 @@ class Rate(TimePar):
 
 class prob(Rate):
     """
-    `prob` represents the probability of an event occurring during a
-    specified period of time.
+    The probability of an event occurring during a period of time, e.g. `ss.prob(0.8, ss.years(1))` (or `ss.probperyear(0.8)`)
 
-    The class is designed to allow conversion of a probability from one
-    duration to another through multiplication. However, the behavior of this
-    conversion depends on the data type of the object being multiplied.
+    Times a duration, it is the probability over that duration, through the underlying constant rate
+    `rate = -log(1 - p)`: `p*ss.years(2)` is `1 - exp(-2*rate)`, 96% (the chance of at least one event in
+    two years), not 160%. Times a number, the rate is scaled rather than the probability, so the result is always
+    a valid probability: `p*2` is `ss.prob(0.96, ss.years(1))`, the same as `p + p` (two competing hazards), and
+    `p*0.2` is 0.275, not 0.16. A probability of 1 is an infinite rate, so it stays 1 whatever it is multiplied by;
+    as the rate of a declared transition, it moves everyone in the step (as agents, those who arrive in the step
+    too; in compartments, the whole compartment at the start of each step or substep).
 
-    When multiplied by a duration (type ss.Duration), the underlying constant rate is
-    calculated as
-        `rate = -np.log(1 - self.value)`.
-    Then, the probability over the new duration is
-        `p = 1 - np.exp(-rate*factor)`,
-    where `factor` is the ratio of the new duration to the original duration.
-
-    For example,
-    >>> p = ss.prob(0.8, ss.years(1))
-    indicates a 80% chance of an event occurring in one year.
-
-    >>> p*ss.years(1)
-    When multiplied by the original denominator, 1 year in this case, the
-    probability remains unchanged, 80%.
-
-    >>> p * ss.years(2)
-    Multiplying `p` by `ss.years(2)` does not simply double the
-    probability to 160% (which is not possible), but rather returns a new
-    probability of 96% representing the chance of the event occurring at least
-    once over the new duration of two years.
-
-    When a `prob` object is multiplied by a number, the underlying rate is
-    scaled, not the probability, so the result is always a valid probability:
-    >>> p * 2
-    is `ss.prob(0.96, ss.years(1))`, the same as `p + p` (two competing hazards),
-    and `p * 0.2` is 0.275, not 0.16. A probability of 1 is an infinite rate,
-    so it stays 1 whatever it is multiplied by; as the rate of a declared
-    transition, it moves everyone in the step (as agents, those who arrive in
-    the step too; in compartments, the whole compartment at the start of each
-    step or substep).
-
-    Use `per` instead of `prob` if you would prefer to directly
-    specify the instantaneous rate.
+    Use `ss.per` to give the instantaneous rate directly.
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
@@ -1193,52 +1112,20 @@ class prob(Rate):
 
 class per(Rate):
     """
-    A `per` represents an instantaneous rate of an event occurring. Rates
-    must be non-negative, but need not be less than 1.
+    An instantaneous rate (a hazard) of an event, e.g. `ss.per(0.8, ss.years(1))` (or `ss.peryear(0.8)`)
 
-    Through multiplication, rate can be modified or converted to a probability,
-    depending on the data type of the object being multiplied.
+    Times a number (e.g. a relative rate), the rate is scaled. Times a duration, it is the probability of the event
+    in that duration, `1 - exp(-rate*factor)`, with `factor` the duration over the rate's unit: `ss.peryear(0.8)*ss.years(1)`
+    is about 55%. Where `ss.prob` starts from a probability (probability → rate → probability), a `per` starts from the rate.
 
-    When a `per` is multiplied by a scalar or array, the rate is simply
-    scaled. Such multiplication occurs frequently in epidemiological models,
-    where the base rate is multiplied by "rate ratio" or "relative rate" to
-    represent people experiencing higher (multiplier > 1) or lower (multiplier <
-    1) event rates.
-
-    Alternatively, when a `per` is multiplied by a duration (type
-    ss.Duration), a probability is calculated. The conversion from rate to
-    probability on multiplication by a duration is
-        `1 - np.exp(-rate*factor)`,
-    where `factor` is the ratio of the multiplied duration to the original
-    period (denominator).
-
-    For example, consider
-    >>> p = ss.per(0.8, ss.years(1))
-    When multiplied by a duration of 1 year, the calculated probability is
-        `1 - np.exp(-0.8)`, which is approximately 55%.
-    >>> p*ss.years(1)
-
-    When multiplied by a scalar, the rate is simply scaled.
-    >>> p*2
-
-    The difference between `prob` and `per` is subtle, but important. `per` works directly
-    with the instantaneous rate of an event occurring. In contrast, `prob` starts with a probability and a duration,
-    and the underlying rate is calculated. On multiplication by a duration,
-    * per: rate -> probability
-    * prob: probability -> rate -> probability
-
-    The behavior of both classes depends on the data type of the object being multiplied.
-
-    `ss.per` has the same dimension as `ss.freq`, but by default multiplication returns
-    a probability rather than a number of events. Use `ss.per` for hazards
-    (e.g., the rate of death per year), and `ss.freq` for events (e.g., number of acts per year).
+    `ss.per` has the same dimension as `ss.freq`, but times a duration it is a probability rather than a number of
+    events: use `ss.per` for hazards (e.g. the rate of death per year), and `ss.freq` for events (e.g. acts per year).
+    A negative rate is allowed only for net migration (`ss.migration(rate=ss.peryear(-0.005))`); as the rate of a
+    transition or a probability, it is an error (see `to_prob()`).
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
     timepar_subtype = 'per'
-
-    def __init__(self, value, unit=None): # A negative rate is allowed only for net migration (ss.migration(rate=ss.peryear(-0.005))); as the rate of a transition or a probability, it is an error (see to_prob())
-        super().__init__(value, unit)
 
     def __mul__(self, other):
         return self._mul(other, self.to_prob)
@@ -1382,8 +1269,6 @@ class peract:
 
 
 #%% Convenience classes
-
-
 
 # Value at which to switch over from interpreting a value from a year duration to a calendar year
 cal_year_threshold = 1800 # Low enough for a long burn-in before 1900
@@ -1546,28 +1431,13 @@ from .dates import DateArray, date, datedur
 
 class MockAxis():
     """
-    Emulator for Axis.get_view_interval() to return converted values
-
-    Matplotlib's date locators (AutoDateLocator, YearLocator, MonthLocator etc.)
-    call Axis.get_view_interval() to get the current axis limits. These locators all
-    expect the values to be returned in matplotlib dates (i.e., days since 1970-01-01).
-    This helper class is bound to the actual axis, and emulates `Axis.get_view_interval()`
-    performing the conversion to return the values in the expected units. That way, the
-    Locator instances can be used directly without needing any other changes.
-
-    When this class is instantiated, it is bound to an actual Axis instance. The axis
-    instance would have our custom date units and values in floating point years. Then
-    `MockAxis.get_view_interval()` converts these years to standard matplotlib date values
-    before they get passed to the Matplotlib locators.
+    An axis (of float years) as Matplotlib's date locators see it: `get_view_interval()` gives its limits in Matplotlib
+    dates (days since 1970-01-01), which the locators expect, so they can be used unchanged
     """
-
     def __init__(self, axis):
         self.axis = axis
 
     def get_view_interval(self):
-        """
-        Return converted axis limits, as a tuple of (min, max) in matplotlib date units (days since 1970-01-01)
-        """
         ymin, ymax = self.axis.get_view_interval()
         vmin, vmax = matplotlib.dates.date2num(ss.date(ymin)), matplotlib.dates.date2num(ss.date(ymax))
         return vmin, vmax
@@ -1575,16 +1445,8 @@ class MockAxis():
 
 class FloatYearLocator(matplotlib.ticker.Locator):
     """
-    Locator to calculate tick positions for float year axes
-
-    It exists so that a plot against decimal years gets tick marks at sensible dates.
-
-    Matplotlib's AutoDateLocator is the standard way of calculating date-based tick
-    positions, incorporating a lot of functionality around sensibly setting the tick intervals
-    e.g., to whole months. This class wraps AutoDateLocator to allow it to be used
-    with float year axis values, by converting the float year values to matplotlib date values
-    before calling the locator, and then converting the calculated tick positions back to
-    float years before returning them.
+    Tick positions at sensible dates (e.g. whole months) for an axis of float years: Matplotlib's AutoDateLocator, on
+    the years converted to Matplotlib dates, with its ticks converted back to years (for durations, its AutoLocator)
     """
 
     def __init__(self, unit):
@@ -1599,12 +1461,7 @@ class FloatYearLocator(matplotlib.ticker.Locator):
             self._float_locator = matplotlib.ticker.AutoLocator() # Store an AutoLocator to handle DateArrays that contain dur values rather than dates
 
     def set_axis(self, axis):
-        # When binding this locator to an axis, we also need to bind the internal date locator
-        # to a MockAxis instance that performs a conversion from our years to matplotlib values.
-        # This instance is internally passed from AutoDateLocator to whichever child class instance
-        # gets used to calculate the tick locations. The float_locator (for dur values) does not need
-        # to be bound to a MockAxis because the axis is already in the raw units (from `to_human()`)
-        # and therefore we can bind it to the actual axis directly.
+        # The date locator is bound to a MockAxis, which converts the years to Matplotlib dates; the float locator (for durations) to the axis itself
         super().set_axis(axis)
         if self._convert_dates:
             self._date_locator.set_axis(MockAxis(axis))
@@ -1647,14 +1504,7 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
 
 class FloatYearFormatter(sc.ScirisDateFormatter):
-    """
-    Formatter that renders float years as calendar dates
-
-    It exists so that a plot against decimal years shows dates on its axis.
-
-    This class provides the same formatting as sc.ScirisDateFormatter, but works with
-    axis values that are float years, rather than matplotlib date values (days since 1970-01-01)
-    """
+    """ Labels for an axis of float years as calendar dates, as `sc.ScirisDateFormatter` gives them for Matplotlib dates """
     def format_data_short(self, value):
         return super().format_data_short(matplotlib.dates.date2num(ss.date(value)))
 
@@ -1668,35 +1518,15 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
 
 class DateConverter(matplotlib.units.ConversionInterface):
     """
-    Starsim date conversion interface for matplotlib
+    The converter Matplotlib uses for `ss.date`, `ss.DateArray`, and `ss.Duration`, so they can be plotted directly
 
-    It exists so that Matplotlib can plot `ss.date` and `ss.Duration` values directly.
-
-    This class gets registered with matplotlib as the converter for Starsim
-    date and DateArray types, allowing them to be used directly as axis values. This achieves
-    two outcomes
-
-    1. When Starsim date or DateArray values are plotted, the x-axis values are automatically converted
-       to float years for plotting. If this class is not used, matplotlib will instead convert them to
-       days since 1970-01-01, which is the default behavior for pd.Timestamp.
-    2. If the first plotting command used on an axis has date/DateArray as the x-axis, our standard
-       custom date locators and formatters will be used, so that the float years will automatically be
-       labeled with dates.
-
-    Together, this means that users can freely plot both Starsim date/DateArray values and
-    plain float years on the same axis without needing any conversions, and they'll also automatically
-    get date-based ticks without needing to set the locator, even if they are using custom plotting
-    code rather than ss.Result.plot().
+    Dates are plotted as float years (rather than Matplotlib's days since 1970), so they can share an axis with plain
+    years; and if dates are the first thing plotted on an axis, it gets date ticks and labels, even in custom plotting code.
     """
 
     @staticmethod
     def axisinfo(unit, axis):
-        """
-        Specify which locators and formatters should be used if an instance of a registered class is the first one plotted
-        """
-
-        # If the unit is a date, use our custom locators and formatters to set the tick locations/labels
-        # Otherwise, set them to `None` to use matplotlib's defaults
+        """ The locator and formatter for an axis whose first values are of a registered class: date ticks for dates, else Matplotlib's defaults """
         if issubclass(unit, ss.date):
             loc = FloatYearLocator(unit)
             fmt = FloatYearFormatter(loc)
@@ -1733,10 +1563,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     @staticmethod
     def convert(value, unit, axis):
-        # Handle the conversion of registered class instances to numerical values
-        # that will appear as the x-values for any plotted data - this is the crucial
-        # part so that plotting float year data is compatible with date data. Timepars
-        # are converted here rather than by float(), which is deliberately disallowed.
+        # Registered values as numbers on the axis (float years for dates), so they are compatible with plain years; not by float(), which timepars disallow
         if isinstance(value, np.ndarray) and value.dtype != object: # Already numeric, e.g. float years
             return value
         elif sc.isiterable(value):

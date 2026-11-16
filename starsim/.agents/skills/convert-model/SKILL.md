@@ -47,24 +47,25 @@ An import that could not translate everything is not refused: `ss.import_from()`
 
 ## Frameworks
 
-| Framework | Mechanical import | Guide |
-|---|---|---|
-| EMULSION | `format='emulsion'` (YAML) | `references/emulsion.md` |
-| odin | `format='odin'` (the R DSL) | `references/odin.md` |
-| SBML | `format='sbml'` (XML) | `references/sbml.md` |
-| SimInf | `format='siminf'` (`mparse` and the predefined models) | `references/siminf.md` |
-| flepiMoP | `format='flepimop'` (the config YAML) | `references/flepimop.md` |
-| summer2 | `format='summer2'` (a JSON dump of the model object) | `references/summer2.md` |
-| Atomica | `format='atomica'` (the framework and databook workbooks, and any program book and calibration) | `references/atomica.md` |
-| EpiModel | `format='epimodel'` (a JSON dump from `dump_epimodel.R`; built-in models and networks, custom modules listed with their R source) | `references/epimodel.md` |
-| epydemix | `format='epydemix'` (a JSON dump from `starsim/converters/epydemix.py` run as a script, or a live model) | `references/epydemix.md` |
-| epipack | `format='epipack'` (a JSON dump from `starsim/converters/epipack.py` run as a script) | the user guide's conversion page |
-| epymorph | `format='epymorph'` (a JSON dump from `starsim/converters/epymorph.py` run as a script) | the user guide's conversion page |
-| LASER, laser-measles | by hand | `references/laser.md` |
-| MEmilio | `format='memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`, alone, on a `MobilityGraph` (places with commuting), or in a parameter study (distributions as priors)); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
-| camdl | `format='camdl'` (a `.camdl` file, or camdlc's JSON) | `references/camdl.md` |
-| Pandemic Simulator | by hand | `references/pandemic_simulator.md` |
-| Starsim v3 | upgrade first with the migrate-starsim3 skill (removed names, changed results); then declared transitions by hand | `references/starsim3.md` |
+What each importer reads, and how to get the file (some frameworks are dumped to JSON first, by a script run in their own environment), is in [Importing and exporting](https://starsim.org/v4/user_guide/building_import.html#the-formats). The guide for each framework:
+
+| Framework | Guide |
+|---|---|
+| Atomica | `references/atomica.md` |
+| camdl | `references/camdl.md` |
+| EMULSION | `references/emulsion.md` |
+| EpiModel | `references/epimodel.md` |
+| epydemix | `references/epydemix.md` |
+| epipack, epymorph | the user guide page above |
+| flepiMoP | `references/flepimop.md` |
+| LASER, laser-measles (by hand) | `references/laser.md` |
+| MEmilio | `references/memilio.md` |
+| odin | `references/odin.md` |
+| Pandemic Simulator (by hand) | `references/pandemic_simulator.md` |
+| SBML | `references/sbml.md` |
+| SimInf | `references/siminf.md` |
+| summer2 | `references/summer2.md` |
+| Starsim v3 (upgrade first with the migrate-starsim3 skill) | `references/starsim3.md` |
 
 `ss.converters.importers` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.converters.Source` (states, parameters, flows as written in the source) and call `ss.converters.build(source)`, which classifies the rates by the same rules, prints how it read each one, and writes the model as code (`ss.converters.write(source)` gives the code alone).
 
@@ -72,15 +73,7 @@ An import that could not translate everything is not refused: `ss.import_from()`
 
 An export is also two passes. `ss.export_to()` writes what it can, and lists the rest; what it left out is then yours to translate or report. Each exporter writes the compartmental form of the declared diseases, so it carries less than an import (`ss.converters.exporters` lists them; `starsim convert --to=<format>` from the shell).
 
-| To share | How |
-|---|---|
-| The model, for SBML tools such as COPASI | `ss.export_to(sim, 'sbml', filename='model.xml')` |
-| The model, for odin | `ss.export_to(sim, 'odin', filename='model.R')` |
-| The model, for EpiModel, SimInf, summer2, epydemix, epipack, epymorph, MEmilio, or Atomica | `ss.export_to(sim, '<format>', filename=...)`: an R or Python script that builds and runs it in the framework, or for Atomica, a framework workbook |
-| The model, for any other framework | By hand, from `sim.diseases.x.equations()`, reading the framework's guide in `references/` from right to left |
-| Results | `sim.to_json()`, or `sim.to_df()` |
-| Forecasts for a hub | `ss.converters.to_hub()` |
-| The model, for Starsim users | The script itself, or `ss.save()` for a sim partway through a run |
+What each format holds, and the other ways to write a model or its results out (JSON, `sim.to_json()`, `ss.save()`, forecast hubs with `ss.converters.to_hub()`), is in [Importing and exporting](https://starsim.org/v4/user_guide/building_import.html#exporting-a-model). For a framework with no exporter, write it by hand from `sim.diseases.x.equations()`, reading the framework's guide in `references/` from right to left.
 
 1. **Decide whether the target can hold the model.** Exports are compartmental, so a model whose answer depends on individuals (a network, histories, who infected whom) changes meaning, even though the export succeeds. Say so before going on, rather than after.
 2. **Export, and read every line of the `ss.errors.LossyExport` warning.** An export doesn't fail for what it can't carry. Lines starting `not exported:` were dropped (a network is written as homogeneous mixing; interventions, code, and functions are left out), and lines starting `changed:` were altered (a sim run as agents is written as an ODE; a stratified disease is written as the sum of its groups, with the base values of its parameters). Each line is a difference between the two models.

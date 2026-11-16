@@ -78,7 +78,8 @@ def likelihoods(sim, data=None, likelihood=None):
         if likelihood is not None and not isinstance(likelihood, dict): # One for every series
             given = likelihood
         else:
-            given = (likelihood or {}).get(col, (likelihood or {}).get(name, (likelihood or {}).get(res.name)))
+            by_name = likelihood or {}
+            given = by_name.get(col, by_name.get(name, by_name.get(res.name)))
         if given is None:
             for mod in sim.declared:
                 if mod.results.get(res.name) is res and res.name in mod.graph.outcomes: # By the result itself, since its module is a label
@@ -90,6 +91,15 @@ def likelihoods(sim, data=None, likelihood=None):
 def lik_pars(lik):
     """ The parameters of a likelihood: a distribution's, or none for a function """
     return lik.pars if isinstance(lik, ss.Dist) else {}
+
+
+def par_values(dist):
+    """ The current values of a distribution's parameters (an `ss.par` as its value) """
+    return {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
+
+
+lik_choices = 'ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(std=...), or ss.lognormal(std=...)' # The distributions that can be likelihoods
+no_lik = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())'
 
 
 def logpdf(dist, observed, model, xp=np, pars=None):
@@ -132,7 +142,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     gammaln = spsp.gammaln if jsp is None else jsp.special.gammaln
     norm = sps.norm if jsp is None else jsp.stats.norm
     if pars is None:
-        pars = {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
+        pars = par_values(dist)
     mean = xp.maximum(model, 1e-9)
     if isinstance(dist, ss.poisson):
         out = observed*xp.log(mean) - mean - gammaln(observed + 1)
@@ -162,7 +172,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
         sigma2 = pars['log_std']**2 if dist.log_form else xp.log1p(pars['std']**2/mean**2)
         logobs = np.log(np.where(observed > 0, observed, 1.0))
         return xp.where(observed > 0, norm.logpdf(logobs, xp.log(mean) - sigma2/2, xp.sqrt(sigma2)) - logobs, -np.inf)
-    errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(std=...), or ss.lognormal(std=...) (or log_std=...)'
+    errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use {lik_choices} (or log_std=...)'
     raise TypeError(errormsg)
 
 
@@ -171,11 +181,11 @@ def draw(dist, model, rng):
     Values drawn from a likelihood, with the model's values as its mean, as `logpdf()` reads them: what `sim.to_synthetic_data(noise=)` draws
 
     Args:
-        dist (`ss.Dist`): the likelihood: `ss.poisson()`, `ss.nbinom(n=...)`, `ss.binom(n=...)`, `ss.bernoulli()`, `ss.normal(std=...)`, or `ss.lognormal(std=...)`
+        dist (`ss.Dist`): the likelihood (see `logpdf()`)
         model (array): the model's values
         rng (`np.random.Generator`): the random numbers
     """
-    pars = {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
+    pars = par_values(dist)
     mean = np.maximum(model, 0)
     if isinstance(dist, (ss.binom, ss.bernoulli)) and np.any((np.asarray(model) < 0) | (np.asarray(model) > 1)):
         errormsg = f'ss.{type(dist).__name__}() draws with the model\'s value as a probability, but the values go up to {np.max(model):n}: use it for a fraction, such as a prevalence, and ss.poisson() or ss.nbinom() for a count'
@@ -193,7 +203,7 @@ def draw(dist, model, rng):
     elif isinstance(dist, ss.lognormal):
         sigma2 = np.log1p(pars['std']**2/np.maximum(mean, 1e-9)**2)
         return rng.lognormal(np.log(np.maximum(mean, 1e-9)) - sigma2/2, np.sqrt(sigma2))
-    errormsg = f'{type(dist).__name__} is not a likelihood to draw data from; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(std=...), or ss.lognormal(std=...)'
+    errormsg = f'{type(dist).__name__} is not a likelihood to draw data from; use {lik_choices}'
     raise TypeError(errormsg)
 
 
@@ -272,11 +282,9 @@ class ParticleFilter(sc.prettyobj):
     An estimate of the likelihood of a stochastic sim's data, from a bootstrap particle filter (see `sim.fit()` with `method='pmcmc'`)
 
     Many runs of the sim (the particles, `ss.solvers.Particles`) go forward together. At each data point, each is
-    weighted by the likelihood of the data given its results, and when the weights become
-    uneven, the runs are drawn again in proportion to them, so that runs that have strayed
-    from the data are dropped and those that follow it are copied. The product over the data
-    of the mean weight is an unbiased estimate of the likelihood (Andrieu, Doucet & Holenstein 2010),
-    which is what particle MCMC needs.
+    weighted by the likelihood of the data given its results, and when the weights become uneven, the runs are
+    drawn again in proportion to them. The product over the data of the mean weight is an unbiased estimate of
+    the likelihood (Andrieu, Doucet & Holenstein 2010), which is what particle MCMC needs.
 
     Each declared disease is filtered on its own, since the diseases of a sim that the kernels run
     whole do not affect each other, except those tracked jointly (see `ss.solvers.JointStates`), which are
@@ -284,8 +292,7 @@ class ParticleFilter(sc.prettyobj):
     (rather than drawn, as a run of the sim draws it), as the likelihood would compare it.
 
     After each call, `path` is one run drawn from the filter: a particle at the last data point, drawn by its weight,
-    and the particles it was copied from back to the start (Andrieu, Doucet & Holenstein 2010), as particle MCMC keeps with each draw
-    (see `Fit.trajectories`). For each disease filtered (or diseases tracked jointly, by the first's name), it has the time point after the last
+    and the particles it was copied from back to the start, as particle MCMC keeps with each draw (see `Fit.trajectories`). For each disease filtered (or diseases tracked jointly, by the first's name), it has the time point after the last
     step that its data read, `ti`; the compartments there, `y`; and, by disease, how many were in each state (`stocks`) and the flow along each
     transition (`flows`) at each time point before it (totals over the groups), as `ss.solvers.Compartmental.run_many()` takes them to continue the run.
 
@@ -306,26 +313,13 @@ class ParticleFilter(sc.prettyobj):
             errormsg = f'The particle filter cannot run this sim, since {why}; use method="optuna" instead'
             raise ValueError(errormsg)
         self.sim = sim
-        lined = lineup(sim)
         mods = list(sim.declared)
-        self.series = []
-        for col in sim.data.columns:
-            base, dims = parse_column(col)
-            res = match_name(sim, base)
-            j = [j for j,mod in enumerate(mods) if mod.results.get(res.name) is res][0]
-            engine = mods[j].engine
-            keep = None
-            if dims: # The groups of a stratum
-                keep = np.ones(sim.groups.n_groups)
-                for dim,level in column_levels(sim, dims).items():
-                    d = sim.groups.dim_index(dim)
-                    keep = keep*(sim.groups.group_levels[:, d] == sim.groups.strats[d].index(level))
-            W, expected, rows = lined[col]
-            spans = [(np.flatnonzero(w).min(initial=len(w)) if w.any() else 0, np.flatnonzero(w).max(initial=0) + 1) for w in W] # The steps that each data point is worked out from
-            read = self.reader(engine, res.name)
-            back = 0 if read is not None else self.reach(engine, res.name)
-            self.series.append(sc.obj(col=col, j=j, name=res.name, read=read, back=back, keep=keep, W=W, spans=spans, expected=expected, rows=rows,
-                                          lik=liks[col], weight=series_weight(weights, col)))
+        self.series = data_series(sim, liks, weights)
+        for s in self.series:
+            engine = mods[s.j].engine
+            s.spans = [(np.flatnonzero(w).min(initial=len(w)) if w.any() else 0, np.flatnonzero(w).max(initial=0) + 1) for w in s.W] # The steps that each data point is worked out from
+            s.read = self.reader(engine, s.name)
+            s.back = 0 if s.read is not None else self.reach(engine, s.name)
         self.engines = {j:mods[j].engine for j in sorted({s.j for s in self.series})}
         self.path = None
         return
@@ -509,6 +503,34 @@ class ParticleFilter(sc.prettyobj):
         return
 
 
+def data_series(sim, liks, weights):
+    """
+    Each data series of a sim, as an `sc.obj`: its column (`col`); the position in `sim.declared` of the module whose result it is
+    (`j`, None if none); the result's name; the groups of its stratum (`keep`); what `ss.results.lineup()` gives for it (`W`,
+    `expected`, `rows`); and its likelihood and weight
+    """
+    lined = lineup(sim)
+    out = []
+    for col in sim.data.columns:
+        base, dims = parse_column(col)
+        res = match_name(sim, base)
+        owners = [j for j,mod in enumerate(sim.declared) if mod.results.get(res.name) is res] # By the result itself, since its module is a label
+        W, expected, rows = lined[col]
+        out.append(sc.obj(col=col, j=owners[0] if owners else None, name=res.name, keep=stratum_mask(sim, dims), W=W, expected=expected, rows=rows, lik=liks[col], weight=series_weight(weights, col)))
+    return out
+
+
+def stratum_mask(sim, dims):
+    """ Which groups (1 or 0) are in the stratum of a data column, from its dimensions (see `ss.results.parse_column()`); None for everyone """
+    if not dims:
+        return None
+    keep = np.ones(sim.groups.n_groups)
+    for dim,level in column_levels(sim, dims).items():
+        d = sim.groups.dim_index(dim)
+        keep = keep*(sim.groups.group_levels[:, d] == sim.groups.strats[d].index(level))
+    return keep
+
+
 def data_end(sim):
     """ The time point after the last step that the data read (as `ss.fitting.ParticleFilter`'s runs end), where a run kept with a draw ends, so that a projection's scenarios differ after the data rather than after the sim's stop """
     return max(int(np.flatnonzero(np.any(W != 0, axis=0)).max(initial=-1)) + 1 for W,_,_ in lineup(sim).values())
@@ -598,17 +620,11 @@ class Swarm(sc.prettyobj):
             errormsg = f'IF2 cannot fit "{modified[0]}", which a modifier changes; use method="pmcmc"'
             raise ValueError(errormsg)
         self.consts = {k:self.index[id(par)] for k,par in enumerate(engine.prog_pars) if id(par) in self.index}
-        self.flows = []
-        for f,flow in enumerate(engine.flows): # The flows whose rate is worked out from fitted values alone, as in ss.gradients.Density
-            if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.solvers.backends.kernels.convey())
-                continue
-            dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
-            leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
-            if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
-                errormsg = f'IF2 cannot fit a parameter of the distribution of a dwell time ("{flow.tr.name}"); use method="pmcmc"'
-                raise ValueError(errormsg)
-            if any(id(leaf) in self.index for leaf in leaves):
-                self.flows.append((f, flow, dw, np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)))
+        try: # The flows whose rate is worked out from fitted values alone, as in ss.gradients.Density
+            flows = ss.gradients.rate_flows(engine, lambda leaf: id(leaf) in self.index)
+        except ss.gradients.Unsupported as E:
+            raise ValueError(f'IF2 cannot fit {E}; use method="pmcmc"') from E
+        self.flows = [(f, flow, dw, np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)) for f,flow,dw in flows]
 
         # Each fitted value must set the rates of the run, or the time fraction between places, and nothing else: the rest is the same for every particle
         self.x0 = x0 = to_x(z0)[0]
@@ -644,7 +660,7 @@ class Swarm(sc.prettyobj):
         return
 
     def fracs(self, x=None):
-        """ The time fraction between places of every particle, as `ss.solvers.backends.kernels.advance()` takes it (particles by entries; default, the swarm's) """
+        """ The time fraction between places of every particle, as `ss.solvers.numba.compartmental.advance()` takes it (particles by entries; default, the swarm's) """
         x = self.to_x(self.z)[0] if x is None else x
         return np.ascontiguousarray(self.sh0 + (x - self.x0) @ self.sh_slopes)
 
@@ -674,7 +690,7 @@ class Swarm(sc.prettyobj):
         return self.to_x(self.z.mean(axis=0))[0]
 
     def tables(self, x=None, rows=slice(None)):
-        """ The parts of the program that vary in time, as `ss.solvers.backends.kernels.advance()` takes them: for every particle, with its own values (particles by values; default, the swarm's), at some rows (of those that vary in time) """
+        """ The parts of the program that vary in time, as `ss.solvers.numba.compartmental.advance()` takes them: for every particle, with its own values (particles by values; default, the swarm's), at some rows (of those that vary in time) """
         x = self.to_x(self.z)[0] if x is None else x
         n = len(x)
         ctx = ParticleCtx(self, self.engine, x.T[:, :, None, None], rows) # Each value as particles by 1 by 1, so a value by row and group broadcasts
@@ -901,9 +917,9 @@ def pmmh(logpost, z0, draws='auto', warmup=1000, chains=4, particles=None, rand_
     def take(chain_list, count):
         """ Take every chain `count` steps further, in parallel processes or one after another """
         if parallel:
-            method = ss.solvers.backends.kernels.start_method()
-            with ss.solvers.backends.kernels.starting_workers(method):
-                return sc.parallelize(ss.solvers.backends.kernels.worker(advance), iterarg=[(c, count) for c in chain_list], start_method=method)
+            method = ss.solvers.backends.workers.start_method()
+            with ss.solvers.backends.workers.starting_workers(method):
+                return sc.parallelize(ss.solvers.backends.workers.worker(advance), iterarg=[(c, count) for c in chain_list], start_method=method)
         return [advance(c, count) for c in chain_list]
 
     auto = draws == 'auto'
@@ -1739,6 +1755,16 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
                         sim=best, n_runs=n_runs[0], what=str(getattr(what, '__name__', what)), converged=bool(res.success) if res is not None else True, why=str(res.message) if res is not None else 'nothing to allocate')
 
 
+def log_scale(lows, highs):
+    """ Which values are searched (and sampled) on a log scale: those with wide positive bounds """
+    return (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10)
+
+
+def central_slopes(fn, x, hs):
+    """ The derivative of fn (a number or an array) along each value of x, by central differences with steps hs """
+    return np.array([(fn(x + h*e) - fn(x - h*e))/(2*h) for h,e in zip(hs, np.eye(len(x)))])
+
+
 def bound_value(b, raw):
     """ A bound of a parameter in the unit of its value: a typed bound (e.g. `ss.days(3)`) is converted to the type of the parameter """
     return (type(raw)(b) if isinstance(raw, ss.TimePar) else b).value if isinstance(b, ss.TimePar) else b
@@ -1763,9 +1789,7 @@ def bounded_pars(probe, pars=None, unused=()):
             if id(p) in unused: # A parameter of a likelihood that is not used in this fit
                 continue
             if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars) and not any(p is q for q in fitted.values()): # A parameter shared by several modules is fitted once
-                same = [m.graph.pars[name] for m in probe.declared if name in m.graph.pars]
-                key = name if all(q is same[0] for q in same) else f'{mod.name}.{name}'
-                fitted[key] = p
+                fitted[ss.gradients.par_key(probe, mod, name)] = p
     mixed = getattr(probe, 'mixed', []) if not isinstance(probe.solver, ss.solvers.abm) else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
     coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
@@ -1889,7 +1913,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
         raise ValueError('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
     names = list(bounded.keys())
     lows, highs = [np.array([float(p.bounds[k]) for p in bounded.values()]) for k in [0, 1]]
-    logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are sampled on a log scale, as fit() searches them
+    logs = log_scale(lows, highs) # Sampled on a log scale, as fit() searches them
     unit = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1).random(n)
     lo, hi = np.where(logs, np.log(lows), lows), np.where(logs, np.log(highs), highs)
     X = lo + unit*(hi - lo)
@@ -1976,7 +2000,7 @@ def likelihood_profile(sim, par, values=None, level=0.95, **kwargs):
         raise ValueError(errormsg)
     others = [key for key in dict.fromkeys(map(name_of, problem.names)) if key != par]
     if not problem.use_lik or any(has for key,has in zip(problem.names, problem.priors) if name_of(key) in others):
-        why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not problem.use_lik else 'a parameter refitted has a prior, so a fit would maximize the posterior'
+        why = no_lik if not problem.use_lik else 'a parameter refitted has a prior, so a fit would maximize the posterior'
         raise ValueError(f'likelihood_profile() maximizes the likelihood, but {why}')
     calibrate = dict(kwargs, pars=others)
     cls = problem.types[problem.names.index(par)] if par in problem.names else None # Keep the unit of a typed value
@@ -2231,15 +2255,16 @@ class Problem(sc.prettyobj):
         raws = [entry(name, p, levels, elements) for name,p in fitted.items()]
         self.lows, self.highs = [np.array([elements[name][2+k] if name in elements else bound_value(p.bounds[k], raw) for name,p,raw in zip(names, fitted.values(), raws)], dtype=float) for k in [0, 1]]
         self.x0, self.types = start_values(raws) # Keep the unit of typed values
-        self.logs = logs = (self.lows > 0) & (self.highs/np.maximum(self.lows, 1e-300) >= 10) # Wide positive bounds are searched on a log scale
+        self.logs = logs = log_scale(self.lows, self.highs)
         if verbose and logs.any():
             print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
         self.external = [i >= self.n_model for i in range(len(fitted))] # Parameters of a likelihood given at calibration time
         self.priors = [p.prior is not None for p in fitted.values()]
         self.frozen = [freeze_prior(p) for p in fitted.values()] # Each prior as SciPy's distribution, made once: making one copies the prior, which takes far longer than a run
         self.use_map = False # Set with the method; see choose()
-        self.base_lows = np.where(logs, np.log(np.where(logs, self.lows, 1.0)), self.lows) # The scale for sampling and random walks: see to_x()
-        self.span = np.where(logs, np.log(np.where(logs, self.highs, 1.0)), self.highs) - self.base_lows
+        self.base_lows = self.encode(self.lows) # The scale for sampling and random walks: see to_x()
+        self.span = self.encode(self.highs) - self.base_lows
+        self.search_bounds = list(zip(self.base_lows, self.encode(self.highs))) # For SciPy, on the scale searched on
 
         # How it is run and scored
         self.stochastic = not isinstance(probe.solver, ss.solvers.ode)
@@ -2282,10 +2307,10 @@ class Problem(sc.prettyobj):
         if self.penalty_fn is not None and (method in sampling_methods or method == 'if2'):
             raise ValueError(f'penalty= is added to what a best fit minimizes, but method="{method}" does not minimize; for a posterior, give the parameters priors (ss.par(..., prior=...))')
         elif method == 'nuts' and (not self.use_lik or self.no_grad):
-            why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not self.use_lik else f'it has no gradients, since {self.no_grad}'
+            why = no_lik if not self.use_lik else f'it has no gradients, since {self.no_grad}'
             raise ValueError(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
         elif method == 'pmcmc' and (not self.use_lik or (self.stochastic and filtered)): # A deterministic sim's likelihood is exact, so it needs no filter
-            why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not self.use_lik else filtered
+            why = no_lik if not self.use_lik else filtered
             raise ValueError(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a deterministic sim (an ODE) or a stochastic compartmental sim that runs whole, in one compiled call, but {why}.')
         elif method == 'abc-smc' and not self.stochastic: # Every run at the same values is the same, so the tolerance shrinks toward zero and the population with it, by as much as the generations allow
             errormsg = ('method="abc-smc" gives no posterior for a deterministic sim (solver=ode): its runs have no chance in them, so the width of what it gives is set by the number of generations, not by the data. '
@@ -2293,7 +2318,7 @@ class Problem(sc.prettyobj):
                            'A posterior needs a likelihood for every data series (e.g. likelihood=ss.poisson()), and then method="pmcmc" or method="nuts"; for a best fit by a loss, leave out method=.'))
             raise ss.CapabilityError(errormsg)
         elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.elements or self.n_model < len(self.fitted)):
-            why = 'the data series have no likelihood (give one, e.g. likelihood=ss.poisson())' if not self.use_lik else filtered or ('a parameter has several values' if self.levels or self.elements else 'a parameter of a likelihood is fitted')
+            why = no_lik if not self.use_lik else filtered or ('a parameter has several values' if self.levels or self.elements else 'a parameter of a likelihood is fitted')
             raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that runs whole, in one compiled call, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
         return method
 
@@ -2426,9 +2451,13 @@ class Problem(sc.prettyobj):
                 self._density = call
         return self._density or None
 
+    def new_density(self):
+        """ The log of the posterior density in JAX (see `ss.gradients.Density`); raises `ss.gradients.Unsupported` if it does not cover the model """
+        return ss.gradients.Density(self.runner, self.fitted, self.x0, self.restart, likelihood=self.likelihood, weights=self.weights, external=self.external, bounds=(self.lows, self.highs))
+
     def build_density(self):
-        """ The log-likelihood in JAX (see `ss.gradients.Density`), kept for `jax_density()`; raises `ss.gradients.Unsupported` if it does not cover the model """
-        self.built_density = ss.gradients.Density(self.runner, self.fitted, self.x0, self.restart, likelihood=self.likelihood, weights=self.weights, external=self.external, bounds=(self.lows, self.highs))
+        """ The log-likelihood in JAX, kept for `jax_density()` """
+        self.built_density = self.new_density()
         return self.built_density
 
     def jax_uncovered(self):
@@ -2457,8 +2486,7 @@ class Problem(sc.prettyobj):
             value, derivs = ss.gradients.gradient(self.runner, self.restart, x, self.measure)
             derivs = np.array(derivs, dtype=float)
         if self.use_map or self.penalty_fn is not None: # The slope of the priors and the penalty, numerically
-            hs = 1e-6*np.maximum(np.abs(x), 1e-6)
-            derivs += np.array([(self.penalty(x + h*e) - self.penalty(x - h*e))/(2*h) for h,e in zip(hs, np.eye(len(x)))])
+            derivs += central_slopes(self.penalty, x, 1e-6*np.maximum(np.abs(x), 1e-6))
         value = float(value) + self.penalty(x)
         self.trials.append(dict(zip(self.names, x), objective=value))
         return value, derivs
@@ -2482,24 +2510,48 @@ class Problem(sc.prettyobj):
         """ Values from the scale an optimizer searches on """
         return np.clip(np.where(self.logs, np.exp(np.minimum(z, 700)), z), self.lows, self.highs)
 
-    def to_x(self, z):
-        """ Values from the scale a sampler moves on, and each one's place between its bounds """
-        frac = np.clip(1/(1 + np.exp(-z)), 1e-12, 1 - 1e-12)
+    def to_x(self, z, xp=np):
+        """ Values from the scale a sampler moves on, and each one's place between its bounds (xp: NumPy, or `jax.numpy`) """
+        frac = xp.clip(1/(1 + xp.exp(-z)), 1e-12, 1 - 1e-12)
         pos = self.base_lows + self.span*frac
-        return np.where(self.logs, np.exp(pos), pos), frac
+        return xp.where(self.logs, xp.exp(pos), pos), frac
 
     def frac_of(self, x):
         """ The place of each value between its bounds, on the scale it is searched on """
-        return np.clip((np.where(self.logs, np.log(np.maximum(x, 1e-300)), x) - self.base_lows)/self.span, 1e-9, 1 - 1e-9)
+        return np.clip((self.encode(x) - self.base_lows)/self.span, 1e-9, 1 - 1e-9)
 
     def to_z(self, x):
         """ Values on the scale a sampler moves on """
         frac = self.frac_of(x)
         return np.log(frac/(1 - frac))
 
-    def logjac(self, x, frac):
+    def dxdz(self, x, frac, xp=np):
+        """ The derivative of each value with respect to the scale a sampler moves on """
+        return self.span*frac*(1 - frac)*xp.where(self.logs, x, 1.0)
+
+    def logjac(self, x, frac, xp=np):
         """ The log of dx/dz, which turns a density of the values into one on the scale a sampler moves on """
-        return np.log(self.span*frac*(1 - frac)*np.where(self.logs, x, 1.0)).sum(axis=-1)
+        return xp.log(self.dxdz(x, frac, xp)).sum(axis=-1)
+
+    def dlogjac(self, frac):
+        """ The derivative of `logjac()` with respect to the scale a sampler moves on """
+        return 1 - 2*frac + np.where(self.logs, self.span*frac*(1 - frac), 0.0)
+
+    def logpost(self, z):
+        """ The log of the posterior density at a point on the scale a sampler moves on, from a run of the sim (exact for a deterministic sim) """
+        x, frac = self.to_x(z)
+        return -self.measure(self.run(x)) + self.logprior(x) + self.logjac(x, frac)
+
+    def prior_slopes(self, x):
+        """ The derivative of the log of each value's prior, by central differences (0 for one without a prior) """
+        hs = 1e-6*np.maximum(np.abs(x), 1e-6)
+        return np.array([(logprior(q, val + h, frozen=f) - logprior(q, val - h, frozen=f))/(2*h) if q.prior is not None else 0.0 for q,val,h,f in zip(self.fitted.values(), x, hs, self.frozen)])
+
+    def search_grad(self, z):
+        """ The objective and its gradient with respect to the scale searched on: d/dz = x d/dx where x = exp(z) """
+        x = self.decode(z)
+        value, grad = self.with_gradient(x)
+        return value, grad*np.where(self.logs, x, 1.0)
 
     def spread(self, n):
         """ Points spread over the bounds (by a Latin hypercube, on the scale searched on) """
@@ -2667,32 +2719,14 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
         restarts (int): the number of searches
         options (dict): passed to `scipy.optimize.minimize` as `options=`, e.g. `maxiter=500`; see `scipy.optimize.show_options()` (a setting SciPy does not know is an error)
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60)
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method='nelder-mead', scan=5, restarts=2, maxiter=200)
-        print(fit.pars, fit.converged)
-        ```
     """
     import scipy.optimize as spo
     p = problem
     restarts = sc.ifelse(restarts, 1 if len(p.names) == 1 and not p.stochastic else 3)
-    bounds = list(zip(p.encode(p.lows), p.encode(p.highs)))
+    bounds = p.search_bounds
     options = sc.mergedicts(dict(xatol=1e-4, fatol=1e-6) if method == 'nelder-mead' else None, options)
-    if method in grad_methods and not p.no_grad: # The gradient with respect to the scale searched on: d/dz = x d/dx where x = exp(z)
-        def fun(z):
-            x = p.decode(z)
-            value, grad = p.with_gradient(x)
-            return value, grad*np.where(p.logs, x, 1.0)
-        search = lambda start: spo.minimize(fun, p.encode(start), method=method, jac=True, bounds=bounds, options=options)
+    if method in grad_methods and not p.no_grad:
+        search = lambda start: spo.minimize(p.search_grad, p.encode(start), method=method, jac=True, bounds=bounds, options=options)
     else:
         search = lambda start: spo.minimize(lambda z: p.objective(p.decode(z)), p.encode(start), method=method, bounds=bounds, options=options)
     starts = p.scan(scan, top=restarts)
@@ -2727,13 +2761,10 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
 
 def smoothed_best(zs, values):
     """
-    The index of the point whose neighbors score lowest, among the best tenth of the
-    points (at least 5): each of their scores is replaced by the mean of all scores
-    weighted by a Gaussian kernel of the distance between points, on the scale searched
-    on, with a width for each parameter by Scott's rule from the spread of those best
-    points (the spread of all of them, including the random first trials, would let a
-    dense region of worse points pull the choice away from the best). For scores from
-    fresh random seeds, whose lowest value picks out chance as much as the values.
+    The index of the point whose neighbors score lowest, among the best tenth of the points (at least 5), for scores from fresh
+    random seeds, whose lowest value picks out chance as much as the values: each of their scores is replaced by the mean of all
+    scores weighted by a Gaussian kernel of the distance between points (on the scale searched on), with a width for each
+    parameter by Scott's rule from the spread of those best points
     """
     n, d = zs.shape
     best = np.argsort(values, kind='stable')[:max(5, n//10)]
@@ -2786,20 +2817,6 @@ def fit_optuna(problem, n_trials=None, workers=None, storage=None, **kwargs): # 
 
     It has not converged if the best trial is the initial values or one of the first 10 (which are random), or if the best improved
     by 1% or more over the last quarter of the trials.
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method='optuna', n_trials=50, n_runs=4)
-        print(fit.pars, fit.converged)
-        ```
     """
     import optuna
     p = problem
@@ -2815,9 +2832,9 @@ def fit_optuna(problem, n_trials=None, workers=None, storage=None, **kwargs): # 
     remaining = n_trials - len(study.trials)
     if remaining > 0 and workers > 1:
         fracs = [len(part) for part in np.array_split(np.arange(remaining), workers)]
-        method = ss.solvers.backends.kernels.start_method()
-        with ss.solvers.backends.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(ss.solvers.backends.kernels.worker(optuna_worker), iterarg=list(enumerate(fracs)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
+        method = ss.solvers.backends.workers.start_method()
+        with ss.solvers.backends.workers.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
+            sc.parallelize(ss.solvers.backends.workers.worker(optuna_worker), iterarg=list(enumerate(fracs)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
@@ -2868,21 +2885,6 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
         cooling (float): the fraction of its first size that a step has after 50 passes, as `cooling.fraction.50` in pomp
         sd (float): the first size of a step of the random walk, on the scale searched on: the logit of each value's place between its bounds, or of its log for wide bounds
         chains (int): the number of chains, each from its own start: one of the best few of the initial values and a spread of points over the bounds
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method='if2', particles=300, iterations=50, likelihood=ss.poisson())
-        print(fit.pars, fit.converged)
-        ```
     """
     p = problem
     filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
@@ -2938,21 +2940,6 @@ def fit_pmcmc(problem, scan=None, particles=None, draws='auto', warmup=1000, cha
         chains (int): the number of chains
         parallel (bool): whether to run the chains in parallel
         ess, rhat, max_draws, batch: with `draws='auto'`, when to stop (see `pmmh()`)
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method='pmcmc', draws=200, warmup=200, chains=2, particles=100, likelihood=ss.poisson())
-        print(fit.table, fit.samples.head())
-        ```
     """
     p = problem
     if p.stochastic:
@@ -2965,9 +2952,7 @@ def fit_pmcmc(problem, scan=None, particles=None, draws='auto', warmup=1000, cha
         if particles is not None:
             raise ValueError('particles= is the number of particles of the particle filter, which a deterministic sim does not use: its likelihood is exact; leave particles= out')
         particles = 0
-        def logpost(z, rng, n):
-            x, frac = p.to_x(z)
-            return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, frac)
+        logpost = lambda z, rng, n: p.logpost(z)
 
     starts = p.scan(scan, top=chains) # The best points of a scan that are apart, a chain from each (several from one if there are fewer than chains), so that chains caught in different modes disagree
     z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)])
@@ -2990,20 +2975,6 @@ def fit_abc_smc(problem, samples=200, generations=8, quantile=0.5, tolerance=Non
         generations (int): the most generations
         quantile (float): the quantile of the distances that sets the next generation's tolerance
         tolerance (float): the distance to stop at (default: run every generation)
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method='abc-smc', samples=100, generations=6)
-        print(fit.table, fit.samples.head())
-        ```
     """
     p = problem
     keep = p.stochastic and p.can_restart # A run that the kernels take whole can be kept, to continue (see Fit.trajectories)
@@ -3034,12 +3005,9 @@ def fit_abc_smc(problem, samples=200, generations=8, quantile=0.5, tolerance=Non
 
 def laplace_starts(problem, optima, chains, curvature, inflate=2.0):
     """
-    A start for each chain of NUTS: a draw from the Laplace approximation of the posterior at one of the optima in turn (a normal
-    distribution at the optimum, whose covariance is minus the inverse of the Hessian of the log-density there, on the sampler's scale),
-    with the covariance inflated by `inflate`, so that the chains start apart (overdispersed, so R-hat can tell if they fail to mix) but
-    near the mode. A factor of 2 in variance (1.4 in standard deviation) puts a start of one value within 2.8 standard deviations of the
-    optimum 95% of the time: in the bulk of the posterior, rather than in its tails (as prior draws would be), where an ODE can be stiff
-    and a chain slow to find its way back.
+    A start for each chain of NUTS: a draw from the Laplace approximation of the posterior at one of the optima in turn (on the
+    sampler's scale), with the covariance inflated by `inflate`, so that the chains start apart (so R-hat can tell if they fail
+    to mix) but in the bulk of the posterior, rather than in its tails, where an ODE can be stiff and a chain slow to find its way back
 
     Args:
         problem (Problem): the fit
@@ -3082,54 +3050,25 @@ def fit_nuts(problem, draws='auto', warmup=300, chains=4, scan=None, ess=ESS_TAR
         chains (int): the number of chains
         scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
         ess, rhat, max_draws, batch: with `draws='auto'`, when to stop (see `nuts()`)
-
-    Examples:
-        ```python
-        import starsim as ss
-
-        beta = ss.par(0.3, bounds=[0.1, 1])
-        S, I, R = ss.states('S I R')
-        infection = S >> I @ beta*I
-        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
-        pars = dict(total_pop=10_000, unit='day', stop=60)
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method='nuts', draws=200, warmup=200, chains=2, likelihood=ss.poisson())
-        print(fit.table, fit.samples.head())
-        ```
     """
     p = problem
     sampling = dict(draws=draws, warmup=warmup, chains=chains, ess=ess, rhat=rhat, max_draws=max_draws, batch=batch)
-    logs, span, base_lows = p.logs, p.span, p.base_lows
     import scipy.optimize as spo
-    bounds = list(zip(p.encode(p.lows), p.encode(p.highs)))
-    def fun(z): # Minus the log-likelihood and its gradient, on the scale searched on (as in fit_scipy())
-        x = p.decode(z)
-        value, grad = p.with_gradient(x)
-        return value, grad*np.where(p.logs, x, 1.0)
-    optima = [p.decode(spo.minimize(fun, p.encode(x), method='l-bfgs-b', jac=True, bounds=bounds).x) for x in p.scan(scan, top=max(chains, 3))] # The optimum near each of the best points of the scan that are apart
+    optima = [p.decode(spo.minimize(p.search_grad, p.encode(x), method='l-bfgs-b', jac=True, bounds=p.search_bounds).x) for x in p.scan(scan, top=max(chains, 3))] # The optimum near each of the best points of the scan that are apart
     scores = np.array([p.objective(x) - p.logprior(x) for x in optima]) # Minus the log of the posterior density at each
     starts = []
     for i in np.argsort(scores, kind='stable'): # The chains start at the best optimum, and at others only if they are nearly as good, so they cannot all sit in a mode far below the best, while chains in modes that compete disagree
         if scores[i] - scores.min() <= 5 and all(np.abs(p.frac_of(optima[i]) - p.frac_of(x)).max() >= 0.01 for x in starts):
             starts.append(optima[i])
 
-    def logpost(z):
+    def logpost(z): # The log of the posterior density and its gradient, on the sampler's scale, with Python in the loop
         x, frac = p.to_x(z)
-        dxdz = span*frac*(1 - frac)*np.where(logs, x, 1.0)
         value, derivs = ss.gradients.gradient(p.runner, p.restart, x, p.measure)
-        hs = 1e-6*np.maximum(np.abs(x), 1e-6)
-        dprior = np.array([(logprior(q, val + h) - logprior(q, val - h))/(2*h) if q.prior is not None else 0.0 for q,val,h in zip(p.fitted.values(), x, hs)])
-        dlogjac = 1 - 2*frac + np.where(logs, span*frac*(1 - frac), 0.0) # The derivative of log(dx/dz)
-        return -float(value) + p.logprior(x) + np.log(dxdz).sum(), (dprior - np.array(derivs, dtype=float))*dxdz + dlogjac
-
-    def exact(z): # The log of the posterior density at a point, from a run of the sim
-        x, frac = p.to_x(z)
-        return -p.measure(p.run(x)) + p.logprior(x) + p.logjac(x, frac)
+        return -float(value) + p.logprior(x) + p.logjac(x, frac), (p.prior_slopes(x) - np.array(derivs, dtype=float))*p.dxdz(x, frac) + p.dlogjac(frac)
 
     z0 = None # Each chain's start, once the curvature can be taken
     try: # The log-density as one function in JAX, if the model allows; otherwise each gradient is worked out with Python in the loop
-        density = ss.gradients.Density(p.runner, p.fitted, p.x0, p.restart, likelihood=p.likelihood, weights=p.weights, external=p.external, bounds=(p.lows, p.highs))
+        density = p.new_density()
     except ss.gradients.Unsupported as E:
         density = None
         p.python_in_loop(f'the log-density in JAX does not cover {E} yet', 'the posterior')
@@ -3139,23 +3078,16 @@ def fit_nuts(problem, draws='auto', warmup=300, chains=4, scan=None, ess=ESS_TAR
         if not forward:
             density.reverse()
         def logpost_jax(z):
-            frac = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
-            pos = base_lows + span*frac
-            x = jnp.where(logs, jnp.exp(pos), pos)
-            return density(x) + jnp.log(span*frac*(1 - frac)*jnp.where(logs, x, 1.0)).sum()
+            x, frac = p.to_x(z, xp=jnp)
+            return density(x) + p.logjac(x, frac, xp=jnp)
         jax = ss.gradients.jax()
         compiled = p.jax_density() # The log-likelihood and its gradient, compiled already for the optima
         if compiled is not None:
             def gradient(z): # Of the log of the posterior density, on the sampler's scale, as logpost() gives it
                 x, frac = p.to_x(z)
-                derivs = np.array(compiled(x)[1], dtype=float)
-                hs = 1e-6*np.maximum(np.abs(x), 1e-6)
-                dprior = np.array([(logprior(q, val + h, frozen=f) - logprior(q, val - h, frozen=f))/(2*h) if q.prior is not None else 0.0 for q,val,h,f in zip(p.fitted.values(), x, hs, p.frozen)])
-                dlogjac = 1 - 2*frac + np.where(logs, span*frac*(1 - frac), 0.0)
-                return (dprior - derivs)*span*frac*(1 - frac)*np.where(logs, x, 1.0) + dlogjac
+                return (p.prior_slopes(x) - np.array(compiled(x)[1], dtype=float))*p.dxdz(x, frac) + p.dlogjac(frac)
             def curvature(z): # The Hessian by central differences of that gradient: 2 gradients for each value, rather than compiling the Hessian (seconds), for starts that need only be roughly right
-                hs = 1e-4*np.maximum(np.abs(z), 1)
-                return np.array([(gradient(z + h*e) - gradient(z - h*e))/(2*h) for h,e in zip(hs, np.eye(len(z)))])
+                return central_slopes(gradient, z, 1e-4*np.maximum(np.abs(z), 1))
         else:
             hessian = jax.jit(jax.jacfwd(jax.jacfwd(logpost_jax)) if forward else jax.hessian(logpost_jax)) # Forward over forward, as the gradient is taken (an ODE's adaptive substeps can't be differentiated in reverse mode)
             def curvature(z):
@@ -3165,15 +3097,14 @@ def fit_nuts(problem, draws='auto', warmup=300, chains=4, scan=None, ess=ESS_TAR
         zs, logdens, divergent = nuts(logpost_jax, z0, traced=True, forward=forward, rand_seed=p.rand_seed, verbose=p.verbose, **sampling)
         flat_z, flat_lp = zs.reshape(-1, len(p.names)), logdens.reshape(-1)
         for i in np.linspace(0, len(flat_lp) - 1, 3).astype(int): # The JAX log-density is the one the sim gives, at a few of the draws
-            expected = exact(flat_z[i])
+            expected = p.logpost(flat_z[i])
             if not np.isclose(flat_lp[i], expected, rtol=1e-6, atol=1e-6):
                 p.python_in_loop(f'the log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(p.names, p.to_x(flat_z[i])[0]))}', 'the posterior again')
                 density = None
                 break
     if density is None:
         def curvature(z): # The Hessian by central differences of the gradient
-            hs = 1e-4*np.maximum(np.abs(z), 1)
-            return np.array([(logpost(z + h*e)[1] - logpost(z - h*e)[1])/(2*h) for h,e in zip(hs, np.eye(len(z)))])
+            return central_slopes(lambda z: logpost(z)[1], z, 1e-4*np.maximum(np.abs(z), 1))
         if z0 is None:
             z0 = laplace_starts(p, starts, chains, curvature)
         zs, logdens, divergent = nuts(logpost, z0, rand_seed=p.rand_seed, verbose=p.verbose, **sampling)
