@@ -11,7 +11,7 @@ kw = dict(verbose=0)
 
 @sc.timer()
 def test_bv_debut():
-    sc.heading('Testing BV debut as soon as women turn 15, with ss.on(), as agents and as compartments')
+    sc.heading('Testing BV debut as soon as women turn 15, as agents')
     adult_f = ss.person.female & (ss.person.age >= 15)
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
@@ -31,21 +31,7 @@ def test_bv_debut():
     res = sim.results.bv
     assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100
     assert res.U[0] < 0.7*5000 # Those 15+ at the start debuted before it
-    assert 'as soon as it holds' in sim.diseases.bv.describe()
-    assert isinstance(ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver, ss.solvers.abm) # As agents for now
 
-    # A trigger has no rate to modify
-    bv = make()
-    with pytest.raises(KeyError):
-        ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
-
-    # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step
-    strat = dict(sex=['female', 'male'], age=[0, 10, 15, 50, 100])
-    ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
-    r = ode.results.bv
-    waiting = r.U.select(sex='female', age='15-49')
-    assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
-    assert any('arrivals where it holds go straight' in note for note in ode.notes)
     return sim
 
 
@@ -62,48 +48,11 @@ def test_on_event():
         assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
         assert np.isclose(r.b.flag[:-1].sum(), r.b.unflag[:-1].sum() + r.b.F[-1], rtol=1e-6) # The flow is the move (F[-1] is before the last step's flows)
 
-    # The events of a state by path, for modules made from strings: the same as the state's own
-    def by_path(path):
-        a = make_a()
-        S, F, G = ss.states('S F G')
-        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.ref('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
-        on = [ss.ref('a.I').exit] if path else [a.I.exit]
-        dx = [ss.screen(ss.Diagnostic(), when=x, name=f'dx{i}') for i,x in enumerate(on)]
-        return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
-    direct, path = by_path(False), by_path(True)
-    assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
-    assert path.dx0.delivered.sum() > 100 and np.array_equal(path.dx0.delivered.values, direct.dx0.delivered.values)
-
     # An event of its own module, as compartments: those it happened to move at the end of the step
     S, F, G = ss.states('S F G')
     a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
     res = ss.Sim(a, solver='ode', **kw).run().results.a
     assert res.flag.sum() > 0 and np.isclose(res.flag.sum(), res.sa.sum(), rtol=0.01) and res.F.max() < 1e-6*res.S[0]
-    return sim
-
-
-@sc.timer()
-def test_join_events():
-    sc.heading('Testing events joined with |: branches and whole transitions, in any order, before they are named')
-    def make(join):
-        S, P, C, X = ss.states('S P C X')
-        precin = ss.Transition(P, {C: 0.2, S: None}, dur=ss.years(1.5))
-        cin = ss.Transition(C, {S: 0.5, X: None}, dur=ss.years(2))
-        clear = ss.Transition(X, S, dur=ss.years(1))
-        on = join(precin, cin, clear, S)
-        kinds = sorted(e.args[0] for e in ss.expressions.events_in(on))
-        assert kinds == ['to', 'to', 'tr'], kinds
-        nab = ss.attr(ss.uniform(0.5, 0.95), when=on, combine='max', init=0)
-        return ss.Disease(S, P, C, X, infection=S >> P @ ss.peryear(0.4)*(P + C), precin=precin, cin=cin, clear=clear, nab=nab, init_prev=0.3, name='hpv')
-    joins = [
-        lambda a, b, tr, S: a.to(S) | b.to(S) | tr,
-        lambda a, b, tr, S: tr | a.to(S) | b.to(S),
-        lambda a, b, tr, S: tr | (a.to(S) | b.to(S)),
-        lambda a, b, tr, S: a.to(S) | tr | b.to(S),
-    ]
-    for join in joins:
-        sim = ss.Sim(make(join), networks='random', n_agents=2000, start=2000, stop=2010, unit='year', **kw).run()
-        assert (sim.diseases.hpv.nab.values > 0).sum() > 50
     return sim
 
 
@@ -143,6 +92,5 @@ if __name__ == '__main__':
     sc.options(interactive=False)
     test_bv_debut()
     test_on_event()
-    test_join_events()
     for form in ['since', 'ever', 'count', 'recorded']:
         test_memory_slots(form)

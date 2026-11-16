@@ -127,8 +127,6 @@ Nothing is computed when a sim is made. `sim.init()`, which `sim.run()` calls if
 
 Calling `sim.init()` yourself is useful for looking at the people or the model before a long run, or for finding an error without waiting for one.
 
-A sim copies the modules it is given, so the same disease can be given to several sims. After a run, use the sim's own copy: `sim.diseases.measles`, not the variable `measles`, which is never run.
-
 ### The order of each step {#the-order-of-a-step}
 
 Each step, the sim calls the modules in a fixed order (Starsim's long-standing order, in `starsim/internals/loop.py`), so that each sees what the modules before it did. This is the one full statement of the order; other pages link here.
@@ -273,7 +271,7 @@ The scenarios and seeds are then a loop over its arguments, run together with `s
 
 ## Pitfalls
 
-- **Reading a variable rather than the sim.** A function given to a sim should read what it needs from the sim it is given (`lambda sim: sim.diseases.measles.I.n`), not from the `measles` you made, which is never run.
+- **Reading a variable rather than the sim.** A function given to a sim should read what it needs from the sim it is given (`lambda sim: sim.diseases.measles.I.n`), not from the `measles` you made: a sim copies the modules it is given, so the variable is never run, and after a run the results are on the sim's copy (`sim.diseases.measles`).
 - **Changing a setting after the sim is built.** Once a sim is initialized its settings belong to that run, and setting one (`sim.pars.stop = 30`) raises an error; give it to `sim.new(stop=30)` instead.
 - **A sim that isn't what you meant.** Read the first lines a run prints, and `sim.describe()`: R0, the unit of time, and the solver catch most mistakes (see [Profiling and debugging](running_debugging.qmd)).
 

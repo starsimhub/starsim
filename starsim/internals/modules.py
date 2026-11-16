@@ -48,11 +48,7 @@ def is_module(obj):
 
 def register_modules(*args):
     """
-    Register custom modules with Starsim so they can be referred to by string.
-
-    Note: "modules" here refers to Starsim modules. But this function registers
-    Starsim "modules" (e.g. `ss.SIR`) that are found within Python "modules"
-    (e.g. `starsim`).
+    Register custom modules (e.g. `ss.SIR`), or the Python modules that contain them, so they can be referred to by string
 
     Args:
         args (list): the additional modules to register; can be either a module or a list of objects
@@ -84,54 +80,25 @@ def find_modules(key=None, flat=False, verbose=False):
         flat (bool): whether to return one flat dict, not one for each type
         verbose (bool): whether to print each custom module as it is loaded
     """
-    modules = sc.obj()
     modmap = module_map()
-    attr_lists = [[ss, dir(ss)]] # Find all attributes in Starsim (note: does not parse user code; use register_modules() for that)
+    modules = sc.obj({modkey:sc.obj() for modkey in modmap})
+    modules['modules'] = sc.obj() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
+    candidates = [(attr.lower(), getattr(ss, attr)) for attr in dir(ss)] # Note: does not parse user code; use register_modules() for that
     for custom in custom_modules:
         if verbose: print(f'Loading {custom}...')
         if sc.ismodule(custom):
-            attr_lists.append([custom, dir(custom)])
+            candidates += [(attr.lower(), getattr(custom, attr)) for attr in dir(custom)]
         else:
-            attr_lists.append([None, sc.tolist(custom)])
+            candidates += [(item.__name__.lower(), item) for item in sc.tolist(custom) if is_module(item)]
 
-    # Initialize dict
-    for modkey in modmap.keys():
-        modules[modkey] = sc.obj()
-    modules['modules'] = sc.obj() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
-
-    # Loop over all attributes
-    for pymodule,attrs in attr_lists:
-        if verbose: sc.heading(f'Processing {pymodule} ...')
-        for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
-            if verbose: print(f'  Checking {attr}')
-
-            # Handle modules or a list of objects being provided
-            if pymodule is not None: # Main use case: pymodule=ss, attr='SIR'
-                item = getattr(pymodule, attr)
-                low_attr = attr.lower()
-            else: # Alternate use case: pymodule=None, attr=SIR
-                if is_module(attr): # It's a module, proceed
-                    item = attr
-                    low_attr = item.__name__.lower()
-                else: # It's not a module, skip
-                    item = None
-
-            # Check whether it's a module
-            ismodule = is_module(item)
-            if ismodule:
-                assigned = False
-                for modkey, modtype in modmap.items(): # Loop over each module type
-                    if modtype is not None and issubclass(item, modtype):
-                        modules[modkey][low_attr] = item # It passes, so assign it to the dict
-                        if modkey == 'networks' and low_attr.endswith('net'): # Also allow networks without 'net' suffix
-                            altname = low_attr.removesuffix('net')
-                            modules[modkey][altname] = item
-                        assigned = True
-                        if verbose: print(f'     Module {modkey}.{low_attr} added')
-                        break # Exit the innermost loop
-                if not assigned:
-                    modules['modules'][low_attr] = item
-                    if verbose: print(f'     Module modules.{low_attr} added')
+    for name,item in candidates:
+        if not is_module(item):
+            continue
+        modkey = next((key for key,modtype in modmap.items() if issubclass(item, modtype)), 'modules')
+        modules[modkey][name] = item
+        if modkey == 'networks' and name.endswith('net'): # Also allow networks without 'net' suffix
+            modules[modkey][name.removesuffix('net')] = item
+        if verbose: print(f'  Module {modkey}.{name} added')
 
     if flat:
         modules = sc.obj({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
@@ -140,11 +107,7 @@ def find_modules(key=None, flat=False, verbose=False):
 
 def required():
     """
-    Decorator to mark module methods as required.
-
-    A common gotcha in Starsim is to forget to call super(), or to mistype a method
-    name so it's never called. This decorator lets you mark methods (of Modules only)
-    to be sure that they are called either on sim initialization or on sim run.
+    Decorator to mark a module's method as required: the sim raises if it is never called (e.g. a missing `super()` call, or a mistyped name)
 
     Examples:
         ```python
@@ -453,7 +416,7 @@ class Module(Base):
     def check_not_given(self, action):
         """ Raise if this module was given to a sim, which runs its own copy, so that `action` on this one would never be seen """
         if getattr(self, '_given', False):
-            kind = next((key for key,cls in module_map().items() if isinstance(self, cls)), 'custom')
+            kind = ss.simpars.module_kind(self)
             errormsg = (f'{action} on "{self.name}", which was given to a sim: the sim runs its own copy, so it would never be used. '
                         f'Do it before making the sim, or on the sim\'s copy, sim.{kind}.{self.name}, after sim.init()')
             raise RuntimeError(errormsg)
@@ -515,9 +478,7 @@ class Module(Base):
 
     def check_method_calls(self):
         """
-        Check if any required methods were not called.
-
-        Typically called automatically by `sim.run()`.
+        The required methods that were not called (see `ss.required()`); called by `sim.run()`
         """
         missing = [key for key, called in self._call_required.items() if not called]
         return missing
@@ -606,29 +567,14 @@ class Module(Base):
         """
         Create a module from a function
 
-        Wraps a plain function into a module of the calling class, so that simple,
-        one-off logic can be used anywhere a module is expected without writing a
-        full class. The function must take the sim as its only argument; it becomes
-        the module's `step()` method and is therefore called once on every timestep
-        (so it must do its own time gating, e.g. `if sim.now == 2015:`). The module's
-        `name` is taken from the function's name.
+        The function takes the sim as its only argument, and becomes the module's `step()`, so it is called on every
+        timestep and does its own time gating (e.g. `if sim.now == 2015:`); the module is named after the function. A function
+        given to `interventions=`, `analyzers=`, or to the sim is converted this way automatically.
 
-        This is the mechanism behind "function-based" interventions and analyzers:
-        passing a function to `interventions=` or `analyzers=`, or to the sim as an argument
-        automatically calls `from_func()` on the appropriate class
-        (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
-        you don't need to call this method directly. Call it explicitly when you want
-        to construct the module yourself, e.g. to add it to a sim later.
-
-        Keyword arguments of the function with defaults are the module's parameters,
-        passed to it at each call; one given as `ss.par` with bounds can be fitted
-        (`sim.fit()`), sampled (`sim.sensitivity()`), and set by name (`ss.Sim(pars=...)`,
-        `ss.parallel(pars=...)`) as any other. This is how to fit a value that is not a
-        parameter of any module, e.g. one set in code (see the second example).
-
-        Function-based modules are otherwise minimal: they have no states or results
-        of their own. As soon as you need `define_states()` or `define_results()`,
-        write a proper subclass instead.
+        Keyword arguments of the function with defaults are the module's parameters, passed to it at each call; one given as
+        `ss.par` with bounds can be fitted (`sim.fit()`), sampled (`sim.sensitivity()`), and set by name (`ss.Sim(pars=...)`)
+        as any other, e.g. to fit a value set in code (see the last example). Such a module has no states or results of its
+        own: for those, write a subclass.
 
         Args:
             func (callable): a function taking the sim, and optionally keyword arguments with defaults (its parameters)
@@ -657,7 +603,7 @@ class Module(Base):
                     sim.diseases.sis.rel_trans[:] *= frac
             ```
         """
-        def step(mod): # TODO: see if this can be done more simply
+        def step(mod):
             return mod.func(mod.sim, **mod.pars)
         name = func.__name__
         mod = cls(name=name)
@@ -760,6 +706,7 @@ class Module(Base):
         if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
             pars = pars.with_bounded()
         pars = sc.mergedicts(pars, kwargs)
+        ss.v3_deprecations.check(type(self), '__init__', [key for key in pars if key not in self.pars]) # A keyword of Starsim 3's that it no longer takes, saying what replaces it
 
         # Pull out the named arguments of this module's nearest __init__ (found by identity, so a wrapper or an overriding update_pars() doesn't hide it)
         frame = ss.utils.getframe(1)
@@ -798,13 +745,7 @@ class Module(Base):
 
     def define_states(self, *args, reset=False, lock=True, overwrite=False, **kwargs):
         """
-        Define states of the module with the same attribute name as the state
-
-        In addition to registering the state with the module by attribute, it adds
-        it to `mod._auto_states`, which is used by `mod.state_list` and `mod.state_dict`.
-
-        Any keyword arguments other than the ones listed below are passed to
-        `define_aliases()`, so states and their aliases can be defined together.
+        Define states of the module, each an attribute of the same name; other keyword arguments are aliases (see `define_aliases()`)
 
         Args:
             args (states): list of states to add
@@ -815,8 +756,8 @@ class Module(Base):
 
         Examples:
             ```python
-            self.define_states(ss.BoolArr('exposed'), reset='ti_infected') # Add a state and remove an inherited one
-            self.define_states(ss.BoolArr('infectious'), overwrite=True) # Replace an inherited state or alias
+            self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
             ```
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
@@ -829,9 +770,9 @@ class Module(Base):
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
-                state = ss.BoolArr(*arg)
+                state = ss.BoolState(*arg)
             elif isinstance(arg, dict):
-                state = ss.BoolArr(**arg)
+                state = ss.BoolState(**arg)
             else:
                 state = arg
             assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
@@ -859,7 +800,7 @@ class Module(Base):
                 self._locked_attrs.append(attr)
 
             # Add it to the list of auto states, if needed
-            if isinstance(state, ss.BoolArr) and state.result:
+            if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
 
         # Handle any aliases
@@ -871,22 +812,12 @@ class Module(Base):
         """
         Define aliases for states, e.g. `self.define_aliases(infectious='infected')`
 
-        An alias is only used if the attribute isn't otherwise defined, so it acts as a
-        default that a subclass overrides simply by defining a state of the same name.
-        E.g. `ss.AgentDisease` treats everyone infected as infectious this way, while letting
-        a subclass define `infectious` as a state (or another alias) in its own right.
+        An alias is used only if the attribute isn't otherwise defined, so a subclass overrides it by defining a state of
+        the same name (e.g. `ss.AgentDisease` treats everyone infected as infectious this way).
 
-        Each alias is either the name of another state, or a callable taking the module as
-        its only argument. A callable behaves like a property: it is recomputed on each
-        access, so it can be read but not written to.
-
-        Note: a callable alias defined as a lambda can't be saved with plain `pickle`
-        (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
-        module-level function, or a property, if plain pickling is required.
-
-        A callable alias also generates an automatic result, in the same way an `ss.BoolArr`
-        does: an alias named `infected` produces the result `infected`. A string alias does not,
-        since the state it points to is already counted under its own name.
+        Each alias is the name of another state, or a callable taking the module, which is recomputed on each access (read
+        only) and also generates a result of its name, as an `ss.BoolState` does (a string alias doesn't, since its state is
+        counted already). A lambda can't be saved with plain `pickle` (`sc.save()` and `ss.MultiSim` use `dill`, so are fine).
 
         Args:
             overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
@@ -896,7 +827,7 @@ class Module(Base):
             ```python
             self.define_aliases(infectious='infected') # Everyone infected is infectious
             self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
-            self.define_states(ss.BoolArr('exposed'), infectious='infected') # Aliases can also be defined alongside states
+            self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
             ```
         """
         for key in kwargs:
@@ -980,11 +911,7 @@ class Module(Base):
     @required()
     def init_pre(self, sim, force=False):
         """
-        Perform initialization steps
-
-        This method is called once, as part of initializing a Sim. Note: after
-        initialization, initialized=False until init_post() is called (which is after
-        distributions are initialized).
+        Perform initialization steps, once, as part of initializing a sim; `initialized` stays False until `init_post()`, after the distributions are initialized
 
         Args:
             sim (`ss.Sim`): the sim
@@ -1028,10 +955,7 @@ class Module(Base):
     @required()
     def link_timepars(self, force=False):
         """
-        Find all time parameters in the module and link them to the module's `dt`
-
-        This is what lets a timepar resolve itself against the timestep with no
-        argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
+        Link the module's time parameters to its `dt`, so that e.g. `self.pars.death_rate.to_prob()` needs no argument
 
         Args:
             force (bool): whether to relink parameters that are already linked
@@ -1052,10 +976,7 @@ class Module(Base):
         """
         Initialize results output; called during `init_pre()`
 
-        By default, modules all report on counts for any explicitly defined "States", e.g. if
-        a disease contains an `ss.BoolArr('susceptible')` it will automatically contain a
-        Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
-        generate results, leave out `result=True`.
+        By default, the number in each `ss.BoolState` (e.g. `susceptible`) and derived state is a result; an `ss.BoolArr` has none.
         """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
@@ -1101,13 +1022,7 @@ class Module(Base):
     @property
     def state_list(self):
         """
-        Return a flat list of all states (`ss.Arr` objects)
-
-        The base class returns all states that are contained in top-level attributes
-        of the Module. If a Module stores states in a non-standard location (e.g.,
-        within a list of states, or otherwise in some other nested structure - perhaps
-        due to supporting features like multiple genotypes) then the Module should
-        overload this attribute to ensure that all states appear in here.
+        A flat list of the module's states (`ss.Arr` objects) in its attributes; a module that keeps states elsewhere (e.g. in a list) overrides this
         """
         out = [val for val in self.__dict__.values() if isinstance(val, ss.Arr)]
         return out
@@ -1115,33 +1030,21 @@ class Module(Base):
     @property
     def state_dict(self):
         """
-        Return a flat dictionary (objdict) of all states
-
-        Will raise an exception if multiple states have the same name.
+        A flat dict of the module's states by name; raises if two have the same name
         """
         return ss.utils.nlist_to_dict(self.state_list)
 
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.BoolArr` unless `result=False`) that were added
-        via `define_states()`
-
-        For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables automatically generate results
-        of the same names (susceptible, infectious, etc.), the number in each. For a list of all states, see
-        `state_list`.
+        The `ss.BoolState`s added with `define_states()`, each of which has a result of the same name, the number in it (e.g. `susceptible`)
         """
         return self._auto_states[:]
 
     @property
     def derived_state_names(self):
         """
-        Names of the aliases that are defined by a callable (see `define_aliases()`)
-
-        Unlike a string alias, which points at a state that is already counted under its
-        own name, a derived state has no state object of its own, so it generates an
-        automatic result (e.g. `infected`) in the same way an `ss.BoolArr` does.
+        Names of the aliases defined by a callable (see `define_aliases()`), each of which has a result of its own, as an `ss.BoolState` does
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
@@ -1221,7 +1124,7 @@ class Module(Base):
         in the step (a flow, or one that needs a flow) goes in `record_events()` instead.
 
         Args:
-            names (list): the states to count (default: every `ss.BoolArr` unless `result=False`, and derived state)
+            names (list): the states to count (default: every `ss.BoolState`, and derived state)
         """
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:
@@ -1256,7 +1159,7 @@ class Module(Base):
         if not all(isinstance(state, ss.BoolArr) and state.raw.ndim == 1 and state.raw.flags.c_contiguous for state in states):
             return False # E.g. a derived state, or one with no memory of its own yet
         alive = ppl.alive.raw[:ppl.uid.len_used]
-        counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), alive) # Those alive in each, then the number alive...
+        counts = ss.solvers.numba.passes.count_alive(tuple(state.raw for state in states), alive) # Those alive in each, then the number alive...
         if counts[-1] != len(ppl.auids): # ...which should be the active agents, as at the start of a step
             return False
         ti = self.ti

@@ -120,7 +120,7 @@ modeling = '''
 '''.split()
 extension = '''
     Module Network DynamicNetwork AgentDisease Demographics Intervention Product Connector Analyzer
-    Arr FloatArr IntArr BoolArr CatArr TimeArr uids DateArray Timeline Dist multi_random
+    Arr FloatArr IntArr BoolArr BoolState CatArr TimeArr uids DateArray Timeline Dist multi_random
     register_modules required compile jit plot_args return_fig ndict Pars SimPars TimePar Rate warn note CapabilityError AlreadyRunError
 '''.split()
 

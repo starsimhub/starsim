@@ -1,4 +1,4 @@
-//! Exact random draws, from one uniform each where possible: `starsim/solvers/backends/draws.py`, bit for bit (see its docstring).
+//! Exact random draws, from one uniform each where possible: `starsim/solvers/numba/draws.py`, bit for bit (see its docstring).
 //! Each function has the name and arguments of the Numba one. Where Numba turns a float into an integer, `to_i64()` and
 //! `to_u64()` do it as Numba does on this CPU, so even out-of-range values (NaN, inf, n above 2^63) give the same draws.
 

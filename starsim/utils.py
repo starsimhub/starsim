@@ -25,10 +25,8 @@ class method_wrapper:
     """
     A method that Starsim wraps in a subclass (e.g. `init()`, see `outermost`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
 
-    It is a class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. to
-    send a sim to `ss.parallel()`'s workers), pickles with its own method and not with the globals of the module that
-    wrapped it: dill copies those, and with them, by value, any module not installed in site-packages (e.g. Sciris
-    or Starsim installed as editable), which may not pickle at all ("cannot pickle '_thread._local' object").
+    A class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. for `ss.parallel()`), doesn't
+    pickle the globals of the module that wrapped it, which may not pickle at all ("cannot pickle '_thread._local' object").
     """
     def __init__(self, func):
         self.func = func
@@ -481,10 +479,8 @@ def call_fn(func, names=fn_names, positions=None, **values):
 
 # %% Data cleaning and processing
 
-# Alternative column names accepted for standard data columns, used only if the configured
-# column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
-# rather than "Year"). Keep this list short and explicit; anything else can be handled by
-# supplying `columns=dict(...)` (to `ss.Births`, `ss.Deaths`, or `ss.Pregnancy`) explicitly.
+# Other names for standard data columns, used only if the configured one is not in the data (e.g. "Time" for "Year", as in UN
+# World Population Prospects data); anything else is mapped with `columns=dict(...)` (to `ss.Births`, `ss.Deaths`, or `ss.Pregnancy`)
 col_synonyms = dict(
     year = ['Year', 'Time', 'year', 'time'],
     age = ['AgeGrpStart', 'AgeGrp'],
@@ -493,10 +489,7 @@ col_synonyms = dict(
 
 def resolve_data_col(data, key, col):
     """
-    Find the column to use for a given data key, allowing for known synonyms
-
-    The configured column name always takes precedence; synonyms (see `ss.utils.col_synonyms`)
-    are only consulted if it is absent from the data.
+    Find the column to use for a given data key: the configured one, else one of its synonyms (see `ss.utils.col_synonyms`)
 
     Args:
         data (dict): the data, as a dict of columns
@@ -521,27 +514,12 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     """
     Standardize formats of input data
 
-    Input data can arrive in many different forms. This function accepts a variety of data
-    structures, and converts them into a Pandas Series containing one variable, based on
-    specified metadata, or an `ss.Dist` if the data is already an `ss.Dist` object.
-
-    The metadata is a dictionary that defines columns of the dataframe or keys
-    of the dictionary to use as indices in the output Series. It should contain:
-
-    - `metadata['data_cols']['value']` specifying the name of the column/key to draw values from
-    - `metadata['data_cols']['year']` optionally specifying the column containing year values; otherwise the default year will be used
-    - `metadata['data_cols']['age']` optionally specifying the column containing age values; otherwise the default age will be used
-    - `metadata['data_cols'][<arbitrary>]` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
-
-    If a configured column is not present in the data, a known synonym is used instead if one is
-    available (see `ss.utils.col_synonyms`); for example, year data labeled "Time" (as in UN World
-    Population Prospects data) is used for a data column configured as "Year". Explicitly configured
-    column names always take precedence over synonyms.
-
-    If a `sex` column is part of the index, the metadata can also optionally specify a string mapping to convert
-    the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
-    an additional key like `metadata['sex_keys'] = {'Female':'f','Male':'m'}` which in this case would map the strings
-    'Female' and 'Male' in the original data into 'm'/'f' for Starsim.
+    Converts data in any of several forms into a Pandas Series of one variable, indexed by year, age, and any other columns
+    the metadata gives; a number, `ss.Dist`, or `ss.Rate` is returned as it is. The metadata gives the columns in
+    `metadata['data_cols']`: `value` (required), and optionally `year` and `age` (else the defaults) and any others, which
+    become part of the index. A column that is not in the data is looked for under its synonyms (see `ss.utils.col_synonyms`,
+    e.g. "Time" for "Year", as in UN World Population Prospects data). `metadata['sex_keys']` (e.g. `{'Female':'f','Male':'m'}`)
+    maps the labels of a `sex` column to Starsim's 'f' and 'm'.
 
     Args:
         data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array or a number, with the input data to be standardized.
@@ -552,11 +530,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         default_year (float): the year to use if the data has no year column
 
     Returns:
-
-        - A `pd.Series` for all supported formats of `data` *except* an `ss.Dist`. This series will contain index columns for 'year'
-          and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
-          they appeared in the metadata (except for year and age appearing first).
-        - An `ss.Dist` instance - if the `data` input is an `ss.Dist`, that same object will be returned by this function
+        A `pd.Series` indexed by year, age (in that order), and then the other columns in the order of the metadata; or the input, if it is a number, `ss.Dist`, or `ss.Rate`
     """
     # It's a format that can be used directly: return immediately
     if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.Rate)):
@@ -715,11 +689,7 @@ def time_str(x, sim=None, plural=False):
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`, for Starsim's own objects
-
-    Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. Another
-    framework's model is read with `ss.import_from()`.
+    Load a Starsim object saved with `ss.save()` (an alias to `sc.loadany()`); another framework's model is read with `ss.import_from()`
 
     Args:
         filename (str/path): the name of the file to load
@@ -735,11 +705,7 @@ def load(filename, **kwargs):
 
 def save(filename, obj, **kwargs):
     """
-    Alias to Sciris `sc.save()`
-
-    While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with `ss.load()`.
-    Another framework's format is written by `ss.export_to()`.
+    Save any object (an alias to `sc.save()`), to load with `ss.load()`; another framework's format is written by `ss.export_to()`
 
     Args:
         filename (str/path): the name of the file to save
@@ -793,15 +759,9 @@ class Shrunk:
 
 def shrink(obj=None, attrs=None, verbose=False):
     """
-    Replace one or more object attributes in-place with an `ss.utils.Shrunk()` placeholder.
+    Replace one or more object attributes in-place with an `ss.utils.Shrunk()` placeholder, which says they were removed on purpose
 
-    Used to save memory or remove circular references, especially when running large
-    numbers of sims. It is good practice to write `shrink()` methods for modules to remove
-    any temporary arrays or other memory-intensive objects.
-
-    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes
-    of an object in-place. It is used rather than simply deleting attributes or setting them to
-    `None` to make it clear that the attributes were intentionally removed.
+    Used to save memory or remove circular references, especially when running many sims (see also a module's `shrink()` method).
 
     Args:
         obj (object): the object to shrink in-place (optional)
@@ -859,34 +819,27 @@ plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
 plotting_kw.return_fig = ['do_show', 'is_jupyter', 'filename']
 
-def plot_args(kwargs=None, _debug=False, **defaults):
+def plot_args(kwargs=None, **defaults):
     """
     Split the keywords given to `sim.plot()` and other plotting functions among the parts of the plot they are for (the figure, the lines, the data, and so on)
 
-    Note: the kwargs supplied to the parent function should be supplied as the
-    first argument of this function; keyword arguments to this function are treated
-    as default values that will be overwritten by user-supplied values in `kwargs`.
-    The argument "_debug" is used internally to print debugging output, but is
-    not typically set by the user.
+    The kwargs given to the calling function are the first argument; keyword arguments to this function are defaults, overridden by `kwargs`.
+    Each part takes the keywords listed in `ss.utils.plotting_kw` (e.g. `figsize` for the figure), or a dict of them, e.g. `fig_kw=dict(...)`:
+
+        - fig: passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
+        - plot: passed to `plt.plot()`
+        - data: passed to `plt.scatter()`, for plotting the data (`data_alpha`, `data_color`, `data_size`)
+        - fill: for shaded areas (`fill_alpha`, `fill_color`, `fill_hatch`, `fill_lw`)
+        - legend: passed to `plt.legend()`
+        - style: passed to `sc.options.with_style()`
+        - return_fig: 'do_show', 'is_jupyter', 'filename' (see `ss.return_fig()`)
 
     Args:
-        fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
-        plot_kw (dict): passed to `plt.plot()`
-        data_kw (dict): passed to `plt.scatter()`, for plotting the data
-        style_kw (dict): passed to `sc.options.with_style()`, for controlling the detailed plotting style
-        **kwargs (dict): parsed among the above dictionaries
+        kwargs (dict): the keywords to split
+        defaults (dict): the default values
 
     Returns:
         A dict-of-dicts with plotting arguments, for use with subsequent plotting commands
-
-    Valid kwarg arguments are:
-
-        - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
-        - plot: 'alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'
-        - data: 'data_alpha', 'data_color', 'data_size'
-        - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
-        - style: 'font', 'fontsize', 'interactive'
-        - return_fig: 'do_show', 'is_jupyter', 'filename' (see `ss.return_fig()`)
 
     Examples:
         ```python
@@ -894,12 +847,10 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
         ```
     """
-    suffix='_kw'
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.obj() # Output arguments
     for subtype,args in plotting_kw.items():
-        if _debug: print('Subtype & args:', subtype, args)
         kw[subtype] = sc.obj() # e.g. kw.fig
 
         # Handle kwargs, e.g. "figsize"
@@ -907,18 +858,12 @@ def plot_args(kwargs=None, _debug=False, **defaults):
             args = {k:k for k in args}
         for inkey,outkey in args.items():
             val = kwargs.pop(inkey, _None) # Handle None as a valid argument
-            if _debug: # Just for debugging, since the logic is complex
-                if inkey == outkey:
-                    print(f'    {inkey} = {val}')
-                else:
-                    print(f'    {inkey} → {outkey} = {val}')
             if val is not _None:
                 kw[subtype][outkey] = val
 
         # Handle dicts of kwargs, e.g. "fig_kw"
-        subtype_dict = kwargs.pop(f'{subtype}{suffix}', None) # e.g. fig_kw
+        subtype_dict = kwargs.pop(f'{subtype}_kw', None)
         if subtype_dict is not None:
-            if _debug: print('Subtype dict:', subtype_dict)
             kw[subtype].update(subtype_dict)
 
     # Expect everything has been converted
@@ -928,9 +873,6 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         unconverted = f'\n\nUnconverted:\n{sc.newlinejoin(kwargs.keys())}'
         errormsg = f'Did not successfully convert all plotting keys:{valid}{converted}{unconverted}'
         raise sc.KeyNotFoundError(errormsg)
-
-    if _debug: print('Final output:', kw)
-
     return kw
 
 

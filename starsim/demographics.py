@@ -87,17 +87,17 @@ def rate_per_of(per, rates, name):
     How many people the rates of `ss.Births`, `ss.Deaths`, `ss.Pregnancy`, `ss.birth()`, `ss.death()`, or
     `ss.migration()` are per: `rate_per` as given, or else 1 (per person). The unit is never guessed from the size of
     the rates. But rates of births, deaths, conceptions, and migration are well below 1 per person per year, so if
-    `rate_per` is not given and the rates are above 1 per year (the median, for a table or time series), this warns
-    that they are read as per person: give `rate_per=1000` if they are per 1,000 people, or `rate_per=1` if per person
-    is meant (which silences the warning).
+    `rate_per` is not given and the rates are above 1 per year (the median, for a table or time series), this raises,
+    since they are almost certainly per 1,000 people (which would otherwise kill or make a thousand times too many): give
+    `rate_per=1000` if they are per 1,000 people, or `rate_per=1` if per person is meant.
 
     Data that a place name loads are not read by this: the module says how many people they are per (the UN's crude
     rates and fertility rates are per 1,000, and its death rates by age, `mx`, per person).
 
     Args:
-        per (float): `rate_per` as given: None for per person (with the warning), 1000 for per 1,000, 1 for per person
-        rates (number/rate/timeseries/dataframe): the rates, or rate data, for the warning
-        name (str): what the rates are, for the warning (e.g. "birth_rate of ss.Births")
+        per (float): `rate_per` as given: None for per person (checked), 1000 for per 1,000, 1 for per person
+        rates (number/rate/timeseries/dataframe): the rates, or rate data, to check
+        name (str): what the rates are, for the error (e.g. "birth_rate of ss.Births")
     """
     check_rate_per(per, name)
     if per is not None:
@@ -105,8 +105,9 @@ def rate_per_of(per, rates, name):
     size = rate_size(rates)
     if size is not None and size > 1:
         many = not (sc.isnumber(rates) or isinstance(getattr(rates, 'raw', rates), ss.Rate))
-        ss.warn(f'The {name} is {size:.4g} per person per year{" (the median)" if many else ""}, more than 1, which is high for a rate per person; it is read as per person. '
-                f'If it is per 1,000 people, give rate_per=1000; if per person is meant, give rate_per=1, which silences this warning.')
+        errormsg = (f'The {name} is {size:.4g} per person per year{" (the median)" if many else ""}, more than 1, which is far too high for a rate per person. '
+                    f'If it is per 1,000 people, give rate_per=1000; if per person is meant, give rate_per=1.')
+        raise ValueError(errormsg)
     return 1
 
 
@@ -269,7 +270,7 @@ class Demographics(ss.Module):
     the `ss.People` population and can interact with `ss.Network` objects
     (e.g. to add newborns to contact networks).
     """
-    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
+    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.build.init_unit()
 
 
 class Flows(Demographics):
@@ -279,7 +280,7 @@ class Flows(Demographics):
     Every declared disease's people are born and die by them, once, under every solver: they become
     transitions of the first declared disease (or the first with the state that births name), whose
     people are everyone's, since as agents the diseases share the people, and in a compartmental run
-    with several declared diseases, their states are tracked jointly (see `ss.solvers.choose.init_flows()`).
+    with several declared diseases, their states are tracked jointly (see `ss.solvers.build.init_flows()`).
     With no declared disease, the sim adds one of everyone alive to hold them (`ss.SimPars.population()`), so
     they are a declared model like any other. This class is not usually used directly.
 
@@ -426,7 +427,7 @@ class Births(Demographics):
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
-        mothers = ss.solvers.backends.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
+        mothers = ss.solvers.numba.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
         if not len(mothers):
             return ss.uids()
 
@@ -809,7 +810,7 @@ class Pregnancy(Demographics, ss.Disease):
     birth       = ss.birth(NP, when=delivery) # Children, linked to the mother (agents only, for now): children= of them (see __init__())
     infant_mortality = ss.Transition(NP, ss.dead, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
 
-    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
+    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.build.init_unit()
 
     def __init__(self, pars=None, fetal_agents='auto', columns=None, **kwargs):
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
@@ -872,19 +873,19 @@ class Pregnancy(Demographics, ss.Disease):
         self.fertility_rate_data = None # Set in init_pre()
         self.mean_dur_pregnancy = None # In years; set in init_pre()
         self.define_states(
-            ss.BoolArr('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
+            ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('parity', label='Parity', default=0),
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
-            ss.BoolArr('fetal', label='A fetus, as an agent'),
+            ss.BoolState('fetal', label='A fetus, as an agent'),
             ss.FloatArr('gestation_at_birth', label='Gestational age at birth, in weeks (on the newborn)'),
-            ss.BoolArr('preterm', label='Preterm birth (on the newborn)', result=False),
-            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)', result=False),
+            ss.BoolArr('preterm', label='Preterm birth (on the newborn)'),
+            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)'),
             ss.FloatArr('rel_preterm_base', default=self.pars.preterm.rel, label='Baseline relative risk of preterm birth'),
             ss.FloatArr('rel_preterm', default=1.0, label='Relative risk of preterm birth (set at conception: see preterm_risk())'),
             ss.FloatArr('n_pregnancies', default=0, label='Number of pregnancies'),
             ss.FloatArr('ti_delivered', label='The step of the last delivery'),
             ss.FloatArr('dur_gestation', label='The duration of the current (or last) pregnancy as drawn, in weeks'),
-            ss.BoolArr('lactating', label='Breastfeeding'),
+            ss.BoolState('lactating', label='Breastfeeding'),
             ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
         self.rng_md = ss.random() # For p_maternal_death set to a plain number later, the chance at delivery
@@ -1077,7 +1078,7 @@ class Pregnancy(Demographics, ss.Disease):
             reasons += [f'{name} is a prenatal network' for name,net in nets.items() if isinstance(net, ss.PrenatalNet)]
             for mod in sim.declared:
                 for name,tr in mod.graph.transitions.items():
-                    if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
+                    if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, '_who_now', None), tr._trigger] + sc.tolist(tr.p)):
                         reasons.append(f'ss.mother in {mod.name}.{name}')
             for key in ['interventions', 'connectors']:
                 for mod in sim.pars[key].values():

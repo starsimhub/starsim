@@ -9,29 +9,5 @@ Welcome! We are thrilled you are interested in contributing to Starsim. This doc
 
 If you have any other questions, please reach out to us: <info@starsim.org>. Thank you!
 
-## Changelog entries
-Every PR should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, must be flagged with **Migration** or **Regression**. Until Starsim 4 is released, its detailed entries go in `docs/migration/v4_changelog.md`, and the 4.0.0 entry in `CHANGELOG.md` stays a short summary.
-
-For any backwards-incompatible change, write the entry so that a human (or an LLM) could perform the migration from the changelog alone. Include the concrete before/after call. For example, instead of:
-
-> `ss.foo()` and `ss.bar()` are deprecated; use `ss.cat()` instead.
-
-write:
-
-> `ss.foo()` and `ss.bar()` have been replaced by `ss.cat()`. Instead of `ss.foo(x=1)` and `ss.bar(y=2)`, use e.g. `ss.cat(z=[1, 2])`.
-
-The extra specificity (which arguments map to which, with example values) is what makes the entry actionable.
-
-## Release procedure
-This assumes you're about to release version `4.1.1`.
-1. Merge all PRs into the release candidate branch (`rc4.1.1`)
-2. Update the version in `version.py` from `4.1.1.dev0` to `4.1.1`, and update the date
-3. Mark the PR ready
-4. If tests pass, merge
-5. On the `Starsim` repository page, click 'Releases' to go to the [Releases](https://github.com/starsimhub/starsim/releases) page
-6. Click 'Draft a new release' on the top right
-7. In the tag dropdown, enter `v4.1.1` as a new tag. Leave the target as `main`
-8. Set the Release title to `v4.1.1`
-9. Generate release notes automatically, and then edit further as required
-10. Click 'Publish release' to deploy, which will update PyPI and build/upload the latest documentation
-11. Create a new release candidate branch (e.g. `rc4.1.2`), and make a draft PR
+## Changelog entries and releases
+See the [developer guide](https://starsim.org/v4/contributing/developer.html#changelog-entries) for how to write changelog entries, and for the [release procedure](https://starsim.org/v4/contributing/developer.html#release-procedure). <!-- V4-PREVIEW: drop /v4 on release -->

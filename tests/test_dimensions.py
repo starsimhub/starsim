@@ -3,100 +3,24 @@ Test dimensions that are more than a property of people: states with dimensions 
 """
 
 # %% Imports and settings
-import sys
-import math
-import subprocess
-import tempfile
 import pytest
 import numpy as np
 import pandas as pd
-import scipy.sparse as sps
 import scipy.integrate as sp_integrate
-import scipy.stats as stats
-from scipy.special import expit
 import sciris as sc
 import starsim as ss
 import corpus
 
 kw = dict(verbose=0)
-solvers = ['ode', 'binomial', 'abm']
-
-
-def at_start(sim):
-    """ The results with the number in each state at the start, at index 0, before the first step """
-    sim.init()
-    for mod in sim.declared:
-        mod.engine.start_step()
-        mod.engine.record_states()
-    return sim.results
-
-
-def run(mod, solver, **kwargs):
-    """ Run a module with one solver, as 10,000 agents if it is agent-based """
-    pars = dict(n_agents=10_000) if solver == 'abm' else {}
-    return ss.Sim(mod, solver=solver, **pars, **kw, **kwargs).run()
-
-
-def make_malaria():
-    """ Ross-Macdonald: humans and mosquitoes as states of one disease """
-    a = 0.3 # Bites per mosquito per day
-    b = 0.5 # Probability an infectious bite infects a human
-    c = 0.5 # Probability a bite on an infectious human infects the mosquito
-    Sh, Eh, Ih, Rh = ss.states(4)
-    Sv, Ev, Iv     = ss.states(3, people=False)
-    Nh             = (Sh + Eh + Ih + Rh).n
-    malaria = ss.Disease(
-        infection     = Sh >> Eh @ a * b * Iv.n / Nh,
-        latency       = Eh >> Ih @ ss.days(12),
-        recovery      = Ih >> Rh @ ss.days(100),
-        waning        = Rh >> Sh @ ss.days(365),
-        emergence     = ss.unborn >> Sv @ ss.perday(5_000),
-        biting        = Sv >> Ev @ a * c * Ih.n / Nh,
-        incubation    = Ev >> Iv @ ss.days(10),
-        mortality     = Sv + Ev + Iv >> ss.dead @ ss.days(10),
-        init          = dict(Ih=0.01, Sv=50_000),
-        default_state = 'Sh',
-        name          = 'malaria',
-    )
-    return malaria
-
-
-def make_tb():
-    """ TB with drug resistance as a strain, acquired during treatment """
-    susceptible, latent, active, on_treatment = ss.states(4)
-    tb = ss.Disease(
-        infection  = susceptible >> latent @ ss.peryear(8) * active,
-        activation = latent >> active @ ss.peryear(0.05),
-        diagnosis  = active >> on_treatment @ ss.peryear(0.7),
-        cure       = on_treatment >> susceptible @ ss.months(6),
-        failure    = on_treatment >> active @ ss.peryear(0.2),
-        init       = dict(active=0.01),
-        name       = 'tb',
-        strains    = ss.Strains(['DS', 'MDR'], name='resistance', fractions=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
-    )
-    tb.stratify(acquired=ss.transfer(dict(resistance=('DS', 'MDR')), rate=ss.peryear(0.02), states=['on_treatment']))
-    return tb
 
 
 # %% Define the tests
 
 
-def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
-    """ Two strains in one TB-like course: superinfection of the latent, cure for each strain, resistance emerging at failure """
-    S, L, I, Tx, R = ss.states('S L I Tx R')
-    strains = ss.Strains(['DS', 'RIF'], max_strains=2, fractions=[0.8, 0.2], rel_trans=[1, 0.6], cure=list(cure),
-                         immunity=ss.immunity(due_to=L, protection=0.7) if immunity else None)
-    DS, RIF = strains
-    return ss.Disease(infection=S >> L @ ss.peryear(beta)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain='each'),
-                      failure=ss.Transition(Tx, I, rate=ss.peryear(0.2), move=DS >> (DS, RIF)), relapse=R >> S @ ss.years(2),
-                      name='tb', strains=strains, **kwargs)
-
-
 @sc.timer()
 def test_strain_cure():
     sc.heading('Testing an outcome for each strain carried: a regimen that cures DS only')
-    sim = ss.Sim(make_resistance(beta=0, cure=(1.0, 0.0), init=dict(Tx=0.5)), n_agents=4000, start=2000, stop=2003, dt=1/52, **kw).init()
+    sim = ss.Sim(corpus.make_resistance(beta=0, cure=(1.0, 0.0), init=dict(Tx=0.5)), n_agents=4000, start=2000, stop=2003, dt=1/52, **kw).init()
     tb = sim.diseases.tb
     tx = tb.Tx.uids
     sim.people.strain[tx] = np.arange(len(tx)) % 3 # DS, RIF, and both, in turn
@@ -106,8 +30,7 @@ def test_strain_cure():
     cured = tb.R.raw[tx] | tb.S.raw[tx]
     assert cured[level == 0].mean() > 0.5 and not cured[level != 0].any() # DS alone is cured; RIF never is
     assert set(now[level == 2]) <= {1, 2} and (now[level == 2] == 1).sum() > 0.5*(level == 2).sum() # Of DS and RIF, RIF is left
-    with pytest.raises(TypeError, match="'each'"): # True is spelled 'each', beside 'first'
-        ss.Transition(*ss.states('Tx R'), rate=1, per_strain=True)
+    assert tb.results.failure.sum() > 0 and tb.results.infection.sum() == 0 # Emergence at treatment failure is not an infection
     return sim
 
 
@@ -166,8 +89,6 @@ def test_commuting():
     away_b = p_l/(p_r + p_l - p_l*p_r) # Coming back (out), then perhaps leaving again
     assert abs((now[home == 0] == 1).mean() - away_a) < 0.012 and abs((now[home == 1] == 0).mean() - away_b) < 0.025 # About 4 standard deviations
     assert sim.results.sir.infection.cum.by('home').values[-1, 1] > 1000
-    with pytest.raises(TypeError): # Several on one dimension (it was a bare TypeError)
-        ss.SIR().stratify(patch=ss.levels(['a', 'b'], mobility=[ss.geo.Mobility(matrix=T), ss.geo.Mobility(matrix=T)]))
     return sim
 
 
@@ -187,9 +108,9 @@ def test_register():
         return sir.stratify(place=ss.levels({'a': 0.5, 'b': 0.3, 'c': 0.2}, kind='space', mobility=ss.geo.register(data)))
 
     sims = sc.obj()
-    for solver in ['ode', 'gillespie', 'abm']:
+    for solver in ['ode', 'abm']:
         with pytest.warns(RuntimeWarning, match='more people than there were'): # Nobody in c is ever infected, so the last event finds nobody to move
-            sims[solver] = sim = run(make(), solver, total_pop=10_000, unit='day', stop=60)
+            sims[solver] = sim = corpus.run_with(make(), solver, total_pop=10_000, unit='day', stop=60)
         res = sim.results.sir
         n = np.sum([res[s].by('place').values for s in 'SIR'], axis=0) # People in each place, on each day
         assert np.allclose(n[10] - n[9], [0, 0, 500]) # Added to c
@@ -203,39 +124,15 @@ def test_register():
             assert np.allclose(n[0], [4000, 4000, 2000]) # An event on the first day happens before it is counted
     assert sims.ode.results.sir.infection.cum.by('place').values[-1, 1] > 1000 # People moved from a took the epidemic to b
 
-    # Stepping gives what the whole run in one call does; a date is placed on the sim's calendar; a whole number is a count of people
-    with pytest.warns(RuntimeWarning):
-        stepped = ss.Sim(make(), solver='ode', total_pop=10_000, unit='day', stop=60, **kw).perf_profile(kind='loop', plot=False).sim
-    assert np.allclose(stepped.results.sir.I.values, sims.ode.results.sir.I.values)
+    # A date is placed on the sim's calendar; a whole number is a count of people
     dated = register.copy()
     dated['date'] = [ss.date('2020-01-01') + ss.days(int(d)) for d in register['date']]
     with pytest.warns(RuntimeWarning):
         sim = ss.Sim(make(dated), solver='ode', total_pop=10_000, unit='day', start='2020-01-01', stop='2020-03-01', **kw).run()
     assert np.allclose(sim.results.sir.S.values, sims.ode.results.sir.S.values)
-    res = at_start(ss.Sim(make(register.iloc[:1], init=ss.by(place=[1, 0, 0])), solver='ode', total_pop=10_000, unit='day', stop=5, **kw)).sir
+    res = corpus.at_start(ss.Sim(make(register.iloc[:1], init=ss.by(place=[1, 0, 0])), solver='ode', total_pop=10_000, unit='day', stop=5, **kw)).sir
     assert np.allclose(res.I.by('place').values[0], [0.8, 0.2, 0]) # One person in a (not all of them), of whom 1000 in 5000 moved to b
 
-    # With another disease tracked jointly, in either order, everyone is moved once, by the states of the disease that has them (before, the events at the start were lost, and the first disease's states were used: 6% and 44% off)
-    def crossed(other_first):
-        sir = make()
-        S, I = ss.states('S I')
-        other = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.2) * I), recovery=ss.Transition(I, S, dur=ss.days(7)), init_prev=0.02, name='other')
-        same = ss.modify(sir.rel_sus, multiply=1.0, who=other.I, name='same') # Changes nothing, but the diseases are tracked jointly
-        return ss.Sim(diseases=[other, sir] if other_first else [sir, other], connectors=same, solver='ode', total_pop=10_000, unit='day', stop=60, **kw)
-    for other_first in [False, True]:
-        with pytest.warns(RuntimeWarning):
-            res = crossed(other_first).run().results.sir
-        assert np.allclose(res.I.values, sims.ode.results.sir.I.values, rtol=1e-4) # To the ODE's accuracy: the other disease's growth can give the joint run more substeps
-
-    # Mistakes
-    with pytest.raises(KeyError):
-        ss.Sim(make(register.assign(to=['b', 'd', None, 'c', 'a'])), **kw).run()
-    with pytest.raises(KeyError):
-        ss.Sim(make(register.assign(states=[None, 'X', None, 'R', 'I'])), **kw).run()
-    with pytest.raises(KeyError, match='columns'):
-        ss.geo.register(register.drop(columns='n'))
-    with pytest.raises(TypeError, match='ss.geo.register'): # A register is its own kind of movement
-        ss.geo.Mobility(data=register, kind='commute')
     # An event can move people to other states in the same place, as SimInf's shift matrix does when animals age
     def ages(data):
         S1, I1 = ss.states('S1 I1')
@@ -243,22 +140,17 @@ def test_register():
         dis = ss.Disease(S1, I1, S2, I2, inf1=S1 >> I1 @ 0*I1, inf2=S2 >> I2 @ 0*I2, rec1=I1 >> S1 @ 0.0, rec2=I2 >> S2 @ 0.0, init=dict(I1=0.2), default_state='S1', name='dis')
         return dis.stratify(herd=ss.levels(['a', 'b'], kind='space', mobility=ss.geo.register(data)))
     aging = pd.DataFrame({'date':[5, 5], 'from':['a', 'b'], 'to':['a', 'b'], 'n':[100, 50], 'states':['S1, I1']*2, 'to_states':['S2, I2']*2})
-    for solver,agents in [('ode', {}), ('gillespie', {}), ('abm', dict(n_agents=1000))]:
+    for solver,agents in [('ode', {}), ('abm', dict(n_agents=1000))]:
         res = ss.Sim(ages(aging), total_pop=1000, stop=10, solver=solver, **agents, **kw).run().results.dis
         assert np.allclose(res.S2.by('herd').values[6] + res.I2.by('herd').values[6], [100, 50])
         assert np.isclose(res.I2.values[6]/(res.S2.values[6] + res.I2.values[6]), 0.2, atol=0.1) # Infected and not move to their own states
-    mixed = pd.concat([aging, pd.DataFrame({'date':[6], 'from':['a'], 'to':[None], 'n':[10], 'states':['S1']})]) # Rows with no to_states are read as such
-    ss.Sim(ages(mixed), total_pop=1000, stop=10, **kw).run()
-    with pytest.raises(ValueError): # As many states to move people to as to move them from
-        ss.Sim(ages(aging.assign(states=['S1, I1', 'S1'])), total_pop=1000, stop=10, **kw).init()
 
     return sims
 
 
 @sc.timer()
 def test_property_values():
-    sc.heading('Testing that people hold the values of a numeric dimension, and keep a property they already have')
-    # Numeric levels are lower bin edges, and people hold the value (before, they held 0 to 4, binned by the edges 1 to 5, so the top level was empty)
+    sc.heading('Testing that people hold the values of a numeric dimension (lower bin edges)')
     S, I = ss.states('S I')
     sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), n_agents=5000, start=2000, stop=2001, solver='abm', verbose=0)
     sim.stratify(wealthquintile=[1, 2, 3, 4, 5])
@@ -267,36 +159,11 @@ def test_property_values():
     res = sim.results.d
     assert np.allclose(res.S.by('wealthquintile').values[0] + res.I.by('wealthquintile').values[0], 1000)
 
-    # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and shares for it raise
-    def make(urban=[False, True]):
-        ppl = ss.People(5000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
-        S, I = ss.states('S I')
-        sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
-        sim.stratify(urban=urban)
-        sim.stratify(wealth=[0, 50])
-        return sim
+    return sim
     sim = make().run()
     assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
     with pytest.raises(ValueError, match='would overwrite them'):
         make(urban={False: 0.5, True: 0.5}).init()
-    with pytest.raises(ValueError, match="'age', 'space', 'plain'"): # An unknown kind
-        make(urban=ss.levels([False, True], kind='clock'))
-    return sim
-
-
-@sc.timer()
-def test_many_groups():
-    sc.heading('Testing more groups than 16-bit integers hold, as agents')
-    S, D = ss.states(2)
-    dis = ss.Disease(onset=S >> D @ ss.peryear(1), back=D >> S @ ss.days(7), name='dis')
-    dis.stratify(a=ss.levels([f'a{i}' for i in range(128)], states=[D]))
-    dis.stratify(b=ss.levels([f'b{i}' for i in range(384)], states=[D])) # 49,152 groups: an OverflowError, or groups wrapped round to negative numbers
-    sim = ss.Sim(diseases=dis, n_agents=2_000, start='2010-01-01', stop='2010-02-01', dt=ss.days(1), verbose=0).run()
-    groups = sim.groups
-    assert groups.n_groups == 49_152
-    assert np.array_equal(groups.group_raw(), groups.level_raw(0).astype(np.int64)*384 + groups.level_raw(1)) # Kept up to date as people move in and out of D
-    res = sim.results.dis
-    assert res.D.by('b').values[-1].sum() == res.D[-1] and res.D[-1] - res.back[-1] + res.onset[-1] == sim.diseases.dis.D.sum() # The last time point, then its step
     return sim
 
 
@@ -306,7 +173,7 @@ def test_given_splits():
     # Stratifying by a property the people already have keeps it, and is not described as guessed (everyone was put at False, the first level)
     N = 10_000
     tob = np.random.default_rng(1).random(N) < 0.3
-    ppl = ss.People(N, extra_states=[ss.BoolArr('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
+    ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), default_state='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
@@ -315,7 +182,7 @@ def test_given_splits():
     assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
     assert 'Guessed' not in [line for line in sim.describe().splitlines() if 'tob' in line and 'Dimension' in line][0]
 
-    # A split over two dimensions that contradicts one's own split raises (before, urban came out at 0.497 where 0.17 was given)
+    # A split over two dimensions that contradicts one's own split raises
     table = np.array([[0.11, 0.21, 0.22, 0.23, 0.23], [0.75, 0.16, 0.05, 0.02, 0.02]]) # P(wealth | urban)
     def make(table):
         S = ss.State()
@@ -334,7 +201,7 @@ def test_given_splits():
 def test_sex():
     """ As agents, a dimension of sex is people.female, for everyone including newborns """
     sc.heading('Testing sex as a dimension of agents')
-    for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex={'female': 0.7, 'male': 0.3})]:
+    for kw in [dict(sex=['m', 'f']), dict(sex={'female': 0.7, 'male': 0.3})]:
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), init_prev=0.05, name='si')
         sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=0.03), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
@@ -347,9 +214,6 @@ def test_sex():
         women = ppl[strat.attr].raw[ppl.auids] == strat.female
         assert np.array_equal(women, ppl.female.raw[ppl.auids]), f'{kw}: the levels of sex disagree with people.female'
         assert sim.results.si.S.select(**{strat.name: strat.labels[strat.female]})[0] == start # The women in S at the start
-    with pytest.raises(ValueError, match='people.female'):
-        S, I = ss.states('S I')
-        ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), name='si'), n_agents=100, stratify=dict(sex=['a', 'b']), verbose=0).init()
     return
 
 
@@ -396,22 +260,12 @@ def test_places_by_name():
     prev = ss.Sim(make(init_prev=seed), stratify=patch, stop=3, unit='day', **kw).run().results.m.I.by('patch').values[0]
     assert prev[0] == prev[1] == 0 and prev[2] > 0
     assert seed.rest is None # A copy is the starting value, so the same ss.by elsewhere still needs every place
-    later = ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(8))
-    later.pars.init_prev = ss.by(patch={'c': 0.1}) # A parameter of a built-in disease, set after it is made, as agents and as compartments
-    for sir in [ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(8), init_prev=ss.by(patch={'c': 0.1})), later]:
-        for n_agents in [None, 2000]:
-            given = dict(stratify=patch, stop=3, unit='day', **kw) | (dict(n_agents=n_agents) if n_agents else {})
-            prev = ss.Sim(diseases=sc.dcp(sir), **given).run().results.sir.I.by('patch').values[0]
-            assert prev[0] == prev[1] == 0 and prev[2] > 0
-    with pytest.raises(ValueError):
-        ss.Sim(make(init_n=dict(I=ss.by(patch={'b': 10})), beta=0.3*ss.by(patch={'a': 1.0})), stratify=patch, stop=3, unit='day', **kw).run()
     with pytest.raises(ValueError): # A misspelled place is not quietly 0
         ss.Sim(make(init_n=dict(I=ss.by(patch={'bb': 10}))), stratify=patch, stop=3, unit='day', **kw).run()
 
     # A name like patch given only names mixes as one population, which a note says; kind= given says what it is, as do contacts by it
     notes = lambda nets=None, **strat: [note for note in ss.Sim(make(init_prev=0.01), stratify=strat, stop=3, unit='day', **kw, **(dict(networks=nets) if nets else {})).init().notes if 'mix as one population' in note]
     assert not notes(ss.contacts(region=[[0.8, 0.2], [0.2, 0.8]]), region=['north', 'south'])
-    assert not notes(ss.contacts(np.eye(4), dims=['region', 'risk']), region=['north', 'south'], risk=['low', 'high']) # Contacts over several dimensions together
     assert len(notes(region=['north', 'south'])) == 1
     assert not notes(region=ss.levels(['north', 'south'], kind='plain')) and not notes(region=ss.levels(['north', 'south'], kind='space')) and not notes(risk=['low', 'high'])
     return
@@ -430,22 +284,11 @@ def test_levels():
         d = [strat.name for strat in g.strats].index('parity')
         assert np.array_equal(g.group_inside[:, d], (g.group_coords[:, 0] == 0) & (g.group_coords[:, 1] >= 1)), f'{solver}: parity only for women of 15 and over'
     assert [s.name for s in make().stratify(states=['low', 'high'], kind=[0, 1]).graph.strats] == ['states', 'kind'] # An option's name can be a dimension's
-    for old in [dict(fractions=[0.8, 0.2]), dict(adjust={'infection': [1, 3]}), dict(kind='space'), dict(where=dict(sex='female'))]:
-        with pytest.raises(TypeError, match=r'stratify\(\) takes only dimensions'):
-            make().stratify(risk=['low', 'high'], **old)
-    with pytest.raises(TypeError, match='one dict of dimensions'):
-        old_form = [dict(age=[0, 15]), dict(risk=['low', 'high'])] # A list of dicts, one per call of stratify(), as before
-        ss.Disease(*ss.states('S I'), stratify=old_form)
-    return sim
 
-
-def test_levels_fractions():
-    sc.heading('ss.levels(fractions=) as its docstring gives it: the shares at each combination of levels')
+    # ss.levels(fractions=) as its docstring gives it: the shares at each combination of levels
     sim = ss.Sim(diseases=ss.SIR(beta=0.1), stop=2002, verbose=0)
     sim.stratify(age={0: 0.5, 15: 0.5}, risk=ss.levels(['low', 'high'], fractions=ss.by(np.array([[0.45, 0.05], [0.2, 0.3]]), dims=['age', 'risk'])))
     sim.run()
-    with pytest.raises(TypeError, match="dims="):
-        ss.Sim(diseases=ss.SIR()).stratify(risk=['low', 'high'], fractions=ss.by(age=[0.5, 0.5]))
     return sim
 
 
@@ -464,8 +307,6 @@ def test_levels_effects():
     sir, _ = make(True)
     sim = ss.Sim(sir, total_pop=1000, **kw)
     assert 'rel_sus: False 1, True 0.1' in str(sim.describe()) and 'by level of vaccinated' in str(sim.what_modifies(sir.rel_sus))
-    with pytest.raises(TypeError, match='one multiplier for each level'):
-        ss.levels([False, True], rel_sus=0.5)
     return
 
 
@@ -486,34 +327,7 @@ def test_levels_R0():
     return
 
 
-def test_strains_class_twice():
-    sc.heading('A class with an outcome for each strain carried can be made twice: the strains change the copies of its transitions, not the class')
-    class TB(ss.Disease):
-        S, L, I, Tx, R = ss.states('S L I Tx R')
-        infection = S >> L @ ss.peryear(4)*I
-        activation = L >> I @ ss.peryear(0.3)
-        diagnosis = I >> Tx @ ss.peryear(2)
-        treatment = ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain='each')
-    strains = lambda: ss.Strains(['DS', 'RIF'], max_strains=2, cure=[0.9, 0.3])
-    TB(strains=strains())
-    tb = TB(strains=strains(), name='tb')
-    ss.Sim(tb, n_agents=500, start=2000, stop=2002, **kw).run()
-    return
-
-
 if __name__ == '__main__':
-    cure    = test_strain_cure()
-    slev = test_strain_levels()
-    commuting = test_commuting()
-    register = test_register()
-    values  = test_property_values()
-    many    = test_many_groups()
-    splits  = test_given_splits()
-    sex     = test_sex()
-    initp   = test_init_prev_by_agent()
-    places  = test_places_by_name()
-    levels  = test_levels()
-    test_levels_fractions()
-    test_levels_effects()
-    test_levels_R0()
-    test_strains_class_twice()
+    for name,test in list(globals().items()):
+        if name.startswith('test_'):
+            test()

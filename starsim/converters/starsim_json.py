@@ -140,9 +140,9 @@ class Writer:
             val = getattr(tr, key, None)
             if val is not None:
                 out[key] = self.expr(val, pars) if key in ['min_stay', 'noise'] else val
-        for key in ['where', 'move', 'increment']:
+        for key in ['who', 'move', 'increment']:
             if getattr(tr, key, None) is not None:
-                self.lost.append(f'not exported: the {"who" if key == "where" else key}= of transition "{g.module.name}.{tr.name}"') # who= is stored as where
+                self.lost.append(f'not exported: the {key}= of transition "{g.module.name}.{tr.name}"')
         typed = isinstance(getattr(dur, 'raw', dur), (ss.Duration, ss.Dist)) # A dwell time written with @ needs a unit, so that it is not read as a rate
         if set(out.keys()) <= {'source', 'dest', 'rate', 'dur'} and not isinstance(out.dest, list) and ('rate' in out or typed):
             rate = out.get('rate', out.get('dur'))

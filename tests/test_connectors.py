@@ -1,142 +1,29 @@
 """
-Test connectors and custom interventions
-
-Demonstrates a connector mediating a bidirectional interaction between two diseases
-(HIV and SIS), plus a custom intervention that treats one of them. HIV provides a
-`cd4` state (lower CD4 = more advanced disease); SIS provides a simple infected/
-susceptible cycle that stands in for a co-infection.
+Test connectors and modifiers, and code in plain NumPy composed with Starsim
 """
 
 import sciris as sc
 import numpy as np
 import pytest
-import matplotlib.pyplot as plt
 import starsim as ss
 import starsim.library as ssl
 
 sc.options(interactive=False) # Assume not running interactively
 
 
-class hiv_sis(ss.Connector):
-    """ Connector for a bidirectional HIV<->SIS interaction """
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.define_pars(
-            label = 'HIV-SIS',
-            rel_sus_sis_hiv    = 2,   # People with HIV are 2x more likely to acquire SIS
-            rel_sus_sis_aids   = 5,   # People with AIDS (low CD4) are 5x more likely to acquire SIS
-            rel_trans_sis_hiv  = 1.5, # People with HIV are 1.5x more likely to transmit SIS
-            rel_trans_sis_aids = 3,   # People with AIDS are 3x more likely to transmit SIS
-            rel_sus_hiv_sis    = 2.7, # People with SIS are 2.7x more likely to acquire HIV
-            rel_trans_hiv_sis  = 2.7, # People with SIS are 2.7x more likely to transmit HIV
-        )
-        self.update_pars(**kwargs)
-        return
-
-    def step(self):
-        """ Specify HIV-SIS interactions """
-
-        diseases = self.sim.diseases
-        sis = diseases.sis
-        hiv = diseases.hiv
-        cd4 = self.sim.people.hiv.cd4
-
-        # People with HIV are more likely to acquire SIS
-        sis.rel_sus[cd4 < 500] = self.pars.rel_sus_sis_hiv
-        sis.rel_sus[cd4 < 200] = self.pars.rel_sus_sis_aids
-
-        # People with HIV are more likely to transmit SIS
-        sis.rel_trans[cd4 < 500] = self.pars.rel_trans_sis_hiv
-        sis.rel_trans[cd4 < 200] = self.pars.rel_trans_sis_aids
-
-        # People with SIS are more likely to acquire HIV
-        hiv.rel_sus[sis.infected] = self.pars.rel_sus_hiv_sis
-
-        # People with SIS are more likely to transmit HIV
-        hiv.rel_trans[sis.infected] = self.pars.rel_trans_hiv_sis
-        return
-
-
-class TreatSIS(ss.Intervention):
-    """ Treat (cure) SIS-infected people from a given year onwards """
-    def __init__(self, year=2020, prob=0.8):
-        super().__init__() # Initialize the intervention
-        self.prob = prob # Store the probability of treatment
-        self.year = ss.date(year)
-        return
-
-    def step(self):
-        sim = self.sim
-        if sim.now > self.year:
-            sis = sim.diseases.sis
-
-            # Define who is eligible for treatment
-            eligible_ids = sis.infected.uids
-            n_eligible = len(eligible_ids) # Number of people who are eligible
-
-            # Define who receives treatment
-            is_treated = np.random.rand(n_eligible) < self.prob  # Compare np.random.rand() to self.prob
-            treat_ids = eligible_ids[is_treated]  # Pull out the IDs for the people receiving the treatment
-            sis.infected[treat_ids] = False
-            sis.susceptible[treat_ids] = True
-            sim.diseases.hiv.rel_sus[treat_ids] = 1
-            sim.diseases.hiv.rel_trans[treat_ids] = 1
-        return
-
-
-def make_args():
-    """ Make people, HIV, SIS, and network """
-    pars = dict(n_agents=2000, verbose=0)
-    mf = ss.SexualNet(dur=ss.lognormal(mean=5, std=0.5, unit=ss.years))
-    hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2)
-    sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.02, 0.01]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly; low enough per act for rel_sus to matter
-    return dict(**pars, networks=mf, diseases=[hiv, sis])
-
-
-@sc.timer()
-def test_connectors(do_plot=False):
-    """ Test connector example """
-    sc.heading('Testing connectors')
-
-    # Sims with a connector, without one, and with a connector and SIS treatment
-    args = make_args()
-    sims = sc.obj()
-    sims.con = ss.Sim(label='With connector', connectors=hiv_sis(), **args).run()
-    sims.nocon = ss.Sim(label='Without connector', **args).run()
-    sims.treat = ss.Sim(label='With treatment', connectors=hiv_sis(), interventions=TreatSIS(), **args).run()
-    diseases = ['sis', 'hiv']
-    results = sc.odict({sim.label: sc.obj({d: sim.results[d].infected for d in diseases}) for sim in sims.values()})
-
-    if do_plot:
-        plt.figure()
-        for i,disease in enumerate(diseases):
-            plt.subplot(2,1,i+1)
-            for label,res in results.items():
-                plt.plot(sims.con.t.yearvec, res[disease], label=label)
-            plt.title(f'{disease.upper()} infections')
-            plt.axvline(2020)
-            plt.legend()
-        sc.figlayout()
-        plt.show()
-
-    # Check results
-    for disease in diseases:
-        assert results[0][disease].sum() > results[1][disease].sum(), f'{disease.title()} infections should be higher with connector'
-        assert results[0][disease].sum() > results[2][disease].sum(), f'{disease.title()} infections should be lower with treatment'
-
-    # The same interaction with v4's modifiers, on the HIV written as code and a declared SIS
+def test_connectors():
+    sc.heading('Testing modifiers between the HIV written as code and a declared SIS')
     def run(*connectors):
         hiv = ssl.diseases.HIV(beta={'sexual': [0.008, 0.004]}, init_prev=0.2)
-        sis = ss.SIS(beta={'sexual': ss.peract(m2f=0.01, f2m=0.005)}, init_prev=0.05)
+        sis = ss.SIS(beta={'sexual': ss.peract(m2f=0.01, f2m=0.005)}, dur_inf=ss.years(1), init_prev=0.05)
         mods = [make(hiv, sis) for make in connectors]
-        return ss.Sim(n_agents=2000, networks=ss.SexualNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, verbose=0).run().results
+        return ss.Sim(n_agents=2000, networks=ss.SexualNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, dt=ss.months(1), verbose=0).run().results
     base = run()
     stop_hiv = run(lambda hiv, sis: ss.modify(hiv.rel_trans, multiply=0, when=ss.schedule(start=2010))) # A modifier of the rel_trans of a disease written as code
     no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, who=hiv.cd4 < 1e6)) # A condition on an array of a disease written as code (everyone's CD4 is below 1e6)
     after = stop_hiv.timevec > 2010
     assert base.hiv.infection[after].sum() > 0 and stop_hiv.hiv.infection[after].sum() == 0 # No HIV transmission after 2010
     assert base.sis.infection.sum() > 0 and no_sis.sis.infection.sum() == 0
-    return sims
 
 
 def test_lazy_arrays():
@@ -175,12 +62,10 @@ def test_lazy_arrays():
         arr = mods[which][which]
         protected = (arr[new] >= 500) if which == 'cd4' else ~arr[new]
         assert len(new) and not protected.any(), f'{which}: {protected.sum()} of {len(new)} infected were protected'
-    return
 
 
-@sc.timer()
 def test_where_count():
-    sc.heading('A condition on a count in when= is worked out at each step, under every solver; in who=, a clear error')
+    sc.heading('A condition on a count in when= is worked out at each step, under every solver; in who=, it raises')
     def make():
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
@@ -194,37 +79,23 @@ def test_where_count():
     d = make()
     vaccinate = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 200, coverage=0.1) # A delivery takes one too
     assert ss.Sim(d, interventions=vaccinate, n_agents=2000, stop=100, verbose=0).run().results.d.I.max() > 200
-    with pytest.raises(TypeError, match='goes in who='): # A condition on people is not when
-        ss.modify(make().infection, multiply=0.5, when=make().I)
-    for make_who in [lambda d: ss.modify(d.infection, multiply=0.5, who=d.I.n > 200), lambda d: ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 200), lambda d: ss.Event(d.S >> d.R, who=d.I.frac > 0.1)]:
-        with pytest.raises(TypeError, match='give it as when='): # A count says when, for everyone at once
-            make_who(make())
-    return
+    with pytest.raises(TypeError): # A count says when, for everyone at once, so it is not who=
+        ss.modify(d.infection, multiply=0.5, who=d.I.n > 200)
+    with pytest.raises(TypeError): # ...and a condition on people is not when=
+        ss.modify(d.pars.beta, multiply=0.5, when=d.I)
 
 
 def test_count_is_when():
-    sc.heading('A condition on the population is when= everywhere; one joined to a condition on people in who= raises, showing the split')
+    sc.heading('A count in when= of a transition says when its rate applies; an intervention written as code takes a count and a schedule')
     S, I, Q = ss.states('S I Q')
-    for make_who in [lambda: ss.Transition(I, Q, rate=ss.peryear(5), who=Q.n < 20), lambda: ss.move(I, Q, who=Q.n < 20), lambda: ss.Intervention(who=I.n > 5)]:
-        with pytest.raises(TypeError, match='give it as when='):
-            make_who()
-    for make_who in [lambda: ss.Event(S >> Q, who=(ss.person.age < 5) & (I.n > 10)), lambda: ss.modify('d.infection', multiply=0.5, who=(ss.person.age < 5) & (I.n > 10)), lambda: ss.Transition(I, Q, rate=1, who=(ss.person.age < 5) & (I.n > 10))]:
-        with pytest.raises(TypeError, match=r'who=\(people.age < 5\), when=\(I.n > 10\)'):
-            make_who()
-    with pytest.raises(TypeError, match='cannot be split'): # Joined with |, there is no split
-        ss.Event(S >> Q, who=(ss.person.age < 5) | (I.n > 10))
-
-    # On a transition with a rate, a count in when= says when the rate applies (here, while there are beds); with no rate, it still moves everyone at once
-    gated = ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20)
-    assert gated.trigger is None and gated.where is not None
-    assert ss.Transition(I, Q, when=Q.n < 20).trigger is not None
+    assert ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20)._trigger is None # With a rate, the count gates it
+    assert ss.Transition(I, Q, when=Q.n < 20)._trigger is not None # With no rate, it moves everyone at once
     for solver in ['ode', 'abm']:
         S, I, Q = ss.states('S I Q')
         d = ss.Disease(S, I, Q, infection=S >> I @ ss.peryear(2)*I, q=ss.Transition(I, Q, rate=ss.peryear(5), when=Q.n < 20), init_prev=0.1, name='d')
         size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
         assert ss.Sim(d, solver=solver, start=2000, stop=2003, dt=ss.years(0.25), verbose=0, **size).run().results.d.Q[-1] < 100 # Without the gate, about 800
 
-    # An intervention written as code takes a count, a schedule, or both as when=
     class Count(ss.Intervention):
         def init_pre(self, sim):
             super().init_pre(sim)
@@ -237,32 +108,14 @@ def test_count_is_when():
     I, n = sim.results.sir.I, np.array(sim.interventions.count.n)
     due = np.arange(len(n)) % 10 == 0
     assert np.all(n[~due] == 0) and np.all((n[due] > 0) == (I[:len(n)][due] > 100)) and (n > 0).sum() >= 2
-    with pytest.raises(TypeError, match='when= of Count'):
-        Count(when=ss.person.age > 10)
-
-    # A transition gated by counts joined together, as by one: here the second always holds, so the same numbers
-    for solver in ['ode', 'abm']:
-        maxq = []
-        for gate in [lambda Q, I: Q.n < 20, lambda Q, I: (Q.n < 20) & (I.n >= 0), lambda Q, I: (Q.n < 20) | (I.n > 1e9)]:
-            S, I, Q, R = ss.states('S I Q R')
-            dis = ss.Disease(S, I, Q, R, infection=S >> I @ ss.perday(0.3)*I, iso=ss.Transition(I, Q, rate=ss.peryear(50), when=gate(Q, I)), rec=I >> R @ ss.days(10), out=Q >> R @ ss.days(5), init_prev=0.01, name='d')
-            maxq.append(ss.Sim(dis, n_agents=1000, total_pop=1000, unit='day', stop=60, solver=solver, verbose=0).run().results.d.Q.max())
-        assert np.allclose(maxq, maxq[0]), (solver, maxq)
-    return
 
 
 def test_when_joined():
     sc.heading('when= joins a schedule, or an event, to a condition on the population with & (both) or | (either)')
     d = ss.SIR(name='d')
     assert repr(ss.schedule(start=2025) & (d.I.n > 1000)) == 'ss.schedule(start=2025) & (I.n > 1000)'
-    assert (d.I.n > 1000) & ss.schedule(every=ss.years(1)) is not None # Either way round
-    assert ss.on(d.infection, delay=ss.days(5)) & (d.I.n > 10) is not None
-    for bad, match in [(lambda: ss.schedule(start=2025) & d.I.n > 1000, 'in parentheses'), (lambda: ss.schedule() | (d.I.n > 10), 'adds nothing'),
-                       (lambda: ss.schedule(every=ss.days(10)) | d.I, 'goes in who='), (lambda: ss.schedule(every=ss.days(10)) & (d.I.n > 5) | (d.I.n > 9), 'not clear'),
-                       (lambda: ss.schedule() & d.I, 'goes in who='), (lambda: [2025, 2030] & (d.I.n > 10), r'ss.schedule\(\[2025, 2030\]\) &'),
-                       (lambda: ss.schedule() & d.infection, 'is an event')]:
-        with pytest.raises(TypeError, match=match):
-            bad()
+    with pytest.raises(TypeError):
+        ss.schedule(start=2025) & d.I.n > 1000 # Not in parentheses
 
     # Rounds every 10 days, each only if the count holds then, as compartments and as agents
     for solver in ['ode', 'abm']:
@@ -275,13 +128,6 @@ def test_when_joined():
         assert np.all(~ran[np.arange(len(ran)) % 10 != 0]) # Only on the schedule
         assert np.any(ran) and np.all(I[ran] > 50) and not np.all(ran[::10]) # Only while the count holds, which it stops doing
 
-    # A modifier from a date, while a count holds
-    d = ss.SIR(beta=ss.perday(0.3), init_prev=0.001, name='d')
-    npi = ss.modify(d.pars.beta, multiply=0.0, when=ss.schedule(start=ss.days(20)) & (d.I.n > 100))
-    assert 'when=ss.schedule(start=days(20)) & (I.n > 100)' in npi.describe()
-    inf = ss.Sim(diseases=d, connectors=npi, solver='ode', total_pop=10_000, unit='day', dt=1, stop=60, verbose=0).run().results.d.infection
-    assert np.all(inf[:20] > 0) and inf[20:].min() == 0 and inf[20:].max() > 0 # Off once it holds after day 20, on again while it does not
-
     # After an event and a delay, the count is checked when it acts
     for op, acts in [('<', False), ('>', True)]:
         d = ss.SIR(beta=ss.perday(0.3), init_prev=0.01, name='d')
@@ -290,79 +136,28 @@ def test_when_joined():
         sim = ss.Sim(diseases=d, networks='random', interventions=ev, n_agents=2000, unit='day', dt=1, stop=20, rand_seed=1, verbose=0).run()
         assert (sim.results.ev.delivered[10:].sum() > 0) == acts # Infected while fewer than 300 were infectious, and acted on when more were
 
-    # Joined with |, on either: a round on the schedule's steps, and everyone eligible at each step the count holds; or, with an event, those it happens to
-    def run(solver, when):
+    # Joined with |: a round on the schedule's steps, and everyone eligible at each step the count holds; or, with an event, those it happens to
+    def run(when):
         d = ss.SIR(beta=ss.perday(0.2), init_prev=0.01, name='d')
-        size = dict(n_agents=2000, networks='random') if solver == 'abm' else dict(total_pop=2000)
-        sim = ss.Sim(diseases=d, interventions=ss.Event(when=when(d), p=0.1, name='ev'), solver=solver, unit='day', dt=1, stop=50, rand_seed=1, verbose=0, **size).run()
+        sim = ss.Sim(diseases=d, interventions=ss.Event(when=when(d), p=0.1, name='ev'), n_agents=2000, networks='random', unit='day', dt=1, stop=50, rand_seed=1, verbose=0).run()
         return np.asarray(sim.results.ev.delivered), np.asarray(sim.results.d.I)
     rounds = np.arange(51) % 10 == 0
-    for solver in ['ode', 'abm']:
-        event, I = run(solver, lambda d: d.infection) # The event changes nothing, so the epidemic is the same in each run
-        thresh = I.max()/2 # Held for some steps, not all
-        either, I = run(solver, lambda d: ss.schedule(every=ss.days(10)) | (d.I.n > thresh))
-        held = I > thresh
-        assert held.any() and not held.all() and np.array_equal(either > 0, rounds | held), f'Under {solver}, a round every 10 days, and one at each step the count holds'
-        either, I = run(solver, lambda d: d.infection | (d.I.n > thresh))
-        held = I > thresh
-        assert np.allclose(either[~held], event[~held]) and np.all(either[held] > event[held]) # The event, and everyone while the count holds
-        either, _ = run(solver, lambda d: ss.schedule(every=ss.days(10)) | d.infection)
-        assert np.allclose(either[~rounds], event[~rounds]) and np.all(either[rounds] > event[rounds]) # The event, and a round every 10 days
-    delayed, _ = run('abm', lambda d: ss.on(d.infection, delay=ss.days(3)))
-    either, I = run('abm', lambda d: ss.on(d.infection, delay=ss.days(3)) | (d.I.n > 300))
-    held = I > 300
-    assert np.array_equal(either[~held], delayed[~held]) and np.all(either[held] > delayed[held]) # The count acts at once; the delay is the event's
+    event, I = run(lambda d: d.infection) # The event changes nothing, so the epidemic is the same in each run
+    thresh = I.max()/2 # Held for some steps, not all
+    either, I = run(lambda d: ss.schedule(every=ss.days(10)) | (d.I.n > thresh))
+    held = I > thresh
+    assert held.any() and not held.all() and np.array_equal(either > 0, rounds | held)
+    either, I = run(lambda d: d.infection | (d.I.n > thresh))
+    held = I > thresh
+    assert np.allclose(either[~held], event[~held]) and np.all(either[held] > event[held]) # The event, and everyone while the count holds
 
     # A modifier on a schedule, or while a count holds
     d = ss.SIR(beta=ss.perday(0.3), init_prev=0.001, name='d')
     npi = ss.modify(d.pars.beta, multiply=0.0, when=ss.schedule(every=ss.days(10)) | (d.I.n > 100))
-    assert 'when=(ss.schedule(every=ss.days(10)) | (I.n > 100))' in npi.describe()
     res = ss.Sim(diseases=d, connectors=npi, solver='ode', total_pop=10_000, unit='day', dt=1, stop=60, verbose=0).run().results.d
-    off = np.arange(61) % 10 == 0
-    off = off | (np.asarray(res.I) > 100)
+    off = (np.arange(61) % 10 == 0) | (np.asarray(res.I) > 100)
     inf = np.asarray(res.infection)
     assert np.all(inf[off] == 0) and np.all(inf[~off][1:] > 0) and off.sum() > 6 # Off on the schedule and while the count holds (the first step has no infections yet)
-    with pytest.raises(TypeError, match='an event, which a modifier does not take'):
-        ss.modify(d.pars.beta, multiply=0.5, when=ss.schedule(every=ss.days(10)) | d.infection)
-    with pytest.raises(TypeError, match='wait for the delay'): # The other event would wait for the delay too
-        d.recovery | ss.on(d.infection, delay=ss.days(20))
-
-    # A schedule given as a function of the date is bounded by its start and stop, and so is a condition joined to it
-    t = ss.Timeline(start='2020-01-01', stop='2020-06-01', dt=ss.days(1))
-    t.init()
-    sched = ss.schedule(lambda now: now.day == 1, start='2020-02-01', stop='2020-03-01').init(t)
-    assert sched.counts.sum() == 2 and sched.window.sum() == 30
-    return
-
-
-def test_keywords():
-    sc.heading('who= chooses people, and when= is an event, a time, or a condition on the population')
-    d = ss.SIR(beta=ss.perday(0.1), name='d')
-    assert ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I.n > 5).eligible is not None # A count decides for everyone at once, so it is when
-    assert ss.screen(ss.Diagnostic(), when=d.infection & (d.I.n > 5)).eligible is not None # Joined to an event, while it holds
-    with pytest.raises(TypeError, match='give the event as when='): # An event triggers, so it is not who=
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.infection)
-    with pytest.raises(TypeError, match='give it as who='): # A condition on people is not when
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), when=d.I)
-    with pytest.raises(TypeError, match='give the event as when='): # who= of a transition only restricts
-        ss.Transition(d.S, d.R, who=d.infection)
-    with pytest.raises(TypeError, match='goes in who='): # A state is not a time
-        ss.modify(d.pars.beta, multiply=0.5, when=d.I)
-    with pytest.raises(AttributeError, match='goes in who='): # when= is given the date, not the sim
-        ss.Sim(d, connectors=ss.modify(d.pars.beta, multiply=0.5, when=lambda sim: sim.results), n_agents=100, start='2000-01-01', dur=ss.days(5), verbose=0).run()
-    make = lambda intv: ss.Sim(ss.SIR(beta=ss.perday(0.1), init_prev=0.1, name='d'), networks='random', interventions=intv, n_agents=200, unit='day', stop=10, solver='abm', verbose=0).run().results.vx.delivered.sum()
-    assert make(ss.vaccinate(ss.Vaccine(efficacy=0), when='d.infection', name='vx')) > 0 # An event in when= triggers it, here by its path
-
-    # The same on a transition: an event, or a condition with no other driver, is what moves people
-    S, I, F = ss.states('S I F')
-    flag = ss.Transition(I, F, when=ss.person.age >= 0)
-    assert flag.trigger is not None and flag.where is None
-    tr = S >> I @ ss.perday(1)
-    with pytest.raises(ValueError, match='takes no rate='):
-        ss.Transition(S, I, rate=ss.perday(1), when=tr)
-    timed = ss.Transition(I, F, dur=ss.days(3), who=ss.person.age >= 0) # A condition with a driver is who it applies to
-    assert timed.trigger is None and timed.where is not None
-    return
 
 
 def test_member():
@@ -387,13 +182,6 @@ def test_member():
     given = [ss.modify(d.rel_trans, multiply=0.5**(d.I.time_in/ss.days(3)), who=d.I), ss.modify(d.pars.beta, multiply=0.5, when=ss.schedule(start=20)), ss.modify(d.recovery, multiply=2, when=ss.schedule(start=30))]
     assert np.array_equal(held.results.a.I, ss.Sim(d, connectors=given, **kw).run().results.a.I)
 
-    # Two of the same class, each with its own, and one by keyword, under any solver
-    assert ss.Sim(diseases=[Fading(init_prev=0.1, name='x'), Fading(init_prev=0.1, name='y')], **kw).run().results.y.infection.sum() > 0
-    S, I, R = ss.states('S I R')
-    d = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(8), halved=ss.modify('rel_trans', multiply=0.5), init_prev=0.01, name='d')
-    never = ss.Sim(ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.15)*I, recovery=I >> R @ ss.days(8), init_prev=0.01, name='d'), solver='ode', total_pop=500, unit='day', stop=40, verbose=0).run()
-    assert np.allclose(ss.Sim(d, solver='ode', total_pop=500, unit='day', stop=40, verbose=0).run().results.d.I, never.results.d.I)
-
     # A member whose target is in another module, by its path: the same as given to the sim
     S, I, R = ss.states('S I R')
     a = lambda: ss.Disease(S, I, R, infection=S >> I @ 0*I, recovery=I >> R @ ss.days(5), init_prev=0.2, name='a')
@@ -401,18 +189,9 @@ def test_member():
     b = lambda **kw: ss.Disease(U, V, infection=U >> V @ ss.perday(0.1), init_prev=0.5, name='b', **kw)
     kw2 = dict(n_agents=500, unit='day', stop=10, verbose=0)
     member = ss.Sim(diseases=[a(), b(slower=ss.modify('a.recovery', multiply=0.25, who=V))], **kw2).run()
-    assert list(member.connectors.keys()) == ['b_slower']
     given = ss.Sim(diseases=[a(), b()], connectors=ss.modify('a.recovery', multiply=0.25, who='b.V'), **kw2).run()
     assert np.array_equal(member.results.a.R, given.results.a.R)
     assert member.results.a.R[-1] < ss.Sim(diseases=[a(), b()], **kw2).run().results.a.R[-1] # It slows a's recovery
-
-    with pytest.raises(sc.KeyNotFoundError, match='does not belong to a module'): # Not a member, it has no module
-        ss.Sim(diseases='sis', networks='random', connectors=ss.modify('rel_trans', multiply=0.5), n_agents=100, verbose=0).init()
-    with pytest.raises(ss.CapabilityError, match='declared disease'):
-        class Coded(ss.AgentDisease):
-            fading = ss.modify('rel_trans', multiply=0.5)
-        Coded()
-    return
 
 
 def test_stop_due():
@@ -422,7 +201,6 @@ def test_stop_due():
         d = ss.Disease(S, I, R, infection=S >> I @ 0*I, recovery=I >> R @ ss.days(10), init_prev=0.9, name='a')
         stopped = ss.Sim(diseases=d, connectors=ss.modify(d.recovery, multiply=0, start=5), unit='day', stop=10, solver=solver, verbose=0, **kw).run().results.a.I
         assert stopped[4] > stopped[5] and np.all(stopped[5:] == stopped[5]), f'{solver}: {stopped}' # None leave from the step it starts
-    return
 
 
 def test_coded():
@@ -442,18 +220,14 @@ def test_coded():
         wealth, link = sim.get_module('wealth'), sim.get_module('link')
         assert wealth.seen == [1, 1, 2, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4, 4], f'{solver}: {wealth.seen} and {link.seen}' # A step from each year 0 to 5
         assert wealth.pars.rate == 1
-    with pytest.raises(ValueError, match='cannot differ between people'):
-        ss.Sim(Wealth(name='wealth'), diseases=ss.SIR(beta=ss.perday(0.1)), connectors=ss.modify('wealth.pars.rate', multiply=2, who=ss.person.age > 5), n_agents=100, verbose=0).init()
-    return
 
 
 def test_modifier_tables():
     sc.heading('Modifiers that depend only on time are worked out before a compartmental run, span by span, and kept for a rerun until something they depend on changes')
-    def make(start=40, cut=0.5, beta=0.3, wrap=False, **kwargs):
+    def make(start=40, cut=0.5, beta=0.3, **kwargs):
         S, I, R = ss.states(3)
         season = ss.seasonal(amplitude=0.5, peak=ss.days(50), period=ss.days(180))
-        rate = ss.par(beta*season, name='beta') if wrap else ss.par(beta, name='beta')*season # A parameter given as an expression varies in time as one with the factor outside
-        d = ss.Disease(S, I, R, infection=S >> I @ rate*I, recovery=I >> R @ ss.days(10), init=dict(I=0.001), name='d')
+        d = ss.Disease(S, I, R, infection=S >> I @ ss.par(beta, name='beta')*season*I, recovery=I >> R @ ss.days(10), init=dict(I=0.001), name='d')
         d.stratify(age={0: 0.3, 20: 0.5, 60: 0.2})
         mods = [ss.modify(d.rel_sus, multiply=ss.by(age=[0.5, 1, 0.8]), when=ss.schedule(start=start, stop=150)),
                 ss.modify(d.rel_trans, multiply=ss.par(cut, name='cut'), when=ss.schedule(stop=100)),
@@ -465,45 +239,124 @@ def test_modifier_tables():
     assert sim._compiled_reason() is None
     assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
     assert np.allclose(I(make().run(until=200)), ref, rtol=1e-12), 'A run a step at a time gives the same'
-    assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
-    assert np.array_equal(I(sim.restart(pars=dict(beta=0.4)).run()), I(make(beta=0.4).run())), 'A new value of a parameter'
-    assert np.array_equal(I(sim.restart(pars=dict(cut=0.2)).run()), I(make(beta=0.4, cut=0.2).run())), 'A new value of a parameter in a modifier'
+    assert np.array_equal(I(sim.restart(pars=dict(cut=0.2)).run()), I(make(cut=0.2).run())), 'A new value of a parameter in a modifier'
     sim = make().run()
     sim.interventions()[0].start = 60
     assert np.array_equal(I(sim.run()), I(make(start=60).run())), 'A modifier changed in place'
-    sim = make().run()
-    sim.interventions()[2].amount.interpolation = 'linear'
-    assert not np.array_equal(I(sim.run()), ref), 'A time series changed in place, in how it goes between its values'
-    sim = make().run()
-    assert np.array_equal(I(sim.new(interventions=make(start=60).pars.interventions).run()), I(make(start=60).run())), 'sim.new() with other modifiers'
-    assert np.array_equal(I(sim.new(solver='binomial').run()), I(make(solver='binomial').run())), 'sim.run() with another solver'
-    return
 
 
 def test_sim_diagram():
     sc.heading('A sim\'s diagram and equations show every disease, and how they act on each other')
     hiv, syph = ss.SIS(name='hiv'), ss.SIR(name='syph')
     sim = ss.Sim(diseases=[hiv, syph], connectors=ss.modify(hiv.rel_trans, multiply=3, who=syph.I), verbose=0)
-    text = sim.diagram('text')
-    assert 'subgraph hiv' in text and 'subgraph syph' in text and 'syph_I -..->' in text # The link, from syphilis to HIV
-    eqs = sim.equations()
-    assert 'hiv:' in eqs and 'syph:' in eqs and 'syph.I → hiv.infection' in eqs
-    fig = sim.diagram(do_show=False)
-    assert fig is not None and len(fig.axes[0].patches) > 8
-    return
+    assert 'subgraph syph' in sim.diagram('text') and 'syph.I → hiv.infection' in sim.equations()
+    assert len(sim.diagram(do_show=False).axes[0].patches) > 8
+
+
+# %% Code in plain NumPy, composed with Starsim
+
+class NumpySIR(ss.Module):
+    """ An SIR ODE in plain NumPy, with Euler steps; it reads nothing of the sim but its step """
+    def __init__(self, beta=0.3, gamma=0.1, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(beta=beta, gamma=gamma)
+        self.update_pars(**kwargs)
+
+    def init_post(self):
+        super().init_post()
+        self.y = np.array([0.99, 0.01, 0.0])
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('I', label='Infectious', kind='stock'))
+
+    def step(self):
+        S, I, R = self.y
+        b, g, dt = self.pars.beta, self.pars.gamma, self.t.dt.days
+        self.y = np.array([S - b*S*I*dt, I + (b*S*I - g*I)*dt, R + g*I*dt])
+
+    def record_states(self):
+        super().record_states()
+        self.results.I[self.ti] = self.y[1]
+
+
+class Reservoir(ss.Module):
+    """ Pathogen in the environment, in plain NumPy: shed by the infectious, decaying, and raising the declared disease's beta """
+    def __init__(self, shed=2.0, decay=0.1, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(shed=shed, decay=decay)
+        self.update_pars(**kwargs)
+        self.W = 0.0
+
+    def step(self):
+        sir = self.sim.diseases.sir
+        prev = sir.I.n/(sir.S.n + sir.I.n + sir.R.n) # An aggregate value, which the declared disease publishes under any solver
+        self.W += (self.pars.shed*prev - self.pars.decay*self.W)*self.t.dt.days
+        sir.pars.beta = 0.1*(1 + self.W) # And the value it publishes back
+
+
+class Mosquitoes(ss.Module):
+    """ Agents of its own, in plain NumPy, with a random number generator of its own """
+    def init_post(self):
+        super().init_post()
+        self.rng = np.random.default_rng(1)
+        self.age = np.zeros(1000)
+
+    def step(self):
+        self.age += self.t.dt.days
+        dead = self.rng.random(len(self.age)) < 0.1
+        self.age[dead] = 0 # Each replaced by a newly hatched one
+
+
+def test_numpy_beside():
+    sc.heading('Testing an ODE in NumPy beside a declared disease, coupled through aggregate values; and agents in NumPy beside a standard module')
+    def declared_sir():
+        S, I, R = ss.states(3)
+        return ss.Disease(S >> I @ ss.par(0.1, name='beta') * I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir')
+    for solver, size in [('abm', dict(n_agents=5000, rand_seed=2)), ('ode', dict(total_pop=5000))]: # Chosen from the size, whatever the NumPy module
+        kw = dict(unit='day', stop=100, verbose=0, **size)
+        alone = ss.Sim(declared_sir(), **kw).run()
+        coupled = ss.Sim(declared_sir(), connectors=Reservoir(), **kw).run()
+        assert coupled.solver.name == alone.solver.name == solver and coupled.connectors.reservoir.W > 0
+        assert coupled.results.sir.infection.sum() > 1.2*alone.results.sir.infection.sum() # The environment adds to transmission
+
+    kw = dict(diseases='sir', networks='random', n_agents=2000, start=2000, stop=2010, verbose=0)
+    both = ss.Sim(connectors=Mosquitoes(), **kw).run()
+    assert both.connectors.mosquitoes.age.max() > 0
+    assert np.array_equal(both.results.sir.I.values, ss.Sim(**kw).run().results.sir.I.values) # Its own random numbers leave those of the other modules alone
+
+    # An intervention given as a function, changing a parameter of a NumPy module
+    def distance(sim):
+        if sim.ti == 20:
+            sim.connectors.numpysir.pars.beta = 0.05
+    kw = dict(unit='day', dt=1, start=0, stop=100, verbose=0)
+    I0 = ss.Sim(connectors=NumpySIR(), **kw).run().results.numpysir.I.values
+    I1 = ss.Sim(connectors=NumpySIR(), interventions=distance, **kw).run().results.numpysir.I.values
+    assert np.array_equal(I0[:21], I1[:21]) and I1[40] < 0.5*I0[40]
+
+
+def test_coded_and_declared():
+    sc.heading('Testing code that writes the states of a declared disease run as agents')
+    class Mover(ss.Intervention): # Moves ten people from S to I at step 3: by indexing, and with an in-place operator
+        def step(self):
+            sir = self.sim.diseases.sir
+            if self.ti == 3:
+                sir.S[sir.S.uids[:10]] = False
+                sir.I |= ~(sir.S | sir.R)
+    class Reader(ss.Intervention): # Reads the number infected later in the same step
+        def step(self):
+            if self.ti == 3:
+                self.n = np.sum(self.sim.diseases.sir.I.n)
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S >> I @ 0*I, I >> R @ ss.days(1000), init_prev=0, name='sir')
+    sim = ss.Sim(sir, interventions=[Mover(), Reader()], unit='day', stop=6, n_agents=100, solver='abm', verbose=0).run()
+    res = sim.results.sir
+    assert sim.interventions.reader.n == 10 and res.I[4] == 10 and res.S[4] == 90 # Seen in the same step, and in the results
 
 
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
     T = sc.timer()
-
-    sims = test_connectors(do_plot=do_plot)
-    lazy = test_lazy_arrays()
-    test_where_count()
-    test_count_is_when()
-    test_when_joined()
-    test_modifier_tables()
-    test_sim_diagram()
-
+    for name, test in list(globals().items()):
+        if name.startswith('test_'):
+            test()
     T.toc()

@@ -1019,7 +1019,7 @@ class Treatment(Held):
             raise sc.KeyNotFoundError(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
                                    f'     Say what it moves people along with moves= (or as the key of cure=): a transition (e.g. moves={dis.name}.{next(iter(options), "recovery")}), or a move written with the states (e.g. moves={srcs} >> {example.name}); or give efficacy as a dict for a treatment that changes rates without curing.')
         dst = list(dsts.values())[0]
-        into = [t for t in options.values() if t.dest[0] is dst and getattr(t, 'where', None) is None] # The flow that counts the cured: the one recovery into that state, if there is one, and if it is for everyone (not, say, only men)
+        into = [t for t in options.values() if t.dest[0] is dst and getattr(t, '_who_now', None) is None] # The flow that counts the cured: the one recovery into that state, if there is one, and if it is for everyone (not, say, only men)
         tr = into[0] if len(into) == 1 else None
 
         # The states cured people leave: the infected ones, and those that people reach from them on the way to the state they are cured to
@@ -1055,8 +1055,8 @@ class Treatment(Held):
 
 
 def coded_states(dis):
-    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolArr` unless `result=False`), e.g. `cin` """
-    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolArr) and arr.result}
+    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolState`), e.g. `cin` """
+    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolState)}
 
 
 class Diagnostic(Product):

@@ -370,7 +370,7 @@ class Expressions:
                         continue
                     amount = m.current(self)
                     amount = amount[uids] if np.ndim(amount) else amount
-                    mask = np.ones(len(uids), dtype=bool) if m.where is None else self.selector.select(m.where)[uids] > 0
+                    mask = np.ones(len(uids), dtype=bool) if m._who_now is None else self.selector.select(m._who_now)[uids] > 0
                     if   op == 'set':      value = np.where(mask, amount, value)
                     elif op == 'multiply': value = value*np.where(mask, amount, 1.0)
                     elif op == 'add':      value = value + np.where(mask, amount, 0.0)

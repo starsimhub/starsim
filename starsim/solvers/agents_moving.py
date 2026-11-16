@@ -72,7 +72,7 @@ class Moving:
             self.derived_flows(tr, src, uids)
         if self.on_event and src.name in self.scheduled:
             mod.left_exit[uids] = mod[f'ti_exit_{src.name}'].raw[uids]
-        if tr.stays and tr.trigger is not None and src.name in self.scheduled: # Those who stay keep the exit they had (see stay())
+        if tr.stays and tr._trigger is not None and src.name in self.scheduled: # Those who stay keep the exit they had (see stay())
             kept = mod[f'ti_exit_{src.name}']
             self._kept_exits.setdefault(tr.name, []).append((uids, kept.raw[uids].copy()))
         self.put(src.name, uids, False)
@@ -169,9 +169,9 @@ class Moving:
                 srcs = {s.name for s in t.source}
                 after[t.name] |= {u.name for u in trs if u is not t and any(getattr(d, 'name', None) in srcs for d in (u.dest or []))}
                 after[t.name] |= events[t.name] - {t.name}
-                if t.trigger is not None:
+                if t._trigger is not None:
                     for s in t.source:
-                        after.update({u.name:after[u.name] | {t.name} for u in self.exits_of.get(s.name, []) if u is not t and u.trigger is None})
+                        after.update({u.name:after[u.name] | {t.name} for u in self.exits_of.get(s.name, []) if u is not t and u._trigger is None})
             order, done = [], set()
             while len(order) < len(trs):
                 ready = [t for t in trs if t.name not in done and after[t.name] <= done]
@@ -185,9 +185,9 @@ class Moving:
 
     def event_transitions(self, tr):
         """ The transitions of this module whose moves are the event a trigger is on (none for another module's event, or a condition) """
-        if tr.trigger is None or not tr.trigger.event:
+        if tr._trigger is None or not tr._trigger.event:
             return set()
-        event = tr.trigger.x
+        event = tr._trigger.x
         if ss.conditions.modname(event.module) not in [None, self.mod.name]:
             return set()
         spec = event.spec()
@@ -333,19 +333,19 @@ class Moving:
         for tr in (self.triggers if triggers is None else triggers):
             srcs = [s for s in tr.source if s.people]
             names = [s.name for s in srcs]
-            if tr.trigger.event:
+            if tr._trigger.event:
                 uids = self.new_events(tr) # Seen whether or not anyone is in the source, so an old event does not move people who enter later
-            elif getattr(tr.trigger.x, 'op', None) == 'event': # A delivery's or a product's event: news for a step, so moved once
-                uids = np.flatnonzero(self.unseen_fired(tr, np.asarray(self.selector.select(tr.trigger.x), dtype=bool)))
+            elif getattr(tr._trigger.x, 'op', None) == 'event': # A delivery's or a product's event: news for a step, so moved once
+                uids = np.flatnonzero(self.unseen_fired(tr, np.asarray(self.selector.select(tr._trigger.x), dtype=bool)))
             elif any(mod[name].raw.any() for name in names):
-                uids = np.flatnonzero(np.asarray(self.selector.select(tr.trigger.x), dtype=bool))
+                uids = np.flatnonzero(np.asarray(self.selector.select(tr._trigger.x), dtype=bool))
             else:
                 continue
             uids = uids[self.in_states_for(names, uids)]
             if tr.name in self.delays: # Not at once, but a time after the event drawn for each person, as long as they stay in the source
                 uids = self.delayed(tr, names, uids, taken)
-            if tr.where is not None and len(uids):
-                uids = uids[np.asarray(self.selector.select(tr.where), dtype=bool)[uids]]
+            if tr._who_now is not None and len(uids):
+                uids = uids[np.asarray(self.selector.select(tr._who_now), dtype=bool)[uids]]
             if taken is not None:
                 uids = uids[~taken[uids]]
             if len(uids):
@@ -390,7 +390,7 @@ class Moving:
 
     def new_events(self, tr):
         """ The agents an event trigger's event has happened to since it last looked """
-        event = tr.trigger.x
+        event = tr._trigger.x
         name = ss.conditions.modname(event.module)
         if name not in [None, self.mod.name] and name not in {mod.name for mod in self.sim.declared}: # An event of a module that isn't in the sim (e.g. ss.ref('pregnancy.birth') with no ss.Pregnancy) never happens
             if tr.name not in self._absent:
@@ -663,7 +663,7 @@ class Moving:
             state = self.graph.states[names[i]]
             self.put(state.name, inds, True)
             if state.name in self.scheduled:
-                if tr.trigger is not None:
+                if tr._trigger is not None:
                     for moved,exits in kept:
                         mine = member(moved, inds)
                         mod[f'ti_exit_{state.name}'].raw[moved[mine]] = exits[mine]
@@ -780,7 +780,7 @@ class Moving:
             if how == 'uniform':
                 return rvs
             elif how == 'expon':
-                return ss.solvers.backends.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
+                return ss.solvers.numba.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
             elif how == 'agent':
                 n, pars, kwds = self.agent_pars(key, dist, checked=True, uids=uids)
                 pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
@@ -1059,7 +1059,7 @@ class Moving:
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
             branches = self.branches_of(state.name)
-            fixed = self._fixed[key] = all(tr is None or ((tr.p is None or self.is_fixed(tr.p[0])) and self.unmodified('branch', tr.name) and self.is_fixed(getattr(tr, 'where', None))) for tr in branches)
+            fixed = self._fixed[key] = all(tr is None or ((tr.p is None or self.is_fixed(tr.p[0])) and self.unmodified('branch', tr.name) and self.is_fixed(getattr(tr, '_who_now', None))) for tr in branches)
         return self.fixed_edges(key, fixed, lambda u: self.branch_edges_for(state, u), uids)
 
     def branch_edges_for(self, state, uids):

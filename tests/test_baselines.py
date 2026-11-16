@@ -1,6 +1,5 @@
 """
-Test that the current version of Starsim exactly matches
-the baseline results.
+Test that the current version of Starsim exactly matches the baseline results, and guard against slowdowns
 """
 import os
 import sys
@@ -30,70 +29,34 @@ pars = sc.obj(
 )
 
 
-def make_sim(run=False, **kwargs):
-    """
-    Define a default simulation for testing the baseline. If run directly (not
-    via pytest), also plot the sim by default.
-    """
+def make_sim(**kwargs):
+    """ The default sim for testing the baseline """
     diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), sexual=ss.peract(0.02)), dur_inf=ss.years(6)), # A probability per act on ss.SexualNet, about the default rate's chance in a step of 0.2 years
                 dict(type='sis', beta=dict(random=ss.peryear(0.05), sexual=ss.peract(0.01)), dur_inf=ss.years(10))] # Durations in years (Starsim 3's defaults), as the rest of the sim
     networks = ['random', 'sexual']
-    sim = ss.Sim(pars | kwargs, networks=networks, diseases=diseases, demographics=True)
-
-    # Optionally run and plot
-    if run:
-        sim.run()
-        sim.plot()
-
-    return sim
+    return ss.Sim(pars | kwargs, networks=networks, diseases=diseases, demographics=True)
 
 
 def save_baseline():
-    """
-    Refresh the baseline results. This function is not called during standard testing,
-    but instead is called by the update_baseline script.
-    """
+    """ Refresh the baseline results (called by the update_baseline script, not by the tests) """
     sc.heading('Updating baseline values...')
-
-    # Make and run sim
-    sim = make_sim()
-    sim.run()
-
-    # Export results
-    json = sim.to_json(keys='summary')['summary']
-    sc.saveyaml(baseline_filename, json)
-
-    print('Done.')
+    sim = make_sim().run()
+    sc.saveyaml(baseline_filename, sim.to_json(keys='summary')['summary'])
     return
 
 
 @sc.timer()
 def test_baseline():
     """ Compare the current default sim against the saved baseline """
-
-    # Load existing baseline
     old = sc.loadyaml(baseline_filename)
-
-    # Calculate new baseline
-    new = make_sim()
-    new.run()
-
-    # Compute the comparison
+    new = make_sim().run()
     ss.debugtools.diff_sims(old, new, die=True)
-
     return new
 
 
 @sc.timer()
 def test_benchmark(do_save=False, repeats=1, verbose=True):
     """ Compare benchmark performance """
-
-    if verbose: print('Running benchmark...')
-    try:
-        previous = sc.loadyaml(benchmark_filename)
-    except FileNotFoundError:
-        previous = None
-
     t_inits = []
     t_runs  = []
 
@@ -112,38 +75,19 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
     t_init = ratio*min(t_inits)
     t_run  = ratio*min(t_runs)
 
-    # Construct json
-    n_decimals = 3
-    json = {'time': {
-                'initialize': round(t_init, n_decimals),
-                'run':        round(t_run,  n_decimals),
-                },
-            'parameters': {
-                'n_agents': sim.pars.n_agents,
-                'dur':      sim.t.dur,
-                'dt':       sim.t.dt,
-                },
-            'cpu_performance': ratio,
-            }
-
+    json = dict(
+        time = dict(initialize=round(t_init, 3), run=round(t_run, 3)),
+        parameters = dict(n_agents=sim.pars.n_agents, dur=sim.t.dur, dt=sim.t.dt),
+        cpu_performance = ratio,
+    )
     if verbose:
-        if previous:
+        if os.path.exists(benchmark_filename):
             print('Previous benchmark:')
-            sc.pp(previous)
-
+            sc.pp(sc.loadyaml(benchmark_filename))
         print('\nNew benchmark:')
         sc.pp(json)
-    else:
-        brief = sc.dcp(json['time'])
-        brief['cpu_performance'] = json['cpu_performance']
-        sc.pp(brief)
-
     if do_save:
         sc.saveyaml(filename=benchmark_filename, obj=json)
-
-    if verbose:
-        print('Done.')
-
     return json
 
 
@@ -278,22 +222,11 @@ def measure_case(fn, which, repeats, warmup=1, crn=True):
 @sc.timer()
 def test_performance_guard(do_save=False, verbose=True):
     """
-    Guard against major performance regressions.
-
-    Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
-    term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x) plus up to ABS_SLACK (20 ms), but at most MAX_FACTOR (3x) its baseline.
-    Baselines are the current times, so this catches only major regressions, not normal drift.
-    A case that comes in at less than 70% of its baseline (TIGHTEN) has its baseline lowered to the
-    new time, saved to perf_guard.yaml, so that improvements are kept rather than lost to drift. A case
-    over its limit is measured again before it fails, since a burst of load can slow one measurement.
-    Times use min-of-repeats with CPU normalization (see test_benchmark) to cancel machine speed.
-    Refresh with ./update_benchmarks.py after an intended speedup.
-
-    Note: this test is timing-sensitive, so it is skipped when running under pytest-xdist
-    (parallel contention makes per-test wall-clock unreliable). Run it serially to gate, e.g.
-    `pytest test_baselines.py::test_performance_guard`, or via ./update_benchmarks.py.
+    Guard against major performance regressions: fail if a CPU-normalized time (min of repeats) exceeds its baseline by more than
+    perf_limit() allows. A case under TIGHTEN times its baseline lowers it, and a case over its limit is measured again before it fails.
+    Refresh with ./update_benchmarks.py after an intended speedup. Skipped under pytest-xdist, where timing is unreliable: run it
+    serially, e.g. `pytest test_baselines.py::test_performance_guard`.
     """
-    # Skip under heavy parallel contention (xdist workers), where timing is unreliable
     if not do_save and os.environ.get('PYTEST_XDIST_WORKER') is not None:
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
@@ -382,14 +315,8 @@ def load_guard():
 
 
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
-
     T = sc.timer()
-
-    json = test_benchmark() # Run this first so benchmarking is available even if results are different
-    new  = test_baseline()
-    guard = test_performance_guard()
-    sim = make_sim(run=do_plot)
-
+    test_benchmark() # Run this first so benchmarking is available even if results are different
+    test_baseline()
+    test_performance_guard()
     T.toc()

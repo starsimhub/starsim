@@ -315,7 +315,27 @@ def draw_map(res, t=None, animate=False, shapes=None, names=None, cmap='Reds', v
         return anim
 
 
-class gravity:
+class MovementModel:
+    """ What `ss.geo.gravity` and `ss.geo.radiation` share: the amount of movement (`away=` or `scale=`), how people move (`kind=`), and the geography they read """
+    def __init__(self, away=None, scale=None, kind=None):
+        if away is not None and scale is not None:
+            errormsg = f'ss.geo.{type(self).__name__}() takes away= (the fraction of time spent away) or scale= (the amount of movement), not both'
+            raise ValueError(errormsg)
+        self.away = away
+        self.scale = scale
+        self.kind = kind
+        return
+
+    def geography(self, strat):
+        """ The populations and distances of the places of a stratification, from its geography """
+        place = strat.geo
+        if place is None or place.distances is None or place.populations is None:
+            raise ValueError(f'ss.geo.{type(self).__name__}() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+                             f'     Give the places with ss.geo.geography(names=[...], populations=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
+        return place.populations, place.distances
+
+
+class gravity(MovementModel):
     """
     The gravity model of movement: the fraction of their time that a person from place `i` spends in place `j` (or, for migration,
     the rate at which they move there) is `scale × pop[i]^(source_power−1) × pop[j]^dest_power / distance[i,j]^distance_power`
@@ -343,12 +363,7 @@ class gravity:
         ```
     """
     def __init__(self, away=None, scale=None, kind=None, source_power=1.0, dest_power=1.0, distance_power=2.0):
-        if away is not None and scale is not None:
-            errormsg = 'ss.geo.gravity() takes away= (the fraction of time spent away) or scale= (a calibrated amount of movement), not both'
-            raise ValueError(errormsg)
-        self.away = away
-        self.scale = scale
-        self.kind = kind
+        super().__init__(away=away, scale=scale, kind=kind)
         self.source_power = source_power
         self.dest_power = dest_power
         self.distance_power = distance_power
@@ -365,11 +380,7 @@ class gravity:
         Args:
             strat (Strat): the stratification, whose geography gives the populations and distances
         """
-        place = strat.geo
-        if place is None or place.distances is None or place.populations is None:
-            raise ValueError(f'ss.geo.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
-                                 f'     Give the places with ss.geo.geography(names=[...], populations=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
-        pop, dist = place.populations, place.distances
+        pop, dist = self.geography(strat)
         scale, a, b, c = [float(v) for v in [sc.ifelse(self.scale, 1.0), self.source_power, self.dest_power, self.distance_power]] # Any can be a fitted ss.par
         with np.errstate(divide='ignore'):
             out = scale*pop[:, None]**(a - 1)*pop[None, :]**b/dist**c # Without a scale, only the shape matters: see Mobility.time_frac()
@@ -377,7 +388,7 @@ class gravity:
         return out
 
 
-class radiation:
+class radiation(MovementModel):
     """
     The radiation model of movement (Simini et al. 2012), which has no parameters to fit: of the people from place `i` who travel,
     the fraction who go to place `j` is `pop[i] × pop[j] / ((pop[i] + s) × (pop[i] + pop[j] + s))`, where `s` is the population of the
@@ -399,15 +410,6 @@ class radiation:
         sir.stratify(patch=ss.levels(towns, mobility=ss.geo.radiation(scale=2e-5, kind='migrate'))) # 2e-5 moves per person per unit of time
         ```
     """
-    def __init__(self, away=None, scale=None, kind=None):
-        if away is not None and scale is not None:
-            errormsg = 'ss.geo.radiation() takes away= (the fraction of time spent away) or scale= (the amount of movement), not both'
-            raise ValueError(errormsg)
-        self.away = away
-        self.scale = scale
-        self.kind = kind
-        return
-
     def __repr__(self):
         args = [f'away={self.away}' if self.away is not None else f'scale={self.scale}' if self.scale is not None else '', f'kind={self.kind!r}' if self.kind is not None else '']
         return f'radiation({", ".join(a for a in args if a)})'
@@ -418,11 +420,7 @@ class radiation:
         Args:
             strat (Strat): the stratification, whose geography gives the populations and distances
         """
-        place = strat.geo
-        if place is None or place.distances is None or place.populations is None:
-            raise ValueError(f'ss.geo.radiation() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
-                                 f'     Give the places with ss.geo.geography(names=[...], populations=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
-        pop, dist = place.populations, place.distances
+        pop, dist = self.geography(strat)
         order = np.argsort(dist, axis=1, kind='stable')
         nearer = np.zeros((len(pop), len(pop) + 1))
         nearer[:, 1:] = np.cumsum(pop[order], axis=1) # The population of the n nearest places to each, itself included

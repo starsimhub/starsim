@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 11
   ai: 89
-  note: Merged on Nov 11 by AI from "Results" (written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results) and "Plotting" (written by AI, from the plotting functions in the Starsim code); examples made realistic and appendices added by AI; shortened on Nov 11 by AI; the generated list of a result's methods replaced by a link on Nov 12 by AI after the docs review
+  note: Merged on Nov 11 by AI from "Results" (written by AI, with the anatomy of a result, results with several columns, and parts of exporting adapted from the Starsim 3 user guide page on results) and "Plotting" (written by AI, from the plotting functions in the Starsim code); examples made realistic and appendices added by AI; shortened on Nov 11 by AI; the generated list of a result's methods replaced by a link on Nov 12 by AI after the docs review; results of many runs shortened to a link to Scenarios on Nov 15 by AI
 ---
 
 A run produces results: for each disease, the number of people in each state at each time point, the number who made each transition in each step, and any other quantities the model declares. This page covers reading, resampling, grouping, summarizing, exporting, and plotting them. Results know their labels, time points, and kinds, so most plots take one line.
@@ -175,18 +175,11 @@ head(df)
 
 ### Results of many runs
 
-The runs of a stochastic model together (see [Scenarios](running_scenarios.qmd)) have the same results as one run, with every run inside each:
+The runs of a stochastic model together have the same results as one run, with every run inside each: `msim.results.measles.I.median()` and `.quantiles()` at each time point, `.select(run=0)` or `.take()` for some runs, `.scenarios()` and `.axes()` for how they are arranged, and `.diff('baseline')` for each scenario's difference from the baseline, run by run. [Reading many runs](running_scenarios.qmd#reading-many-runs) shows how to read them. Here are 20 runs, plotted [below](#comparing-scenarios-and-runs):
 
 ```{python}
 msim = ss.parallel(sim.new(solver='binomial'), n_runs=20)
-mres = msim.results.measles.I
-
-median = mres.median()            # The median of the runs at each time point
-low, mid, high = mres.quantiles() # The 2.5%, 50%, and 97.5% quantiles at each time point
-first = mres.select(run=0)        # One run
 ```
-
-`take()` keeps some runs, `scenarios()` and `axes()` say how they are arranged, and `diff('baseline')` is the difference of each other scenario from the one labeled `'baseline'`, run by run (`msim.diff('baseline')` does it for every result). `msim.summarize()` gives the median and interval of each result over the whole run, which is not the same as the median at each time point: the quantiles at each time point don't give the quantiles of the peak or of the total size.
 
 ## Plotting
 

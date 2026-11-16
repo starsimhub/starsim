@@ -27,7 +27,7 @@ from numba.core.errors import NumbaError
 from numba.extending import overload, typeof_impl
 from numba.np.random.distributions import random_loggam
 import starsim as ss
-from . import cache as _cache
+from . import compiling
 
 __all__ = ['jit']
 
@@ -140,7 +140,7 @@ class Function:
             if gens:
                 func = rewrite_gens(func, gens)
             self.numba = make_dispatcher(func)
-            self.numba.ss_compiling = (f'{self.py_func.__qualname__}()', 1, 10) # Said by _cache.Compiling
+            self.numba.ss_compiling = (f'{self.py_func.__qualname__}()', 1, 10) # Said by compiling.Compiling
         return self.numba
 
     def call_numba(self, args, kwargs):
@@ -158,7 +158,7 @@ class Function:
     def call_jax(self, args, kwargs):
         jax = ss.gradients.jax()
         if self.jax_func is None:
-            self.jax_func = _cache.timed_first(jax.jit(with_jnp(self.py_func)), f'{self.py_func.__qualname__}()', 'JAX', 0.2, 5)
+            self.jax_func = compiling.timed_first(jax.jit(with_jnp(self.py_func)), f'{self.py_func.__qualname__}()', 'JAX', 0.2, 5)
         try:
             return self.jax_func(*args, **kwargs)
         except (TypeError, IndexError) as e: # What JAX raises for what it can't trace (e.g. ConcretizationTypeError, NonConcreteBooleanIndexError)

@@ -1,6 +1,6 @@
 # Starsim's kernels in Rust
 
-This crate holds a second copy of Starsim's compiled kernels, in Rust, which give the same numbers as the Numba ones, bit for bit. They are compiled ahead of time, so a first run takes no compiling (with an empty Numba cache, a first compartmental run takes 0.01 s rather than about two minutes), and they run at least as fast as Numba's in nearly every case. With `ss.options.backend = 'auto'` (the default), Starsim uses them whenever they have been built; see the table of kernels in the solvers' architecture page (`docs/user_guide/architecture_solvers.qmd`).
+This crate holds a second copy of Starsim's compiled kernels, in Rust, which give the same numbers as the Numba ones, bit for bit. They are compiled ahead of time, so a first run takes no compiling (with an empty Numba cache, a first compartmental run takes 0.01 s rather than about two minutes), and they run at least as fast as Numba's in nearly every case. With `ss.options.backend = 'auto'` (the default), Starsim uses them whenever they have been built; see the table of kernels in `starsim/solvers/numba/README.md`.
 
 ## Building
 
@@ -18,7 +18,7 @@ This takes about 90 s the first time (about 15 s after that) and puts the librar
 
 The Numba kernels are the reference, since they are the easier to read and the plain Python copy is the same code. To change a kernel:
 
-1. Change the Numba code (`starsim/solvers/backends/kernels.py`, `passes.py`, `events.py`, `draws.py`, or a small kernel in `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` or `people.py`).
+1. Change the Numba code (in `starsim/solvers/numba/`: `compartmental.py`, `passes.py`, `agent_moves.py`, `agent_events.py`, or `draws.py`; or a small kernel in `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` or `people.py`).
 2. Make the same change in its Rust copy here (each Rust function is named after the Numba one, and its docstring names it), and where it applies in JAX (`ss.gradients`, for the ODE).
 3. Rebuild (`./build`), and run `cd tests && pytest test_kernel_sets.py`, which compares Numba's, Rust's, plain Python's and JAX's kernels on the main paths, and every kernel of `ss.solvers.backends.rust.names` call by call.
 4. After a change to the compartmental kernels, also run the tests that use them with every call compared: `cd tests && python -m pytest -p devtests.rust_twin test_kernels.py test_dimensions.py test_deliveries.py -n 2`.
@@ -27,13 +27,12 @@ Bit for bit means following Numba's arithmetic where Rust's differs: Python's `m
 
 ## Layout
 
-Each file holds its kernels and, at the bottom, their bindings, added to the module by its `register()`:
+Each file is named after the Numba file it copies, in `starsim/solvers/numba/`, and the compartmental kernels have a file for each section of `compartmental.py`; `starsim/solvers/numba/README.md` has the table, with what calls each. Each file holds its kernels and, at the bottom (or in `compartmental/bind.rs`), their bindings, added to the module by its `register()`:
 
-- `draws.rs`: the exact draws (`starsim/solvers/backends/draws.py`), which the other kernels use, and `draws.many` for `ss.Dist`
-- `passes.rs`: the passes over agents and network edges (`starsim/solvers/backends/passes.py`), serial and threaded, with a thread pool of its own
-- `events.rs`: the pass of agents taken event by event within a step, `solver='abm-events'` (`starsim/solvers/backends/events.py`)
-- `small.rs`: the small kernels of `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` and `people.py`
-- `kernels.rs` and `kernels/`: the compartmental kernels (`starsim/solvers/backends/kernels.py`)
+- `draws.rs`, `passes.rs` (serial and threaded, with a thread pool of its own), `agent_moves.rs`, `agent_events.rs`: as their Numba files
+- `compartmental.rs`: the program, a step (`step_groups()`), and the entry points; `compartmental/rates.rs`, `chain.rs`, `exact.rs`, `at_once.rs`, and `register.rs`: the other sections; the compartmental entry points are the submodule `_rs.compartmental`
+- `compartmental/views.rs` (arrays as the kernels see them), `rng.rs` (NumPy's Generators, drawn as Numba draws them, and the exact draws on views), `ziggurat.rs` (its tables), and `bind.rs` (the bindings): what the compartmental kernels are built on
+- `small.rs`: the small kernels of `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` and `people.py`, with the names of the Numba functions
 - `py.rs`: what the bindings share (NumPy arrays as slices, a body run for each element type, `avx2!`)
 
 `step()` is compiled twice from one body (`step_groups()`), for one group, where the loops over groups go away, and for many, with AVX2 where the CPU has it; Numba's has one body, which takes a model of one group about 5× as long as Rust's does.

@@ -142,7 +142,7 @@ An analyzer can keep a value for each agent, declared in its class body as a mod
 ```{python}
 class Reinfections(ss.Analyzer):
     """ New infections each step, from the infection log and from the states, and the number of times each person is infected """
-    was_infected = ss.BoolArr(result=False) # Infected at the previous time point (a flag, not a result)
+    was_infected = ss.BoolArr() # Infected at the previous time point (a flag, not a result)
     infections   = ss.FloatArr(default=0)   # The times each person has been infected
 
     def init_results(self):

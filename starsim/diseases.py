@@ -52,6 +52,16 @@ def check_stratify(stratify, where):
     return stratify
 
 
+def rebind_when(when, memo):
+    """ A transition's when= as given, with the transitions it names replaced by their copies in `memo` (see `rebind_member()`) """
+    if isinstance(when, ss.on):
+        new = ss.on(rebind_when(when.x, memo), delay=when.delay)
+        return when if new.x is when.x else new
+    if isinstance(when, ss.Transition):
+        return memo.get(id(when), when)
+    return ss.conditions.rebind(when, memo)
+
+
 def rebind_member(obj, memo):
     """ A member given to an instance of a declared class (e.g. `ssl.Measles(rash=ss.outcome(0.9*ssl.Measles.onset))`), reading the instance's copies of the class's states, transitions, and parameters (`memo`, see `ss.expressions.rebind()`); a transition is copied only if it reads any of them """
     if isinstance(obj, (list, tuple)): # E.g. transitions=[...]
@@ -62,7 +72,7 @@ def rebind_member(obj, memo):
         reads = any(id(x) in memo for x in ss.expressions.nodes(obj)) or isinstance(obj, ss.outcome)
         return ss.expressions.rebind(obj, memo) if reads else obj # Unchanged otherwise, so a positional member keeps the name of its variable
     exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay, obj.noise] + list(obj.p or [])
-    conds = [c for c in [obj.where, getattr(obj.trigger, 'x', None)] if c is not None]
+    conds = [c for c in [obj._who_now, getattr(obj._trigger, 'x', None)] if c is not None]
     reads = any(id(x) in memo for x in list(obj.source or []) + list(obj.dest or []) + list(ss.expressions.nodes(exprs)))
     reads = reads or any(id(ev.args[1]) in memo for c in conds for ev in ss.conditions.event_leaves(c) if len(ev.args) > 1)
     if not reads:
@@ -73,10 +83,11 @@ def rebind_member(obj, memo):
     for key in ['rate', 'dur', 'p_die', 'p_stay', 'noise']:
         setattr(new, key, ss.expressions.rebind(getattr(obj, key), memo))
     new.p = None if obj.p is None else [ss.expressions.rebind(v, memo) for v in obj.p]
-    new.where = ss.conditions.rebind(obj.where, memo)
-    if obj.trigger is not None:
-        new.trigger = ss.on(ss.conditions.rebind(obj.trigger.x, memo))
-        new.trigger.delay = obj.trigger.delay
+    new._who_now = ss.conditions.rebind(obj._who_now, memo)
+    new.when = rebind_when(obj.when, memo)
+    if obj._trigger is not None:
+        new._trigger = ss.on(ss.conditions.rebind(obj._trigger.x, memo))
+        new._trigger.delay = obj._trigger.delay
     return new
 
 
@@ -84,19 +95,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     A disease: states people are in and the transitions between them (declared), code, or both
 
-    Declared from its states and transitions, no methods need to be defined, and the
-    disease can be run with any solver (see `ss.Sim`):
-
-        S, I, R = ss.states(3)
-        sir = ss.Disease(
-            infection = S >> I @ 0.3 * I,
-            recovery  = ss.Transition(I, R, dur=10),
-            init_prev = 0.01,
-        )
-
-    The same disease can be declared in a class body (the class form), which can also
-    add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
-    this way.
+    Declared from its states and transitions (see the examples), no methods need to be defined, and the
+    disease can be run with any solver (see `ss.Sim`). The same disease can be declared in a class body
+    (the class form), which can also add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR`
+    are written this way.
 
     A disease can also be written as code: a subclass that declares
     nothing, defines its per-agent arrays (`define_states()`), and changes them in its
@@ -158,7 +160,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         # Written as code: a disease that is not transmitted
         class Anemia(ss.Disease):
             p_onset = ss.par(ss.bernoulli(0.01))
-            anemic  = ss.BoolArr(label='Anemic')
+            anemic  = ss.BoolState(label='Anemic')
 
             def step_state(self):
                 self.anemic[self.pars.p_onset.filter()] = True
@@ -535,10 +537,11 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None), getattr(val, 'noise', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, when=recovery)) is the copy
-            tr.where = ss.conditions.rebind(tr.where, memo)
-            if tr.trigger is not None and (x := ss.conditions.rebind(tr.trigger.x, memo)) is not tr.trigger.x:
-                delay, tr.trigger = tr.trigger.delay, ss.on(x)
-                tr.trigger.delay = delay
+            tr._who_now = ss.conditions.rebind(tr._who_now, memo)
+            tr.when = rebind_when(tr.when, memo)
+            if tr._trigger is not None and (x := ss.conditions.rebind(tr._trigger.x, memo)) is not tr._trigger.x:
+                delay, tr._trigger = tr._trigger.delay, ss.on(x)
+                tr._trigger.delay = delay
         kwargs = {k:rebind_member(v, memo) for k,v in kwargs.items()} # A result, outcome, or transition given here that reads the class's states reads the copies, e.g. ssl.Measles(V=V, vax=ss.Transition(ssl.Measles.S, V, ...))
         args = [rebind_member(v, memo) for v in args]
         if isinstance(strains, ss.Strains): # An outcome for each strain carried, set on the copies, so that the class's own transitions are left as they were for the next instance
@@ -1203,7 +1206,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         return
 
     def record_states(self):
-        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolArr` unless `result=False` (see `ss.Module.record_states()`) """
+        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolState` (see `ss.Module.record_states()`) """
         self.engine.record_states()
         return
 
@@ -1259,7 +1262,7 @@ class AgentDisease(Disease):
             beta         = ss.par(ss.perday(0.05))
             init_prev    = ss.par(0.01)
             dur_inf      = ss.par(10)
-            recovered    = ss.BoolArr()
+            recovered    = ss.BoolState()
             ti_recovered = ss.TimeArr()
 
             def step_state(self):
@@ -1296,8 +1299,8 @@ class AgentDisease(Disease):
         self.update_pars(pars, strains=strains, **kwargs)
         rel = self.__dict__.pop('_rel_given', {})
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible'),
-            ss.BoolArr('infected', label='Infected'),
+            ss.BoolState('susceptible', default=True, label='Susceptible'),
+            ss.BoolState('infected', label='Infected'),
             ss.FloatArr('rel_sus', default=rel.get('rel_sus', 1.0), label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=rel.get('rel_trans', 1.0), label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection'),
@@ -1402,7 +1405,7 @@ class AgentDisease(Disease):
         return seeds
 
     def init_results(self):
-        """ The counts of the states (one for each `ss.BoolArr` unless `result=False`), and the prevalence and new infections """
+        """ The counts of the states (one for each `ss.BoolState`), and the prevalence and new infections """
         super().init_results()
         self.define_results(
             ss.Result('prevalence', dtype=float, scale=False, label='Prevalence', kind='ratio'),

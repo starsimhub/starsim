@@ -24,8 +24,7 @@ class HIV(ss.AgentDisease):
     `infection` and `prevalence` results; it adds the CD4 count, ART, and death.
 
     Use with `ART` to scale up treatment over time, and `CD4_analyzer` to record
-    CD4 counts. Since `beta` defaults to 0, it must be set for transmission to
-    occur.
+    CD4 counts. `beta` is 0 by default, so give it for transmission.
 
     Note: CRN safe.
 
@@ -60,7 +59,6 @@ class HIV(ss.AgentDisease):
         ```
     """
     def __init__(self, pars=None, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             beta = 0.0, # Placeholder value: set it for transmission to occur
@@ -76,7 +74,7 @@ class HIV(ss.AgentDisease):
 
         # States
         self.define_states(
-            ss.BoolArr('on_art', label='On ART'),
+            ss.BoolState('on_art', label='On ART'),
             ss.FloatArr('ti_art', label='Time of ART initiation'),
             ss.FloatArr('ti_dead', label='Time of death'), # Time of HIV-caused death
             ss.FloatArr('cd4', default=500, label='CD4 count'),
@@ -94,10 +92,12 @@ class HIV(ss.AgentDisease):
     def step_state(self):
         """ Update CD4 """
         people = self.sim.people
-        self.cd4[people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[people.alive & self.infected & self.on_art])/self.pars.cd4_rate
-        self.cd4[people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
-
-        self.rel_trans[people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
+        p = self.pars
+        treated = people.alive & self.infected & self.on_art
+        untreated = people.alive & self.infected & ~self.on_art
+        self.cd4[treated] += (p.cd4_max - self.cd4[treated])/p.cd4_rate
+        self.cd4[untreated] += (p.cd4_min - self.cd4[untreated])/p.cd4_rate
+        self.rel_trans[treated] = 1 - p.art_efficacy
 
         can_die = self.infected.uids
         hiv_deaths = self.pars.death_dist.filter(can_die)
@@ -150,7 +150,6 @@ class ART(ss.Delivery):
         ```
     """
     def __init__(self, coverage=1.0, who=None, when=None, art_delay=ss.years(1), name=None, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', kwargs)
         self.art_delay = art_delay
         eligible = self.eligible if who is None else ss.conditions.Cond('&', who, self.eligible)
         super().__init__(ARTDrug(name='art_drug'), who=eligible, when=when, coverage=coverage, disease='hiv', name=name, **kwargs)

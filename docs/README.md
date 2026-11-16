@@ -1,16 +1,6 @@
 # Starsim docs
 
-## Tutorials
-
-Please see the `tutorials` subfolder.
-
-## User guide
-
-Please see the `user_guide` subfolder.
-
-## Everything else
-
-This folder includes source code for building the docs. Users are unlikely to need to do this themselves. Instead, view the Starsim docs at http://docs.starsim.org.
+This folder holds the source of the Starsim docs: the tutorials (`tutorials/`), the user guide (`user_guide/`), and the scripts that build them. To read the docs, go to https://starsim.org/v4/. <!-- V4-PREVIEW: drop /v4 on release -->
 
 To build the docs, follow these steps:
 

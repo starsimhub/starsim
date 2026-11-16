@@ -16,6 +16,19 @@ ss_int = ss.dtypes.int
 _ = None # Sentinel for "not provided" default arguments
 
 
+def cluster_pairs(sizes):
+    """ Every pair (i<j) within each of consecutive clusters of these sizes, as indices into the people in order, looping over sizes rather than clusters """
+    starts = np.cumsum(sizes) - sizes
+    p1 = [np.empty(0, dtype=ss_int)]
+    p2 = [np.empty(0, dtype=ss_int)]
+    for size in np.unique(sizes[sizes > 1]):
+        these = starts[sizes == size][:, None]
+        i, j = np.triu_indices(size, k=1)
+        p1.append((these + i).ravel())
+        p2.append((these + j).ravel())
+    return np.concatenate(p1), np.concatenate(p2)
+
+
 class ClusterNet(ss.Network):
     """
     Fully connected clusters of agents, e.g. households, schools, or workplaces
@@ -43,7 +56,6 @@ class ClusterNet(ss.Network):
         ```
     """
     def __init__(self, pars=None, cluster_size=_, who=_, dynamic=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             cluster_size = ss.poisson(mean=4),
@@ -89,17 +101,9 @@ class ClusterNet(ss.Network):
         self.cluster[uids] = self.n_clusters + np.repeat(np.arange(n_clusters), sizes)
         self.n_clusters += n_clusters
 
-        # Connect every pair (i<j) within each cluster, looping over cluster sizes rather than clusters
-        starts = np.cumsum(sizes) - sizes
-        p1 = [np.empty(0, dtype=ss_int)]
-        p2 = [np.empty(0, dtype=ss_int)]
-        for size in np.unique(sizes[sizes > 1]):
-            these = starts[sizes == size][:, None]
-            i, j = np.triu_indices(size, k=1)
-            p1.append((these + i).ravel())
-            p2.append((these + j).ravel())
-        p1 = uids[np.concatenate(p1)]
-        p2 = uids[np.concatenate(p2)]
+        p1, p2 = cluster_pairs(sizes)
+        p1 = uids[p1]
+        p2 = uids[p2]
         self.append(p1=p1, p2=p2, weight=np.ones(len(p1), dtype=ss_float))
         return
 
@@ -168,7 +172,6 @@ class HybridNet(ss.Network):
         return {k:beta*v for k,v in cls.rel_betas.items()}
 
     def __init__(self, pars=None, household_size=_, n_contacts=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
-        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(mean=2.0), # Covasim v3 default (contacts['h'])

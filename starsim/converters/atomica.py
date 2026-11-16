@@ -16,14 +16,9 @@ y-factors Atomica saves with `ParameterSet.save_calibration()`) scales the value
 A program book's programs become parameters of spending, whose coverage changes the
 parameters they affect (see `read_progbook()`).
 
-Exporting: `to_atomica(sim)` (`ss.export_to(sim, 'atomica')`) writes the compartmental
-form of a sim (see `ss.converters.export.flatten()`) as a framework workbook, returned as
-the bytes of the .xlsx: its compartments, with their initial numbers; the sums of them
-(such as `N`) as characteristics; its parameters; and a parameter on the transition matrix
-for each flow, a rate a year per person in the compartment it leaves (or a number of births
-a year, from a source compartment, with deaths into a sink). The values are the defaults of
-the databook's pages, so a databook made from the framework (`at.ProjectData.new()`) has them,
-and `load_atomica()` reads the framework alone.
+Exporting: `to_atomica(sim)` (`ss.export_to(sim, 'atomica')`) writes the compartmental form of a sim as a framework
+workbook (the bytes of the .xlsx), with the sim's values as the defaults of the databook's pages, so
+`load_atomica()` reads the framework alone.
 
 Used with: compartments; declared modules
 """

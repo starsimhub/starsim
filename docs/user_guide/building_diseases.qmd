@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 7
   ai: 93
-  note: Written by AI, with the section on diseases written as code adapted from the Starsim 3 user guide page on diseases; examples made realistic and appendices, the list of names with special meaning, and the "Explicit" tabs added by AI; shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review (common transitions first, then advanced sections)
+  note: Written by AI, with the section on diseases written as code adapted from the Starsim 3 user guide page on diseases; examples made realistic and appendices, the list of names with special meaning, and the "Explicit" tabs added by AI; shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review (common transitions first, then advanced sections); the opening SIR example replaced by a link to Writing models on Nov 15 by AI
 ---
 
 A disease in Starsim is declared the way a compartmental model is drawn: as states (the compartments) and the transitions between them (the flows), each driven by a rate or a duration. It runs as a compartmental model or as agents, unchanged. For a step-by-step introduction, see [T2 – Building a model](../tutorials/t2_model.qmd) and [T3 – Building a disease](../tutorials/t3_disease.qmd); for the syntax itself, see [Writing models](building_writing.qmd#shorthand-and-its-written-out-form).
@@ -20,55 +20,12 @@ The advanced sections cover [states that are not people](#states-that-are-not-pe
 
 ## A disease in brief
 
-The simplified measles model used throughout these pages is an SIR model:
-
-::: {.panel-tabset group="language"}
-## Python
-
-```{python}
-import starsim as ss
-
-S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the fraction infectious
-recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
-measles = ss.Disease(infection, recovery, init_prev=0.001)
-
-measles.equations()
-```
-
-## R
-
-```r
-library(starsim)
-
-states("S I R")
-measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the fraction infectious
-  recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
-  init_prev = 0.001
-)
-
-measles$equations()
-```
-
-## Explicit
-
-```{python}
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the fraction infectious
-recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
-measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
-
-measles_explicit.equations()
-```
-:::
-
-`ss.states()` makes the states, named in one string. A transition is written `source >> destination @ driver`: "S goes to I at 1.9 times I". What follows `@` is one of:
+The simplified measles model used throughout these pages is the SIR model of [Writing models](building_writing.qmd#a-model-and-its-parts) (shown there in Python, in R, and written out in full): `S, I, R = ss.states('S I R')`, `infection = S >> I @ 1.9*I`, and `recovery = I >> R @ ss.days(8)`. `ss.states()` makes the states, named in one string. A transition is written `source >> destination @ driver`: "S goes to I at 1.9 times I". What follows `@` is one of:
 
 - a **rate**, per person in the source state per unit of time, such as `ss.perday(0.125)`, or an expression of states and parameters, such as `1.9*I`;
 - a **duration**, such as `ss.days(8)`: the average time people spend in the source state before they take this transition. A duration of 8 days and a rate of 1/8 per day are the same transition.
 
-The operators are a short way to write `ss.Transition()` (the "Explicit" tab; every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords ([Names](building_writing.qmd#names)), and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
+The operators are a short way to write `ss.Transition()` (every form is in [Writing models](building_writing.qmd#shorthand-and-its-written-out-form)), and `measles.equations()` shows a disease as equations ([Equations](building_writing.qmd#equations-diagram-and-transitions)). A bare number in a rate is in the sim's unit of time, here days ([Time](building_time.qmd#units)). Names come from the variables or keywords ([Names](building_writing.qmd#names)), and so do the results (`sim.results.measles.infection`); [What Starsim names and fills in](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the names and values Starsim fills in itself.
 
 ## Transmission
 
@@ -100,6 +57,8 @@ A rate is read as it is written: only a state on its own means contact. `ss.stat
 ## Python
 
 ```{python}
+import starsim as ss
+
 S, I, R = ss.states('S I R')
 V = ss.State(rel_sus=0.03) # Vaccinated: 3% as susceptible as others
 infection = S + V >> I @ 1.9*I
@@ -114,6 +73,8 @@ print('Infections in a year:', round(sim.results.measles.infection.sum()))
 ## R
 
 ```r
+library(starsim)
+
 states("S I R")
 V <- ss$State(rel_sus = 0.03) # Vaccinated: 3% as susceptible as others
 measles <- Disease(

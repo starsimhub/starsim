@@ -13,6 +13,7 @@ import operator
 import numpy as np
 import sciris as sc
 import starsim as ss
+from .expressions import Shared
 
 __all__ = ['Cond', 'Event', 'ref']
 
@@ -26,7 +27,7 @@ leaves = ['people', 'state', 'dim', 'kind', 'array', 'incidence', 'event', 'memo
 memory_kinds = ['ever', 'n_times', 'since']
 
 
-class Cond:
+class Cond(Shared): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
     """
     A lazy condition: an unevaluated expression over the arrays of the people and modules in a sim
 
@@ -58,14 +59,7 @@ class Cond:
         return ufunc(*[ss.expressions.as_expr(x) if isinstance(x, Cond) else x for x in inputs])
 
     def clip(self, min=None, max=None, out=None):
-        """
-        The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.person.age, 0, 1)` calls this)
-
-        Args:
-            min (float): the lowest value; if None, no lower limit
-            max (float): the highest value; if None, no upper limit
-            out (None): not used; present since `np.clip()` passes it
-        """
+        """ The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.person.age, 0, 1)` calls this; see `ss.Expr.clip()`) """
         return ss.expressions.as_expr(self).clip(min, max)
 
     def __init__(self, op, *args):
@@ -115,28 +109,17 @@ class Cond:
     @property
     def time_in(self):
         """ For a set of states (`A | B`): the time since entering it from outside it, in the sim's unit (moves within the set do not reset it; NaN outside it) """
-        states = state_objects(self)
-        if states is None:
-            errormsg = f'.time_in is for a set of states, e.g. (sir.I | sir.R).time_in, not {self!r}'
-            raise TypeError(errormsg)
-        return ss.expressions.Clock(states)
+        return ss.expressions.Clock(self.as_states('time_in'))
 
     @property
     def enter(self):
         """ For a set of states (`A | B`): the event of entering it from outside it (moves within the set are not entering it) """
-        return self._set_event('enter')
+        return Event('enter', self.as_states('enter'))
 
     @property
     def exit(self):
         """ For a set of states (`A | B`): the event of leaving it for a state outside it """
-        return self._set_event('exit')
-
-    def _set_event(self, kind):
-        states = state_objects(self)
-        if states is None:
-            errormsg = f'.{kind} is for a set of states, e.g. (sir.I | sir.R).{kind}, not {self!r}'
-            raise TypeError(errormsg)
-        return Event(kind, states)
+        return Event('exit', self.as_states('exit'))
 
     def __or__(self, other):  return NotImplemented if defers(other) else Cond('|', self, unbracketed(self, other))
     def __rand__(self, other): return NotImplemented if defers(other) else Cond('&', other, self)
@@ -169,11 +152,7 @@ class Cond:
         sim = getattr(mod, 'sim', None)
         if sim is not None and sim.initialized:
             return count_now(sim, self, mod)
-        states = state_objects(self)
-        if states is None:
-            errormsg = f'{self!r}.n is the number of people it holds for, which is known in a rate only for a set of states (e.g. (sir.I | sir.R).n); in code, it is the number now once the sim is initialized'
-            raise TypeError(errormsg)
-        return ss.expressions.Count(states, kind='n')
+        return ss.expressions.Count(self.as_states('n'), kind='n')
 
     @property
     def frac(self):
@@ -195,10 +174,11 @@ class Cond:
         return ss.expressions.Count(self.as_states('total'), kind='total')
 
     def as_states(self, kind):
-        """ The states a condition is a set of, for a count of them (see `n`) """
+        """ The states a condition is a set of, for `kind` (e.g. `n`, `time_in`, or `enter`) """
         states = state_objects(self)
         if states is None:
-            raise TypeError(f'{self!r}.{kind} is known only for a set of states (e.g. (sir.I | sir.R).{kind})')
+            more = '; in code, .n is the number now once the sim is initialized' if kind == 'n' else ''
+            raise TypeError(f'{self!r}.{kind} is known only for a set of states (e.g. (sir.I | sir.R).{kind}){more}')
         return states
 
     @property
@@ -242,12 +222,6 @@ class Cond:
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
         return Cond(op, a, b)
     __hash__ = object.__hash__
-
-    def __copy__(self): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
-        return self
-
-    def __deepcopy__(self, memo):
-        return self
 
     def isin(self, values):
         """
@@ -455,7 +429,7 @@ class Event(Cond):
         return engine.event_uids(**self.spec())
 
 
-class Named:
+class Named(Shared):
     """
     An event a module records that is not one of its transitions (e.g. `preg.live_birth`), or several events (a tuple of names), for `ss.conditions.Event`
 
@@ -473,9 +447,6 @@ class Named:
 
     def __repr__(self):
         return f'{modname(self.module)}.{self.name}'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
 
 
 def unbracketed(cond, other):
@@ -941,15 +912,20 @@ def path_events(cond):
     return cond
 
 
+def path_module(sim, path):
+    """ The module's name, the name, and the declared module (or None) of a path `'mod.name'`; a module may be given by its default name, e.g. 'sir' for an ss.SIR called measles """
+    modname, name = path.args
+    modname = ss.utils.own_name(sim._named_modules(), modname)
+    return modname, name, next((m for m in sim.declared if m.name == modname), None)
+
+
 def check_path_events(sim, cond, owner):
     """ Check that each path an event's when= gives (see `split_where()`) is a transition of a module in the sim """
     for leaf in event_leaves(cond) if isinstance(cond, Cond) else []:
         path = getattr(leaf, 'path', None)
         if path is None:
             continue
-        modname, name = path.args
-        modname = ss.utils.own_name(sim._named_modules(), modname) # A module by its default name, e.g. 'sir' for an ss.SIR called measles
-        mod = next((m for m in sim.declared if m.name == modname), None)
+        modname, name, mod = path_module(sim, path)
         if mod is not None and name in mod.graph.states:
             errormsg = f'when="{modname}.{name}" of "{owner}" is a state, a condition on people, which says who it reaches: give it as who="{modname}.{name}", or for entering it, when=ss.ref("{modname}.{name}").enter'
             raise TypeError(errormsg)
@@ -969,9 +945,7 @@ def resolve_paths(cond, sim):
         return cond
     if isinstance(cond, StatePath) or getattr(cond, 'path', None) is not None:
         path = cond if isinstance(cond, StatePath) else cond.path
-        modname, name = path.args
-        modname = ss.utils.own_name(sim._named_modules(), modname) # A module by its default name, e.g. 'sir' for an ss.SIR called measles
-        mod = next((m for m in sim.declared if m.name == modname), None)
+        modname, name, mod = path_module(sim, path)
         graph = getattr(mod, 'graph', None)
         if graph is not None and (name in graph.transitions or name in graph.transfers):
             if isinstance(cond, StatePath):
@@ -1031,15 +1005,16 @@ def check_not_time(who, what):
     return who
 
 
-def split_delivery(on=None, who=None, where=None):
+def split_delivery(trigger=None, who=None, gate=None):
     """
     The trigger and the condition of a delivery, either of which may be None
 
-    on (from when=) is what triggers it: an event (the people it happened to on this step), or events joined with | and &, or a
+    trigger (from when=) is what triggers it: an event (the people it happened to on this step), or events joined with | and &, or a
     transition by its path (`when='sir.infection'`). who chooses people or compartments: a condition on them (who is
-    eligible). where (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
-    condition on people too. who and where are joined with &, and neither takes an event.
+    eligible). gate (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
+    condition on people too. who and gate are joined with &, and neither takes an event.
     """
+    on, where = trigger, gate
     for val in [who, where]:
         check_not_time(val, 'an event')
     for key,val in dict(on=on, who=who, where=where).items():
@@ -1130,6 +1105,12 @@ class Selector(sc.prettyobj):
 
     def nobody(self):
         return np.zeros(self.shape, dtype=bool if self.abm else float)
+
+    def of_uids(self, uids):
+        """ As agents: a selection of these agents """
+        out = self.nobody()
+        out[uids] = True
+        return out
 
     #%% Leaves
 
@@ -1253,9 +1234,7 @@ class Selector(sc.prettyobj):
         """ The people who went through a declared transition or transfer this step (to one destination, in a compartmental run: see `event_of()`) """
         engine = mod.engine
         if self.abm:
-            out = np.zeros(self.shape, dtype=bool)
-            out[engine.events.get(name, ss.uids())] = True
-            return out
+            return self.of_uids(engine.events.get(name, ss.uids()))
         if name in mod.graph.transfers: # The people who moved along a stratification this step
             raise ss.CapabilityError(f'the transfer "{name}" of "{mod.name}" as an event cannot run with solver="{self.sim.solver}" yet.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
@@ -1275,7 +1254,7 @@ class Selector(sc.prettyobj):
             if isinstance(mod, ss.Event):
                 if mod.product is not None:
                     out |= {(mod.product.name, outcome), (mod.product.name, None)}
-                out |= self.lineage(mod.trigger, depth + 1)
+                out |= self.lineage(mod._trigger, depth + 1)
             return out
         elif cond.op in leaves:
             return {event_key(cond)} if is_event(cond) else set()
@@ -1304,10 +1283,7 @@ class Selector(sc.prettyobj):
         if isinstance(name, str) and graph is not None and (name in graph.transitions or name in graph.transfers) and not (self.abm and 'to' in spec): # A declared transition or transfer (as compartments, also a branch of one)
             return self.event(mod, name, to=spec.get('to'))
         if self.abm:
-            out = np.zeros(self.shape, dtype=bool)
-            uids = engine.event_uids(**spec)
-            out[uids] = True
-            return out
+            return self.of_uids(engine.event_uids(**spec))
         if 'tr' in spec:
             raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
         raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
@@ -1325,12 +1301,9 @@ class Selector(sc.prettyobj):
         if isinstance(cond, Cond) and cond.op == 'memory' and isinstance(value, ss.TimePar):
             return ss.solvers.convert(value, self.sim.unit_base)
         if isinstance(cond, Cond) and cond.op in leaves and isinstance(value, (str, bool, np.bool_)):
-            name = cond.args[-1]
-            dims = [strat.name for strat in self.sim.groups.strats]
-            if name in dims:
-                strat = self.sim.groups.strats[dims.index(name)]
-                if value in strat.labels:
-                    return strat.labels.index(value)
+            strat = self.dim_strat(cond.args[-1])
+            if strat is not None and value in strat.labels:
+                return strat.labels.index(value)
         return value
 
     def bands(self, op, a, b):
@@ -1355,13 +1328,11 @@ class Selector(sc.prettyobj):
 
     def check_edge(self, cond, value):
         """ In a compartmental run, an age threshold has to be the edge of an age group: the value, as that edge (see `on_edge()`) """
-        sim = self.sim
         if self.abm or not (isinstance(cond, Cond) and cond.op == 'people' and sc.isnumber(value)):
             return value
         name = cond.args[0]
-        dims = [strat.name for strat in sim.groups.strats]
-        if name in dims and self.is_binned(name):
-            strat = sim.groups.strats[dims.index(name)]
+        strat = self.dim_strat(name)
+        if strat is not None and strat.edges is not None:
             edge = on_edge(strat, value)
             if edge is not None:
                 return edge
@@ -1422,9 +1393,7 @@ class Selector(sc.prettyobj):
             return self.in_states([out.state.name]) * self.everyone()
         if self.abm:
             if isinstance(out, ss.uids):
-                mask = self.nobody()
-                mask[out] = True
-                return mask
+                return self.of_uids(out)
             if isinstance(out, ss.Arr):
                 out = out.raw
             out = np.asarray(out)

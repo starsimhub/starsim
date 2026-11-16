@@ -1,6 +1,6 @@
 # Tests
 
-- `test_*.py`: the core tests (about 400, under a minute in parallel), which `./run_tests` runs; keep new tests here few and quick
+- `test_*.py`: the core tests (about 300, about a minute in parallel), which `./run_tests` runs; keep new tests here few and quick
 - `devtests/`: the developer tests, slower and more thorough (`pytest devtests -n auto`); see its README
 - `test_data/`: small data files that the tests read (Nigeria's demography)
 
@@ -19,8 +19,8 @@ Run a single file with `pytest test_sim.py`, and the tests with coverage with `.
 
 - `baseline.yaml`, `benchmark*.yaml`, `perf_guard.yaml`: the recorded results and timings that `test_baselines.py` checks against
 - `update_all`: update the baseline and every benchmark (e.g. before a release), by `update_benchmarks.py` and then the baseline; `update_baseline.py` updates the baseline and the quick benchmarks only; `quick_baseline` and `quick_benchmark` check them
-- `benchmark_*.py`, `profile_*.py`, `simple.py`: scripts for timing and profiling by hand
-- `perfcount.py`: counts what code does on the CPU (instructions, flops, loads and stores, where the cycles went), which hardly depends on what else the machine is doing, and which functions and source lines the cycles were spent in; Linux only (perf)
+- `benchmark_*.py`, `profile_sim.py`: scripts for timing and profiling by hand
+- `devtests/perfcount.py`: counts what code does on the CPU (instructions, flops, loads and stores, where the cycles went), which hardly depends on what else the machine is doing, and which functions and source lines the cycles were spent in; Linux only (perf)
 
 ## Downstream repositories
 

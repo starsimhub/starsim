@@ -1,8 +1,8 @@
 """
 Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.backend = 'auto'` (the default) when they are there (in
 the wheels, or built), or `'rust'` (or `STARSIM_BACKEND=rust`), the
-serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the pass of `solver=ss.solvers.abm(step='events')` (`ss.solvers.backends.events`), the small kernels of `ss.arrays`, `ss.networks`,
-`ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.solvers.backends.kernels`: see
+serial and threaded passes over the agents and a network's edges (`ss.solvers.numba.passes`), the pass of `solver=ss.solvers.abm(step='events')` (`ss.solvers.numba.agent_events`), the small kernels of `ss.arrays`, `ss.networks`,
+`ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.solvers.numba.compartmental`: see
 `compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and
 they run at least as fast as Numba's in nearly every case. A threaded pass takes as many threads as Numba has (see `ss.options.threads`),
@@ -20,10 +20,7 @@ import importlib.util
 import collections
 import sciris as sc
 import starsim as ss
-from . import passes
-from . import events
-from . import moves
-from . import draws
+from ..numba import passes, agent_events, agent_moves, draws
 
 __all__ = ['use', 'built', 'on', 'fell', 'compartmental']
 
@@ -50,14 +47,14 @@ def fallback(rs, nb):
 
 def modules():
     """ Where the kernels are: modules, a class (whose kernels are static methods), and `draws.many` (a dict) """
-    return sc.obj(passes=passes, events=events, moves=moves, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
+    return sc.obj(passes=passes, agent_events=agent_events, agent_moves=agent_moves, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
                       multi_random=ss.distributions.multi_random, many=draws.many)
 
-single = ['levels', 'crossed', 'infection_probs', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.backends.passes with no threaded version
-pairs = ['census', 'flatnonzero', 'infect', 'due', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
-tuples = dict(edges='random_edges', candidates='candidates', can='can_transmit', ending='ending', touching='touching', women='women', debut='debuts', compress='compress', exits='competing_exits', agent_exits='competing_agent_exits') # Those whose two drivers are a pair, by the Rust kernel
-names = dict(passes=single + [f'{k}_{kind}' for k in pairs for kind in ['serial', 'threaded']] + [f'{k}_drivers' for k in tuples],
-             events=['step_events'], moves=['due_agents', 'step_moves'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
+single = ['levels', 'crossed', 'infection_probs', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.numba.passes with no threaded version
+drivers = ['census', 'flatnonzero', 'infect', 'due', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw', 'random_edges', 'candidates', 'can_transmit', 'ending', 'touching',
+           'women', 'debuts', 'compress', 'competing_exits', 'competing_agent_exits'] # Those with a serial and a threaded driver (X_drivers), both the Rust kernel X (the number of chunks says which)
+names = dict(passes=single + [f'{k}_drivers' for k in drivers],
+             agent_events=['step_events'], agent_moves=['due_agents', 'step_moves'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
              multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
 numba = None # The Numba kernels, once replaced
 
@@ -115,7 +112,7 @@ def use(rust=True):
         numba = {(m, k): get(mods[m], k) for m, ks in names.items() for k in ks}
     if rust:
         rs = load()
-        missing = [k for k in ss.solvers.backends.kernels.entries + ['evaluate'] if not hasattr(rs.kernels, k)]
+        missing = [k for k in ss.solvers.numba.compartmental.entries + ['evaluate'] if not hasattr(rs.compartmental, k)]
         if missing: # Checked now rather than at the first run that needs them, as for every other kernel
             errormsg = f'The Rust kernels are older than the Python that calls them (missing {sc.strjoin(missing)}): rebuild them with "./build" in the starsim/solvers/rust/ folder'
             raise AttributeError(errormsg)
@@ -124,23 +121,11 @@ def use(rust=True):
             errormsg = 'The Rust kernels were built from different source than is here, so may give different numbers: rebuild them with "./build" in the starsim/solvers/rust/ folder'
             raise AttributeError(errormsg)
         kernels = {('passes', k): fallback(getattr(rs, k), numba['passes', k]) for k in single}
-        kernels.update({('passes', f'{k}_{kind}'): fallback(getattr(rs, k), numba['passes', f'{k}_{kind}']) for k in pairs for kind in ['serial', 'threaded']})
-        kernels.update({('passes', f'{k}_drivers'): tuple(fallback(getattr(rs, r), nb) for nb in numba['passes', f'{k}_drivers']) for k,r in tuples.items()})
-        kernels.update({
-            ('events', 'step_events'):        fallback(rs.step_events, numba['events', 'step_events']),
-            ('moves', 'due_agents'):          fallback(rs.due_agents, numba['moves', 'due_agents']),
-            ('moves', 'step_moves'):          fallback(rs.step_moves, numba['moves', 'step_moves']),
-            ('arrays', 'nb_true_raw'):        fallback(rs.true_raw, numba['arrays', 'nb_true_raw']),
-            ('arrays', 'nb_indexer'):         fallback(rs.indexer, numba['arrays', 'nb_indexer']),
-            ('networks', 'nb_transmit'):      fallback(rs.transmit, numba['networks', 'nb_transmit']),
-            ('dists', '_hash_uniforms_fill'): fallback(rs.hash_uniforms, numba['dists', '_hash_uniforms_fill']),
-            ('arrays', 'nb_true'):            fallback(rs.true_vals, numba['arrays', 'nb_true']),
-            ('arrays', 'nb_count'):           fallback(rs.count, numba['arrays', 'nb_count']),
-            ('networks', 'fisher_yates_shuffle'): fallback(rs.shuffle, numba['networks', 'fisher_yates_shuffle']),
-            ('networks', '_mark_partners'):   fallback(rs.mark_partners, numba['networks', '_mark_partners']),
-            ('multi_random', 'combine_rvs'):  fallback(rs.combine_rvs, numba['multi_random', 'combine_rvs'].__func__),
-            ('multi_random', 'combine2_rvs'): fallback(rs.combine2_rvs, numba['multi_random', 'combine2_rvs'].__func__),
-        })
+        kernels.update({('passes', f'{k}_drivers'): tuple(fallback(getattr(rs, k), nb) for nb in numba['passes', f'{k}_drivers']) for k in drivers})
+        for m in ['agent_events', 'agent_moves', 'arrays', 'networks', 'dists', 'multi_random']: # Each Rust kernel has the name of the Numba one
+            for k in names[m]:
+                nb = numba[m, k]
+                kernels[m, k] = fallback(getattr(rs, k), nb.__func__ if isinstance(nb, staticmethod) else nb) # A static method of multi_random, as its function
         for k in names['many']: # The draws of ss.Dist (see ss.dists.inverse())
             kernels['many', k] = fallback(getattr(rs, 'many_' + k), numba['many', k])
     else:
@@ -153,19 +138,19 @@ def use(rust=True):
 
 class Compartmental:
     """
-    The compartmental kernels in Rust (`ss.solvers.backends.kernels` when the Rust kernels are in use): the entries that the engines call
+    The compartmental kernels in Rust (`ss.solvers.numba.compartmental` when the Rust kernels are in use): the entries that the engines call
     (`run()`, `run_many()`, `one_step()`, `advance()`, `advance_threads()`, `apply_events()`, `apply_shifts()`,
-    `settle_places()`, `evaluate()`), with the same arguments and results as Numba's; every other name is ss.solvers.backends.kernels' own
+    `settle_places()`, `evaluate()`), with the same arguments and results as Numba's; every other name is that of `ss.solvers.numba.compartmental`
 
     It exists so that the engine can call the Rust kernels and the Numba ones alike.
     """
     def __init__(self, rs):
-        for name in ss.solvers.backends.kernels.entries + ['evaluate']:
-            setattr(self, name, getattr(rs.kernels, name))
+        for name in ss.solvers.numba.compartmental.entries + ['evaluate']:
+            setattr(self, name, getattr(rs.compartmental, name))
         return
 
     def __getattr__(self, name):
-        return getattr(ss.solvers.backends.kernels, name)
+        return getattr(ss.solvers.numba.compartmental, name)
 
 compartmental_set = None # The compartmental kernels in Rust, once loaded
 
