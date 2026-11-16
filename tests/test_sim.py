@@ -661,9 +661,9 @@ def test_step_order():
     sim = make('given').run()
     assert log[:3] == ['first', 'net', 'last']
     assert len(sim.custom) == 2 and len(sim.networks) == 1 # Still found by kind
-    for kw in [dict(modules=Mark()), dict(pars=dict(modules=Mark()))]: # Modules of any kind are given as arguments, not by keyword or in a dict of settings
-        with pytest.raises(TypeError, match='as arguments'):
-            ss.Sim(**kw, n_agents=100)
+    for kw in [dict(modules=[Mark(), ss.SIR()]), dict(pars=dict(modules=[Mark(), ss.SIR()]))]: # modules= is sorted by kind, as arguments are
+        sim = ss.Sim(**kw, n_agents=100, verbose=0).init()
+        assert len(sim.custom) == 1 and len(sim.diseases) == 1
     sim = ss.Sim(Mark(name='a'), custom=[Mark(name='b'), ss.SIR()], n_agents=100, verbose=0).init() # custom= keeps them where they are given, as for any kind
     assert list(sim.custom.keys()) == ['a', 'b', 'sir'] and not len(sim.diseases) # The model's (given as arguments) first
     return sim

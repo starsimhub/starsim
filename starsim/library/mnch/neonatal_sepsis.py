@@ -72,7 +72,7 @@ class NeonatalSepsis(AgentSIR):
         )
         self.update_pars(pars, **kwargs)
         self.define_states(
-            ss.BoolArr('screened', label='Screened for sepsis at birth', result=False),
+            ss.BoolArr('screened', label='Screened for sepsis at birth'),
         )
         return
 

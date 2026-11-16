@@ -37,6 +37,7 @@ class Sim(ss.modules.Base):
         interventions (str/Intervention/list): as above, for interventions
         diseases (str/Disease/list): as above, for diseases
         analyzers (str/Analyzer/list): as above, for analyzers
+        modules (Module/list): modules of any kind, sorted by kind, as the model is
         custom (Module/list): as above, for modules of your own of no standard kind (an `ss.Module`, or a function of the sim, which becomes its `step()`); kept in `sim.custom`
         solver (str/Solver): how a declared model is run: 'auto' (the default: chosen from the model; `sim.solver_reason` says why), 'ode' (deterministic and fastest), 'binomial' (stochastic compartments, a chain binomial), 'gillespie' (stochastic and exact, event by event), 'tau' (tau-leaping, a faster approximation to Gillespie), or 'abm' (agents, for detail about individuals). A solver can take options, e.g. `ss.solvers.ode(integrator=, substeps=, dwells=)` (`dwells='exact'` keeps each dwell time as it is, rather than as a chain of stages), `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=, rescale=, even_draws=, keep_times=, record_people=)` (e.g. `step='events'` for agents in continuous time, or `rescale=True` for dynamic rescaling, as in Covasim). How strict to be about approximations, common random numbers, and requiring compiled runs are `ss.options` (`approximations`, `crn`, `require_compiled`). A declared module can have its own way of running as agents, `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`, which the sim's does not override. `sim.solver` is the one that runs, e.g. `isinstance(sim.solver, ss.solvers.abm)`
         branching (bool): run the declared model as a branching process, under any solver: infection takes no one from the uninfected and gives no one back, so the susceptible side stays as it would with no infection. This is useful for the early growth or extinction of an outbreak, and for the size of chains of transmission; as agents, only the infected are made, so a large population costs little. See `sim.branching` for the size and outcome of each run, and `sim.run(until=)` to stop one
@@ -86,7 +87,7 @@ class Sim(ss.modules.Base):
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
                  data=None, pars=None, copy_inputs=True, **kwargs):
-        self._check_module_keys(kwargs, pars, *models)
+        models, pars = self._take_modules(models, kwargs, pars)
         self.pars = ss.SimPars() # Make default parameters
         models = [arg for arg in models if arg is not None]
         kinds = ss.modules.module_types() + ['custom']
@@ -170,13 +171,25 @@ class Sim(ss.modules.Base):
         return
 
     @staticmethod
-    def _check_module_keys(*args):
-        """ Modules of any kind are given to the sim as arguments: modules= (in a keyword, or a dict of settings, other than a whole ss.SimPars) raises """
-        for arg in args:
+    def _take_modules(models, kwargs, pars):
+        """ Modules given with modules= (by keyword, or in a dict of settings other than a whole ss.SimPars) are part of the model, sorted by kind as arguments are (those of no standard kind are kept in sim.custom) """
+        models = list(models)
+        if kwargs.get('modules') is not None:
+            models.append(kwargs.pop('modules'))
+        kwargs.pop('modules', None)
+        for i,arg in enumerate(models):
             if isinstance(arg, dict) and not isinstance(arg, ss.SimPars) and 'modules' in arg:
-                errormsg = 'ss.Sim() takes no modules=: give modules of any kind as arguments, which are sorted by kind (those of no standard kind are kept in sim.custom, as for custom=), e.g. ss.Sim(sir, net, my_module, n_agents=1000) or ss.Sim([sir, net], ...)'
-                raise TypeError(errormsg)
-        return
+                arg = dict(arg)
+                mods = arg.pop('modules')
+                models[i] = arg
+                if mods is not None:
+                    models.append(mods)
+        if isinstance(pars, dict) and not isinstance(pars, ss.SimPars) and 'modules' in pars:
+            pars = dict(pars)
+            mods = pars.pop('modules')
+            if mods is not None:
+                models.append(mods)
+        return models, pars
 
     def _settings(self):
         """ The sim settings, not the modules or people (which would be found again by the search for distributions) """
@@ -392,7 +405,9 @@ class Sim(ss.modules.Base):
         if not isinstance(base, Sim):
             errormsg = base or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy (e.g. it was saved by an earlier version); make it again instead'
             raise ValueError(errormsg)
-        self._check_module_keys(kwargs)
+        if 'modules' in kwargs:
+            errormsg = 'sim.new() takes modules by kind (e.g. diseases=..., custom=...), not modules=; or make a new ss.Sim(), which sorts modules= by kind'
+            raise TypeError(errormsg)
         data = kwargs.pop('data', self.data) # Not a sim parameter: taken from this sim, as it may be set once it is initialized
         kinds = ss.modules.module_types() + ['custom']
         if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
@@ -1499,9 +1514,16 @@ class Sim(ss.modules.Base):
         self._check_finite()
         ss.solvers.record_people(self)
         res = self.results
-        if 'cbr' in res: # The crude birth and mortality rates, from the births, deaths, and people alive, as agents or compartments
-            res.cbr[:], res.cmr[:] = ss.solvers.crude_rates(res.birth.values, res.death.values, res.alive.values, ss.solvers.people_t(self).dt_year)
         ss.solvers.hold_flows(self) # The sim's birth and death count them now
+        self.drop_unused_flows()
+        return
+
+    def drop_unused_flows(self):
+        """ Remove the sim's flows of people (`birth`, `death`, `emigration`) that nothing in it can make: a sim with no deaths at all has no `death` result, while one with `ss.death(rate=0)` has one of zeros (see `ss.solvers.people_flows()`) """
+        used = ss.solvers.people_flows(self) | getattr(self.people, '_flows', set())
+        for key in ['birth', 'death', 'emigration']:
+            if key in self.results and key not in used:
+                self.results.pop(key)
         return
 
     def _check_finite(self):

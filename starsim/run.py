@@ -1396,7 +1396,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
     sim = runners[0]
-    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration, cbr, cmr), as one run gives them
+    if 'alive' in sim.results: # The sim's own results (alive, birth, death, emigration), as one run gives them
         def get(mod, key):
             vals = join(values[mod.name, key]) if (mod.name, key) in values else None
             if vals is None or len(vals) != len(runs): # A result some runs don't have
@@ -1406,9 +1406,9 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             counts = ss.solvers.people_counts(sim, get)
         except KeyError:
             counts = None
-        if counts is not None and 'cbr' in sim.results:
-            counts.cbr, counts.cmr = ss.solvers.crude_rates(counts.birth, counts.death, counts.alive, ss.solvers.people_t(sim).dt_year)
         for key,vals in (counts or {}).items():
+            if key not in sim.results: # A flow that nothing in the sim makes (see Sim.drop_unused_flows())
+                continue
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')
     return RestartedSims(runners, sets, n_runs, seeds, given=starts is not None), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs

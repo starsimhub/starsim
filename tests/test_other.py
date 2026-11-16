@@ -150,7 +150,7 @@ def test_class_body_parts():
         half_life = ss.par(ss.years(2))
         p_reset = ss.par(ss.bernoulli(p=0.1))
         level = ss.FloatArr(default=1.0)
-        reset = ss.BoolArr()
+        reset = ss.BoolState()
         noise = ss.normal(0, 1)
         def step(self):
             self.level[:] *= 0.5**(self.t.dt/self.pars.half_life)
@@ -177,7 +177,7 @@ def test_class_body_parts():
     assert vx.waning == ss.years(5) and vx.efficacy == 0.8 and vx.pars.boost == 0.3
     class Anemia(ss.Disease):
         p_onset = ss.par(ss.bernoulli(0.05))
-        anemic = ss.BoolArr()
+        anemic = ss.BoolState()
         def step_state(self):
             self.anemic[self.pars.p_onset.filter()] = True
     assert Anemia(p_onset=0.1).graph is None
@@ -241,9 +241,8 @@ class Counter(ss.Module):
     assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
     assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net, copy_inputs=False)"
-    assert migrate_text("sim = ss.Sim(modules=[a, b], n_agents=10)")[0] == "sim = ss.Sim([a, b], n_agents=10)" # The modules are given as arguments
+    assert migrate_text("sim = ss.Sim(modules=[a, b], n_agents=10)")[0] == "sim = ss.Sim(modules=[a, b], n_agents=10)" # modules= is as it was, sorted by kind
     assert migrate_text("sim = ss.Sim(n_agents=10, rescale=True)")[0] == "sim = ss.Sim(n_agents=10, solver=ss.solvers.abm(rescale=True))" # An option of the agents
-    assert 'as arguments' in migrate_text("sim = ss.Sim(n_agents=10, modules=a)")[2][0][1] # Not the first argument: flagged
     assert migrate_text("sim = ss.Sim(n_agents=10, custom=a)")[0] == "sim = ss.Sim(n_agents=10, custom=a)" # custom= is as it was
     todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
     assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]

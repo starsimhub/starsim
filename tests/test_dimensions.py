@@ -269,7 +269,7 @@ def test_property_values():
 
     # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and shares for it raise
     def make(urban=[False, True]):
-        ppl = ss.People(5000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
+        ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
         S, I = ss.states('S I')
         sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), people=ppl, start=2000, stop=2001, solver='abm', verbose=0)
         sim.stratify(urban=urban)
@@ -306,7 +306,7 @@ def test_given_splits():
     # Stratifying by a property the people already have keeps it, and is not described as guessed (everyone was put at False, the first level)
     N = 10_000
     tob = np.random.default_rng(1).random(N) < 0.3
-    ppl = ss.People(N, extra_states=[ss.BoolArr('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
+    ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), default_state='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()

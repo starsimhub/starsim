@@ -134,7 +134,7 @@ class abm(Solver):
         rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the fraction of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
         even_draws (bool): space each call's random numbers evenly rather than independently (default False), for less variable runs; needs common random numbers (`ss.options.crn`)
         keep_times (bool): for a declared disease, keep the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.n_times`, `.since`, and `.ever`), to read after the run (default False, to save memory: only those that the solver or the model needs are kept, and reading another raises an error)
-        record_people (bool): record the results about people (alive, female, birth, death, emigration, cbr, cmr, etc.) every step (default True); False saves a little time in a sim that doesn't need them
+        record_people (bool): record the results about people (alive, female, birth, death, emigration, etc.) every step (default True); False saves a little time in a sim that doesn't need them
     """
     name = 'abm'
     options = dict(step=('midstep', ['midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
@@ -216,7 +216,7 @@ class Undeclared(Transmission):
         return
 
     def record_states(self):
-        """ The count of each `ss.BoolArr` unless `result=False`, as for any module """
+        """ The count of each `ss.BoolState`, as for any module """
         ss.Module.record_states(self.mod)
         return
 

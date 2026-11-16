@@ -27,3 +27,4 @@ from .agents_compiled import *
 from .choose import *
 from .deliveries import *
 from .particles import *
+from .backends.kernels import compile_status # Whether the kernels are compiled, and with which backend

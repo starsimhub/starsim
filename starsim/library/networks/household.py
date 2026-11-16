@@ -110,7 +110,7 @@ class HouseholdNet(ss.Network):
         self.dynamic = dynamic # None until the sim is known: see init_pre()
         self.define_states(
             ss.FloatArr('household_ids'),
-            ss.BoolArr('fhoh', default=False, result=False), # Only used if households evolve
+            ss.BoolArr('fhoh', default=False), # Only used if households evolve
             ss.FloatArr('ti_move_out_check', default='-inf'),
         )
         self.rng_fractional_age = ss.uniform()

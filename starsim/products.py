@@ -1055,8 +1055,8 @@ class Treatment(Held):
 
 
 def coded_states(dis):
-    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolArr` unless `result=False`), e.g. `cin` """
-    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolArr) and arr.result}
+    """ The states of a disease written as code, by name: its boolean states that are results (`ss.BoolState`), e.g. `cin` """
+    return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolState)}
 
 
 class Diagnostic(Product):

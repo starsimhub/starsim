@@ -493,29 +493,19 @@ def test_catarr():
 
 
 # %% Run as a script
-def test_boolarr_result():
-    """ A BoolArr is counted as a result of its module unless result=False """
-    sc.heading('Testing BoolArr results')
+def test_boolstate_result():
+    """ A BoolState is counted as a result of its module, and a BoolArr is not """
+    sc.heading('Testing BoolState results')
     class Flags(ss.Module):
-        counted = ss.BoolArr(default=True)
-        hidden = ss.BoolArr(default=True, result=False)
-        grid = ss.BoolArr(columns=2, result=False)
+        counted = ss.BoolState(default=True)
+        hidden = ss.BoolArr(default=True)
+        grid = ss.BoolArr(columns=2)
         def step(self): pass
     sim = ss.Sim(Flags(), n_agents=50, dur=2, verbose=0).run()
     assert 'counted' in sim.results.flags and 'hidden' not in sim.results.flags and 'grid' not in sim.results.flags
     assert sim.results.flags.counted[-1] == sim.results.alive[-1]
-    assert not (~sim.custom.flags.counted).result, 'A new array is not a result'
-    with pytest.raises(ValueError, match='result=False'): # Several columns can make no result
-        ss.BoolArr('x', columns=2)
-    with pytest.raises(AttributeError, match='ss.BoolArr'): # Starsim 3's name
-        ss.BoolState  # old-name-ok
-
-    # Starsim 3's BoolState made a result and its BoolArr did not, so the migration keeps both as they were
-    from starsim.converters.migrate import migrate_text
-    v3 = "a = ss.BoolState('a', label='A')\nb = ss.BoolArr('b')\nc = ss.BoolArr()\nd = ss.BoolArr('d', result=True)\ne = ss.BoolArr('e', default=ss.bernoulli(0.5))\n"  # old-name-ok
-    text, changes, todo = migrate_text(v3)
-    assert text.splitlines()[:4] == ["a = ss.BoolArr('a', label='A')", "b = ss.BoolArr('b', result=False)", "c = ss.BoolArr(result=False)", "d = ss.BoolArr('d', result=True)"]
-    assert [line for line, msg in todo if 'BoolArr' in msg] == [5], 'A call it cannot rewrite is listed'
+    with pytest.raises(ValueError, match='2D'): # Several columns can make no result
+        ss.BoolState('x', columns=2)
     return sim
 
 
@@ -537,7 +527,7 @@ if __name__ == '__main__':
     const = test_uids_construction()
 
     cat2  = test_catarr()
-    res   = test_boolarr_result()
+    res   = test_boolstate_result()
     sc.toc(T)
     plt.show()
     print('Done.')

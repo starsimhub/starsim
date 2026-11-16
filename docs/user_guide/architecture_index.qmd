@@ -76,7 +76,7 @@ A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a
 - its **timeline**, `mod.t` (an `ss.Timeline`), which is the sim's unless the module is given a `dt`, `start` or `stop` of its own;
 - its **distributions**, each with a random number stream of its own, found by searching the module when the sim is initialized ([Random numbers](mechanics_random.qmd#how-it-works));
 - its **states**, arrays with one value per agent (`ss.FloatArr`, `ss.BoolArr`, ..., in its class body or given with `define_states()`), which the people grow and shrink with the population;
-- its **results**, `mod.results`, one `ss.Result` per quantity per time point; every `ss.BoolArr` (unless `result=False`) gets a count of the same name without being declared;
+- its **results**, `mod.results`, one `ss.Result` per quantity per time point; every `ss.BoolState` gets a count of the same name without being declared;
 - a link to the sim, `mod.sim`, set when the sim is initialized.
 
 A few attributes are locked (`pars`, `t`, `sim`, `dists`, `results`, and each state), so that `self.I = ...` in a step raises an error instead of quietly replacing the array: the error suggests `self.I[:] = ...`.

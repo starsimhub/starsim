@@ -30,7 +30,7 @@ from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
 from .internals import arrays
-from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, uids
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, BoolState, uids
 
 from .internals import dists
 from .internals.dists import Dist

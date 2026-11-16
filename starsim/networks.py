@@ -285,7 +285,7 @@ class Network(Route):
 
         self.edge_defaults = dict(weight=1.0) # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
         self.edges = sc.obj()
-        self.participant = ss.BoolArr('participant', result=False)
+        self.participant = ss.BoolArr('participant')
         self.agent_edges = None # The edges of each agent, once the edges have stayed the same for a step (see edge_index())
 
         # The columns of the edges (p1=, p2=, weight=, or any in edges=) are edges; the rest are parameters, and update_pars() raises for any it does not know
@@ -1874,7 +1874,7 @@ class SexualNet(DegreeNet):
         self.meta.condoms = ss_float # The fraction of acts with a condom, e.g. for ss.modify(..., frac=lambda net: net.edges.condoms, network=)
         self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
-        self.decided = ss.BoolArr('decided', result=False) # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
+        self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
         return
 
     def active(self, people):
@@ -2106,6 +2106,7 @@ class MixingPools(Route):
         self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
         self.age_edges = None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         self.full = None # One matrix over several of the model's dimensions together (from ss.contacts())
+        self.bare = None # A matrix given by position alone (ss.contacts(matrix)), until it is matched to the model's stratification with as many levels: see bare_contacts()
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value, for a matrix with no pools: see compute_transmission()
         self.unit = None # The unit of time the contacts are counted over, if not the sim's (e.g. 'day' for ss.contacts('Kenya')): see to_unit()
         return
@@ -2599,7 +2600,9 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     - its own age groups, given by their lower edges (`ss.contacts(matrix, ages=[0, 15, 65])`), which need not be the model's (it is
       regrouped to them); a table labeled by age group (as `ss.data.contacts()` gives) says its own;
     - several of the model's stratifications together (`ss.contacts(matrix, dims=['sex', 'risk'])`), for mixing that is not a product,
-      e.g. men mix with women, and by risk differently for each sex.
+      e.g. men mix with women, and by risk differently for each sex;
+    - with none of these, the model's one stratification with as many levels (`ss.contacts(matrix)` for a model stratified into 3 age
+      groups and a 3×3 matrix), found when the sim is built; with none or several, it is an error.
 
     Given by keyword, it is over the model's stratification of that name: its age groups (`ss.contacts(age=matrix)`), or another
     (`ss.contacts(risk=matrix)`). With several, the mixing is their product (`ss.contacts(age=A, area=B)`): the contacts between two
@@ -2706,9 +2709,19 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
         out.full = sc.obj(dims=over, matrix=matrix, levels=levels) # So a compartmental run can use the matrix directly
         out.unit = unit
         return out
-    if matrix is not None and ages is None: # A matrix by position says what it is over
-        errormsg = 'ss.contacts() needs to know what a matrix given by position is over: its own age groups, by their lower edges (ss.contacts(matrix, ages=[0, 15, 65])), '
-        errormsg += 'or several stratifications together (ss.contacts(matrix, dims=["sex", "risk"])); a matrix over one of the model\'s stratifications is given by its name, e.g. ss.contacts(age=matrix) for its age groups'
+    if matrix is not None and ages is None and not by_dim: # A matrix by position alone is over the model's one stratification with as many levels, found when the sim is built (see bare_contacts())
+        matrix = np.array(matrix, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+            errormsg = f'ss.contacts() needs a square contact matrix, with a row and a column for each group; got shape {matrix.shape}'
+            raise ValueError(errormsg)
+        check_contacts(matrix, 'the groups')
+        out = MixingPools(source={}, target={}, n_contacts=np.zeros((0, 0)), name=name)
+        out.bare = matrix
+        out.unit = unit
+        return out
+    if matrix is not None and ages is None: # With matrices by name too, a matrix by position says what it is over
+        errormsg = 'ss.contacts() needs to know what a matrix given by position is over, when others are given by name: its own age groups, by their lower edges (ss.contacts(matrix, ages=[0, 15, 65], ...)), '
+        errormsg += 'or one of the model\'s stratifications, by its name (e.g. ss.contacts(age=matrix, ...))'
         raise TypeError(errormsg)
     if matrix is None and ages is not None:
         errormsg = f'ss.contacts(ages={list(ages)}) gives the age groups of a matrix given by position, but there is none, e.g. ss.contacts(matrix, ages=[0, 15, 65])'
@@ -2747,6 +2760,21 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
     out.age_edges = np.asarray(ages) if matrix is not None else None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
     out.unit = unit
     return out
+
+
+def bare_contacts(net, strats):
+    """ Match a matrix given by position alone (`ss.contacts(matrix)`) to the model's one stratification with as many levels, e.g. its 3 age groups for a 3×3 matrix, as if given by name (`ss.contacts(age=matrix)`) """
+    n = len(net.bare)
+    found = [strat for strat in strats if strat.n == n]
+    if len(found) != 1:
+        which = f'none of its stratifications has {n} levels' if not found else f'{sc.strjoin([strat.name for strat in found])} each have {n} levels'
+        have = f' ({sc.strjoin([f"{strat.name}: {strat.n}" for strat in strats])})' if strats and not found else ''
+        errormsg = f'The {n}×{n} matrix of ss.contacts() "{net.name}" is over the model\'s stratification with {n} levels, but {which}{have}. Say which it is over by name '
+        errormsg += '(e.g. ss.contacts(age=matrix)), give its own age groups (ss.contacts(matrix, ages=[0, 15, 65])), or give several stratifications together (ss.contacts(matrix, dims=["sex", "risk"]))'
+        raise ValueError(errormsg)
+    net.dims = {found[0].name: net.bare}
+    net.bare = None
+    return
 
 
 def age_groups(ages):

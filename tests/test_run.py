@@ -218,7 +218,7 @@ def test_scenarios():
     assert sim.summarize('sir.infection') == sim.summarize().value.sir.infection
     once = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, **kw, rand_seed=2), workers=1) # Each scenario run once: the same table as a sim's, with a value column
     for s,(label,table) in zip(once.sims, once.summarize().groupby(level='scenario')):
-        assert table.droplevel('scenario').equals(s.summarize()) and s.summarize().value.death == 0 # Results that are 0 throughout are kept, so the tables line up
+        assert table.droplevel('scenario').equals(s.summarize()) and 'death' not in s.summarize().index # Nothing in the sim makes deaths, so it has no death result
     assert sim.summarize('sir.I', how='max') == sim.results.sir.I.max() and msim.summarize('sir.S', how='min').equals(msim.summarize('sir.S')) # Peaks and troughs by name (S only falls, so its least is its last)
     with pytest.raises(ValueError, match="Unknown how='maxx'"): # Rather than N/A in the table
         sim.summarize(how='maxx')

@@ -314,12 +314,12 @@ def test_worker_threads():
 
 def test_compile_status():
     sc.heading('Testing that it is clear whether the kernels are compiled')
-    status = ss.compile(check=True, verbose=False) # The same as ss.solvers.backends.kernels.compile_status()
-    assert status == ss.solvers.backends.kernels.compile_status()
+    status = ss.compile(check=True, verbose=False) # The same as ss.solvers.compile_status()
+    assert status == ss.solvers.compile_status()
     assert status.compiled == (not status.missing)
     assert ('compiled' if status.compiled else 'NOT COMPILED' if status.backend != 'rust' else 'OUT OF DATE') in status.summary
     with ss.options.context(backend='python'):
-        status = ss.solvers.backends.kernels.compile_status()
+        status = ss.solvers.compile_status()
     assert status.backend == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
     return status
 

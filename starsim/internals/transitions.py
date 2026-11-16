@@ -1245,7 +1245,7 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     for every disease's people and run under every solver; births into one disease's state go in
     the disease. As agents, each child born at a crude rate has a mother (`people.parent`), a woman
     alive aged `min_age` to `max_age` (in the same place, if the model has places), as `ss.Births` gives.
-    However they are given, the sim's `birth` and `cbr` count the births (see `ss.solvers.population_flows()`).
+    However they are given, the sim's `birth` counts the births (see `ss.solvers.population_flows()`).
 
     With `when=`, as agents the children are made by the module that owns the transition, with `parent` set to the
     person who went through it, and placed in each declared module's state given by its own `ss.birth(when=...)` of
@@ -1414,7 +1414,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, rate_per=None, rel_de
     With no state, the deaths of everyone, in `ss.Sim(demographics=[...])`: at a crude death rate (a number, a typed rate, or a time
     series of either), or from a life table, these are declared, and run under every solver. Death rates that differ by year, sex,
     and age (a table, a place by name, or a life table for each sex or year) need each person's sex and age, so they make the
-    module `ss.Deaths`, which runs as agents (with its own results, `deaths.death` and `deaths.cmr`). Either way, the sim's `death` and `cmr` count them.
+    module `ss.Deaths`, which runs as agents (with its own results, `deaths.death` and `deaths.cmr`). Either way, the sim's `death` counts them.
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people

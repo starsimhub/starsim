@@ -815,8 +815,8 @@ class Module(Base):
 
         Examples:
             ```python
-            self.define_states(ss.BoolArr('exposed'), reset='ti_infected') # Add a state and remove an inherited one
-            self.define_states(ss.BoolArr('infectious'), overwrite=True) # Replace an inherited state or alias
+            self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
+            self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
             ```
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
@@ -829,9 +829,9 @@ class Module(Base):
         # Add the new states
         for arg in args:
             if isinstance(arg, (list, tuple)):
-                state = ss.BoolArr(*arg)
+                state = ss.BoolState(*arg)
             elif isinstance(arg, dict):
-                state = ss.BoolArr(**arg)
+                state = ss.BoolState(**arg)
             else:
                 state = arg
             assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
@@ -859,7 +859,7 @@ class Module(Base):
                 self._locked_attrs.append(attr)
 
             # Add it to the list of auto states, if needed
-            if isinstance(state, ss.BoolArr) and state.result:
+            if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
 
         # Handle any aliases
@@ -884,7 +884,7 @@ class Module(Base):
         (`sc.save()` and `ss.MultiSim` are both fine, since they use `dill`). Use a
         module-level function, or a property, if plain pickling is required.
 
-        A callable alias also generates an automatic result, in the same way an `ss.BoolArr`
+        A callable alias also generates an automatic result, in the same way an `ss.BoolState`
         does: an alias named `infected` produces the result `infected`. A string alias does not,
         since the state it points to is already counted under its own name.
 
@@ -896,7 +896,7 @@ class Module(Base):
             ```python
             self.define_aliases(infectious='infected') # Everyone infected is infectious
             self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
-            self.define_states(ss.BoolArr('exposed'), infectious='infected') # Aliases can also be defined alongside states
+            self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
             ```
         """
         for key in kwargs:
@@ -1053,9 +1053,9 @@ class Module(Base):
         Initialize results output; called during `init_pre()`
 
         By default, modules all report on counts for any explicitly defined "States", e.g. if
-        a disease contains an `ss.BoolArr('susceptible')` it will automatically contain a
+        a disease contains an `ss.BoolState('susceptible')` it will automatically contain a
         Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
-        generate results, leave out `result=True`.
+        generate results, use `ss.BoolArr`.
         """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
@@ -1124,7 +1124,7 @@ class Module(Base):
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.BoolArr` unless `result=False`) that were added
+        List of "automatic" states with boolean type (`ss.BoolState`) that were added
         via `define_states()`
 
         For diseases, these states typically represent attributes like 'susceptible',
@@ -1141,7 +1141,7 @@ class Module(Base):
 
         Unlike a string alias, which points at a state that is already counted under its
         own name, a derived state has no state object of its own, so it generates an
-        automatic result (e.g. `infected`) in the same way an `ss.BoolArr` does.
+        automatic result (e.g. `infected`) in the same way an `ss.BoolState` does.
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
@@ -1221,7 +1221,7 @@ class Module(Base):
         in the step (a flow, or one that needs a flow) goes in `record_events()` instead.
 
         Args:
-            names (list): the states to count (default: every `ss.BoolArr` unless `result=False`, and derived state)
+            names (list): the states to count (default: every `ss.BoolState`, and derived state)
         """
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:

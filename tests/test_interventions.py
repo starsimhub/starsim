@@ -205,7 +205,7 @@ def test_state_results_at_start():
     class Program(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self.define_states(ss.BoolArr('never_reached', default=True))
+            self.define_states(ss.BoolState('never_reached', default=True))
             self.define_aliases(reached=lambda mod: ~mod.never_reached)
 
         def init_results(self):

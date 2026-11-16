@@ -125,7 +125,7 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('isolated', label='Isolated'),
+                ss.BoolState('isolated', label='Isolated'),
                 reset = 'infectious', # Remove the inherited string alias before replacing it
                 infectious = lambda self: self.infected & ~self.isolated, # Isolated agents don't transmit
             )
@@ -159,7 +159,7 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('symptomatic', label='Symptomatic'),
+                ss.BoolState('symptomatic', label='Symptomatic'),
                 asymptomatic = lambda self: self.infected & ~self.symptomatic,
                 ti_onset = 'ti_infected',
             )
@@ -177,8 +177,8 @@ def test_aliases():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_states(
-                ss.BoolArr('infectious', label='Infectious'), # Replaces the inherited alias
-                ss.BoolArr('infected', label='Redefined'), # Replaces the inherited state
+                ss.BoolState('infectious', label='Infectious'), # Replaces the inherited alias
+                ss.BoolState('infected', label='Redefined'), # Replaces the inherited state
                 overwrite = True,
             )
             return
@@ -260,7 +260,7 @@ def test_ncd():
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
             self.update_pars(**kwargs)
-            self.define_states(ss.BoolArr('anemic'))
+            self.define_states(ss.BoolState('anemic'))
 
         def step_state(self):
             self.anemic[self.pars.p_onset.filter()] = True
@@ -456,7 +456,7 @@ def test_same_transmission():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolArr('recovered'), ss.TimeArr('ti_recovered'))
+            self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
             self.update_pars(**kwargs)
         def step_state(self):
             done = (self.infected & self.ti_recovered.due()).uids # At the start of the step after dur_inf, as a declared dwell time ends
@@ -471,7 +471,7 @@ def test_same_transmission():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.define_pars(beta=ss.perday(0.1), dur_inf=10)
-            self.define_states(ss.BoolArr('S', default=True), ss.BoolArr('I'), ss.BoolArr('R'), ss.TimeArr('ti_recovered'),
+            self.define_states(ss.BoolState('S', default=True), ss.BoolState('I'), ss.BoolState('R'), ss.TimeArr('ti_recovered'),
                                ss.FloatArr('rel_sus', default=1.0), ss.FloatArr('rel_trans', default=1.0))
             self.trans_rng = ss.multi_random('source', 'target')
         def init_results(self):
@@ -521,7 +521,7 @@ def test_same_strains():
         def __init__(self, seed_strain, imm=None, **kwargs):
             super().__init__(strains=strains(imm and 'recovered'))
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolArr('recovered'), ss.TimeArr('ti_recovered'))
+            self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
             self.seed_strain = seed_strain # The strain of each seed, as the declared one gives them
             self.update_pars(**kwargs)
         def step_state(self):
@@ -571,7 +571,7 @@ def test_coded_strains():
         def __init__(self, strains=None, **kwargs):
             super().__init__(strains=strains)
             self.define_pars(beta=ss.perday(0.08), dur_inf=8, dur_imm=30, init_prev=ss.bernoulli(0.02))
-            self.define_states(ss.BoolArr('recovered'), ss.FloatArr('ti_recovered'), ss.FloatArr('ti_waned'))
+            self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'), ss.FloatArr('ti_waned'))
             self.update_pars(**kwargs)
         def step_state(self):
             done = (self.infected & (self.ti_recovered <= self.ti)).uids

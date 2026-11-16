@@ -840,7 +840,7 @@ def test_birth_forms():
 
 @sc.timer()
 def test_sim_births_deaths():
-    """ Births and deaths are read the same way whatever form gave them: the sim's birth, death, cbr, and cmr """
+    """ Births and deaths are read the same way whatever form gave them: the sim's birth and death """
     sc.heading('Testing the sim\'s births and deaths for every form...')
     kw = dict(start=2000, stop=2010, dt=ss.years(0.5), verbose=0)
     declared = lambda: [ss.birth(rate=0.03), ss.death(rate=0.01)]
@@ -853,14 +853,19 @@ def test_sim_births_deaths():
     for key,sim in sims.items():
         res = sim.run().results
         assert res.birth.sum() > 0 and res.death.sum() > 0, key
-        assert np.isclose(res.cbr[:-1].mean(), 30, rtol=0.25) and np.isclose(res.cmr[:-1].mean(), 10, rtol=0.5), f'{key}: {res.cbr.mean():n}, {res.cmr.mean():n}' # Per 1,000 per year
+        cbr, cmr = ss.solvers.crude_rates(res.birth.values, res.death.values, res.alive.values, ss.solvers.people_t(sim).dt_year) # Not results of the sim, only of the demographics modules
+        assert 'cbr' not in res and np.isclose(cbr[:-1].mean(), 30, rtol=0.25) and np.isclose(cmr[:-1].mean(), 10, rtol=0.5), f'{key}: {cbr.mean():n}, {cmr.mean():n}' # Per 1,000 per year
+    res = ss.Sim(diseases=ss.SIS(), networks='random', n_agents=500, verbose=0).run().results # With nothing that makes births or deaths, there are no such results, rather than zeros
+    assert 'birth' not in res and 'death' not in res and 'emigration' not in res
+    res = ss.Sim(diseases=ss.SIS(), networks='random', demographics=ss.death(rate=0), n_agents=500, verbose=0).run().results # A death rate of zero has deaths, all zero
+    assert 'death' in res and res.death.sum() == 0 and 'birth' not in res
     for key in ['sir', 'ode']: # The disease no longer has the population's births and deaths as results, but the transitions are still there
         assert 'births' not in sims[key].results.sir and 'deaths' not in sims[key].results.sir and 'death' in sims[key].results.sir
         assert isinstance(sims[key].diseases.sir.births, ss.Transition)
     assert 'births' not in sims.alone.results.population
     assert np.isclose(sims.ode.results.alive[-1], 2000 + sims.ode.results.birth[:-1].sum() - sims.ode.results.death[:-1].sum())
     coded = sims.coded.results
-    assert coded.birth.sum() == coded.births.birth.sum() and np.allclose(coded.cbr, coded.births.cbr) and np.allclose(coded.cmr, coded.deaths.cmr) # The same as the modules' own
+    assert coded.birth.sum() == coded.births.birth.sum() and coded.death.sum() == coded.deaths.death.sum() and 'cbr' not in coded and coded.births.cbr.sum() > 0 and coded.deaths.cmr.sum() > 0 # The same as the modules' own, which have the crude rates
     return sims
 
 

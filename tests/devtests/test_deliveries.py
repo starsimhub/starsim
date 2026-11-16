@@ -952,7 +952,7 @@ class Lesions(ssl.AgentSIS):
     """ A disease written as code with a boolean state beyond infected (a lesion), cleared on cure """
     def __init__(self, **kwargs):
         super().__init__(beta=ss.peryear(2), init_prev=0.3, dur_inf=ss.years(3), waning=ss.peryear(0), imm_boost=0, **kwargs)
-        self.define_states(ss.BoolArr('cin', label='Lesion'))
+        self.define_states(ss.BoolState('cin', label='Lesion'))
         self.rng_cin = ss.bernoulli(p=0.05)
         return
 

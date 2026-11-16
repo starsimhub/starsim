@@ -141,6 +141,16 @@ def test_matrix():
         for net in [ss.MixingPool(n_contacts=4, name='pool'), ss.networks.MixingPools(source=dict(x=None), target=dict(x=None), n_contacts=[[4]], name='pool')]:
             sim = ss.Sim(diseases=[make('a', 0.1, cls), make('b', 0, cls)], networks=net, n_agents=1000, unit='day', stop=20, solver='abm', verbose=0).run()
             assert sim.results.a.infection.sum() > 10 and sim.results.b.infection.sum() == 0
+
+    # A matrix given by position alone is over the stratification with as many levels, as if given by name; with none or several, it is an error
+    C = [[10, 3, 1], [3, 5, 2], [1, 2, 4]]
+    def run(net, **strata):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(10), init_prev=0.01, name='sir').stratify(**strata)
+        return ss.Sim(sir, networks=net, unit='day', stop=30, verbose=0).run().results.sir.I[:]
+    assert np.allclose(run(ss.contacts(C), age=[0, 15, 65], patch=['n', 's']), run(ss.contacts(age=C), age=[0, 15, 65], patch=['n', 's']))
+    with pytest.raises(ValueError, match='each have 2 levels'):
+        run(ss.contacts([[1, 2], [2, 1]]), sex=['f', 'm'], patch=['n', 's'])
     return
 
 
@@ -170,9 +180,9 @@ def test_matrix_dist():
     with pytest.raises(ValueError, match='negative'):
         ss.Sim(ss.SIS(beta=ss.perday(0.05)), networks=ss.contacts(ss.normal(matrix, 2*matrix), ages=[0, 30]), n_agents=1000, stop=2, verbose=0).run()
 
-    # A matrix by position says what it is over (ages= or dims=), one by keyword is over the model's stratification of that name, and a number is a mixing pool
+    # A matrix by keyword is over the model's stratification of that name, so takes no ages=, and a number is a mixing pool
     M = [[2, 1], [1, 3]]
-    for bad, match in [(lambda: ss.contacts(M), 'age=matrix'), (lambda: ss.contacts(age=M, ages=[0, 15]), 'by position'), (lambda: ss.contacts(10), r'MixingPool\(n_contacts=10\)')]:
+    for bad, match in [(lambda: ss.contacts(age=M, ages=[0, 15]), 'by position'), (lambda: ss.contacts(10), r'MixingPool\(n_contacts=10\)')]:
         with pytest.raises(TypeError, match=match):
             bad()
     assert np.array_equal(ss.contacts(M, ages=[0, 15], risk=M).age_edges, [0, 15]) and ss.contacts(age=M).age_edges is None

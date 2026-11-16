@@ -132,9 +132,9 @@ class People:
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         states = [
-            ss.BoolArr('alive', default=True),  # Whether the agent is alive
+            ss.BoolState('alive', default=True),  # Whether the agent is alive
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolArr('female', default=ss.bernoulli(name='female', p=p_female)),
+            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.TimeArr('ti_dead'),  # The step of death
             ss.TimeArr('ti_removed'),  # The step of leaving for another reason (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
@@ -145,6 +145,7 @@ class People:
             self.states.append(state)
             setattr(self, state.name, state)
             state.link_people(self)
+        self._flows = set() # The flows of people that modules written as code have asked for, even with no one ('birth', 'death', 'emigration'): see ss.solvers.people_flows()
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
         self._died_of = {} # Who died of each cause in this step
@@ -389,22 +390,22 @@ class People:
     @property
     def auto_state_list(self):
         """
-        The people's own boolean states that are results (`ss.BoolArr` unless `result=False`, e.g. alive, female), each of which makes a result of the same name, the number of people in it
+        The people's own boolean states that are results (`ss.BoolState`, e.g. alive, female), each of which makes a result of the same name, the number of people in it
 
         Not those of modules (named like "sir.S"), which make their own results; for all states, see `People.states`.
         """
         return [state for key, state in self.states.items()
-                if isinstance(state, ss.BoolArr) and state.result and '.' not in key]
+                if isinstance(state, ss.BoolState) and '.' not in key]
 
     def init_results(self):
         """
         Make the results of the people; called by `Sim.init_results()`
 
-        Each of the people's own boolean states (unless `result=False`) makes a result of the number in it (e.g. `alive`, the
-        number alive); for a state that makes no result, give `result=False`. There are also the flows of
+        Each of the people's own `ss.BoolState` arrays makes a result of the number in it (e.g. `alive`, the
+        number alive); for a state that makes no result, use `ss.BoolArr`. There are also the flows of
         people born, who died, and who left (`birth`, `death`, and `emigration`; `results.death.cum` is the cumulative total),
-        and the crude birth and mortality rates (`cbr` and `cmr`, per 1,000 people per year), worked out from them when the
-        sim is finalized (see `ss.solvers.crude_rates()`).
+        each kept only if something in the sim can make it, even at a rate of zero (see `ss.Sim.drop_unused_flows()`); the crude birth and
+        mortality rates are results of the demographics modules (`ss.Births`, `ss.Deaths`, and `ss.Pregnancy`).
 
         With `ss.solvers.abm(record_people=False)` (or a compartmental run, which records them in its own way), there are none of these (and `record_states()` and
         `record_events()` are skipped in the loop), which saves a little time and memory.
@@ -417,8 +418,6 @@ class People:
             ss.Result('birth', label='Births', kind='flow', **kw),
             ss.Result('death', label='Deaths', kind='flow', **kw),
             ss.Result('emigration', label='Emigrants', kind='flow', **kw),
-            ss.Result('cbr', label='Crude birth rate', kind='ratio', **kw | dict(dtype=float, scale=False)),
-            ss.Result('cmr', label='Crude mortality rate', kind='ratio', **kw | dict(dtype=float, scale=False)),
         ]
         self.sim.results += results
         return
@@ -427,7 +426,7 @@ class People:
     def taken_names(cls):
         """ The names of the attributes every People has (e.g. "age", "version"), and of the sim's results about people (e.g. "death"), which a module can't take from its variable """
         if cls._taken is None:
-            cls._taken = set(dir(cls)) | set(vars(cls(n_agents=1))) | {'birth', 'death', 'emigration', 'cbr', 'cmr'} # See init_results()
+            cls._taken = set(dir(cls)) | set(vars(cls(n_agents=1))) | {'birth', 'death', 'emigration'} # See init_results()
         return cls._taken
 
     def add_module(self, module):
@@ -647,6 +646,7 @@ class People:
             cause (Module/str): what they die of: a module (by its name) or a name (default: none)
             hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
         """
+        self._flows.add('death')
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
@@ -719,6 +719,7 @@ class People:
         Args:
             uids (array): the agents to remove
         """
+        self._flows.add('emigration')
         self.ti_removed[uids] = self.sim.ti
         return
 
@@ -780,6 +781,7 @@ class People:
 
     def count_births(self, children):
         """ Count newborns among the births of the step (`results.birth`): called by `born()`, and for births with no parents (e.g. `ss.birth()` as agents without `mother_ages`) """
+        self._flows.add('birth')
         self._births += (float(self.scale.raw[children].sum()) if self.scale.weighted else len(children))
         return
 
@@ -841,7 +843,7 @@ class People:
         return dying if dying is not None else ss.uids()
 
     def record_states(self):
-        """ Record the population counts at the start of the step (each `ss.BoolArr` unless `result=False`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
+        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
         states = [getattr(self, state.name) for state in self.auto_state_list] # Each automatic result, e.g. alive, female

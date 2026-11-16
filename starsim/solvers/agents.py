@@ -458,7 +458,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolArr.stays
         for state in graph.people_states:
             name = state.name
-            arrs += [ss.BoolArr(name, label=state.label or name)]
+            arrs += [ss.BoolState(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
                 arrs.append(internal(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index'))) # See stamp()
@@ -482,7 +482,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for a in self.attrs.values():
             arrs.append(ss.FloatArr(a.name, default=None if a.kind == 'derived' else a.default, label=a.label or a.name))
             if a.combine == 'first':
-                arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set', result=False))
+                arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set'))
         self.sets = sc.obj() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
         for names in dict.fromkeys(clocks): # Each set of more than one state once, in the order found

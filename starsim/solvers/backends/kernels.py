@@ -452,7 +452,7 @@ def compile_status():
 
     Example:
         ```python
-        print(ss.solvers.backends.kernels.compile_status().summary) # Or ss.compile(check=True)
+        print(ss.solvers.compile_status().summary) # Or ss.compile(check=True)
         ```
     """
     from . import passes

@@ -14,13 +14,13 @@ and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` keeps
 its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
-way), `ss.uids.cat()` (now `ss.uids.concatenate()`), `ss.BoolState` (now `ss.BoolArr`) and `ss.BoolArr` (now `ss.BoolArr(result=False)`, since Starsim 4's makes a result by default), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
+way), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_n=20`, and `dur_inf=10` is
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3; with none, `rate_per=1000` is added to `ss.Births`, `ss.Deaths`, and `ss.Pregnancy` given a rate, since Starsim 3's were per 1,000 by default and Starsim 4's are per person), `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `death`, `cum_deaths` is `death.cum`, and `new_emigrants` is `emigration`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `modules=` of the sim (now the arguments, `ss.Sim(modules)`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `death`, `cum_deaths` is `death.cum`, and `new_emigrants` is `emigration`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `sim.profile()` (now `sim.perf_profile()`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -35,8 +35,6 @@ import sciris as sc
 
 __all__ = ['migrate']
 
-boolstate_note = "ss.BoolState is ss.BoolArr: one class for a true-or-false value per agent, whose count is a result unless result=False"
-boolarr_note = "Starsim 3's ss.BoolArr made no result; Starsim 4's makes one, the number for whom it is true, unless result=False (added, so it stays a flag; remove it to have the result)"
 
 # Names whose rename is mechanical: Starsim 3 spelling (a regular expression) to Starsim 4's
 counted = 'alive|female|susceptible|infected|recovered|exposed|infectious' # The states that Starsim's own modules count (n_alive is now alive)
@@ -51,9 +49,6 @@ renames = [
     (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.MSMNet\(',            "ss.SexualNet(between='mm', ",      "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.NCD\b',              'ssl.NCD',                        'ss.NCD moved to the library (ssl.NCD)'),
-    (r'\bss\.BoolArr\(\s*\)',      'ss.BoolArr(result=False)',        boolarr_note), # Before ss.BoolState, which becomes an ss.BoolArr with a result
-    (r'\bss\.BoolArr\(((?:(?!\bresult\s*=)[^()])+)\)', r'ss.BoolArr(\1, result=False)', boolarr_note),
-    (r'\bss\.BoolState\(([^()]*)\)', r'ss.BoolArr(\1)',                boolstate_note),
     (r'\bss\.Route\b',             'ss.networks.Route',              'ss.Route is ss.networks.Route'),
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
@@ -129,7 +124,7 @@ moved = dict(
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))
-renames.append((r'\bss\.(compile_status)\b', r'ss.solvers.backends.kernels.\1', 'internal helpers are in their submodule (ss.solvers.backends.kernels.)'))
+renames.append((r'\bss\.(compile_status)\b', r'ss.solvers.\1', 'ss.compile_status() is ss.solvers.compile_status()'))
 
 # The keywords of the distributions that Starsim 4 names by their moments (or shape), by distribution
 dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
@@ -143,8 +138,6 @@ dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
-    (r'\bss\.BoolState\b', boolstate_note),
-    (r'\bss\.BoolArr\((?![^\n]*\bresult\s*=)(?:[^()\n]*\(|[^()\n]*$)', boolarr_note + ' (this one has parentheses inside it, or goes on to the next line, so it was not rewritten)'),
     (r'\bdef infect\(\s*self\s*\)|\b(super\(\)|self)\.infect\(\s*\)', "ss.Infection's transmission pass, infect(self), is ss.AgentDisease's transmit(), which returns the UIDs of the new cases (and records their sources and routes in an ss.infection_log); an override of it calls super().transmit(rel_trans=..., rel_sus=...) for its own arrays, e.g. once for each strain (infect(uids) now infects those agents at once)"),
     (r'\bvalidate_beta\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and the beta of each route from route_betas(), which validate_beta() was)"),
     (r'\b(people|ppl)\.n_alive\b', 'people.n_alive (the number of agents alive) was removed: people.n is the number of people alive (as agents, the people they stand for, which is the number of agents only with no population scale), and people.alive.count() is the number of agents alive'),
@@ -555,11 +548,6 @@ def migrate_ast(text, analyzers=None):
                     edits.replace(kw.lineno, kw.col_offset, kw.value.end_col_offset, f'solver=ss.solvers.abm(rescale={ast.unparse(kw.value)})', 'rescale= of ss.Sim is an option of the agents: solver=ss.solvers.abm(rescale=...)')
                 else:
                     found.append((kw.lineno, 'rescale= of ss.Sim is an option of the agents: give it as solver=ss.solvers.abm(rescale=...)'))
-            elif kw.arg == 'modules' and func == 'ss.Sim':
-                if not call.args and kw is call.keywords[0] and kw.value.lineno == kw.lineno: # The first argument, so it can simply be given by position
-                    edits.replace(kw.lineno, kw.col_offset, kw.value.col_offset, '', 'modules= of ss.Sim is gone: modules of any kind are given as arguments, sorted by kind')
-                else:
-                    found.append((kw.lineno, 'modules= of ss.Sim is gone: give these modules as arguments, first, e.g. ss.Sim([...], n_agents=...), which sorts them by kind (or those of no standard kind as custom=)'))
             elif kw.arg == 'debug' and func in ['ss.MultiSim', 'ss.parallel'] and isinstance(kw.value, ast.Constant):
                 if kw.value.value is True:
                     edits.add(kw, 'workers=1', f'debug=True of {func} is workers=1 (one after another in this process)')

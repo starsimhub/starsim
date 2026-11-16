@@ -1247,21 +1247,9 @@ class CatArr(IntArr):
 
 class BoolArr(Arr):
     """
-    Subclass of `ss.Arr` for booleans: a value of true or false for each agent
+    Subclass of `ss.Arr` with defaults for booleans.
 
-    By default, the number of people for whom it is true is recorded as a result of its module, of the
-    same name (e.g. a state named "susceptible" makes a result "susceptible"); people's `alive` and
-    `female`, and the states of a declared disease run as agents, are such arrays. With `result=False`,
-    it is a flag for the module's own use (e.g. `disease.has_immunity`), with no result; an array with
-    several columns (`columns=`) needs it.
-
-    Not to be confused with `ss.State`, a state of a declared model (a compartment), which people move
-    between by its transitions; as agents, each `ss.State` is kept as one of these arrays.
-
-    Args:
-        name (str): the name of the array
-        result (bool): whether the number of people for whom it is true is recorded as a result (default true; false for an array with several columns)
-        kwargs (dict): passed to `ss.Arr`
+    It exists so that a flag can be defined by name alone, and adds what is useful for booleans, such as `.uids`.
 
     Examples:
         ```python
@@ -1270,41 +1258,19 @@ class BoolArr(Arr):
         infected[ss.uids([0, 2, 4])] = True
         infected.count()  # Returns 3
         infected.uids     # Returns ss.uids([0, 2, 4])
-
-        # In a module: a result of the number vaccinated, and a flag with no result
-        class Vaccinate(ss.Intervention):
-            vaccinated = ss.BoolArr()
-            reminded = ss.BoolArr(result=False)
         ```
     """
-    result = False # Whether the number for whom it is true is a result of its module: see Module.define_states()
-    watch = None # What keeps count of the agents in it (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
-
-    def __init__(self, name=None, *, result=True, **kwargs): # No good NaN equivalent for bool arrays
-        if result and kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
-            errormsg = f'BoolArr "{name}" has several columns, so it cannot make a result, which is one number per step; give result=False, e.g. ss.BoolArr("{name}", columns=..., result=False)'
-            raise ValueError(errormsg)
+    def __init__(self, name=None, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
-        self.result = result
         return
 
     @property
     def n(self):
-        """
-        The number of people it is True for now, each counted by their weight and the sim's scale, as `(sir.I | sir.R).n` counts them under every
-        solver, and as a compartmental run's state gives it (`count()` is the number of agents); for a state of a declared disease, its engine counts them
-        """
-        engine = getattr(self.watch, 'engine', None)
-        if engine is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
-            return float(engine.n_of(self.uids))*engine.scale
+        """ The number of people it is True for now, each counted by their weight and the sim's scale, as `(sir.I | sir.R).n` counts them under every solver (`count()` is the number of agents) """
         sim = getattr(self.people, 'sim', None)
         if sim is None or not getattr(sim, 'initialized', False):
             return float(self.count())
         return ss.conditions.count_now(sim, self)
-
-    @n.setter
-    def n(self, value):
-        ss.solvers.engine.no_set_count(getattr(self.mod, 'name', 'module'), self.name)
 
     @property
     def frac(self):
@@ -1363,9 +1329,9 @@ class BoolArr(Arr):
         return self.asnew(~self.raw, cls=BoolArr, copy=False)
 
     # For BoolArr instances implement true in-place operators that reuse the memory from the underlying array
-    # This allows in-place operations to be used directly on a module's arrays without breaking references
+    # This allows in-place operations to be used directly on `BoolState` instances without breaking references
 
-    def _iand(self, other):
+    def __iand__(self, other):
         """ In-place AND """
         if isinstance(other, uids):
             tmp = self.raw[other]
@@ -1375,7 +1341,7 @@ class BoolArr(Arr):
         else:
             return self._boolmath('&', other, inplace=True)
 
-    def _ior(self, other):
+    def __ior__(self, other):
         """ In-place OR """
         if isinstance(other, uids):
             self.raw[other] = True
@@ -1383,7 +1349,7 @@ class BoolArr(Arr):
         else:
             return self._boolmath('|', other, inplace=True)
 
-    def _ixor(self, other):
+    def __ixor__(self, other):
         """ In-place XOR """
         if isinstance(other, uids):
             self.raw[other] = ~self.raw[other]
@@ -1413,9 +1379,39 @@ class BoolArr(Arr):
         f_uids = self.false()
         return t_uids, f_uids
 
+
+class BoolState(BoolArr):
+    """ A boolean array being used as a state.
+
+    Although functionally identical to `BoolArr`, a `BoolState` is handled differently in
+    terms of automation: specifically, results are automatically generated from a
+    `BoolState` (but not a `BoolArr`).
+
+    BoolStates are typically used to keep track of externally-facing variables (e.g.
+    `disease.susceptible`), while BoolArrs can be used to keep track of internal
+    ones (e.g. `disease.has_immunity`). A BoolState named "susceptible" will automatically
+    generate a result named "susceptible" (the number susceptible), for example.
+
+    Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
+    (e.g. in `module.define_states()`), whether or not they are BoolStates.
+    """
+    watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
+
     def __rshift__(self, other):
         """ A move between two states of a declared disease, as code sees them at run time (`ss.move(sir.I >> sir.R, p=0.5)`); see `ss.move()` """
         return ss.transitions.run_move(self, other)
+
+    @property
+    def n(self):
+        """ The number of people in the state: its agents, each counted by the people it stands for (its weight and the sim's scale), as `I.n` in a rate counts them, and as a compartmental run's state gives it; `count()` is the number of agents """
+        engine = getattr(self.watch, 'engine', None)
+        if engine is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
+            return float(engine.n_of(self.uids))*engine.scale
+        return super().n
+
+    @n.setter
+    def n(self, value):
+        ss.solvers.engine.no_set_count(getattr(self.mod, 'name', 'module'), self.name)
 
     @property
     def time_in(self):
@@ -1463,9 +1459,16 @@ class BoolArr(Arr):
         done = ~self.raw & np.isfinite(entered) & np.isfinite(left)
         return ss.time.get_dur_class(engine.sim.unit)((left[done] - entered[done])*engine.dt)
 
+    def __init__(self, name=None, **kwargs):
+        if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
+            errormsg = f'BoolState "{name}" cannot be 2D since it automatically generates results; use ss.BoolArr instead'
+            raise ValueError(errormsg)
+        super().__init__(name=name, **kwargs)
+        return
+
     def asnew(self, arr=None, cls=None, name=None, copy=None):
         """
-        As `Arr.asnew()`; the copy is not a result, and if its values are not the array's own, it is not counted (see `watch`)
+        As `Arr.asnew()`; a copy whose values are not the state's own is not counted (see `watch`)
 
         Args:
             arr (array): the values of the new array; if None, a copy of the active values
@@ -1474,7 +1477,6 @@ class BoolArr(Arr):
             copy (bool): whether to copy `arr`; see `Arr.asnew()`
         """
         new = super().asnew(arr=arr, cls=cls, name=name, copy=copy)
-        new.__dict__['result'] = False # A new array (e.g. ~alive) is not a result
         if new.raw is not self.raw and new.__dict__.get('watch') is not None:
             new.__dict__['watch'] = None
         return new
@@ -1555,22 +1557,22 @@ class BoolArr(Arr):
         return
 
     def __iand__(self, other):
-        out = self._iand(other)
+        out = super().__iand__(other)
         self._changed_all()
         return out
 
     def __ior__(self, other):
-        out = self._ior(other)
+        out = super().__ior__(other)
         self._changed_all()
         return out
 
     def __ixor__(self, other):
-        out = self._ixor(other)
+        out = super().__ixor__(other)
         self._changed_all()
         return out
 
 
-class GroupAlive(BoolArr):
+class GroupAlive(BoolState):
     """
     `people.alive` in a run without agents: one row per group of people, not one per person
 
@@ -1601,7 +1603,7 @@ class GroupAlive(BoolArr):
 
 class Watch:
     """
-    The link from a state to the engine that keeps count of who is in it (`BoolArr.watch`), which is told of
+    The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of
     every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.dists.no_dists()`),
     so the link does not change where they are found, which gives each its random numbers.
     """

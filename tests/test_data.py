@@ -36,10 +36,9 @@ def test_contacts():
     assert school.loc['10-14', '10-14'] == school.values[2, 2] and school.index[-1] == '75+' and school.attrs['ref']['layer'] == 'school'
     table = ss.contacts(school)
     assert np.array_equal(table.edges, ss.contacts('Kenya', layer='school').edges) and table.ref == school.attrs['ref'] and table.unit == 'day'
-    m = [[10, 3], [3, 5]] # A table not labeled by age group says nothing of its groups: by position it needs ages=, and by name it is over the model's own, as a list is
+    m = [[10, 3], [3, 5]] # A table not labeled by age group says nothing of its groups: by position alone it is over the model's stratification with as many levels, and by name over that one, as a list is
     for df in [pd.DataFrame(m), pd.DataFrame(m, index=['young', 'old'], columns=['young', 'old'])]:
-        with pytest.raises(TypeError, match='age=matrix'):
-            ss.contacts(df)
+        assert np.array_equal(ss.contacts(df).bare, m) and ss.contacts(df).edges is None
         assert np.array_equal(ss.contacts(age=df).dims['age'], ss.contacts(age=m).dims['age'])
     assert np.array_equal(ss.contacts(pd.DataFrame(m, index=['0-17', '18+'])).edges, [0, 18])
 

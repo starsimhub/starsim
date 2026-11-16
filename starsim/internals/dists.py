@@ -470,7 +470,7 @@ class Dist:
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
         unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
-        round (bool/str): if 'random', round each value up or down to an integer at random, in proportion to how close it is (so the mean is kept); if 'nearest', round to the nearest integer; if False, don't round (see `dist.rvs()`)
+        round (bool/str): if 'random', round each value up or down to an integer at random, in proportion to how close it is (so the mean is kept); if True or 'nearest', round to the nearest integer; if False, don't round (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int/str): the seed offset, in place of the one from its path in the sim (e.g. `offset='hiv_art'`), so that its draws stay the same if it moves (e.g. to another module); it must be unique within the sim. If None (the default), the path in the sim is hashed for it
         strict (bool): if True, require initialization
@@ -1397,7 +1397,7 @@ class Dist:
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
-            round (bool/str): if 'random', round up or down at random based on how close the value is; if 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
+            round (bool/str): if 'random', round up or down at random based on how close the value is; if True or 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
             repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers, except for `ss.choice` and `ss.histogram`, whose repeats are drawn after every slot)
         """
@@ -1553,19 +1553,20 @@ class Dist:
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """
-        if round is True or round == 'stochastic': # Starsim 3's spellings
-            errormsg = f"round={round!r} is from Starsim 3: use round='random' to round each value up or down at random (keeping the mean), or round='nearest'. See {ss.v3_deprecations.guide} for help migrating from Starsim 3"
+        if round is True: # The simplest rounding
+            return 'nearest'
+        if round == 'stochastic': # Starsim 3's spelling
+            errormsg = f"round='stochastic' is from Starsim 3: use round='random' to round each value up or down at random (keeping the mean). See {ss.v3_deprecations.guide} for help migrating from Starsim 3"
             raise ValueError(errormsg)
         if round not in [None, False, 'random', 'nearest']:
-            errormsg = f"Invalid rounding option {round!r}: must be 'random' (up or down at random, keeping the mean), 'nearest', or False"
+            errormsg = f"Invalid rounding option {round!r}: must be True or 'nearest' (to the nearest integer), 'random' (up or down at random, keeping the mean), or False"
             raise ValueError(errormsg)
         return round
 
     def round_rvs(self, rvs, round):
         """ Round the values (in timesteps, for durations); usually called via `dist.rvs(round='random')` """
-        if round == 'nearest':
+        if self.validate_round(round) == 'nearest':
             return np.round(rvs).astype(ss_int)
-        self.validate_round(round)
         return self.randround(rvs, slots=self._slots)
 
     def randround(self, rvs, slots=None):

@@ -717,6 +717,9 @@ class Groups(sc.prettyobj):
                 raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
+        for net in sim.pars.networks.values(): # A contact matrix given by position alone is over the stratification with as many levels
+            if getattr(net, 'bare', None) is not None:
+                ss.networks.bare_contacts(net, [strat for strat in self.strats if strat not in self.joint_strats and getattr(strat, 'stages_of', None) is None])
         mixed = {dim for net in sim.pars.networks.values() for dim in (getattr(net, 'dims', None) or (getattr(net, 'full', None) or {}).get('dims') or [])} # Dimensions with contacts of their own (a matrix over several together keeps them in net.full)
         for strat in self.strats: # A name like patch= does not make places: say so, since people at its levels mix as one population (unless contacts say otherwise)
             if getattr(strat, 'like_places', False) and strat.name not in mixed:

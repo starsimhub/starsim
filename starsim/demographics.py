@@ -872,19 +872,19 @@ class Pregnancy(Demographics, ss.Disease):
         self.fertility_rate_data = None # Set in init_pre()
         self.mean_dur_pregnancy = None # In years; set in init_pre()
         self.define_states(
-            ss.BoolArr('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
+            ss.BoolState('infertile', label='Infertile (primary infertility)', default=self.pars.p_infertile),
             ss.FloatArr('parity', label='Parity', default=0),
             ss.FloatArr('ti_live_birth', label='Time of the last live birth'),
-            ss.BoolArr('fetal', label='A fetus, as an agent'),
+            ss.BoolState('fetal', label='A fetus, as an agent'),
             ss.FloatArr('gestation_at_birth', label='Gestational age at birth, in weeks (on the newborn)'),
-            ss.BoolArr('preterm', label='Preterm birth (on the newborn)', result=False),
-            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)', result=False),
+            ss.BoolArr('preterm', label='Preterm birth (on the newborn)'),
+            ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)'),
             ss.FloatArr('rel_preterm_base', default=self.pars.preterm.rel, label='Baseline relative risk of preterm birth'),
             ss.FloatArr('rel_preterm', default=1.0, label='Relative risk of preterm birth (set at conception: see preterm_risk())'),
             ss.FloatArr('n_pregnancies', default=0, label='Number of pregnancies'),
             ss.FloatArr('ti_delivered', label='The step of the last delivery'),
             ss.FloatArr('dur_gestation', label='The duration of the current (or last) pregnancy as drawn, in weeks'),
-            ss.BoolArr('lactating', label='Breastfeeding'),
+            ss.BoolState('lactating', label='Breastfeeding'),
             ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
         self.rng_md = ss.random() # For p_maternal_death set to a plain number later, the chance at delivery

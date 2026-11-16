@@ -13,7 +13,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'crude_rates', 'population_flows', 'hold_flows']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'people_flows', 'crude_rates', 'population_flows', 'hold_flows']
 
 
 from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.solvers.backends.kernels.step()
@@ -146,7 +146,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
 
 
 def init_people(sim):
-    """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration, cbr, cmr), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
+    """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
     if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' in sim.results or not mods:
         return
@@ -157,8 +157,6 @@ def init_people(sim):
         ss.Result('birth', label='Births', values=np.zeros(t.npts), kind='flow', **kw),
         ss.Result('death', label='Deaths', values=np.zeros(t.npts), kind='flow', **kw),
         ss.Result('emigration', label='Emigrants', values=np.zeros(t.npts), kind='flow', **kw),
-        ss.Result('cbr', label='Crude birth rate', values=np.zeros(t.npts), kind='ratio', **kw),
-        ss.Result('cmr', label='Crude mortality rate', values=np.zeros(t.npts), kind='ratio', **kw),
     ]
     return
 
@@ -174,6 +172,8 @@ def record_people(sim, ti=None, keys=None):
     else:
         counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values[ti], dtype=float))
     for key in keys or ['alive', 'birth', 'death', 'emigration']:
+        if key not in sim.results: # A flow that nothing in the sim makes, dropped when the sim was finalized (see Sim.drop_unused_flows())
+            continue
         if ti is None:
             sim.results[key][:] = counts[key]
         else:
@@ -201,6 +201,29 @@ def people_counts(sim, get):
     return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
 
 
+def people_flows(sim):
+    """
+    The sim's flows of people that its modules can make, whatever their rates: 'birth', 'death', and 'emigration', from the transitions of
+    the declared modules (`ss.death(rate=0)` has deaths, which are all zero; a sim with no deaths at all has no `death`), and from `ss.Births`
+    and `ss.Deaths`; a module written as code adds its own as it asks for them (see `People.request_death()`)
+    """
+    out = set()
+    for mod in sim.declared:
+        for tr in mod.graph.transitions.values():
+            if tr._deaths is not None and tr.people:
+                out.add('death')
+            elif tr._outflow and tr.migration:
+                out.add('emigration')
+            elif tr._inflow and tr.people and not tr.migration:
+                out.add('birth')
+    for mod in sim.modules:
+        if isinstance(mod, ss.Births):
+            out.add('birth')
+        elif isinstance(mod, ss.Deaths):
+            out.add('death')
+    return out
+
+
 def people_t(sim):
     """ The timeline of the sim's results about people: as agents, the sim's; in a compartmental run, that of the first declared module whose states hold everyone (see `init_people()`) """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
@@ -216,7 +239,7 @@ def crude_rates(birth, death, alive, dt_year):
 def population_flows(mod):
     """
     The results of the births and deaths of everyone that a declared module holds (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`: see
-    `ss.solvers.init_flows()`), which it keeps only during the run: once it is finalized, the sim's own (`birth`, `death`, `cbr`, `cmr`) are the
+    `ss.solvers.init_flows()`), which it keeps only during the run: once it is finalized, the sim's own (`birth`, `death`) are the
     results to read, the same whatever form gave them; the transitions stay (e.g. `ss.modify(sir.births, ...)`)
     """
     graph = getattr(mod, 'graph', None)
@@ -2359,7 +2382,7 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in self.stock_people:
                 r[ti] = r[ti]*scale
-        if self.coded: # The module's own results of boolean states (`ss.BoolArr` unless `result=False`, and derived states), counted as for a module written as code
+        if self.coded: # The module's own results of boolean states (`ss.BoolState`, and derived states), counted as for a module written as code
             ss.Module.record_states(mod, names=self.coded)
         if mod is self.sim.declared[-1]: # Once every declared module has its states for the step: the number alive, as agents record it at the start of the step
             record_people(self.sim, ti, keys=['alive'])

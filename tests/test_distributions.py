@@ -585,8 +585,9 @@ def test_round():
     assert d.rvs(10, round=False).dtype != ss.dtypes.int # Not rounded if overridden
     d = ss.constant(2.3, round='random', strict=False).init(slots=np.arange(10_000))
     assert np.isclose(d.rvs(ss.uids(np.arange(10_000))).mean(), 2.3, atol=0.03) # Stochastic rounding is unbiased
+    assert np.all(d.rvs(ss.uids(np.arange(10)), round=True) == 2) # True is to the nearest integer
     with pytest.raises(ValueError, match="round='random'"): # Starsim 3's spelling says what to use
-        d.rvs(10, round=True)
+        d.rvs(10, round='stochastic')
 
     # Durations are rounded to whole timesteps
     steps = ss.lognormal(ss.days(4.5), ss.days(1.5), round='nearest').mock(dt=ss.days(0.5)).rvs(uids)
@@ -679,7 +680,7 @@ def test_engine_copy():
     h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', default_state='A')
-    ppl = ss.People(1000, extra_states=[ss.BoolArr('urban', default=ss.bernoulli(p=0.5))])
+    ppl = ss.People(1000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(p=0.5))])
     sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
     u = sim.people.auids
     urban, obj, went = sim.people.urban[u], sim.diseases.m.obj[u], sim.diseases.m.B[u]
