@@ -148,6 +148,7 @@ class People:
         self._flows = set() # The flows of people that modules written as code have asked for, even with no one ('birth', 'death', 'emigration'): see ss.solvers.people_flows()
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
+        self._exits = True # Whether a death or removal has been requested since step_die() last looked; if not, it doesn't pass over the agents
         self._died_of = {} # Who died of each cause in this step
         self._knock_on = None # The deaths requested by modules' on_death(), while step_die() calls it, so they happen in the same step
         self._warned_late = set() # The causes of the deaths requested too late in a step, warned about once each: see request_death()
@@ -647,6 +648,7 @@ class People:
             hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
         """
         self._flows.add('death')
+        self._exits = True
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
@@ -720,18 +722,23 @@ class People:
             uids (array): the agents to remove
         """
         self._flows.add('emigration')
+        self._exits = True
         self.ti_removed[uids] = self.sim.ti
         return
 
     def step_die(self):
         """ Carry out the deaths and removals of this step (those requested in it, or set for it before), and return who died or left """
         ti = self.sim.ti
+        self._died_of = {}
+        if not self._exits: # Nobody has been asked to die or leave (deaths and removals are set only by request_death() and request_removal()), so no pass over the agents
+            self._resolved_ti = ti if self.sim.initialized else None
+            return ss.uids()
+        self._exits = False
         deaths, n_alive = ss.solvers.numba.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
             deaths = ss.solvers.numba.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         dying = death_uids
-        self._died_of = {}
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep.
@@ -795,6 +802,8 @@ class People:
         auids = self.auids
         dying = self.dying()
         self._dying = None
+        if not aging and not len(dying): # Nobody left or aged (only step_die() changes who is alive): the active agents stay as they are
+            return
         age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
         dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
         expected = len(auids) - len(dying)
