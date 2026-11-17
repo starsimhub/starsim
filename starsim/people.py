@@ -807,8 +807,6 @@ class People:
         auids = self.auids
         dying = self.dying()
         self._dying = None
-        if not aging and not len(dying): # Nobody left or aged (only step_die() changes who is alive): the active agents stay as they are
-            return
         age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
         dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
         expected = len(auids) - len(dying)
@@ -913,10 +911,13 @@ class People:
     def finish_step(self):
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
-        if type(self).update_post is People.update_post:
-            self.remove_dead(aging=bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm)))
+        fused = type(self).update_post is People.update_post
+        aging = fused and bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm))
+        if aging or len(self.dying()): # Otherwise nobody left (in a run, only step_die() changes who is alive) and nobody ages, so the active agents stay as they are
+            self.remove_dead(aging=aging)
         else:
-            self.remove_dead()
+            self._dying = None
+        if not fused:
             self.update_post()
         return
 
