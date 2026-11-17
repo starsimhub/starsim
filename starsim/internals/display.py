@@ -1465,18 +1465,19 @@ def partnership_lines(mod, tr, sim, name):
     terms = [term for term in getattr(getattr(sim, 'mixing', None), 'terms', []) if term.name == name and 'partnership' in term]
     if not terms or engine is None or not engine.compartmental:
         return []
-    for flow in engine.flows: # Worked out once, when first needed
-        if flow.kind == 'contact' and flow.tr.name == tr.name and flow.routes is False:
-            engine.route_betas(flow)
-    info = engine.partnership_info
     pt = terms[0].partnership
     sides = list(pt.net.sides or {})
     chances = sc.obj()
-    for (trn,state,net,src),out in info.items():
-        if trn == tr.name and net == name:
-            for g in np.flatnonzero((pt.group_side >= 0) & (out > 0)):
-                key = f'{sides[src]}2{sides[pt.group_side[g]]}' if sides else 'each'
-                chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
+    for flow in engine.flows:
+        if flow.kind == 'contact' and flow.tr.name == tr.name:
+            routes = flow.routes if flow.routes is not False else engine.route_betas(flow) # Worked out once, when first needed: by source state, the chance for each term of the mixing (see Compartmental.partnership_chance())
+            for state,outs in (routes or {}).items():
+                for term,out in zip(sim.mixing.terms, outs):
+                    if term.name != name or 'partnership' not in term:
+                        continue
+                    for g in np.flatnonzero((pt.group_side >= 0) & (out > 0)):
+                        key = f'{sides[term.src_side]}2{sides[pt.group_side[g]]}' if sides else 'each'
+                        chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
     chances = ', '.join(f'{k} {v:.2g}' for k,v in chances.items())
     return [f'    partner-change model (approx): partnerships formed at {pt.formed:.2g} a {sim._unit_name}; chance over a partnership {chances}']
 

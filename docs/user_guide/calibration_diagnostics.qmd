@@ -283,7 +283,7 @@ The rule by which each method sets `fit.converged` (and says why in `fit.why`), 
 | NUTS (`'nuts'`) | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`); a higher `max_draws=`; check identifiability |
 | Particle MCMC (`'pmcmc'`) | The chains agree (R-hat at most 1.01) | More draws and warm-up; more particles, if the acceptance is low |
 | ABC-SMC (`'abc-smc'`) | Not assessed (`fit.converged` is None): no rule says when its final tolerance is close enough; `fit.why` and `fit.diagnostics` give it | More generations (`generations=`) or samples (`samples=`); with a likelihood, `'pmcmc'` |
-| A list of methods | Its last stage converged; a stage that doesn't stops the list, with a warning, and its fit (or the last that converged) is returned | Make that stage converge, by its own rule |
+| A list of methods | Its last stage converged; a stage that doesn't still hands its best point to a SciPy method after it (with a warning), and otherwise stops the list, returning its fit (or the last that converged) | Make that stage converge, by its own rule |
 
 A best fit of a stochastic model is also marked as not converged if, rerun with the same seeds, its best values score worse than the starting values.
 

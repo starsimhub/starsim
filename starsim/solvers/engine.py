@@ -585,7 +585,6 @@ class Engine(Telling, Effects):
         self._routes = None # For a transmission with a beta for each route, the beta of each term of the mixing: see Compartmental.route_betas()
         self._route = None # As agents, the route (its name and itself) a transmission's beta is being worked out for: see Agents.route_beta()
         self.routed = set() # In a compartmental run, the ids of the betas applied to the exposure through each route instead: see Compartmental.route_betas()
-        self.partnership_info = dict() # Under the partner-change model, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
         self.register = None # The movement register, as arrays for the kernels
         self.year = None # The year that values that vary smoothly in time are taken at, the middle of the step (None for its start, sim.now)
         self.immune_states = [] # Protection between strains: the states whose people can be infected again, and the protection by level in a state (see init_immunity())

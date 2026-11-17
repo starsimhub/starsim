@@ -239,8 +239,9 @@ def rewrite_expr(expr, funcs=None, where=None, name=None):
     """
     class Sub(ast.NodeTransformer):
         def visit_Call(self, n):
+            func = n.func.id # Before name() can rename it (e.g. camdl's where_)
             self.generic_visit(n)
-            if n.func.id == 'where' and where is not None: # Written whole as a name, since Python's expressions have no such form
+            if func == 'where' and where is not None: # Written whole as a name, since Python's expressions have no such form
                 cond, yes, no = [ast.unparse(a) for a in n.args]
                 return ast.Name(where.format(cond=cond, yes=yes, no=no))
             n.func.id = (funcs or {}).get(n.func.id, n.func.id)

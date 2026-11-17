@@ -111,7 +111,7 @@ fit.trials.groupby('chain').tail(1)
 
 ### Several methods in turn
 
-With a list, each method starts from the best values of the one before, and the list stops, with a warning, at a method that doesn't converge. Each stage's settings are given with it, as `ss.fitting.method()`:
+With a list, each method starts from the best values of the one before. A method that doesn't converge still hands its best values to a SciPy method after it, such as a Nelder-Mead polish, which is needed most then; before any other method, the list stops there, with a warning. Each stage's settings are given with it, as `ss.fitting.method()`:
 
 ```{python}
 fit = deterministic.fit(method=[ss.fitting.method('optuna', n_trials=200), ss.fitting.method('nelder-mead', maxiter=100)], verbose=False)

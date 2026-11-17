@@ -346,7 +346,7 @@ class modify(Connector):
         target (par/str): the quantity to change (see above)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
-        set (float): replace the quantity with this (a parameter only)
+        set (float): replace the quantity with this (a parameter only); as for `multiply`, it can be a function of the sim (e.g. `set=lambda sim: 0.1 if sim.now > ss.date('2025-01-01') else 0.2`)
         efficacy (float): for protection such as a condom or a needle program, the fraction of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
         frac (float): with `multiply=` or `efficacy=`, the fraction of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
             `1 − frac·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of

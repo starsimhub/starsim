@@ -547,6 +547,30 @@ pub fn flatnonzero(raw: &[bool], nchunks: usize) -> Vec<i64> {
     })
 }
 
+/// The agents in a state whose exit is due by step ti, or not set (NaN) (`passes.exit_due()`)
+pub fn exit_due<T: Num>(raw: &[bool], exits: &[T], ti: i64, nchunks: usize) -> Vec<i64> {
+    let st = T::step(ti);
+    let n = raw.len();
+    let rs = bytes(raw);
+    let mut hit = empty::<u8>(n);
+    let found = {
+        let h = Shared::new(&mut hit);
+        par(nchunks, move |c| {
+            let (a, b) = bounds(c, n, nchunks);
+            let hs = unsafe { h.part(a, b) };
+            for ((h, &r), &e) in hs.iter_mut().zip(&rs[a..b]).zip(&exits[a..b]) { // Without branches, so it is vectorized; not after ti, as Numba's `not exits[i] > ti`
+                *h = r & (e.le(st) as u8 | e.f().is_nan() as u8);
+            }
+            true_count(hs)
+        })
+    };
+    let hit = &hit;
+    gather(&found, move |c, part| {
+        let (a, b) = bounds(c, n, nchunks);
+        list_true(hit, a, b, part, 0);
+    })
+}
+
 /// The agents infected this step under homogeneous mixing, each drawn from their uniform for the call, in order (`passes.infect()`)
 #[allow(clippy::too_many_arguments)]
 pub fn infect<G: Ix, R: Num, L: Ix>(susceptible: &[bool], groups: &[G], rate: &[f64], rel_sus: &[R], state_sus: f64, adjust: &[f64], mult: f64, dt: f64, slots: &[L],
@@ -1192,6 +1216,15 @@ pub mod bind {
     }
 
     #[pyfunction]
+    fn exit_due<'py>(py: Python<'py>, raw: &Arr<'py>, exits: &Arr<'py>, ti: i64, nchunks: i64) -> PyResult<(usize, Arr<'py>)> {
+        let nchunks = chunks(py, nchunks)?;
+        typed!(exits, T in [f32, f64, i16, i32, i64] => {
+            let out = passes::exit_due::<T>(sl(raw)?, sl(exits)?, ti, nchunks);
+            Ok((out.len(), arr(py, out)))
+        })
+    }
+
+    #[pyfunction]
     fn due<'py>(py: Python<'py>, auids: &Arr<'py>, ti_dead: &Arr<'py>, ti_removed: &Arr<'py>, ti: i64, nchunks: i64) -> PyResult<Arr<'py>> {
         let nchunks = chunks(py, nchunks)?;
         typed!(ti_dead, T in [f32, f64, i16, i32, i64] => Ok(arr(py, passes::due::<T>(sl(auids)?, sl(ti_dead)?, sl(ti_removed)?, ti, nchunks))))
@@ -1370,6 +1403,7 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(due, m)?)?;
         m.add_function(wrap_pyfunction!(keep_alive, m)?)?;
         m.add_function(wrap_pyfunction!(due_alive, m)?)?;
+        m.add_function(wrap_pyfunction!(exit_due, m)?)?;
         m.add_function(wrap_pyfunction!(count_alive, m)?)?;
         m.add_function(wrap_pyfunction!(keep_raw, m)?)?;
         m.add_function(wrap_pyfunction!(random_edges, m)?)?;

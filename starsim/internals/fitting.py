@@ -2102,8 +2102,11 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.fit()` with `method=` a list
 
     Each stage is a method's name, or `ss.fitting.method()` with that method's settings. A stage
-    that does not converge stops the sequence (with a warning), and the fit returned is that
-    of the last stage that did, or the first stage's best attempt if it was the one that failed.
+    that does not converge still hands its best point to a local search after it (a SciPy method,
+    e.g. a Nelder-Mead polish after Optuna, which is needed most then); before any other method,
+    or with no finite score, it stops the sequence (with a warning), and the fit returned is that
+    of the last stage that converged, or else the best attempt. Whether the fit converged is the
+    last stage's.
 
     Args:
         sim (Sim): the sim to fit
@@ -2127,17 +2130,20 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     """
     verbose = sc.ifelse(verbose, ss.options.verbose)
     stages = [as_method(stage) for stage in stages]
-    fit, good = None, None
+    fit, good, good_i = None, None, None
     current = sim
     for i,stage in enumerate(stages):
         if verbose:
             print(f'Stage {i+1} of {len(stages)}: {stage.name}' + (f', started from stage {i}' if i else ''))
         fit = current.fit(method=stage, verbose=verbose, **kwargs)
-        if fit.converged is False: # Not None, which makes no claim (ABC-SMC)
-            if i < len(stages) - 1:
-                ss.warn(f'stage {i+1} ({stage.name}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}')
-            return good if good is not None else fit
-        good = fit
+        if fit.converged is False and i < len(stages) - 1: # Not None, which makes no claim (ABC-SMC)
+            if stages[i+1].name in scipy_methods and np.isfinite(fit.objective):
+                ss.warn(f'stage {i+1} ({stage.name}) did not converge ({fit.why}); stage {i+2} ({stages[i+1].name}) starts from its best point')
+            else:
+                ss.warn(f'stage {i+1} ({stage.name}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(good_i) if good is not None else "its best attempt"}')
+                return good if good is not None else fit
+        if fit.converged is not False:
+            good, good_i = fit, i + 1
         current = fit.sim.new() # With the best-fit values
     return fit
 
@@ -2729,13 +2735,14 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         search = lambda start: spo.minimize(p.search_grad, p.encode(start), method=method, jac=True, bounds=bounds, options=options)
     else:
         search = lambda start: spo.minimize(lambda z: p.objective(p.decode(z)), p.encode(start), method=method, bounds=bounds, options=options)
-    starts = p.scan(scan, top=restarts)
     with warnings.catch_warnings():
         warnings.filterwarnings('error', message='Unknown solver options') # SciPy would only warn about a setting it does not know
-        try:
-            results = sorted([search(start) for start in starts], key=lambda res: res.fun)
+        try: # Checked on a trivial function first, so that a misspelled setting raises before the scan's runs
+            spo.minimize(lambda z: np.sum(z**2), p.encode(p.x0), method=method, bounds=bounds, options=sc.mergedicts(options, dict(maxiter=1)))
         except spo.OptimizeWarning as E:
             raise TypeError(f'The fitting method "{method}" takes scan=, restarts=, n_runs=, reseed=, and the options of this SciPy method (see `scipy.optimize.show_options()`); SciPy says: {E}') from E
+    starts = p.scan(scan, top=restarts)
+    results = sorted([search(start) for start in starts], key=lambda res: res.fun)
     result = results[0]
     best = p.decode(result.x)
     if not p.stochastic: # A search can end short of the best point it tried (e.g. if a line search fails); a deterministic sim's scores are exact, so take that point

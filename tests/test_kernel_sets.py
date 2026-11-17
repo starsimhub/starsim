@@ -174,6 +174,7 @@ def twin_calls():
         probs       = lambda: P.infection_probs(a, auids, groups, rate, sus, 0.8, adjust, 1.0, 0.1),
         census      = lambda: P.census((a, b), alive, groups, 3, np.array([0, -1])),
         nonzero     = lambda: [P.flatnonzero(a), P.flatnonzero_drivers[0](a, 1)],
+        exit_due    = lambda: [P.exit_due(a, np.where(uni() < 0.1, np.nan, ti_dead.astype(float)), 5), P.exit_due_drivers[0](a, ti_dead, 5, 1)],
         infect      = lambda: P.infect(a, groups, rate, sus, 0.8, adjust, 1.0, 0.1, None, 1, 2, np.float32),
         due         = lambda: P.due(auids, ti_dead, ti_removed, 5),
         keep        = lambda: changed(lambda age: (P.keep_alive(auids, alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64)), P.keep_raw(alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64), int(alive.sum()))), ages),

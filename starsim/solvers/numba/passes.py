@@ -369,6 +369,44 @@ def flatnonzero(raw):
     return func(raw, nchunks)[1]
 
 
+
+@jit
+def exit_due_chunk(raw, exits, ti, a, b, hit):
+    """ For agents a to b: whether each is in the state (`raw`) with its exit due by step ti or not set (NaN), without branches, so it is vectorized; returns how many are """
+    rs = raw[a:b].view(np.uint8)
+    ex = exits[a:b]
+    hs = hit[a:b].view(np.uint8)
+    for i in range(len(rs)):
+        hs[i] = rs[i] & np.uint8(not ex[i] > ti)
+    return true_count(hit, a, b)
+
+
+def exit_due_driver(threaded):
+    loop = nb.prange if threaded else range
+    def exit_due(raw, exits, ti, nchunks):
+        n = len(raw)
+        hit = np.empty(n, dtype=np.bool_)
+        found = np.zeros(nchunks + 1, dtype=np.int64)
+        for c in loop(nchunks):
+            a, b = bounds(c, n, nchunks)
+            found[c+1] = exit_due_chunk(raw, exits, ti, a, b, hit)
+        starts = np.cumsum(found)
+        out = np.empty(starts[-1], dtype=np.int64)
+        if starts[-1]:
+            for c in loop(nchunks):
+                if found[c+1]:
+                    a, b = bounds(c, n, nchunks)
+                    list_true(hit, a, b, out, starts[c])
+        return starts[-1], out
+    return exit_due
+
+exit_due_drivers = compile_drivers(exit_due_driver)
+
+def exit_due(raw, exits, ti):
+    """ The agents in a state (`raw`) whose exit is due by step ti, or not set (NaN), as `np.flatnonzero(raw & ~(exits > ti))`, threaded for a large population """
+    func, nchunks = threads(exit_due_drivers, len(raw))
+    return func(raw, exits, ti, nchunks)[1]
+
 @jit
 def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, mult, dt, slots, key, shift, scale, a, b, hit):
     """ For agents a to b: whether each is infected (see infect()), and how many are """
