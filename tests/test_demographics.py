@@ -152,7 +152,7 @@ def test_births_parents():
     sc.heading('Testing the parents of births...')
     S, I = ss.states(2)
     dis = ss.Disease(onset=S >> I @ ss.peryear(0.01), name='dis')
-    for births, ages in [(ss.Births(birth_rate=ss.peryear(0.04)), (15, 50)), (ss.birth(rate=0.04, min_age=20, max_age=30), (20, 30))]:
+    for births, ages in [(ss.Births(birth_rate=ss.peryear(0.04)), (15, 50)), (ss.birth(rate=0.04, mothers=True, min_age=20, max_age=30), (20, 30))]:
         sim = ss.Sim(diseases=dis.copy(), n_agents=5000, start=2000, stop=2003, verbose=0, stratify=dict(district=ss.geo.geography(names=['a', 'b', 'c'], populations=[4000, 3000, 3000])),
                      demographics=[births, ss.Deaths(death_rate=ss.peryear(0.01))]).run()
         ppl = sim.people
@@ -289,8 +289,8 @@ def test_birth_forms():
     kw = dict(n_agents=20_000, start=2000, stop=2010, dt=ss.years(0.5), verbose=0)
     ts = lambda: ss.timeseries({2000: 0.04, 2010: 0.02}, interpolation='linear')
     pairs = { # A time series, and a place's rates, in the lower-case form and in the class
-        'series':  ([ss.birth(rate=ts(), rel_birth=0.5), ss.death(rate=ts(), rel_death=0.5)], [ss.Births(birth_rate=ts(), rel_birth=0.5), ss.Deaths(death_rate=ts(), rel_death=0.5)]),
-        'place':   ([ss.birth(rate='Kenya'), ss.death(rate='Kenya')], [ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')]),
+        'series':  ([ss.birth(rate=ts(), rel_birth=0.5, mothers=True), ss.death(rate=ts(), rel_death=0.5)], [ss.Births(birth_rate=ts(), rel_birth=0.5), ss.Deaths(death_rate=ts(), rel_death=0.5)]),
+        'place':   ([ss.birth(rate='Kenya', mothers=True), ss.death(rate='Kenya')], [ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')]),
     }
     for key, (lower, upper) in pairs.items():
         a, b = [ss.Sim(demographics=dem, **kw).run() for dem in [lower, upper]]

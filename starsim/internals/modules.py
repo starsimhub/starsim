@@ -1090,7 +1090,7 @@ class Module(Base):
         `ss.Pregnancy`, or by a declared birth transition), once they are people.
 
         Args:
-            parents (`ss.uids`): the parent of each child (so a parent of several children appears once for each)
+            parents (`ss.uids`): the parent of each child (so a parent of several children appears once for each), or -1 for a child with no parent (e.g. born by `ss.birth()` without `mothers=True`)
             children (`ss.uids`): the children
         """
         return

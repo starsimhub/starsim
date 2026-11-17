@@ -780,7 +780,7 @@ class People:
         return
 
     def count_births(self, children):
-        """ Count newborns among the births of the step (`results.birth`): called by `born()`, and for births with no parents (e.g. `ss.birth()` as agents without `mother_ages`) """
+        """ Count newborns among the births of the step (`results.birth`): called by `born()` """
         self._flows.add('birth')
         self._births += (float(self.scale.raw[children].sum()) if self.scale.weighted else len(children))
         return

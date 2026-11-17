@@ -1249,15 +1249,16 @@ class BirthOn:
         return self
 
 
-def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=None, rel_birth=None, min_age=None, max_age=None, columns=None, name=None, label=None, **kwargs):
+def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=None, rel_birth=None, mothers=False, min_age=None, max_age=None, columns=None, name=None, label=None, **kwargs):
     """
     An inflow of people: at a crude (per-person) birth rate, e.g. `ss.birth(S, rate=ss.peryear(0.02))`; or driven by a
     flow, e.g. `ss.birth(NP, when=preg.delivery, children=2)`, `children` for each person who goes through the transition
 
     Births of the whole population go in `ss.Sim(demographics=[...])`, where they are declared once
     for every disease's people and run under every solver; births into one disease's state go in
-    the disease. As agents, each child born at a crude rate has a mother (`people.parent`), a woman
-    alive aged `min_age` to `max_age` (in the same place, if the model has places), as `ss.Births` gives.
+    the disease. As agents, with `mothers=True`, each child born at a crude rate has a mother (`people.parent`), a
+    woman alive aged `min_age` to `max_age` (in the same place, if the model has places), as `ss.Births` gives, and
+    modules' `on_birth()` is called for them; without it, children have no parent, which saves an array of parents.
     However they are given, the sim's `birth` counts the births (see `ss.solvers.population_flows()`).
 
     With `when=`, as agents the children are made by the module that owns the transition, with `parent` set to the
@@ -1272,8 +1273,9 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
         p_female (float/Dist): the chance a child is female (default: as for anyone added)
         rate_per (float): for the births of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`); not needed for a place
         rel_birth (float): a multiplier on the birth rate (e.g. on a place's rates)
-        min_age (float): as agents, the youngest age of a mother (default 15)
-        max_age (float): as agents, the age that mothers are younger than (default 50)
+        mothers (bool): as agents, give each child born at a crude rate a mother (default false)
+        min_age (float): with `mothers=True`, the youngest age of a mother (default 15)
+        max_age (float): with `mothers=True`, the age that mothers are younger than (default 50)
         columns (dict): for a table, its column for each standard key, where they differ from the defaults (`year='Year'`, which may also be `Time`, and `value='CBR'`)
         name (str): the name of the transition
         label (str): a human-readable name
@@ -1284,9 +1286,10 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
         ss.Sim(sir, demographics=[ss.birth(rate=20, rate_per=1000), ss.death(rate=10, rate_per=1000)]) # The same, per 1,000 people per year
         ss.Sim(sir, demographics=[ss.birth(rate='Kenya'), ss.death(rate='Kenya')]) # Kenya's UN rates (deaths by age and sex, as agents)
         ss.birth(rate=pd.read_csv('cbr.csv'), rate_per=1000) # Crude birth rates per 1,000 by year, columns Year and CBR
+        ss.birth(rate=0.03, mothers=True, min_age=18) # As agents, each child has a mother aged 18 to 50
         ```
     """
-    check_kwargs(kwargs, 'ss.birth()', ['state', 'rate', 'when', 'children', 'p_female', 'rate_per', 'rel_birth', 'min_age', 'max_age', 'columns', 'name', 'label'], renamed=dict(
+    check_kwargs(kwargs, 'ss.birth()', ['state', 'rate', 'when', 'children', 'p_female', 'rate_per', 'rel_birth', 'mothers', 'min_age', 'max_age', 'columns', 'name', 'label'], renamed=dict(
         n='ss.birth() takes children= for the number of children each time (e.g. children=2 for twins), not n=; n= is a number of people',
         birth_rate='ss.birth() takes rate=, not birth_rate= (which is the keyword of the class ss.Births)'))
     on = when.x if isinstance(when, ss.on) and when.delay is None else when
@@ -1298,8 +1301,11 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     elif columns is not None:
         errormsg = f'columns= of ss.birth() names the columns of a table of rates, but the rate is not a table: {rate!r}'
         raise ValueError(errormsg)
-    if (rate_per is not None or min_age is not None or max_age is not None) and (state is not None or on is not None):
-        errormsg = 'rate_per=, min_age=, and max_age= of ss.birth() are for a crude birth rate of everyone (with no state or when=); a rate of births into a state is per person, and children born by a flow have their parent as mother'
+    if (rate_per is not None or mothers or min_age is not None or max_age is not None) and (state is not None or on is not None):
+        errormsg = 'rate_per=, mothers=, min_age=, and max_age= of ss.birth() are for a crude birth rate of everyone (with no state or when=); a rate of births into a state is per person, and children born by a flow have their parent as mother'
+        raise ValueError(errormsg)
+    if (min_age is not None or max_age is not None) and not mothers:
+        errormsg = 'min_age= and max_age= of ss.birth() are the ages of mothers, who are given only with mothers=True, e.g. ss.birth(rate=0.03, mothers=True, min_age=18)'
         raise ValueError(errormsg)
     if on is not None and rate is not None:
         errormsg = 'ss.birth() takes either rate= (a crude birth rate) or when= (a transition that drives the births), not both'
@@ -1316,7 +1322,7 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     out.n_born = children
     out.p_female = p_female
     out.state_given = state is not None
-    out.mother_ages = None if on is not None else (sc.ifelse(min_age, 15), sc.ifelse(max_age, 50)) # As agents, the ages of the women who are mothers (see ss.solvers.agents_stepping.step_births())
+    out.mother_ages = (sc.ifelse(min_age, 15), sc.ifelse(max_age, 50)) if mothers else None # As agents, the ages of the women who are mothers (see ss.solvers.agents_stepping.step_births())
     return out
 
 
