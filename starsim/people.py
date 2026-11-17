@@ -606,6 +606,15 @@ class People:
         self.auids = self._auids_view = room[:n+k].view(ss.uids)
         return
 
+    def scale_flows(self, inds):
+        """
+        The number of people some agents stand for, by their weights (`people.scale`), e.g. for a result that counts people rather than agents
+
+        Args:
+            inds (array): the agents to count
+        """
+        return self.scale[inds].sum()
+
     def update_post(self):
         """ Updates at the end of each step: agents get older (see `finish_step()`) """
         sim = self.sim
@@ -771,7 +780,7 @@ class People:
         return
 
     def count_births(self, children):
-        """ Count newborns among the births of the step (`results.birth`): called by `born()`, and for births with no parents (e.g. `ss.birth()` as agents without `mother_ages`) """
+        """ Count newborns among the births of the step (`results.birth`): called by `born()` """
         self._flows.add('birth')
         self._births += (float(self.scale.raw[children].sum()) if self.scale.weighted else len(children))
         return
