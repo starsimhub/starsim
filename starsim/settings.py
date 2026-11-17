@@ -135,7 +135,7 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         optdesc.precision = 'The precision of the numbers kept for each agent: 32 (default) for float32, which takes half the memory, or 64 for float64, for when small differences matter (e.g. comparing against another model to many decimal places).'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
-        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, use: 0 (default) for as many as Numba has (by default, one per core), or 1 for no extra threads, e.g. on a shared machine. Each worker of ss.parallel() and of a calibration uses one, since the workers already share the cores.'
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, use: 0 (default) for as many as Numba has (by default, one per core) for the agents, and one for the particles (whose steps are too short for threads to pay off); or 1 for no extra threads, e.g. on a shared machine. Each worker of ss.parallel() and of a calibration uses one, since the workers already share the cores.'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
         optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy: 1 (default), since more threads rarely speed up a sim but do slow down many sims run in parallel; or 0 to leave BLAS as it is. For the threads of Starsim itself, see "threads"; see also the "Deployment" page of the user guide.'
