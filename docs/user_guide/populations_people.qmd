@@ -245,7 +245,7 @@ for year in [2010, 2020, 2030]:
 
 **Steps of a month or less for projections.** Births each step are worked out from the population at the step's start, so with long steps a growing population is undercounted: Kenya by 2030 comes out about 0.8 million low with yearly steps, and less than 0.1 million low with monthly ones. For projections compared with data, use `dt=ss.months(1)` or shorter.
 
-Crude birth rates by year are a time series, so births from data run under every solver, like any other rate. Death rates by age and sex need each person's age and sex, so `ss.death()` given them makes the module `ss.Deaths`, which runs as agents, and whose own results are `deaths.death` and `deaths.cmr` (the crude mortality rate); the sim's `death` counts them too. As agents, each newborn has a mother (`people.parent`), a woman aged 15 to 50 (`min_age=` and `max_age=` of `ss.birth()`), in the same place if the model has places. `rel_birth=` and `rel_death=` multiply all the rates. The UN's totals include migration, which this model leaves out (see [Migration](#migration)).
+Crude birth rates by year are a time series, so births from data run under every solver, like any other rate. Death rates by age and sex need each person's age and sex, so `ss.death()` given them makes the module `ss.Deaths`, which runs as agents, and whose own results are `deaths.death` and `deaths.cmr` (the crude mortality rate); the sim's `death` counts them too. As agents, `ss.birth(mothers=True)` gives each newborn a mother (`people.parent`), a woman aged 15 to 50 (`min_age=` and `max_age=`), in the same place if the model has places; without it, newborns have no parent, which saves memory. `rel_birth=` and `rel_death=` multiply all the rates. The UN's totals include migration, which this model leaves out (see [Migration](#migration)).
 
 ### Data of your own
 
@@ -401,7 +401,7 @@ Births and deaths of the whole population are given with `ss.birth()` and `ss.de
 
 | Building block | What it does | Data by place | Runs under | Results |
 |---|---|---|---|---|
-| `ss.birth(rate=)` | Births at a crude rate (a number, a typed rate, a time series, or a table by year), into each disease's first state; as agents, each child has a mother aged `min_age` to `max_age` | `rate='Kenya'` | Every solver | `birth` |
+| `ss.birth(rate=)` | Births at a crude rate (a number, a typed rate, a time series, or a table by year), into each disease's first state; as agents, with `mothers=True`, each child has a mother aged `min_age` to `max_age` | `rate='Kenya'` | Every solver | `birth` |
 | `ss.birth(when=, children=)` | `children` for each person who goes through a transition (e.g. a delivery) | No | Agents (for now) | The transition's |
 | `ss.death(rate=)` | Deaths at a rate (a number, a typed rate, or a time series) from every state (or, in a disease, from one state) | No | Every solver | `death` |
 | `ss.death(rate=df)` | Deaths at rates by year, age, and sex (`Time`, `Sex`, `AgeGrpStart`, `mx`), as `ss.Deaths` | `rate='Kenya'` | Agents | `death` (and `deaths.death`, `deaths.cmr`) |

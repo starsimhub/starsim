@@ -442,8 +442,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 elif isinstance(obj, ss.expressions.Count):
                     counted.update({id(st):st for st in obj.states})
                 for key,val in vars(obj).items():
-                    if key != 'module':
-                        walk(val, depth + 1, where or key == 'where')
+                    if key not in ['module', 'who', 'when']: # who= and when= as given are also kept resolved, as _who_now and _trigger
+                        walk(val, depth + 1, where or key == '_who_now')
         walk(list(args) + list(members.values()))
         others = {key:st for key,st in counted.items() if key not in endpoints and getattr(st, 'module', None) is not None} # Another disease's state in a rate, e.g. syph.I.n: a reference to it, not a copy
         for cond in conds: # A condition on another disease's states is kept as it is, unless it is on a state being copied

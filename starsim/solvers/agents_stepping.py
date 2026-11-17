@@ -409,11 +409,10 @@ class Stepping:
                         of.append(np.full(n, c))
             levels = {dim:cells[np.concatenate(of), j] for j,dim in enumerate(dims) if dim != d} if of else None
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
-            if getattr(tr, 'mother_ages', None) is not None and not tr.migration and len(new):
-                self.give_mothers(tr, new)
+            if not tr.migration:
+                if getattr(tr, 'mother_ages', None) is not None and len(new): # ss.birth(mothers=True)
+                    self.give_mothers(tr, new)
                 sim.people.born(new)
-            elif not tr.migration: # Births with no parents, counted as born() counts those with
-                sim.people.count_births(new)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new): # An event, e.g. when=measles.births, as for births driven by a flow (see step_per())
