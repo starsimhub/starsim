@@ -177,6 +177,47 @@ def test_jit():
     return
 
 
+def test_compiled_step():
+    sc.heading('Testing a step written as one compiled pass: ss.jit(parallel=True), dist.key(), and ss.utils.count_by()')
+    import numba as nb
+
+    @ss.jit(parallel=True)
+    def flip(state, key, p):
+        for i in nb.prange(len(state)):
+            if ss.draws.uniform(key, i) < p:
+                state[i] = 1 - state[i]
+
+    class Flipper(ss.Module):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.Arr('state', dtype=np.uint8, default=0))
+            self.rand = ss.random()
+
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('on', kind='stock', groups=True))
+
+        def step(self):
+            seed, ind = self.rand.seed, self.rand.ind
+            key = self.rand.key()
+            uids = self.sim.people.auids[:50]
+            assert np.array_equal([ss.draws.uniform(key, u) for u in uids], ss.dists.hash_uniforms(seed, ind, uids, dtype=np.float64)) # As the distribution draws them
+            flip(self.state.raw, key, 0.3)
+            place = self.sim.groups.level('patch')
+            counts = ss.utils.count_by(self.state.raw, 2, place, 2)
+            assert np.array_equal(counts[1], np.bincount(place[self.state.raw == 1], minlength=2))
+            assert counts.sum() == len(self.sim.people)
+            self.results.on.set_groups(self.ti, counts[1])
+
+    def run(threads):
+        with ss.options.context(threads=threads):
+            sim = ss.Sim(modules=Flipper(name='flip'), n_agents=5000, stop=10, verbose=0)
+            sim.stratify(patch=['a', 'b'])
+            return sim.run().results.flip.on.values
+    assert np.array_equal(run(1), run(4)) # The same whatever the number of threads
+    return
+
+
 @pytest.mark.numba # Compiles Numba's draws, so CI runs it only in the jobs for Numba (see pytest.ini)
 @sc.timer()
 def test_exact_draws():
@@ -222,5 +263,6 @@ if __name__ == '__main__':
     test_module_beside_kernels()
     test_threads()
     test_jit()
+    test_compiled_step()
     test_exact_draws()
     T.toc()

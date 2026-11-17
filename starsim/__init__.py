@@ -94,7 +94,7 @@ from .internals import loop
 from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit
-from .solvers.numba import draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
+from .solvers.numba import draws # Draws, for ss.draws.uniform() and ss.draws.next_u() in compiled code (see ss.Dist.key() and ss.Dist.streams())
 from . import sim
 from .simpars import SimPars
 from .sim import Sim, demo

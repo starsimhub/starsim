@@ -29,6 +29,9 @@ def member(a, b):
     return b[np.minimum(np.searchsorted(b, a), len(b) - 1)] == a
 
 
+no_groups = np.empty(0, dtype=np.int64) # For a kernel that takes each agent's group, when there is one group
+
+
 class Moving:
     """
     The part of the agent engine for how agents move between states: their exits, entries, events, and those part way through at the start
@@ -45,14 +48,10 @@ class Moving:
             return
         ng = self.sim.groups.n_groups
         groups = self.sim.groups.group_raw() if ng > 1 else None # Any changes of group (e.g. by age) are counted first, as for a write from code
-        was = arr[uids]
-        arr[uids] = value
+        change = ss.solvers.numba.passes.put_count(arr, np.asarray(uids), bool(value), no_groups if groups is None else groups, ng) # The number whose value changed, in each group, in one pass over them
         if ng == 1:
-            n = np.count_nonzero(was)
-            self.live[name] = self.live[name] + (len(uids) - n if value else -n)
-        else:
-            change = np.bincount(groups[uids[~was if value else was]], minlength=ng)
-            self.live[name] = self.live[name] + (change if value else -change)
+            change = int(change[0])
+        self.live[name] = self.live[name] + (change if value else -change)
         return
 
     def clear_exit(self, name, uids):
@@ -1036,13 +1035,20 @@ class Moving:
             best[earlier] = dur[earlier]
             which[earlier] = i
 
-        steps = self.whole_steps(new, best)
         loops = self.loops_of[name]
-        if loops.any(): # Back to this state: taken again no sooner than the next step, so a dwell shorter than a step does not go round within one
-            again = (which >= 0) & loops[np.maximum(which, 0)] & (best > 0)
-            steps[again] = np.maximum(steps[again], 1)
-        ti_exit.raw[new] = entered + steps # Exits happen at the start of a step
-        mod[f'exit_{name}'][new] = which
+        exit = mod[f'exit_{name}']
+        if not loops.any() and ti_exit.raw.dtype in (np.float32, np.float64) and exit.raw.dtype == which.dtype and exit.shared is None: # The usual case: in one pass over them
+            people = self.sim.people
+            slots = people.slot_raw()
+            ss.solvers.numba.passes.set_exits(np.asarray(new), np.asarray(best, dtype=float), np.atleast_1d(np.asarray(entered, dtype=float)), no_groups if slots is None else slots,
+                                              people.phase_shift(), float(self.dt), which, ti_exit.raw, exit.raw)
+        else:
+            steps = self.whole_steps(new, best)
+            if loops.any(): # Back to this state: taken again no sooner than the next step, so a dwell shorter than a step does not go round within one
+                again = (which >= 0) & loops[np.maximum(which, 0)] & (best > 0)
+                steps[again] = np.maximum(steps[again], 1)
+            ti_exit.raw[new] = entered + steps # Exits happen at the start of a step
+            exit[new] = which
         modified = self.rescaled_of(name)
         if modified and f'mult_{name}' in mod.__dict__: # How fast each exit ran when its dwell time was drawn, so a later change can rescale what is left of it: see rescale_exits()
             mults = np.ones(len(new))

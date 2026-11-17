@@ -1308,14 +1308,22 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def exposure(self, state):
         """ Under homogeneous mixing: the infectiousness-weighted fraction of people in the state """
         mod = self.mod
+        mixing = self.sim.mixing
+        people = self.sim.people
+        if (self._strain is None or not self.applies[state.name][self.strain]) and not people.scale.weighted and state.rel_trans == 1 and np.ndim(mult := self.mult_raw('rel_trans', None)) == 0 and mult == 1: # The usual case: in one pass over the agents
+            places = None if mixing.space is None else self.place_raw()
+            n_places = 1 if places is None else self.sim.groups.strats[mixing.space].n
+            num = ss.solvers.numba.passes.group_sums(mod[state.name].raw, mod.rel_trans.raw, places, 2, n_places, first=1)[1]
+            if places is None:
+                n = len(people) if self.held is None else self.held_n().sum()
+                return num[0]/n if n > 0 else 0.0
+            return self.place_exposure(num, places, n_places)
         uids = self.members(state)
         frac = 1.0
         if self._strain is not None and self.applies[state.name][self.strain]: # Only the people who carry this strain
             frac = self.strain_weights[self.strain_raw()[uids], self._strain]
             uids, frac = uids[frac > 0], frac[frac > 0]
         infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans*frac
-        mixing = self.sim.mixing
-        people = self.sim.people
         weighted = people.scale.weighted
         if weighted: # Each agent counted by its weight, as in count()
             infectious = infectious*people.scale.raw[uids]
@@ -1327,12 +1335,19 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return infectious.sum()/n if n > 0 else 0.0
         places = self.place_raw() # People mix within their own place, so there is one value per agent
         n_places = self.sim.groups.strats[mixing.space].n
+        num = np.bincount(places[uids], weights=infectious, minlength=n_places)
+        return self.place_exposure(num, places, n_places)
+
+    def place_exposure(self, num, places, n_places):
+        """ The exposure in each place, from the infectiousness there (`num`), as `exposure()` gives it: for each group, or for the agents the rate is being worked out for """
+        mixing = self.sim.mixing
+        people = self.sim.people
+        weighted = people.scale.weighted
         if 'place_sizes' not in self.cache:
             sizes = self.by_place(self.alive_counts() if self.held is None else self.held_n()) if not weighted else None
             self.cache['place_sizes'] = sizes if sizes is not None else np.bincount(places[people.auids], weights=people.scale.raw[people.auids] if weighted else None, minlength=n_places).astype(float)
-        num = np.bincount(places[uids], weights=infectious, minlength=n_places)
         prev = mixing.by_place(np.arange(n_places), num, self.cache['place_sizes'], n_places)
-        return prev[mixing.places] if self._by_group else prev[places[self._uids]] # For each group, or for the agents the rate is being worked out for
+        return prev[mixing.places] if self._by_group else prev[places[self._uids]]
 
     def place_raw(self):
         """ The place of each agent, as an array indexed by UID """

@@ -408,6 +408,101 @@ def exit_due(raw, exits, ti):
     return func(raw, exits, ti, nchunks)[1]
 
 @jit
+def put_count(raw, uids, value, groups, ng):
+    """ Put agents in a state (`value` True) or take them out (False), as `raw[uids] = value`, and how many of them that changed, in each of the `ng` groups (`groups` by UID, or empty for one group) """
+    out = np.zeros(ng, dtype=np.int64)
+    one = len(groups) == 0
+    for u in uids:
+        if raw[u] != value:
+            raw[u] = value
+            out[0 if one else groups[u]] += 1
+    return out
+
+
+@jit
+def set_exits(uids, dur, entered, slots, shift, dt, which, ti_exit, exit):
+    """
+    Schedule the exits of agents who have entered a state: each at `entered` (one value for all, or one each) plus their dwell time `dur` as whole steps, rounded
+    up or down by their phase (as `ss.People.phase()` and `whole_steps()`: `floor(dur/dt + phase)`), and by the exit `which`; `slots` by UID, or empty if they are the UIDs
+    """
+    each = len(entered) > 1
+    by_uid = len(slots) == 0
+    for j in range(len(uids)):
+        u = uids[j]
+        slot = u if by_uid else slots[u]
+        x = slot*0.6180339887498949 + shift
+        phase = x - np.floor(x) # Exactly x % 1 (as ss.People.phase() takes it), since x is not negative, without a call to fmod
+        ti_exit[u] = entered[j if each else 0] + np.floor(dur[j]/dt + phase)
+        exit[u] = which[j]
+    return
+
+
+@jit
+def group_sums_chunk(codes, weights, groups, first, skip, a, b, out):
+    """
+    For agents a to b (a a multiple of 8): add each one's weight (or 1, if `weights` is empty) to the sum for their code and group, for the codes counted (see
+    `group_sums()`); with `skip` (codes of one byte, counted from 1), eight at a time where all are 0
+    """
+    n_codes = out.shape[0]
+    weighted = len(weights) > 0
+    one = len(groups) == 0
+    end = a + (b - a)//8*8 if skip else a
+    if end > a:
+        words = codes[a:end].view(np.uint64)
+        for w in range(len(words)):
+            if words[w]:
+                for i in range(a + 8*w, a + 8*w + 8):
+                    k = np.int64(codes[i])
+                    if k >= first and k < n_codes:
+                        out[k, 0 if one else np.int64(groups[i])] += weights[i] if weighted else 1.0
+    for i in range(end, b):
+        k = np.int64(codes[i])
+        if k >= first and k < n_codes:
+            out[k, 0 if one else np.int64(groups[i])] += weights[i] if weighted else 1.0
+    return
+
+
+def group_sums_driver(threaded):
+    loop = nb.prange if threaded else range
+    def group_sums(codes, weights, groups, first, skip, n_codes, ng, nblocks):
+        n = len(codes)
+        sums = np.zeros((nblocks, n_codes, ng))
+        for c in loop(nblocks): # Blocks of a fixed size, a multiple of 8
+            group_sums_chunk(codes, weights, groups, first, skip, c*chunk_size, min(n, (c + 1)*chunk_size), sums[c])
+        out = np.zeros((n_codes, ng))
+        for c in range(nblocks): # In order, so the sums do not depend on the number of threads
+            out += sums[c]
+        return out
+    return group_sums
+
+group_sums_drivers = compile_drivers(group_sums_driver)
+
+def group_sums(codes, weights, groups, n_codes, ng, first=0):
+    """
+    The number of agents with each code (e.g. a state, 0 to n_codes - 1) in each group, or the sum of their weights: one pass over the agents, threaded for a large population
+
+    The sums are taken in blocks of a fixed size (`chunk_size`), added in order, so they do not depend on the number of threads; with one block (up
+    to `chunk_size` agents), they are in the order of the agents, as `np.bincount()` adds them.
+
+    Args:
+        codes (array): each agent's code, by UID (e.g. a boolean state, or a state as a small integer); those outside `first` to `n_codes - 1` are not counted
+        weights (array): each agent's weight, by UID, or None to count them
+        groups (array): each agent's group, by UID, or None for one group
+        n_codes, ng (int): the number of codes and of groups
+        first (int): the first code counted (e.g. 1, for those in a boolean state)
+
+    Returns an array of floats, one row for each code and one column for each group.
+    """
+    n = len(codes)
+    weights = np.empty(0) if weights is None else weights
+    groups = np.empty(0, dtype=np.int64) if groups is None else groups
+    func = threads(group_sums_drivers, n)[0]
+    nblocks = max(1, -(-n//chunk_size))
+    skip = codes.itemsize == 1 and first >= 1 # Eight at a time where none is counted
+    return func(codes, weights, groups, first, skip, n_codes, ng, nblocks)
+
+
+@jit
 def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, mult, dt, slots, key, shift, scale, a, b, hit):
     """ For agents a to b: whether each is infected (see infect()), and how many are """
     sus = susceptible[a:b] # Slices, so the loop's indices are known not to be negative

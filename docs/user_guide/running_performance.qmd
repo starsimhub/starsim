@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 24
   ai: 76
-  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; "A step as one compiled pass" added on Nov 17 by AI
 ---
 
 Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. The first half of this page covers what makes a run slow and what to do about it; the second, running many sims from a script, on a large computer, on a cluster, or behind a dashboard. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd), and making and comparing many sims in [Scenarios](running_scenarios.qmd).
@@ -100,6 +100,89 @@ A module written as code runs its `step()` in Python, once a step, and Starsim t
 As a rough guide from one test (a module that updates a value for each of 50,000 agents, on one computer), a loop in Python made the whole run about seven times slower, while the same loop with `@ss.jit`, or NumPy on the whole array, made it 15–40% slower; time your own model before and after.
 
 To find where the time goes, `sim.perf_profile(kind='loop')` records how long each part of each step takes, and `sim.perf_profile()` how long each line of a function takes ([Profiling and debugging](running_debugging.qmd#profiling)). Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
+
+### A step as one compiled pass
+
+For the most speed with millions of agents, a module can do its whole step in one compiled loop over the agents, shared by threads. Each agent's state is a small whole number rather than a set of boolean states, so the loop reads a few bytes per agent. Three tools make this short:
+
+- **`@ss.jit(parallel=True)`** compiles the function and shares its `nb.prange` loops between threads (as many as `ss.options.threads` says). Each pass of the loop must write only its own agent's values.
+- **`dist.key()`** gives the key of one call of a Starsim distribution, and `ss.draws.uniform(key, i)` is agent `i`'s uniform for that call, in compiled code. The draws stay reproducible and paired between scenarios, and don't depend on the number of threads.
+- **`ss.utils.count_by()`** counts the agents in each state and group (here, each place) in one threaded pass, for the results and the force of infection.
+
+Here is an SEIR in which people mix within their own place:
+
+```{python}
+import numpy as np
+import numba as nb
+
+SUS, EXP, INF, REC = 0, 1, 2, 3 # Each agent's state, as a small whole number
+
+@ss.jit
+def days(u, mean):
+    """ A whole number of days, at least 1, from an exponential with this mean, by its uniform """
+    return max(1, int(np.floor(-mean*np.log(1.0 - u) + 0.5)))
+
+@ss.jit(parallel=True)
+def step_agents(state, timer, place, prob, k_inf, k_dur, dur_exp, dur_inf):
+    """ One step for every agent: S→E with the chance in their place; E→I and I→R when their timers run out """
+    for i in nb.prange(len(state)): # Each agent writes only its own values, so threads can share the loop
+        s = state[i]
+        if s == SUS:
+            if ss.draws.uniform(k_inf, i) < prob[place[i]]:
+                state[i] = EXP
+                timer[i] = days(ss.draws.uniform(k_dur, i), dur_exp)
+        elif s == EXP or s == INF:
+            timer[i] -= 1
+            if timer[i] == 0:
+                state[i] = s + 1 # E→I, or I→R
+                if s == EXP:
+                    timer[i] = days(ss.draws.uniform(k_dur, i), dur_inf)
+
+class FastSEIR(ss.Module):
+    """ An SEIR within each place, each step one compiled pass over the agents """
+    def __init__(self, beta=0.3, dur_exp=5, dur_inf=10, init_prev=0.001, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(beta=beta, dur_exp=dur_exp, dur_inf=dur_inf, init_prev=init_prev)
+        self.define_states(ss.Arr('state', dtype=np.uint8, default=SUS), ss.Arr('timer', dtype=np.int16, default=0))
+        self.rand = ss.random() # Its keys give the uniforms of each step's pass
+        self.seed = ss.bernoulli(p=init_prev)
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(*[ss.Result(name, kind='stock', groups=True) for name in 'SEIR'])
+
+    def init_post(self):
+        super().init_post()
+        self.place = self.sim.groups.level('patch')
+        self.n_places = self.place.max() + 1
+        seeds = self.seed.filter()
+        self.state[seeds] = INF
+        self.timer[seeds] = self.pars.dur_inf
+
+    def step(self):
+        counts = ss.utils.count_by(self.state.raw, 4, self.place, self.n_places) # S, E, I, R in each place, at the start of the step
+        for k,name in enumerate('SEIR'):
+            self.results[name].set_groups(self.ti, counts[k])
+        prob = -np.expm1(-self.pars.beta*counts[INF]/counts.sum(axis=0)) # The chance of infection in a day, in each place
+        step_agents(self.state.raw, self.timer.raw, self.place, prob, self.rand.key(), self.rand.key(), self.pars.dur_exp, self.pars.dur_inf)
+```
+
+It gives the same epidemic as the declared `ss.SEIR`, several times faster (rounding each duration to whole days is the only difference):
+
+```{python}
+def make(disease):
+    sim = ss.Sim(disease, n_agents=300_000, stop=ss.days(200), unit='day', verbose=0)
+    sim.stratify(patch=ss.levels(['urban', 'rural'], kind='space'))
+    return sim
+
+for label,disease in [('Code', lambda: FastSEIR(name='seir')), ('Declared', lambda: ss.SEIR(dur_exp=5, init=dict(I=0.001)))]:
+    for rep in range(2): # The first run of the code compiles it
+        sim = make(disease()).run()
+    res = sim.results.seir
+    print(f'{label:8s}: {sim.elapsed:.2f} s; peak of {res.I.max():,.0f} infectious on day {res.I.argmax()}; {res.R[-1]:,.0f} recovered')
+```
+
+What this gives up is everything a declared disease gets from its states and transitions: `describe()` and `diagram()`, running as compartments or an ODE, `ss.modify()` and interventions on its states, and fitting. So write a step by hand only once the declared model is right and too slow. For the hub-and-spoke model of LASER (1.75 million agents in 16 places, for a year), a module like this one runs about 10% faster than LASER on 8 threads, and 30% faster on one.
 
 ## From a notebook to a script
 

@@ -487,6 +487,33 @@ col_synonyms = dict(
 )
 
 
+def count_by(codes, n_codes, groups=None, n_groups=1, weights=None):
+    """
+    The number of agents with each code in each group (or the sum of their weights), in one pass over the agents, threaded for a large population
+
+    For a module written as code that keeps each agent's state as a small whole number (e.g. 0 to 3 for S, E, I, R), to count them by state and place.
+    The result doesn't depend on the number of threads.
+
+    Args:
+        codes (array): each agent's code, by UID (e.g. `self.state.raw`); those outside 0 to `n_codes - 1` (e.g. of agents who have died, if given a code of their own) are not counted
+        n_codes (int): the number of codes
+        groups (array): each agent's group, by UID, e.g. `sim.groups.level('patch')` (default: one group)
+        n_groups (int): the number of groups
+        weights (array): each agent's weight, by UID, to sum rather than count them
+
+    Returns:
+        An array with a row for each code and a column for each group: whole numbers (int64), or the sums of the weights (float64)
+
+    Examples:
+        ```python
+        counts = ss.utils.count_by(self.state.raw, 4, sim.groups.level('patch'), n_patches) # counts[2] is the number in I in each patch
+        ```
+    """
+    groups = None if groups is None else np.asarray(groups)
+    out = ss.solvers.numba.passes.group_sums(np.asarray(codes), None if weights is None else np.asarray(weights), groups, n_codes, n_groups)
+    return out if weights is not None else out.astype(np.int64)
+
+
 def resolve_data_col(data, key, col):
     """
     Find the column to use for a given data key: the configured one, else one of its synonyms (see `ss.utils.col_synonyms`)

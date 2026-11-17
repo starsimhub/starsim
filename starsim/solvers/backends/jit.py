@@ -34,7 +34,7 @@ __all__ = ['jit']
 gen_methods = ['binomial', 'poisson'] # NumPy Generator methods given arrays as Numba doesn't: see rng_binomial()
 
 
-def jit(func=None, *, nopython=True):
+def jit(func=None, *, nopython=True, parallel=False):
     """
     Make a function fast, by compiling it with Numba or JAX, with no change in what it does
 
@@ -50,6 +50,7 @@ def jit(func=None, *, nopython=True):
     Args:
         func (function): the function
         nopython (bool): if False, run it as Python when Numba can't compile it, rather than raise an error
+        parallel (bool): if True, its `nb.prange` loops are shared by threads (as many as `ss.options.threads` says), for a loop over a large population; each iteration must write only its own items
 
     Examples:
         ```python
@@ -66,8 +67,8 @@ def jit(func=None, *, nopython=True):
         ```
     """
     if func is None: # Called with options, as @ss.jit(nopython=False)
-        return lambda func: Function(func, nopython=nopython)
-    return Function(func, nopython=nopython)
+        return lambda func: Function(func, nopython=nopython, parallel=parallel)
+    return Function(func, nopython=nopython, parallel=parallel)
 
 
 class Unsupported(Exception):
@@ -107,9 +108,10 @@ class Function:
     It exists so that one callable can go to whichever compiler its arguments need.
     """
 
-    def __init__(self, func, nopython=True):
+    def __init__(self, func, nopython=True, parallel=False):
         self.py_func = func
         self.nopython = nopython # Whether Numba not compiling it is an error, rather than running it as Python
+        self.parallel = parallel # Whether its nb.prange loops are shared by threads
         self.numba = None # The Numba dispatcher, once made
         self.jax_func = None # The function traced by JAX, once made
         self.failed = False # Whether Numba can't compile it
@@ -139,12 +141,16 @@ class Function:
             gens = [name for name,a in zip(inspect.signature(func).parameters, args) if isinstance(a, np.random.Generator)]
             if gens:
                 func = rewrite_gens(func, gens)
-            self.numba = make_dispatcher(func)
+            self.numba = make_dispatcher(func, parallel=self.parallel)
             self.numba.ss_compiling = (f'{self.py_func.__qualname__}()', 1, 10) # Said by compiling.Compiling
         return self.numba
 
     def call_numba(self, args, kwargs):
         if not self.failed:
+            if self.parallel: # As many threads as ss.options.threads says, as for Starsim's own passes
+                threads = ss.options.threads
+                if threads and threads != nb.get_num_threads():
+                    nb.set_num_threads(min(threads, nb.config.NUMBA_NUM_THREADS))
             try:
                 return self.dispatcher(args)(*[plain(a) for a in args], **{k:plain(v) for k,v in kwargs.items()})
             except (NumbaError, Unsupported) as e:
@@ -190,12 +196,12 @@ def with_jnp(func):
     return new
 
 
-def make_dispatcher(func):
-    """ A Numba dispatcher for the function, cached on disk if it can be """
+def make_dispatcher(func, parallel=False):
+    """ A Numba dispatcher for the function, cached on disk if it can be, with its `nb.prange` loops threaded if `parallel` """
     try:
-        return nb.jit(func, nopython=True, cache=True)
+        return nb.jit(func, nopython=True, cache=True, parallel=parallel)
     except RuntimeError: # E.g. a function defined at the prompt, which has no file to cache it by
-        return nb.jit(func, nopython=True)
+        return nb.jit(func, nopython=True, parallel=parallel)
 
 
 def parse(func):

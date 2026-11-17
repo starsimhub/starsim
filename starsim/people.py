@@ -192,10 +192,8 @@ class People:
         Args:
             uids (uids): the agents to give the phases of (worked out for them alone); by default, every agent's, kept until agents are made
         """
-        if getattr(self, '_phase_shift', None) is None:
-            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
-            self._phase_shift = np.random.default_rng(seed).random()
-        of = lambda slot: (slot*0.6180339887498949 + self._phase_shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
+        shift = self.phase_shift()
+        of = lambda slot: (slot*0.6180339887498949 + shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
         slots = self.slot_raw()
         if uids is not None:
             return of(uids if slots is None else slots[uids])
@@ -209,6 +207,13 @@ class People:
             phase[done:used] = of(np.arange(done, used) if slots is None else slots[done:used])
         self._phase = (phase, used)
         return phase
+
+    def phase_shift(self):
+        """ The shift of every agent's phase (see `phase()`), from the sim's seed """
+        if getattr(self, '_phase_shift', None) is None:
+            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
+            self._phase_shift = np.random.default_rng(seed).random()
+        return self._phase_shift
 
     def _link_state(self, state, die=True):
         """
