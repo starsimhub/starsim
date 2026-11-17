@@ -174,6 +174,11 @@ def twin_calls():
         probs       = lambda: P.infection_probs(a, auids, groups, rate, sus, 0.8, adjust, 1.0, 0.1),
         census      = lambda: P.census((a, b), alive, groups, 3, np.array([0, -1])),
         nonzero     = lambda: [P.flatnonzero(a), P.flatnonzero_drivers[0](a, 1)],
+        exit_due    = lambda: [P.exit_due(a, np.where(uni() < 0.1, np.nan, ti_dead.astype(float)), 5), P.exit_due_drivers[0](a, ti_dead, 5, 1)],
+        put_count   = lambda: [changed(lambda x: P.put_count(x, auids, value, g, ng), a) for value in [True, False] for g,ng in [(groups, 3), (np.empty(0, dtype=np.int64), 1)]],
+        set_exits   = lambda: [changed(lambda te, ex: (P.set_exits(auids, 30*uni(size=len(auids)), entered, slots, 0.3, 0.5, rng.integers(0, 3, len(auids)).astype(np.int8), te, ex), ex), te, np.zeros(n, dtype=np.int8))
+                               for te,entered,slots in [(np.full(n, np.nan, dtype=np.float32), np.array([5.0]), np.empty(0, dtype=np.int64)), (np.full(n, np.nan), uni(size=len(auids)), rng.permutation(n).astype(np.int32))]],
+        group_sums  = lambda: [P.group_sums(a, None, None, 2, 1, first=1), P.group_sums(a, np.broadcast_to(np.float32(0.7), n), groups, 2, 3, first=1), P.group_sums(groups.astype(np.uint8), sus, groups, 3, 3), P.group_sums((uni(size=150_000)*5).astype(np.int16), uni(np.float32, 150_000), rng.integers(0, 4, 150_000), 4, 4, first=1)],
         infect      = lambda: P.infect(a, groups, rate, sus, 0.8, adjust, 1.0, 0.1, None, 1, 2, np.float32),
         due         = lambda: P.due(auids, ti_dead, ti_removed, 5),
         keep        = lambda: changed(lambda age: (P.keep_alive(auids, alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64)), P.keep_raw(alive, age, np.float32(0.1), True, np.empty(n, dtype=np.int64), int(alive.sum()))), ages),

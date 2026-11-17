@@ -547,6 +547,103 @@ pub fn flatnonzero(raw: &[bool], nchunks: usize) -> Vec<i64> {
     })
 }
 
+/// The agents in a state whose exit is due by step ti, or not set (NaN) (`passes.exit_due()`)
+pub fn exit_due<T: Num>(raw: &[bool], exits: &[T], ti: i64, nchunks: usize) -> Vec<i64> {
+    let st = T::step(ti);
+    let n = raw.len();
+    let rs = bytes(raw);
+    let mut hit = empty::<u8>(n);
+    let found = {
+        let h = Shared::new(&mut hit);
+        par(nchunks, move |c| {
+            let (a, b) = bounds(c, n, nchunks);
+            let hs = unsafe { h.part(a, b) };
+            for ((h, &r), &e) in hs.iter_mut().zip(&rs[a..b]).zip(&exits[a..b]) { // Without branches, so it is vectorized; not after ti, as Numba's `not exits[i] > ti`
+                *h = r & (e.le(st) as u8 | e.f().is_nan() as u8);
+            }
+            true_count(hs)
+        })
+    };
+    let hit = &hit;
+    gather(&found, move |c, part| {
+        let (a, b) = bounds(c, n, nchunks);
+        list_true(hit, a, b, part, 0);
+    })
+}
+
+/// Put agents in a state (value true) or take them out, and how many of them that changed, in each of ng groups (`groups` by UID, or empty for one) (`passes.put_count()`)
+pub fn put_count<G: Ix>(raw: &mut [bool], uids: &[i64], value: bool, groups: &[G], ng: usize) -> Vec<i64> {
+    let mut out = vec![0i64; ng];
+    let one = groups.is_empty();
+    for &u in uids {
+        let u = u as usize;
+        if raw[u] != value {
+            raw[u] = value;
+            out[if one { 0 } else { groups[u].ix() }] += 1;
+        }
+    }
+    out
+}
+
+/// A float64 stored in an array of times, as Numba stores it (rounded to the nearest, for a float32)
+pub trait Store: Copy {
+    fn store(x: f64) -> Self;
+}
+impl Store for f64 { #[inline(always)] fn store(x: f64) -> f64 { x } }
+impl Store for f32 { #[inline(always)] fn store(x: f64) -> f32 { x as f32 } }
+
+/// Schedule the exits of agents who have entered a state, at `entered` plus their dwell time as whole steps, rounded by their phase (`passes.set_exits()`)
+#[allow(clippy::too_many_arguments)]
+pub fn set_exits<L: Ix, T: Store>(uids: &[i64], dur: &[f64], entered: &[f64], slots: &[L], shift: f64, dt: f64, which: &[i8], ti_exit: &mut [T], exit: &mut [i8]) {
+    let each = entered.len() > 1;
+    let by_uid = slots.is_empty();
+    for (j, &u) in uids.iter().enumerate() {
+        let u = u as usize;
+        let slot = if by_uid { u as f64 } else { slots[u].int() as f64 };
+        let x = slot*0.6180339887498949 + shift;
+        let phase = x - x.floor(); // Exactly x % 1, since x is not negative, without a call to fmod
+        ti_exit[u] = T::store(entered[if each { j } else { 0 }] + (dur[j]/dt + phase).floor());
+        exit[u] = which[j];
+    }
+}
+
+/// The number of agents with each code in each group, or the sum of their weights, in blocks of a fixed size added in order (`passes.group_sums()`)
+#[allow(clippy::too_many_arguments)]
+pub fn group_sums<C: Level + Send + Sync, W: Num, G: Ix>(codes: &[C], weights: &[W], groups: &[G], first: i64, skip: bool, n_codes: usize, ng: usize, nblocks: usize) -> Vec<f64> {
+    const BLOCK: usize = 65_536; // passes.chunk_size
+    let n = codes.len();
+    let (weighted, one, each) = (!weights.is_empty(), groups.is_empty(), weights.len() > 1); // One weight for each agent, or one for all (see bind::bcast())
+    let bytes = if skip && std::mem::size_of::<C>() == 1 { Some(unsafe { std::slice::from_raw_parts(codes.as_ptr() as *const u8, n) }) } else { None }; // Eight at a time where all are 0
+    let sums = par(nblocks, move |c| {
+        let mut out = vec![0.0f64; n_codes*ng];
+        let mut add = |i: usize| {
+            let k = codes[i].level().unwrap_or(-1) as i64;
+            if k >= first && k < n_codes as i64 {
+                let g = if one { 0 } else { groups[i].ix() };
+                out[k as usize*ng + g] += if weighted { weights[if each { i } else { 0 }].f() } else { 1.0 };
+            }
+        };
+        let (a, b) = ((c*BLOCK).min(n), ((c + 1)*BLOCK).min(n));
+        let end = if bytes.is_some() { a + (b - a)/8*8 } else { a };
+        if let Some(raw) = bytes {
+            for (w, chunk) in raw[a..end].chunks_exact(8).enumerate() {
+                if word(chunk) != 0 {
+                    (a + 8*w..a + 8*w + 8).for_each(&mut add);
+                }
+            }
+        }
+        (end..b).for_each(&mut add);
+        out
+    });
+    let mut total = vec![0.0f64; n_codes*ng];
+    for s in &sums { // In order, so the sums do not depend on the number of threads
+        for (t, x) in total.iter_mut().zip(s) {
+            *t += x;
+        }
+    }
+    total
+}
+
 /// The agents infected this step under homogeneous mixing, each drawn from their uniform for the call, in order (`passes.infect()`)
 #[allow(clippy::too_many_arguments)]
 pub fn infect<G: Ix, R: Num, L: Ix>(susceptible: &[bool], groups: &[G], rate: &[f64], rel_sus: &[R], state_sus: f64, adjust: &[f64], mult: f64, dt: f64, slots: &[L],
@@ -1192,6 +1289,39 @@ pub mod bind {
     }
 
     #[pyfunction]
+    fn exit_due<'py>(py: Python<'py>, raw: &Arr<'py>, exits: &Arr<'py>, ti: i64, nchunks: i64) -> PyResult<(usize, Arr<'py>)> {
+        let nchunks = chunks(py, nchunks)?;
+        typed!(exits, T in [f32, f64, i16, i32, i64] => {
+            let out = passes::exit_due::<T>(sl(raw)?, sl(exits)?, ti, nchunks);
+            Ok((out.len(), arr(py, out)))
+        })
+    }
+
+    #[pyfunction]
+    fn put_count<'py>(py: Python<'py>, raw: &Arr<'py>, uids: &Arr<'py>, value: bool, groups: &Arr<'py>, ng: usize) -> PyResult<Arr<'py>> {
+        typed!(groups, G in [i16, i32, i64, i8] => Ok(arr(py, passes::put_count::<G>(sl_mut(raw)?, sl(uids)?, value, sl(groups)?, ng))))
+    }
+
+    #[pyfunction]
+    #[allow(clippy::too_many_arguments)]
+    fn set_exits<'py>(uids: &Arr<'py>, dur: &Arr<'py>, entered: &Arr<'py>, slots: &Arr<'py>, shift: f64, dt: f64, which: &Arr<'py>, ti_exit: &Arr<'py>, exit: &Arr<'py>) -> PyResult<()> {
+        typed!(slots, L in [i32, i64] => typed!(ti_exit, T in [f32, f64] => {
+            passes::set_exits::<L, T>(sl(uids)?, sl(dur)?, sl(entered)?, sl(slots)?, shift, dt, sl(which)?, sl_mut(ti_exit)?, sl_mut(exit)?);
+            Ok(())
+        }))
+    }
+
+    #[pyfunction]
+    #[allow(clippy::too_many_arguments)]
+    fn group_sums<'py>(py: Python<'py>, codes: &Arr<'py>, weights: &Arr<'py>, groups: &Arr<'py>, first: i64, skip: bool, n_codes: usize, ng: usize, nblocks: i64) -> PyResult<Arr<'py>> {
+        let nblocks = chunks(py, nblocks)?;
+        typed!(codes, C in [bool, u8, i8, i16, i32, i64] => typed!(weights, W in [f64, f32] => typed!(groups, G in [i64, i32, i16, i8] => {
+            let out = passes::group_sums::<C, W, G>(sl(codes)?, bcast(weights)?, sl(groups)?, first, skip, n_codes, ng, nblocks);
+            Ok(PyArray1::from_vec(py, out).reshape([n_codes, ng])?.into_any())
+        })))
+    }
+
+    #[pyfunction]
     fn due<'py>(py: Python<'py>, auids: &Arr<'py>, ti_dead: &Arr<'py>, ti_removed: &Arr<'py>, ti: i64, nchunks: i64) -> PyResult<Arr<'py>> {
         let nchunks = chunks(py, nchunks)?;
         typed!(ti_dead, T in [f32, f64, i16, i32, i64] => Ok(arr(py, passes::due::<T>(sl(auids)?, sl(ti_dead)?, sl(ti_removed)?, ti, nchunks))))
@@ -1370,6 +1500,10 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(due, m)?)?;
         m.add_function(wrap_pyfunction!(keep_alive, m)?)?;
         m.add_function(wrap_pyfunction!(due_alive, m)?)?;
+        m.add_function(wrap_pyfunction!(exit_due, m)?)?;
+        m.add_function(wrap_pyfunction!(put_count, m)?)?;
+        m.add_function(wrap_pyfunction!(set_exits, m)?)?;
+        m.add_function(wrap_pyfunction!(group_sums, m)?)?;
         m.add_function(wrap_pyfunction!(count_alive, m)?)?;
         m.add_function(wrap_pyfunction!(keep_raw, m)?)?;
         m.add_function(wrap_pyfunction!(random_edges, m)?)?;

@@ -1820,7 +1820,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 out[g] = H/(H + c + 1/pt.dur)
             else:
                 out[g] = H/(H + c)*(1 - np.mean(np.exp(-(H + c)*pt.durs))) if H + c > 0 else 0.0
-        self.partnership_info[(flow.tr.name, state.name, net.name, term.src_side)] = out
         return out
 
     def exit_rate(self, state):

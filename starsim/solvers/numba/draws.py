@@ -1,9 +1,10 @@
 """
-Exact random draws in Numba, from one uniform each where possible; not for the user, except `next_u()`, as `ss.draws.next_u()`
+Exact random draws in Numba, from one uniform each where possible; not for the user, except `uniform()` and `next_u()`, as `ss.draws.uniform()` and `ss.draws.next_u()`
 
-For code compiled with `ss.jit` (or Numba) that needs a varying number of draws for each agent, e.g. one for each act, or in a
-queue: `ss.Dist.streams(uids)` gives the state of a stream for each agent, and `next_u(state)` the next uniform of one and its new
-state. See `ss.Dist.streams()`.
+For code compiled with `ss.jit` (or Numba): in a loop over many agents, `ss.Dist.key()` gives the key of one call of a distribution,
+and `uniform(key, i)` agent i's uniform for it; for a varying number of draws for each agent, e.g. one for each act, or in a
+queue, `ss.Dist.streams(uids)` gives the state of a stream for each agent, and `next_u(state)` the next uniform of one and its new
+state. See `ss.Dist.key()` and `ss.Dist.streams()`.
 
 Every draw here is a function of a uniform u in (0, 1): by inversion of the CDF where
 that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential,

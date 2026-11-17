@@ -344,9 +344,9 @@ class modify(Connector):
 
     Args:
         target (par/str): the quantity to change (see above)
-        multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
-        add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
-        set (float): replace the quantity with this (a parameter only)
+        multiply (value/func): multiply the quantity by this: a number, `ss.by(...)`, an array (one per agent or group, for a target that differs by person, such as `rel_sus` or a transition), an `ss.timeseries` (for changes at given times), an expression (e.g. of states), or a function of the sim returning any of these; likewise for `add` and `set`
+        add (value/func): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
+        set (value/func): replace the quantity with this (a parameter only)
         efficacy (float): for protection such as a condom or a needle program, the fraction of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
         frac (float): with `multiply=` or `efficacy=`, the fraction of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
             `1 − frac·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of

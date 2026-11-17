@@ -105,8 +105,9 @@ def test_partnership_approx():
     # With partnerships that end at a constant rate and no way out of the infectious state, the chance over a partnership is H/(H + 1/D̄)
     sim = run('ode', ss.DegreeNet(name='pairs', n_contacts=1, dur=ss.years(2), acts=ss.peryear(10)), beta=ss.peract(0.05), stratify=dict(risk=['low', 'high'])).init()
     H = 10*-np.log(0.95)
-    assert 'partner-change model (approx)' in sim.diseases.d.describe() # Which also works out partnership_info
-    assert np.isclose(sim.diseases.d.engine.partnership_info[('infection', 'I', 'pairs', 0)][0], H/(H + 1/2)), 'H/(H + 1/D)'
+    assert 'partner-change model (approx)' in sim.diseases.d.describe() # Which also works out the routes
+    flow = next(f for f in sim.diseases.d.engine.flows if f.kind == 'contact')
+    assert np.isclose(flow.routes['I'][0][0], H/(H + 1/2)), 'H/(H + 1/D)' # Its one term of the mixing, from I, to the first group
 
     # Long monogamous partnerships: the ODE is somewhat too high against agents (20 runs of 10,000 agents gave ratios of 1.105 and 1.247 at 10 and 20 years), since it spreads infection that agents keep within pairs
     mf = lambda: ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), dur=ss.lognormal(mean=ss.years(5), std=ss.years(3)), acts=ss.peryear(80))

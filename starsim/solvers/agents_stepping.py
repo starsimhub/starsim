@@ -110,7 +110,7 @@ class Stepping:
         candidates = self.exits_of[name]
         if uids is None:
             exits = mod[f'ti_exit_{name}']
-            due = ss.uids(np.flatnonzero(mod[name].raw & ~(exits.raw > self.ti))) # And not set (NaN), so those put in the state through its NumPy array (which is not watched) are among them
+            due = ss.uids(ss.solvers.numba.passes.exit_due(mod[name].raw, exits.raw, self.ti)) # And not set (NaN), so those put in the state through its NumPy array (which is not watched) are among them
             unset = np.isnan(exits.raw[due])
             if unset.any(): # Scheduled now, as at the start of the step (see schedule()), and taken if that is due
                 self.schedule(state, due[unset])

@@ -1475,6 +1475,34 @@ class Dist:
         self._n = self._uids = self._slots = None
         return draws.streams(u)
 
+    def key(self):
+        """
+        The key of one call of the distribution, for compiled code that draws its own uniforms over many agents (e.g. a loop with `ss.jit(parallel=True)`)
+
+        This counts as one call of the distribution (as `rvs(uids)` does). In code compiled with `ss.jit` (or Numba), `ss.draws.uniform(key, i)` is then the
+        uniform in (0, 1) of agent i, by its slot (`sim.people.slot_raw()`, which is None while the slots are the UIDs, as they are until agents are born).
+        With common random numbers (`ss.options.crn`), it depends only on the distribution's seed, the call, and the agent, so an agent draws the same in
+        every scenario, whoever else is drawn for and however the loop is split between threads. The distribution's own parameters are not used.
+
+        Returns:
+            The key, a whole number (uint64)
+
+        Examples:
+            ```python
+            self.infect_u = ss.random()
+            ...
+            key = self.infect_u.key() # In step(); then, in compiled code, u = ss.draws.uniform(key, i)
+            ```
+        """
+        if not self.initialized:
+            raise ss.errors.DistNotInitializedError(self)
+        seed = self.seed if ss.options.crn else int(self.rng.integers(2**62)) # Without common random numbers, seeded by the sim but not paired between scenarios
+        self.make_history()
+        out = draws.key(seed, self.ind if ss.options.crn else 0)
+        self.called += 1
+        self.jump()
+        return out
+
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """

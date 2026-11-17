@@ -148,6 +148,7 @@ class People:
         self._flows = set() # The flows of people that modules written as code have asked for, even with no one ('birth', 'death', 'emigration'): see ss.solvers.people_flows()
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
+        self._exits = True # Whether a death or removal has been requested since step_die() last looked; if not, it doesn't pass over the agents
         self._died_of = {} # Who died of each cause in this step
         self._knock_on = None # The deaths requested by modules' on_death(), while step_die() calls it, so they happen in the same step
         self._warned_late = set() # The causes of the deaths requested too late in a step, warned about once each: see request_death()
@@ -191,10 +192,8 @@ class People:
         Args:
             uids (uids): the agents to give the phases of (worked out for them alone); by default, every agent's, kept until agents are made
         """
-        if getattr(self, '_phase_shift', None) is None:
-            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
-            self._phase_shift = np.random.default_rng(seed).random()
-        of = lambda slot: (slot*0.6180339887498949 + self._phase_shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
+        shift = self.phase_shift()
+        of = lambda slot: (slot*0.6180339887498949 + shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
         slots = self.slot_raw()
         if uids is not None:
             return of(uids if slots is None else slots[uids])
@@ -208,6 +207,13 @@ class People:
             phase[done:used] = of(np.arange(done, used) if slots is None else slots[done:used])
         self._phase = (phase, used)
         return phase
+
+    def phase_shift(self):
+        """ The shift of every agent's phase (see `phase()`), from the sim's seed """
+        if getattr(self, '_phase_shift', None) is None:
+            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
+            self._phase_shift = np.random.default_rng(seed).random()
+        return self._phase_shift
 
     def _link_state(self, state, die=True):
         """
@@ -647,6 +653,7 @@ class People:
             hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
         """
         self._flows.add('death')
+        self._exits = True
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
@@ -720,18 +727,23 @@ class People:
             uids (array): the agents to remove
         """
         self._flows.add('emigration')
+        self._exits = True
         self.ti_removed[uids] = self.sim.ti
         return
 
     def step_die(self):
         """ Carry out the deaths and removals of this step (those requested in it, or set for it before), and return who died or left """
         ti = self.sim.ti
+        self._died_of = {}
+        if not self._exits: # Nobody has been asked to die or leave (deaths and removals are set only by request_death() and request_removal()), so no pass over the agents
+            self._resolved_ti = ti if self.sim.initialized else None
+            return ss.uids()
+        self._exits = False
         deaths, n_alive = ss.solvers.numba.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
             deaths = ss.solvers.numba.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         dying = death_uids
-        self._died_of = {}
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep.
@@ -899,10 +911,13 @@ class People:
     def finish_step(self):
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
-        if type(self).update_post is People.update_post:
-            self.remove_dead(aging=bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm)))
+        fused = type(self).update_post is People.update_post
+        aging = fused and bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm))
+        if aging or len(self.dying()): # Otherwise nobody left (in a run, only step_die() changes who is alive) and nobody ages, so the active agents stay as they are
+            self.remove_dead(aging=aging)
         else:
-            self.remove_dead()
+            self._dying = None
+        if not fused:
             self.update_post()
         return
 
