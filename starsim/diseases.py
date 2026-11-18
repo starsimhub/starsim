@@ -12,6 +12,8 @@ import sciris as sc
 import starsim as ss
 from .internals import declaring
 
+__all__ = ['Disease', 'AgentDisease', 'SIR', 'SEIR', 'SIS'] # The public names, shown in the API reference; the rest are helpers
+
 
 
 class BuiltAfterInit(type):
@@ -397,6 +399,25 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def abm(self):
         """ Whether it runs as agents """
         return self.engine is not None and self.engine.agents
+
+    @property
+    def y(self):
+        """
+        The number of people in each compartment and group, when it runs as compartments: the array the solver itself steps
+        (as in dy/dt), not a copy, so changing it changes the model, e.g. moving 10% of S to R in every group:
+
+            moved = sir.y[0]*0.1
+            sir.y[0] -= moved
+            sir.y[2] += moved
+
+        A manual override: nothing checks that people are moved rather than made or lost. Its rows are the compartments, in
+        the order of the states (a state with stages has a row for each; `sir.I.rows` gives them), and its columns the groups (one if none; with
+        several stratifications, every combination, the first stratification outermost).
+        """
+        if self.engine is None or self.engine.agents:
+            raise ss.CapabilityError(f'{self.name}.y is the number in each compartment, which a run as agents does not have.\n'
+                                     f'     Set the agents themselves, e.g. {self.name}.S[uids] = False and {self.name}.R[uids] = True.')
+        return self.engine.y
 
     @property
     def transitions(self):

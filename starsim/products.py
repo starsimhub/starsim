@@ -9,6 +9,8 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 
+__all__ = ['Product', 'boxcar', 'Vaccine', 'Treatment', 'Diagnostic'] # The public names, shown in the API reference; the rest are helpers
+
 
 def disease_module(sim, name):
     """ The disease of this name in a sim, whether written as code or declared (whose engine runs it) """

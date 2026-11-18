@@ -11,7 +11,7 @@ The parameters of a model are the numbers in it: transmission rates, durations, 
 
 ## Values live in the model
 
-In a declared disease, a value lives where it is used. There is no separate block of parameters to fill in: each number becomes a parameter, named after its role. The "Explicit" tab gives each parameter its name outright, with `ss.par(..., name=...)`, and β its unit; the parameters, and the results, are the same:
+In a declared disease, a value lives where it is used. There is no separate block of parameters to fill in: each number becomes a parameter, named after its role. The "Explicit" tab keeps the values in a plain dict and reads them into the transitions: a value is just a number wherever it is kept, and is named by where it is used, so the parameters, and the results, are the same:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -43,13 +43,12 @@ measles$pars
 ## Explicit
 
 ```{python}
-beta  = ss.par(ss.perday(1.9), name='beta') # Named for what it multiplies: the fraction infectious
-dur_I = ss.par(ss.days(8), name='dur_I')    # Named for the state it is the time in
+values = dict(transmission=ss.perday(1.9), infectious_period=ss.days(8)) # A plain dict, with any keys
 
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
 measles_explicit = ss.Disease(
-    ss.Transition(source=S, dest=I, rate=beta*I, name='infection'),
-    ss.Transition(source=I, dest=R, dur=dur_I, name='recovery'),
+    ss.Transition(source=S, dest=I, rate=values['transmission']*I, name='infection'), # Named beta, for what it multiplies: the fraction infectious
+    ss.Transition(source=I, dest=R, dur=values['infectious_period'], name='recovery'), # Named dur_I, for the state it is the time in
     init_prev = 0.001,
     name = 'measles',
 )

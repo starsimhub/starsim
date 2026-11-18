@@ -204,4 +204,4 @@ Most runs infect nearly the same number of people (a few die out early, which is
 - The [tutorials](tutorials.qmd) cover each of these steps in more depth, one at a time, with a model of a measles outbreak.
 - The [user guide](user_guide.qmd) covers each topic in full, including networks, demographics, custom modules, and solvers.
 - The [gallery](gallery.qmd) has complete models to start from.
-- If you have a model in another framework, the [conversion guides](user_guide/building_import.qmd) show how to bring it into Starsim.
+- If you have a model in another framework, the [conversion guides](user_guide/library_import.qmd) show how to bring it into Starsim.

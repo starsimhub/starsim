@@ -19,7 +19,7 @@ Mechanistic models of transmission differ in how they represent the population. 
 
 ![Types of model](assets/types_of_model.png)
 
-Tools differ as much in how a model is written: by hand in a general-purpose language (NumPy, deSolve), in a model language (odin), in configuration files (flepiMoP, Atomica), as a library of compartmental models (summer2, epydemix, MEmilio, SimInf), as a network or agent-based framework (EpiModel, LASER, EMOD, Mesa), or with statistical tools that fit mechanistic models to data (pomp, Stan). Models from many of these can be read into Starsim, and Starsim models written out to several (see [Import and export](building_import.qmd)); the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo has a model from each written both ways, with how their results and speed compare. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
+Tools differ as much in how a model is written: by hand in a general-purpose language (NumPy, deSolve), in a model language (odin), in configuration files (flepiMoP, Atomica), as a library of compartmental models (summer2, epydemix, MEmilio, SimInf), as a network or agent-based framework (EpiModel, LASER, EMOD, Mesa), or with statistical tools that fit mechanistic models to data (pomp, Stan). Models from many of these can be read into Starsim, and Starsim models written out to several (see [Import and export](library_import.qmd)); the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo has a model from each written both ways, with how their results and speed compare. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
 
 ## Where Starsim fits
 
@@ -158,7 +158,7 @@ Starsim suits modelers who write code (or are willing to), and is a good fit:
 It may not be the best choice:
 
 - For one run of a simple SIR or SEIR model, where plain Python or R is enough ([above](#when-your-own-code-is-enough)).
-- If your team has a working model, highly specialized to its context, in another tool: the cost of switching may not be worth it. Starsim can import models from several frameworks ([Import and export](building_import.qmd)), so get in touch if this interests you.
+- If your team has a working model, highly specialized to its context, in another tool: the cost of switching may not be worth it. Starsim can import models from several frameworks ([Import and export](library_import.qmd)), so get in touch if this interests you.
 - For networks estimated from survey data with exponential random graph models (`nodemix`, `gwesp`): EpiModel. Starsim's networks target degrees and matching.
 - For the fastest agent-based runs at national scale (tens of millions of agents): LASER, which is about 4 times faster on the England and Wales model.
 - For many small stochastic runs: odin and its companions, whose compiled models start slower but run faster.

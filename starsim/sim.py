@@ -15,6 +15,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
+__all__ = ['Sim', 'demo'] # The public names, shown in the API reference; the rest are helpers
+
 
 class Sim(ss.modules.Base):
     """

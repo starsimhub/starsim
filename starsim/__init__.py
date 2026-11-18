@@ -3,6 +3,13 @@ Import all Starsim modules
 
 The order matters: each group builds on the ones before it, and within a group,
 later modules use earlier ones as they are imported.
+
+The public names are imported by name, so that this file is the list of what `ss.X` is. Each module's
+`__all__` says the same, and is what the API reference shows; the rest of a module is its helpers.
+The three packages differ, each for a reason: `internals/__init__.py` imports nothing, since its modules
+are attached here (`ss.time`, `ss.arrays`, ...); `solvers/__init__.py` imports everything, since the
+solvers' modules call each other's helpers as `ss.solvers.X`; and `library/__init__.py` re-exports its
+subpackages' classes, so that `ssl.Cholera` works as `ss.SIR` does.
 """
 # Authorship: written by humans, edited by AI
 

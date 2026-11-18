@@ -10,6 +10,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 from pathlib import Path
+
+__all__ = ['People', 'population', 'person'] # The public names, shown in the API reference; the rest are helpers
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 

@@ -17,6 +17,9 @@ are in `numba` (`ss.solvers.numba`), with a copy in Rust in `rust/`, and the mac
 *backend* how its numbers are computed (`ss.options.backend`: Rust, Numba, plain Python, or JAX); an *engine* is the
 object that runs one module under the solver, which a modeler never needs.
 
+Unlike `internals/`, this file imports every module's names (`from .engine import *`): the solvers' modules
+are one system split into files, and call each other's helpers as `ss.solvers.X`, wherever each is defined.
+
 Used with: agents and compartments; declared and coded modules
 """
 from .engine import *

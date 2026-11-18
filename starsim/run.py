@@ -13,6 +13,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
+__all__ = ['MultiSim', 'parallel', 'Branching'] # The public names, shown in the API reference; the rest are helpers
+
 
 run_options = ['workers', 'par_args', 'shrink', 'verbose', 'until', 'run_args'] # How to run the sims, as opposed to which runs to take
 

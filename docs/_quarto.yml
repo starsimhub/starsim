@@ -145,7 +145,6 @@ website:
             - user_guide/building_outcomes.qmd
             - user_guide/building_results.qmd
             - user_guide/building_modules.qmd
-            - user_guide/building_import.qmd
         - section: "Populations and data"
           href: user_guide.qmd#populations-and-data
           contents:
@@ -166,6 +165,7 @@ website:
             - user_guide/running_scenarios.qmd
             - user_guide/running_solvers.qmd
             - user_guide/running_performance.qmd
+            - user_guide/running_cli.qmd
             - user_guide/running_branching.qmd
             - user_guide/running_debugging.qmd
         - section: "Calibration"
@@ -183,6 +183,7 @@ website:
             - user_guide/library_networks.qmd
             - user_guide/library_mnch.qmd
             - user_guide/library_econ.qmd
+            - user_guide/library_import.qmd
         - section: "Mechanics"
           href: user_guide.qmd#mechanics
           contents:

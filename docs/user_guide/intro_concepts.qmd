@@ -15,18 +15,22 @@ A Starsim model is a **sim** (`ss.Sim`): a population, a span of time, and a set
 
 ```{mermaid}
 %%| echo: false
-flowchart LR
-    subgraph Sim["<b>Sim</b>: population, time span, step, random seed, solver"]
+flowchart TB
+    subgraph Sim["<b>Sim</b>"]
         direction TB
         P["<b>People</b><br/>compartments or agents"]
         D["<b>Diseases</b><br/>states, transitions, rates"]
         N["<b>Networks and contacts</b><br/>who meets whom"]
         G["<b>Demographics</b><br/>births, deaths, pregnancy"]
-        I["<b>Interventions</b><br/>vaccines, tests, treatment,<br/>changes to parameters"]
+        I["<b>Interventions</b><br/>vaccines, tests, treatment"]
         C["<b>Connectors</b><br/>links between diseases"]
         A["<b>Analyzers</b><br/>extra results"]
+        P ~~~ I
+        D ~~~ C
+        N ~~~ A
+        G ~~~ A
     end
-    Sim --> R["<b>Results</b><br/>stocks, flows, ratios,<br/>outcomes, over time"]
+    Sim --> R["<b>Results</b><br/>stocks, flows, ratios, outcomes"]
     Data["<b>Data</b>"] -.-> R
 ```
 

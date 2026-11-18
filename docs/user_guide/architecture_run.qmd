@@ -55,9 +55,9 @@ When `ss.Disease(...)` is called, it builds the module's graph (`ss.graph.Graph`
 
 So mistakes in the model's structure are errors when the disease is built, at the line that made it. What needs the sim (the unit of bare numbers, values against their bounds, the shapes of values by group, the choice of solver) is checked at `sim.init()`.
 
-### Guessed defaults
+### Defaults and guesses
 
-Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap with a **guessed default**, and `describe()` marks every guess:
+Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap, and `describe()` marks each one: `[Default: ...]` for a value used because none was given, and `[Guessed: ...]` for one worked out from the rest of the model:
 
 ```{python}
 import starsim as ss
@@ -73,7 +73,7 @@ sim = ss.Sim(sir, stop=100)
 sim.describe()
 ```
 
-Every `[Guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solver, homogeneous mixing, 11 Erlang stages for the lognormal dwell time, and `beta` starting at the geometric middle of its bounds. Each guess is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
+Each is a choice you didn't make: 10,000 people, homogeneous mixing, and `beta` starting at the middle of its bounds are defaults; the ODE solver and 11 Erlang stages for the lognormal dwell time are guesses. Each is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
 
 Because the model is data, its other views (`equations()`, `diagram()`, and the table of transitions, all in `starsim/internals/display.py`; see [Writing models](building_writing.qmd#checking-a-model)) and its exports ([below](#importers-and-exporters)) are read from the same graph.
 
@@ -230,7 +230,7 @@ The hardest part of importing is reading rates. Most frameworks write a flow as 
 
 An importer keeps the source's names, marks what it guessed (as `[Guessed]` in `describe()`), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). Exporters write SBML and odin from the built model's compartmental form, and list what they left out or changed (`ss.errors.LossyExport`); a network, a module written as code, and a function are always left out. A sim made in Starsim is never written back out as Starsim code: its code is the script that made it.
 
-The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments, writing the model as JSON for the importer (EpiModel's equivalent is `dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`). For the modeler's view, with worked examples, see [Import and export](building_import.qmd).
+The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments, writing the model as JSON for the importer (EpiModel's equivalent is `dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`). For the modeler's view, with worked examples, see [Import and export](library_import.qmd).
 
 ## Limits
 

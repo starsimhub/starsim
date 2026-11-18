@@ -21,7 +21,7 @@ A model is imported in two passes. The mechanical pass (`ss.import_from(..., for
    sc.savetext('model.py', sim.imported.code)              # the model as Starsim code, to edit (the sim is this code run)
    ```
    `ss.import_from()` writes the model as Starsim code (a declared `ss.Disease` and the `ss.Sim`) and runs it to make the sim. It prints how each rate was read and warns `ImportIncomplete` with each piece it could not translate. Both are kept in `sim.imported` (`choices`, `incomplete`) and are comments in the code: the reading at the top, the untranslated pieces at the end.
-3. **Check the guesses** in the printed reading and in `print(sim.describe())` (marked `[Guessed]`):
+3. **Check the guesses** in the printed reading and in `print(sim.describe())` (marked `[Guessed]` or `[Default]`):
    - A rate with another state divided by the total (`beta*S*I/N`) was read as exposure (`beta * I`, frequency-dependent). One without the total (`beta*S*I`) was kept as counts (`beta * I.n`, density-dependent). Make sure that is what the source meant, especially if the population changes.
    - Units: bare numbers are in the sim's unit (`unit=`). A per-step probability is not a rate: `-log(1 - p)/dt` is the rate that gives it. A probability per time unit is `ss.prob(p, "day")` and the like.
    - Initial numbers: numbers of people are in `init_n=` and fractions in `init=` (1.0 is everyone); the rest start in the first state, `default_state=` (the source's first compartment of people, or a state named `S` or `susceptible`). Check that the source's initial values were numbers where they are in `init_n=`, and that the first state is the right one.
@@ -47,7 +47,7 @@ An import that could not translate everything is not refused: `ss.import_from()`
 
 ## Frameworks
 
-What each importer reads, and how to get the file (some frameworks are dumped to JSON first, by a script run in their own environment), is in [Importing and exporting](https://starsim.org/v4/user_guide/building_import.html#the-formats). The guide for each framework:
+What each importer reads, and how to get the file (some frameworks are dumped to JSON first, by a script run in their own environment), is in [Importing and exporting](https://starsim.org/v4/user_guide/library_import.html#the-formats). The guide for each framework:
 
 | Framework | Guide |
 |---|---|
@@ -73,7 +73,7 @@ What each importer reads, and how to get the file (some frameworks are dumped to
 
 An export is also two passes. `ss.export_to()` writes what it can, and lists the rest; what it left out is then yours to translate or report. Each exporter writes the compartmental form of the declared diseases, so it carries less than an import (`ss.converters.exporters` lists them; `starsim convert --to=<format>` from the shell).
 
-What each format holds, and the other ways to write a model or its results out (JSON, `sim.to_json()`, `ss.save()`, forecast hubs with `ss.converters.to_hub()`), is in [Importing and exporting](https://starsim.org/v4/user_guide/building_import.html#exporting-a-model). For a framework with no exporter, write it by hand from `sim.diseases.x.equations()`, reading the framework's guide in `references/` from right to left.
+What each format holds, and the other ways to write a model or its results out (JSON, `sim.to_json()`, `ss.save()`, forecast hubs with `ss.converters.to_hub()`), is in [Importing and exporting](https://starsim.org/v4/user_guide/library_import.html#exporting-a-model). For a framework with no exporter, write it by hand from `sim.diseases.x.equations()`, reading the framework's guide in `references/` from right to left.
 
 1. **Decide whether the target can hold the model.** Exports are compartmental, so a model whose answer depends on individuals (a network, histories, who infected whom) changes meaning, even though the export succeeds. Say so before going on, rather than after.
 2. **Export, and read every line of the `ss.errors.LossyExport` warning.** An export doesn't fail for what it can't carry. Lines starting `not exported:` were dropped (a network is written as homogeneous mixing; interventions, code, and functions are left out), and lines starting `changed:` were altered (a sim run as agents is written as an ODE; a stratified disease is written as the sum of its groups, with the base values of its parameters). Each line is a difference between the two models.

@@ -106,13 +106,20 @@ msim$plot("measles.infection")
 ## Explicit
 
 ```{python}
-vaccine = ss.Vaccine(efficacy=0.93, leaky=True) # The product: everyone vaccinated is 93% less likely to be infected
-campaign_explicit = ss.vaccinate(vaccine, who=measles.age < 15, when='2025-03-01', coverage=0.8, name='campaign') # The delivery: who, when, and how many
-settings_explicit = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', dt=ss.days(1), unit='day', solver='ode', aging=False)
+def campaign_by_hand(sim):
+    """ On 1 March, 80% of children are vaccinated, and 93% of them fully protected """
+    if sim.now == ss.date('2025-03-01'):                     # The campaign's day only
+        y = sim.diseases.measles.y                           # The number in each compartment (rows: S, E, I, R) and age group (columns: 0-14, 15-64, 65+)
+        protected = y[0, 0]*0.8*0.93                         # Susceptible children, vaccinated (80%) and protected (93%)
+        y[0, 0] -= protected                                 # Set by hand: what leaves S must be added to R,
+        y[3, 0] += protected                                 # since nothing checks that people are not made or lost
+    return
 
+# This vaccine is all or nothing; the Python tab's is leaky (each person vaccinated is 93% less likely to be infected),
+# which moving people from S to R can't do. So the two are close but not the same: 2,134 infections here, 2,210 there
 msim_explicit = ss.parallel({
-    'No intervention': ss.Sim(diseases=measles, **settings_explicit),
-    'Campaign':        ss.Sim(diseases=measles, interventions=campaign_explicit, **settings_explicit),
+    'No intervention': ss.Sim(measles, **settings),
+    'Campaign':        ss.Sim(measles, interventions=campaign_by_hand, **settings),
 })
 msim_explicit.plot('measles.infection')
 ```
@@ -146,8 +153,17 @@ gradual <- vaccinate(efficacy = 0.93, who = measles$age < 15, rate = ss$probpery
 ## Explicit
 
 ```{python}
-p_day = 1 - (1 - 0.8)**(1/365) # The daily probability that gives 0.8 over 365 days
-gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, rate=ss.probperday(p_day))
+import numpy as np
+
+def gradual_by_hand(sim):
+    """ Children are vaccinated at a rate that would reach 80% of them in a year, and 93% of them fully protected """
+    y = sim.diseases.measles.y                               # Rows: S, E, I, R; columns: age groups, children first
+    rate = -np.log(1 - 0.8)/365                              # The rate per day that reaches 80% in 365 days
+    p = 1 - np.exp(-rate*sim.t.dt.days)                      # The chance of being vaccinated in this step
+    protected = y[0, 0]*p*0.93                               # Susceptible children, vaccinated and protected
+    y[0, 0] -= protected
+    y[3, 0] += protected
+    return # All or nothing, so close to the Python tab's leaky vaccine but not the same: 5,216 infections, against 5,468
 ```
 :::
 
