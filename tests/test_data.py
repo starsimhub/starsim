@@ -138,29 +138,14 @@ def test_people():
     return ode, abm
 
 
-@pytest.fixture
-def us_states(tmp_path, monkeypatch):
-    """ The US states' datasets of starsim_data, from the files of a copy of its repository if it is installed from one (so offline), else downloaded """
-    stores = sc.path(ssd.__file__).parent.parent/'fetched'
-    names = ['population_us', 'mistry2021_us']
-    if all((stores/ssd.registry.dataset(name).source().store).is_file() for name in names):
-        monkeypatch.setattr(ssd.options, 'cache_dir', str(tmp_path))
-        for name in names: # As if downloaded: the file, and the record of its digest that fetch() checks
-            source = ssd.registry.dataset(name).source()
-            path = ssd.cache_dir('stores', create=True)/source.store
-            path.write_bytes((stores/source.store).read_bytes())
-            ssd.cache._write_sidecar(path, source.url)
-    try:
-        ssd.fetch('United States:Massachusetts', which='population_us', verbose=False)
-    except OSError as E:
-        pytest.skip(f'The US states\' data of starsim_data are not available: {E}')
-    return
-
-
 @sc.timer()
-def test_us_states(us_states):
+def test_us_states():
     sc.heading('Testing the people and contacts of a US state by name')
     state = 'United States:Massachusetts'
+    try:
+        ssd.fetch(state, which='population_us', verbose=False) # Downloaded on first use, then cached
+    except OSError as E:
+        pytest.skip(f'The US states\' data of starsim_data are not available: {E}')
     ppl = ss.population(state)
     assert 6.5e6 < ppl.named.total < 7.5e6 and ppl.named.ref['year'] == 2023 # The US Census for 2023
     assert list(ppl.named.ages) == list(range(0, 85, 5)) # Grouped by 5 years, as a country's
@@ -204,4 +189,5 @@ if __name__ == '__main__':
     test_geo()
     test_geo_shapes()
     test_people()
+    test_us_states()
     test_fertility()
