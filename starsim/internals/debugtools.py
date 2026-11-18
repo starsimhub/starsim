@@ -1,5 +1,5 @@
 """
-Tools for debugging and profiling Starsim runs: `sim.perf_profile()`, detailed diagnostics, and mock objects for testing a module without a sim
+Tools for debugging and profiling Starsim runs: `sim.perf_profile()`, detailed diagnostics, and small sims for testing an object without making one (`mock_sim()`)
 
 They exist so that a slow or surprising run can be looked into without changing the model.
 
@@ -224,91 +224,30 @@ def metadata(comments=None):
     return md
 
 
-def mock_time(dt=None, dur=10, start=2000):
+def mock_sim(n_agents=100, dt=None, dur=10, start=2000, **kwargs):
     """
-    Create a minimal mock "Time" object
-
-    Args:
-        dt (`ss.dur`/float): the timestep (default `ss.years(1)`)
-        dur (float): the duration
-        start (float): the start
-    """
-    t = sc.obj(
-        dt = sc.ifelse(dt, ss.years(1.0)),
-        ti = 0,
-        start = start,
-        stop = None,
-        dur = dur,
-        npts = 1000,
-        is_absolute = True,
-        initialized = True,
-    )
-    return t
-
-
-def mock_sim(n_agents=100, **kwargs):
-    """
-    Create a minimal mock "Sim" object to initialize objects that require it
-
-    Args:
-        n_agents (int): the number of agents to create
-        **kwargs (dict): passed to `ss.debugtools.mock_time()`
-    """
-    t = mock_time(**kwargs)
-    sim = sc.obj(
-        label = 'mock_sim',
-        people = mock_people(n_agents),
-        t = t,
-        dt = t.dt,
-        pars = t,
-        results = sc.obj(),
-        networks = sc.obj(), # Needed for infections
-        analyzers = sc.obj(), # Needed for infection log
-        diagnostics = None,
-        initialized = True, # A mock sim stands in for an initialized sim
-    )
-    return sim
-
-
-def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
-    """
-    Create a minimal mock "People" object with ages
+    A small sim, initialized, for testing an object that needs one (e.g. a distribution or an array) without making one of your own
 
     Args:
         n_agents (int): the number of agents
-        min_age (float): the youngest age
-        max_age (float): the oldest age
-        age_seed (int): the random seed for the ages
+        dt (`ss.dur`): the timestep (default `ss.years(1)`)
+        dur (float): the duration, in years
+        start (float): the start
+        **kwargs (dict): passed to `ss.Sim()`
     """
-    rng = np.random.default_rng(seed=age_seed)
-    people = sc.obj(
-        uid = np.arange(n_agents),
-        auids = np.arange(n_agents),
-        slot = np.arange(n_agents),
-        age = rng.uniform(min_age, max_age, size=n_agents),
-        alive = np.ones(n_agents, dtype=bool),
-        n = n_agents, # A mock People has no deaths or scale, so this matches len(people)
-        _n_agents_alive = lambda: n_agents,
-        add_module = lambda x: None, # Placeholder function
-    )
-    return people
+    return ss.Sim(n_agents=n_agents, start=start, dur=dur, dt=sc.ifelse(dt, ss.years(1)), verbose=0, **kwargs).init()
 
 
-def mock_module(dur=10, **kwargs):
-    """
-    Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()`
+def mock_people(n_agents=100):
+    """ The people of a small sim (see `mock_sim()`) """
+    return mock_sim(n_agents).people
 
-    Args:
-        dur (float): the duration
-        **kwargs (dict): passed to `mock_time()`
-    """
-    t = mock_time(dur=dur, **kwargs)
-    mod = sc.obj(
-        name = 'mock_module',
-        t = t,
-        dt = t.dt,
-    )
-    return mod
+
+def mock_module(n_agents=100, dt=None, dur=10, start=2000):
+    """ A module of a small sim (see `mock_sim()`), with the sim's timestep as its own, e.g. for a distribution that converts durations and rates to its steps """
+    dt = sc.ifelse(dt, ss.years(1))
+    sim = mock_sim(n_agents=n_agents, dt=dt, dur=dur, start=start, custom=ss.Module(name='mock_module', dt=dt))
+    return sim.custom.mock_module
 
 
 def summary(sim):

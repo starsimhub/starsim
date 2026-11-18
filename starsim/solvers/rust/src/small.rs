@@ -62,21 +62,6 @@ pub fn indexer_strided<T: Copy>(base: *const T, stride: isize, len: usize, inds:
     }).collect()
 }
 
-/// The UIDs whose value is truthy (or not), from the values of the active agents (`arrays.nb_true()`)
-pub fn nb_true<T: Copy + PartialEq + Default>(auids: &[i64], vals: &[T], want: bool) -> Vec<i64> {
-    let zero = T::default();
-    let vals = &vals[..auids.len()];
-    let mut out = Vec::with_capacity(auids.len() + 1);
-    let spare = out.spare_capacity_mut();
-    let mut m = 0;
-    for (k, &u) in auids.iter().enumerate() { // Written every time (branchless), kept only if m advances
-        spare[m].write(u);
-        m += ((vals[k] != zero) == want) as usize;
-    }
-    unsafe { out.set_len(m) };
-    out
-}
-
 /// The number of active agents whose value is truthy (`arrays.nb_count()`)
 pub fn nb_count<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T]) -> i64 {
     let zero = T::default();
@@ -188,11 +173,6 @@ pub mod bind {
     }
 
     #[pyfunction]
-    fn nb_true<'py>(py: Python<'py>, auids: &Bound<'py, PyAny>, vals: &Bound<'py, PyAny>, want: bool) -> PyResult<Bound<'py, PyAny>> {
-        typed!(vals, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(arr(py, small::nb_true::<T>(sl(auids)?, sl(vals)?, want))))
-    }
-
-    #[pyfunction]
     fn nb_count(auids: &Bound<PyAny>, raw: &Bound<PyAny>) -> PyResult<i64> {
         typed!(raw, T in [bool, u8, i8, i16, i32, i64, f32, f64] => Ok(small::nb_count::<T>(sl(auids)?, sl(raw)?)))
     }
@@ -254,7 +234,6 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(nb_transmit, m)?)?;
         m.add_function(wrap_pyfunction!(_hash_uniforms_fill, m)?)?;
         m.add_function(wrap_pyfunction!(nb_indexer, m)?)?;
-        m.add_function(wrap_pyfunction!(nb_true, m)?)?;
         m.add_function(wrap_pyfunction!(nb_count, m)?)?;
         m.add_function(wrap_pyfunction!(fisher_yates_shuffle, m)?)?;
         m.add_function(wrap_pyfunction!(_mark_partners, m)?)?;

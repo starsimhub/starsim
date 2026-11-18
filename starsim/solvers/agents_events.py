@@ -206,7 +206,7 @@ class Events(Agents):
 
     def is_matrix(self, route):
         """ Whether a route mixes by a contact matrix between cells everyone in which has the same contacts: within each place or over the model's dimensions (`sim.contact_rates.pool_terms`), or by age bands of its own (`ss.contacts(ages=...)`) """
-        return route.name in self.sim.contact_rates.pool_terms or (isinstance(route, ss.networks.MixingPools) and not route.pools and route.edges is not None)
+        return route.name in self.sim.contact_rates.pool_terms or (isinstance(route, ss.networks.MixingPools) and route.edges is not None)
 
     def contact_cells(self, route, n):
         """

@@ -521,7 +521,7 @@ class randint(Dist):
         elif len(args):
             errormsg = f'ss.randint() takes one or two arguments, not {len(args)}'
             raise ValueError(errormsg)
-        dtype = sc.ifelse(dtype, ss.dtypes.rand_int) # Not a default argument, so it follows ss.options.precision
+        dtype = sc.ifelse(dtype, ss.dtypes.rand_int)
         low = sc.ifelse(low, 0)
         high = sc.ifelse(high, np.iinfo(ss.dtypes.rand_int).max)
         super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs) # NumPy's Generator calls it integers()
@@ -1157,7 +1157,4 @@ class multi_random(sc.prettyobj):
         else:
             nb_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
             rvs = self.combine_rvs(nb_list, int_type, int_max)
-        dist = self.dists[0]
-        if dist.even: # Combining them undoes the even spacing of each
-            rvs = ss.dists.even_out(rvs, dist.seed, dist.ind)
         return rvs

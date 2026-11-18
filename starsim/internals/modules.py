@@ -105,40 +105,6 @@ def find_modules(key=None, flat=False, verbose=False):
     return modules if key is None else modules[key]
 
 
-def required():
-    """
-    Decorator to mark a module's method as required: the sim raises if it is never called (e.g. a missing `super()` call, or a mistyped name)
-
-    Examples:
-        ```python
-        import starsim.library as ssl
-
-        class CustomSIS(ssl.AgentSIS):
-
-            def step(self):
-                super().step()
-                self.custom_step() # Will raise an exception if this line is not here
-                return
-
-            @ss.required() # Mark this method as required on run
-            def custom_step(self):
-                pass
-        ```
-    """
-    # Wrap the function
-    def decorator(func):
-        func._call_required = True  # Mark for collection
-
-        @ft.wraps(func)
-        def wrapper(self, *args, **kwargs):
-            key = func.__qualname__
-            self._call_required[key] += 1
-            return func(self, *args, **kwargs)
-
-        return wrapper
-    return decorator
-
-
 def class_parts(cls):
     """
     The parameters (`ss.par`), and the arrays (`ss.FloatArr`, `ss.BoolArr`, ...) and distributions (`ss.bernoulli`, ...), declared in the body of a module's class and its bases, by name, in the order defined
@@ -293,13 +259,16 @@ class Module(Base):
         renamed = {k: v for k, v in dict(record_stocks='record_states', record_flows='record_events').items() if k in cls.__dict__}
         if renamed:
             raise TypeError(f'{cls.__name__} defines {sc.strjoin(f"{k}()" for k in renamed)}, which Starsim no longer calls: rename to {sc.strjoin(f"{v}()" for v in renamed.values())}')
+        for name in ['start_step', 'finalize', 'finalize_results']: # The base methods that, if not called, give wrong results without an error
+            func = cls.__dict__.get(name)
+            if inspect.isfunction(func) and name not in func.__code__.co_names and not (name == 'start_step' and getattr(cls.__mro__[1], name) is Module.start_step): # Calls super().name() or Base.name(self); Module's own start_step() does nothing
+                ss.warn(f'{cls.__name__}.{name}() does not call super().{name}(), which it must, else the results will be wrong')
         return
 
     def __init__(self, name=None, label=None, pars=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
         self.setattribute('_serial', next(Module._serials)) # Which module this is, kept by its copies (e.g. the sim's), so what was made of the module given is found for the sim's (see ss.expressions.Clock.sets_of())
-        self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
@@ -475,25 +444,6 @@ class Module(Base):
         out = f'"{self.name}" ({type(self)})'
         return out
 
-    def _collect_required(self):
-        """ Collect all methods marked as required, each called 0 times so far, for `check_method_calls()` to report those never called """
-        reqs = {}
-        for cls in inspect.getmro(type(self)):
-            for attr,method in cls.__dict__.items():
-                if inspect.isfunction(method) and getattr(method, '_call_required', False):
-                    key = f'{cls.__qualname__}.{attr}'
-                    reqs[key] = 0 # Meaning it's been called 0 times
-        self._call_required = reqs
-        return reqs
-
-    def check_method_calls(self):
-        """
-        The required methods that were not called (see `ss.required()`); called by `sim.run()`
-        """
-        missing = [key for key, called in self._call_required.items() if not called]
-        return missing
-
-    @required()
     def set_metadata(self, name=None, label=None):
         """
         Set metadata for the module
@@ -558,20 +508,6 @@ class Module(Base):
         if isinstance(getattr(self, 'results', None), ss.Results):
             self.results.setattribute('_module', self.label)
         return
-
-    @classmethod
-    def create(cls, name, *args, **kwargs):
-        """
-        Create a module instance by name
-
-        Args:
-            name (str): A string with the name of the module class in lower case, e.g. 'sir'
-        """
-        subcls = find_modules(flat=True).get(name)
-        if subcls is not None and issubclass(subcls, cls):
-            return subcls(*args, **kwargs)
-        else:
-            raise KeyError(f'Module "{name}" did not match any known Starsim modules')
 
     @classmethod
     def from_func(cls, func):
@@ -914,7 +850,6 @@ class Module(Base):
             return own + [f'"{self.name}" ({type(self).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in self.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it']
         return own
 
-    @required()
     def init_pre(self, sim, force=False):
         """
         Perform initialization steps, once, as part of initializing a sim; `initialized` stays False until `init_post()`, after the distributions are initialized
@@ -923,10 +858,15 @@ class Module(Base):
             sim (`ss.Sim`): the sim
             force (bool): whether to run again if already done
         """
+        if self.finalized:
+            errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
+            raise ss.AlreadyRunError(errormsg)
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.dists.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
+            t, sim_t = self.t, sim.t
+            if t is not sim_t and len(t.yearvec) == len(sim_t.yearvec) and getattr(t.tvec, 'unit', None) is getattr(sim_t.tvec, 'unit', None) and np.array_equal(t.yearvec, sim_t.yearvec):
+                self.setattribute('t', sim_t) # The same time points in the same unit: it runs on the sim's timeline itself (see ss.Loop._on_sim_time())
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
             if isinstance(self.pars, ss.Pars):
@@ -950,15 +890,12 @@ class Module(Base):
         """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
         if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
             unit = sim.unit and ss.time.normalize_unit(sim.unit)
-        else: # Otherwise in its timestep's, if it has one (not in a mock sim)
-            unit = getattr(sim.t.dt, 'base', None)
-            if unit is None:
-                return
+        else: # Otherwise in its timestep's
+            unit = sim.t.dt.base
         if isinstance(self.pars, ss.Pars):
             self.pars.bare_units(unit, label=self.name)
         return
 
-    @required()
     def link_timepars(self, force=False):
         """
         Link the module's time parameters to its `dt`, so that e.g. `self.pars.death_rate.to_prob()` needs no argument
@@ -966,18 +903,18 @@ class Module(Base):
         Args:
             force (bool): whether to relink parameters that are already linked
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't', 'owner'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = list(sc.search(self.pars, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 'owner']), subclasses=ss.dists.no_dists())).values()) # Those of its parameters, including within their distributions
+        timepars += [val for val in self.__dict__.values() if isinstance(val, ss.TimePar)] # And those set on it directly
 
         # Initialize them with the parent module
         dt = self.t.dt
-        for timepar in timepars.values():
+        for timepar in timepars:
             if timepar is dt: # Avoid a self-reference, which would recurse when serializing
                 continue
             if force or timepar.default_dur is None:
                 timepar.set_default_dur(dt)
         return
 
-    @required()
     def init_results(self):
         """
         Initialize results output; called during `init_pre()`
@@ -993,7 +930,6 @@ class Module(Base):
         self.define_results(*results)
         return
 
-    @required()
     def init_post(self):
         """ Initialize the values of the states, and link its schedules (`ss.schedule`) to its timeline; the last step of initialization """
         for state in self.state_list:
@@ -1004,26 +940,6 @@ class Module(Base):
                 obj.init(self)
         self.initialized = True
         return
-
-    def init_mock(self, n_agents=100, dur=10):
-        """
-        Initialize with a mock simulation -- for debugging purposes only
-
-        Args:
-            n_agents (int): the number of agents in the mock sim
-            dur (float): the duration of the mock sim
-        """
-        sim = ss.debugtools.mock_sim(n_agents=n_agents, dur=dur)
-        self.init_pre(sim)
-        for state in self.state_list: # Manually link the people
-            state.people = self.sim.people
-        obj = [self.pars, self.state_list]
-        dists = sc.search(obj, type=ss.Dist)
-        for i,dist in dists.enumvals():
-            dist.trace = f'dist_{i}'
-        ss.dists.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
-        self.init_post()
-        return self
 
     @property
     def state_list(self):
@@ -1067,14 +983,8 @@ class Module(Base):
             return Ellipsis if inds is None else inds
         return sc.findnearest(sim_tvec, self_tvec)
 
-    @required()
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
-        if self.finalized:
-            errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
-            raise ss.AlreadyRunError(errormsg)
-        if self.dists is not None and ss.options.crn: # Will be None if no distributions are defined; jumping is a no-op under crn=False (see Dist.jump), so skip the per-dist loop entirely
-            self.dists.jump_dt() # Advance random number generators forward for calls on this step
         return
 
     def step(self):
@@ -1109,13 +1019,12 @@ class Module(Base):
         """
         return
 
-    @required()
     def finish_step(self):
         """ Define what should happen at the end of the step, after the results are recorded """
         return
 
     def advance(self):
-        """ For a module with a timeline of its own: move its time to the step about to be taken (the sim moves the time of the modules on its own timeline: see `ss.Sim.advance()`) """
+        """ For a module with a timeline of its own: move its time to the step about to be taken (a module on the sim's timeline moves with it: see `ss.Sim.advance()`) """
         self.t.ti += 1
         return
 
@@ -1140,7 +1049,7 @@ class Module(Base):
             if weights is None:
                 res[self.ti] = self[name].sum()
             else:
-                ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
+                res[self.ti] = weights[self[name].uids].sum()
         return
 
     def record_events(self):
@@ -1157,7 +1066,7 @@ class Module(Base):
     def _count_states(self, names):
         """ Record the number of active agents in each of some boolean states, as `record_states()` does one by one, in one pass by UID (as `people.record_states()` does); False if they can't be counted so """
         ppl = self.sim.people
-        if not isinstance(getattr(self.sim, 'solver', None), ss.solvers.abm) or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
+        if not isinstance(self.sim.solver, ss.solvers.abm): # Not with compartments
             return False
         states = [self.__dict__.get(name) for name in names]
         if not all(isinstance(state, ss.BoolArr) and state.raw.ndim == 1 and state.raw.flags.c_contiguous for state in states):
@@ -1171,14 +1080,12 @@ class Module(Base):
             self.results[name][ti] = count
         return True
 
-    @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
 
-    @required()
     def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called *after* a custom finalize_results()
         """ Finalize results """
         # Scale results, including any nested ones

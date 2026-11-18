@@ -49,7 +49,7 @@ def sort_inputs(models, kwargs, pars, given, names):
         names (dict): the names of the variables of the code that made the sim (see `ss.utils.caller_names()`)
 
     Returns:
-        An `sc.obj` with `mods` (the modules by kind; `modules` for those sorted when the sim is initialized), `settings` (the sim's settings by name), `par_values` (the values of the model's parameters by name, or None), and `given_order` (the model's modules in the order given)
+        An `sc.obj` with `mods` (the modules by kind; `modules` for those sorted when the sim is initialized), `settings` (the sim's settings by name), and `par_values` (the values of the model's parameters by name, or None)
     """
     kwargs = dict(kwargs)
     models, pars = take_modules(models, kwargs, pars)
@@ -60,9 +60,9 @@ def sort_inputs(models, kwargs, pars, given, names):
     pars = model_pars(kwargs, ss.SimPars.names(), pars)
     models = make_disease(models, names)
     mods['diseases'] = make_disease(mods['diseases'], names)
-    given_order = sort_by_kind(models, mods)
+    sort_by_kind(models, mods)
     settings, par_values = settings_in_pars(pars, kwargs, given, given_modules(dict(enumerate(models)), mods))
-    return sc.obj(mods=mods, settings=settings, par_values=par_values, given_order=given_order)
+    return sc.obj(mods=mods, settings=settings, par_values=par_values)
 
 
 def take_modules(models, kwargs, pars):
@@ -125,19 +125,15 @@ def model_pars(kwargs, settings, pars=None):
 def sort_by_kind(models, mods):
     """
     Sort the model's modules into their kinds in `mods` (in place), after those given by keyword, as `init()` would, so that e.g. `sim.pars.diseases` has them before
-    `init()` as after; and number each by its place in the model, for `step_order='given'` (see `SimPars.validate_modules()`). Returns the modules in the order given.
+    `init()` as after
     """
-    given_order = sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)])
-    for i,mod in enumerate(given_order):
-        if isinstance(mod, ss.Module):
-            mod._model_index = i
-    for mod in given_order:
+    for mod in sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)]):
         key = module_kind(mod)
         if key == 'custom' or isinstance(mods[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see validate_modules())
             mods['modules'] = sc.mergelists(mods['modules'], mod)
         else:
             mods[key] = sc.mergelists(mods[key], mod)
-    return given_order
+    return
 
 
 def settings_in_pars(pars, kwargs, given, mods):
@@ -253,7 +249,6 @@ class SimPars(ss.Pars):
         self.aging = None # Whether agents age (by default, if there are births or deaths)
 
         # Modules
-        self.step_order = 'type' # The order in which the modules step: 'type' (each kind at its place in the loop), or 'given' (the order they were given in)
         self.people = None
         self._reset_modules()
 
@@ -341,8 +336,6 @@ class SimPars(ss.Pars):
         self.verbose = ss.parameters.check_verbose(self.verbose)
         self.validate_whole()
         self.validate_agents()
-        if self.step_order not in ['type', 'given']:
-            raise ValueError(f"step_order={self.step_order!r} is not 'type' or 'given'")
         self.solver = ss.solvers.as_solver(self.solver) # A solver by name is the solver itself, e.g. 'ode' is ss.solvers.ode(); the one that runs, if 'auto', is chosen when the sim is initialized (see ss.solvers.choose_solver())
         if self.total_pop is None: # One person per agent
             self.total_pop = self.n_agents
@@ -403,10 +396,6 @@ class SimPars(ss.Pars):
             if mod.has_product and not any(mod.product is p for p,d in products): # Products share the same namespaces; the same product can be used by more than one intervention
                 products.append((mod.product, mod))
             self[modkey].append(mod)
-        order = [mod for source,mod in modules if source == 'modules'] + [mod for source,mod in modules if source != 'modules']
-        order.sort(key=lambda mod: getattr(mod, '_model_index', np.inf)) # The model's modules (given to the sim as arguments) first, in the order given
-        for i,mod in enumerate(order):
-            mod._given_index = i # Its place in the order given, for step_order='given': see ss.Loop.collect_given()
         for product, delivery in products: # Named after all the other modules, so that a product named for its kind ("treatment") never takes a name the user gave a module
             self.validate_name(product, 'products', names, delivery=delivery)
         return

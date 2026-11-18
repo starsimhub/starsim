@@ -216,18 +216,6 @@ class Route(ss.Module):
         """ A route works on groups, unless it says otherwise """
         return []
 
-    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
-        """ The people infected over this route in a step, for a disease written as code; a route other than a network (e.g. a mixing pool) defines it
-
-        Args:
-            rel_sus (array): the relative susceptibility of each agent
-            rel_trans (array): the relative transmissibility of each agent
-            disease_beta (float): the disease's transmission probability
-            disease (Disease): the disease
-        """
-        errormsg = 'compute_transmission() must be defined by Route subclasses'
-        raise NotImplementedError(errormsg)
-
 
 class Network(Route):
     """
@@ -318,7 +306,6 @@ class Network(Route):
     #%% Sides, directions, and acts
 
     sides = None # The kinds of people at the two ends of its edges: a dict of a short label to a condition over people (e.g. dict(m=~ss.person.female, f=ss.person.female)), from which its directions follow
-    same_side = False # Whether an edge can join two people on the same side (e.g. partnerships between anyone, by sex)
     one_way = False # Whether it transmits only from p1 to p2 (mother to child), whose sides are then where they are in an edge
 
     @property
@@ -336,7 +323,7 @@ class Network(Route):
         sides = list(self.sides or {})
         if self.one_way:
             return [f'{sides[0]}2{sides[1]}'] if len(sides) == 2 else []
-        return [f'{a}2{b}' for a in sides for b in sides if a != b] + ([f'{a}2{a}' for a in sides] if self.same_side else [])
+        return [f'{a}2{b}' for a in sides for b in sides if a != b]
 
     def sides_str(self):
         """ The sides, for messages and describe(), e.g. 'sides m and f (m: male, f: female)' """
@@ -548,23 +535,6 @@ class Network(Route):
         for key in ['p1', 'p2']:
             if key in self.edges and not isinstance(self.edges[key], ss.uids):
                 self.edges[key] = ss.uids(self.edges[key])
-        return
-
-    def validate(self):
-        """
-        Check the columns of the edges: convert any of the wrong type, and raise an error for any of the wrong length
-        """
-        if not len(self.edges): # No edges have been added yet
-            return
-        n = len(self.edges.p1)
-        for key, dtype in self.meta.items():
-            if dtype and self.edges[key].dtype != dtype:
-                self.edges[key] = np.array(self.edges[key], dtype=dtype)
-            actual_n = len(self.edges[key])
-            if n != actual_n:
-                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'
-                raise TypeError(errormsg)
-        self.validate_uids()
         return
 
     def eligible(self, who=None):
@@ -1619,9 +1589,14 @@ class DegreeNet(DynamicNetwork):
     def pair(self, p1, p2, start=False):
         """ Add partnerships between two lists of people, leaving out pairs who are already partners (with a target; without, only people with none look), with their durations and acts """
         if len(self) and len(p1) and self.targeted:
-            existing = set(zip(np.minimum(self.edges.p1, self.edges.p2).tolist(), np.maximum(self.edges.p1, self.edges.p2).tolist()))
-            new = zip(np.minimum(p1, p2).tolist(), np.maximum(p1, p2).tolist())
-            keep = np.array([pair not in existing for pair in new], dtype=bool)
+            e1, e2, a1, a2 = [np.asarray(x, dtype=np.int64) for x in (self.edges.p1, self.edges.p2, p1, p2)]
+            m = max(e1.max(), e2.max(), a1.max(), a2.max()) + 1
+            pairing = np.zeros(m, dtype=bool) # Only the edges of the people pairing now can be repeats
+            pairing[a1] = True
+            near = pairing[e1] | pairing[e2]
+            e1, e2 = e1[near], e2[near]
+            key = lambda x, y: np.minimum(x, y)*m + np.maximum(x, y) # Each pair as one number, whichever way round
+            keep = ~np.isin(key(a1, a2), key(e1, e2), kind='sort') # Sorting, since a lookup table would have m*m entries
             p1, p2 = p1[keep], p2[keep]
         keep = p1 != p2
         p1, p2 = p1[keep], p2[keep]

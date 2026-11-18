@@ -366,7 +366,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Tra
         self._round_seeds = {} # The seeds of the rounds named by a transition: see round_seed()
         self._source = None # The module whose rounds these are, if not this one, and the rounds of the others: see new_round()
         self._rounds = {}
-        self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
         self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
         self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
@@ -1039,18 +1038,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Tra
             self.live_total = self.live_total + (np.bincount(self.sim.groups.group_raw()[new], minlength=self.sim.groups.n_groups) if self.sim.groups.n_groups > 1 else len(new))
             self.n_counted = n
         return self.live_total
-
-    def check_counts(self):
-        """ Check the counts kept since the last census against a new one (with `STARSIM_CHECK_COUNTS=1`, at every step; for testing) """
-        kept = {name:vals.copy() for name,vals in self.live.items()}
-        total = self.alive_counts().copy()
-        self.census()
-        for name,vals in self.live.items():
-            if not np.array_equal(kept[name], vals):
-                raise RuntimeError(f'The count of "{self.mod.name}.{name}" kept by group, {kept[name].sum()}, differs from a new count, {vals.sum()}')
-        if not np.array_equal(total, self.live_total):
-            raise RuntimeError(f'The number alive kept by group for "{self.mod.name}", {total.sum()}, differs from a new count, {self.live_total.sum()}')
-        return
 
     def counted(self, state):
         """ The number in a state of people now, by the group it is counted in (see `stock()`) """

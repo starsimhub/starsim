@@ -78,9 +78,7 @@ class Twin:
 def pytest_configure(config):
     ss.options.backend = 'numba' # Numba's, compiled, take the run; Rust's are called beside them
     pair = Twin()
-    ss.solvers.backends.compiling.choose = lambda seconds=0.0: pair
-    for mod in [ss.solvers.compartmental, ss.solvers.joint_states]:
-        mod.choose_kernels = lambda owner, runs, seconds: pair
+    ss.solvers.backends.compiling.choose = lambda: pair
     return
 
 

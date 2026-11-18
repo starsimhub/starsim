@@ -17,7 +17,6 @@ import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents, Transmission, agent_solver
 from .agents_events import Events
-from .agents_compiled import Compiled
 from .engine import convert
 from .build import init_model, init_lifetables, check_routes, flows_of
 
@@ -43,7 +42,7 @@ class Solver:
     example = None # e.g. "ss.solvers.ode(integrator='euler')"
     agents = False # Whether it runs agents (only abm); test this rather than the class, e.g. `sim.solver.agents`
     integer = False # Whether it moves whole people (binomial, gillespie, tau, and abm), not fractions of them (ode)
-    rescale = even_draws = keep_times = record_people = False # The options of agents (see abm), which a compartmental run doesn't have (it records the results about people in its own way)
+    rescale = keep_times = False # The options of agents (see abm), which a compartmental run doesn't have
 
     def __init__(self, **kwargs):
         unknown = [key for key in kwargs if key not in self.options]
@@ -142,17 +141,15 @@ class abm(Solver):
             - 'events': event by event in continuous time within each step (a prototype)
 
         rescale (bool/dict): dynamic rescaling of agents, as in Covasim (default False): each agent starts standing for one person, and the number grows to `sim.pop_scale` as the agents are infected, with some made naive again each time. This keeps the detail of a small outbreak in a large population without an agent per person. True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the fraction of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
-        even_draws (bool): space each call's random numbers evenly rather than independently (default False), for less variable runs; needs common random numbers (`ss.options.crn`)
         keep_times (bool): for a declared disease, keep the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.n_times`, `.since`, and `.ever`), to read after the run (default False, to save memory: only those that the solver or the model needs are kept, and reading another raises an error)
-        record_people (bool): record the results about people (alive, female, birth, death, emigration, etc.) every step (default True); False saves a little time in a sim that doesn't need them
     """
     name = 'abm'
     agents = integer = True
-    options = dict(step=(None, [None, 'midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
+    options = dict(step=(None, [None, 'midstep', 'wholestep', 'events']), rescale=(False, None), keep_times=(False, [False, True]))
     example = "ss.solvers.abm(step='events', rescale=True)"
 
-    def __init__(self, *, step=None, rescale=False, even_draws=False, keep_times=False, record_people=True):
-        super().__init__(step=step, rescale=rescale, even_draws=even_draws, keep_times=keep_times, record_people=record_people)
+    def __init__(self, *, step=None, rescale=False, keep_times=False):
+        super().__init__(step=step, rescale=rescale, keep_times=keep_times)
         check_rescale(rescale)
 
 
@@ -208,12 +205,11 @@ class Undeclared(Transmission):
     finalize_results = Transmission.reset_pars
 
     def define(self):
-        """ Nothing declared, so no distributions of its own (the disease's code makes its own); with strains, those of who infects whom and of protection (see `Transmission.strain_cases()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
+        """ Nothing declared, so no distributions of its own (the disease's code makes its own); with mixing pools, that of who is infected over them (see `Transmission.code_route()`), by the name a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives it """
         self.dists = sc.obj()
-        if getattr(self.mod, 'strains', None) is not None:
-            for key in ['pick_infection', 'protect_infection']:
-                self.dists[key] = ss.random(name=f'rng_{key}')
-                self.mod.setattribute(f'rng_{key}', self.dists[key])
+        if any(isinstance(route, ss.networks.PoolRoute) for route in self.sim.networks.values()):
+            self.dists.mix_infection = ss.random(name='rng_mix_infection')
+            self.mod.setattribute('rng_mix_infection', self.dists.mix_infection)
         return
 
     def start_step(self):
@@ -273,7 +269,7 @@ def make_engine(module, sim):
     if sim.solver.agents:
         if agent_solver(module, sim) == 'events':
             return Events(module, sim)
-        return Compiled(module, sim)
+        return Agents(module, sim)
     if getattr(module, 'solver', None) is not None:
         raise ss.CapabilityError(f'"{module.name}" has solver={module.solver!r}, but the sim runs as compartments (solver="{sim.solver}"); a module\'s own solver is for agents only, so give the sim solver="abm", or leave the module\'s out')
     engine = sim.__dict__.get('layouts', {}).pop(module.name, None)
@@ -375,13 +371,11 @@ def choose_solver(sim):
 
 def check_solver_options(sim):
     """
-    The settings of the sim that only agents take, given to a sim that runs as compartments, are errors rather than ignored: rescale=, even_draws=,
+    The settings of the sim that only agents take, given to a sim that runs as compartments, are errors rather than ignored: rescale=,
     and n_agents= with no other population size (total_pop=, or a named population's), which would otherwise be taken as the number of people; with one, n_agents= is noted as unused
     (see `init_compartments()`), so one sim can be run both ways
     """
     if sim.solver.agents:
-        if sim.solver.even_draws and not ss.options.crn:
-            raise ValueError('ss.solvers.abm(even_draws=True) needs common random numbers, but ss.options.crn is False')
         return
     how = f'solver={sim.pars.solver!r}' if sim.pars.solver != 'auto' else f'solver="auto" chose "{sim.solver}", since {sim.solver_reason}'
     pars = sim.pars

@@ -1,9 +1,9 @@
 """
-Not for the user: compiling the kernels, and choosing between compiled and plain Python for a compartmental run
+Not for the user: compiling the kernels, and choosing which a compartmental run takes
 
-Which compartmental kernels a run takes (`choose()`): Rust's, if they are in use; else Numba's, compiled, or the same code run
-as plain Python (`uncompiled()`), from about how long the run would take as plain Python (`plain_seconds()`). `ss.compile()`
-compiles Numba's ahead of time, and `compile_status()` says whether they are compiled.
+Which compartmental kernels a run takes (`choose()`): Rust's, if they are in use; else Numba's, compiled, or with
+`ss.options.backend = 'python'`, the same code run as plain Python (`uncompiled()`). `ss.compile()` compiles Numba's
+ahead of time, and `compile_status()` says whether they are compiled.
 
 Numba's on-disk cache is made stale by the contents of a module's file and of the files its functions call into.
 Numba checks only the file of a cached function, so a change to a function it calls in
@@ -48,8 +48,7 @@ def takes(what, low, high):
 # Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes (s), erring long (measured 2026-11-07: 34 to 43 s for many runs, 32 to 46 and 33 to 55 s for the particle filter's)
 slow = {
     'starsim.solvers.numba.passes':                         takes('the agent solver', 2, 15), # And for ss.compile(), the rest of what sims with agents compile (30 s measured), as 'agents'
-    'starsim.solvers.numba.agent_moves.step_moves':         takes("the agent solver's moves", 3, 15), # 5.4 s measured (2026-11-17)
-    'starsim.solvers.numba.agent_events.step_events':       takes('the agent solver by events', 3, 15),
+    'starsim.solvers.numba.agent_events.step_events':       takes('the agent solver by events', 3, 15), # Not compiled by ss.compile(): on the first run with abm(step='events')
     'agents':                                               takes('the agent solver and what sims with agents use', 20, 60),
     'starsim.solvers.numba.compartmental.run':              takes('the compartmental solvers', 60, 150), # 63 s measured
     'starsim.solvers.numba.compartmental.one_step':         takes('a step of the compartmental solvers', 5, 20),
@@ -126,14 +125,8 @@ def timed_first(func, what, engine, low, high):
 
 #%% Choosing and compiling the compartmental kernels
 
-compile_seconds = 120 # About how long compiling the kernels for a first run takes, once per install (86 to 128 s measured, 2026-10-31, with nothing in Numba's cache): runs that would take longer than this as plain Python are compiled first (by default: see choose())
 compile_all_seconds = 360 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31; 153 s on another, 2026-11-07); the time of each part is in `slow`
-note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
-plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
-noted = False # Whether choose() has said that a run is taken as plain Python, in this session
-chosen = False # Whether choose() has chosen to compile the kernels, in this session
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
-on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
 
 
 def uncompiled():
@@ -164,15 +157,6 @@ def quiet(func):
     return wrapper
 
 
-def is_compiled():
-    """ Whether the kernels are compiled already: in this session, or in Numba's cache from an earlier one (an index that is out of date reads as empty) """
-    global on_disk
-    step = ss.solvers.numba.compartmental.step
-    if on_disk is None:
-        on_disk = cached(step, in_session=False)
-    return on_disk or bool(step.signatures)
-
-
 def numba_kernel(module, name):
     """ A Numba kernel of `ss.solvers.numba.<module>`, also while Rust's copy is in its place (see `ss.solvers.backends.rust.use()`) """
     held = ss.solvers.backends.rust.numba
@@ -180,8 +164,8 @@ def numba_kernel(module, name):
 
 
 def agent_kernels():
-    """ The Numba functions that stand for the agent solver, one for each file (see `compile_status()`) """
-    return [ss.solvers.numba.passes.bounds, numba_kernel('agent_moves', 'step_moves'), numba_kernel('agent_events', 'step_events')]
+    """ The Numba functions that stand for the agent solver (see `compile_status()`) """
+    return [ss.solvers.numba.passes.bounds]
 
 
 def cached(func, in_session=True):
@@ -189,104 +173,17 @@ def cached(func, in_session=True):
     return bool((in_session and func.signatures) or func._cache._cache_file._load_index())
 
 
-def work(p, y):
+def choose():
     """
-    About how many operations working out a program's rates once takes, from its size alone: each group times each
-    flow, target, operation, compartment, and compartment of an infectious state; for each exposure, through each
-    mixing term, each group and cell, each entry of the time fraction between places that it uses (times the levels in
-    each place), and each pair of cells that mix in a place (a quarter as many for a whole matrix of more than 16,
-    which BLAS takes); and each entry of a mover times its compartments. For `plain_seconds()`.
+    The compartmental kernels to take a run with: the Rust ones (see `ss.solvers.backends.rust`) if they are in use; else Numba's
+    (`ss.solvers.numba.compartmental`), compiled by Numba on their first run (once per install, or ahead of time with `ss.compile()`),
+    or with `ss.options.backend = 'python'`, the same code as plain Python (see `uncompiled()`)
     """
-    nc, ng = y.shape
-    size = ng*(len(p.src) + len(p.tgt_comp) + len(p.ops) + nc + len(p.set_comps))
-    if len(p.ops): # Exposure is worked out only for rates that depend on the compartments
-        mixing = 0.0
-        for t in range(len(p.sizes)):
-            cells, block = int(p.sizes[t]), int(p.block[t])
-            pairs = len(p.sh_val)*block
-            mixing += 3*ng + cells + (2*p.use[0, t] + p.use[2, t])*pairs + p.use[1, t]*cells*block*(0.25 if block == cells > 16 else 1)
-        size += np.sum(p.exp_set >= 0)*mixing
-    if p.n_movers:
-        size += np.sum(np.diff(p.mov_starts[0])*np.diff(p.mov_starts[1]))
-    return size
-
-
-def evals(npts, solver, n_sub):
-    """ How many times a run works out the rates: at each step, each substep (see `substeps()`), and each stage (four for RK4 and tau-leaping) """
-    solvers = ss.solvers.numba.compartmental.solvers
-    stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
-    return npts*stages*max(n_sub, 1)
-
-
-def plain_seconds(p, y, npts, solver, n_sub=1):
-    """
-    About how long a run would take as plain Python, in seconds, from the program's size alone, so that it is the same
-    for a model whatever has run before and whatever else the machine is doing: 10 µs each time the rates are worked
-    out (see `evals()`), plus 0.6 µs for each operation that takes (see `work()`); the exact solver takes about one
-    event for each person and flow. Measured once (2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
-    to 100 groups, over 20 and 50 places, measles metapop over 260 districts, MEmilio's 50 counties, two SEIRs with
-    stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
-    0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
-    enough to choose whether to compile. The binomial and tau-leaping solvers add 70 µs for each draw, one for each flow, group, and
-    step or substep (measured 2026-10-31 on SEIRSs with 1 to 40 groups, within 0.7 to 1.1 times the time taken; without it, 0.1 to 0.2).
-
-    Args:
-        n_sub (int): the substeps in each step (see `substeps()`)
-    """
-    solvers = ss.solvers.numba.compartmental.solvers
-    if solver == solvers['gillespie']:
-        return y.sum()*len(p.src)*(1e-5 + 3e-7*work(p, y))
-    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['whole'], solvers['tau']] else 0.0
-    return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y)) + draws
-
-
-def substeps(rates, dt, n_sub, solver):
-    """ About how many substeps a solver takes in each step, for `plain_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
-    if n_sub > 0 or solver >= 2: # The stochastic solvers that take steps of their own length count them in their own way
-        return max(n_sub, 1)
-    rates = np.ravel(rates)
-    fastest = np.max(rates[np.isfinite(rates)], initial=0.0)
-    return max(int(np.ceil(fastest*dt/0.25)), 1)
-
-
-def choose(seconds=0.0):
-    """
-    The compartmental kernels to take a run with: the Rust ones (see `ss.solvers.backends.rust`) if they are in use, else Numba's (`ss.solvers.numba.compartmental`), compiled by
-    Numba, or the same code as plain Python (see `uncompiled()`), as `ss.options.backend` says
-
-    Compiling them takes about two minutes (`compile_seconds`), once per install (or ahead of time, with `ss.compile()`). By default
-    (`ss.options.backend = 'auto'`, without Rust) they are compiled first if the runs taken as plain Python in this session, with
-    this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
-    saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
-    `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
-    minutes of silence look like a hang.
-
-    Args:
-        seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
-    """
-    global plain_total, noted, chosen
     if ss.solvers.backends.rust.on: # Compiled ahead of time
         return ss.solvers.backends.rust.compartmental()
-    mode = ss.options.backend
-    if mode == 'python':
+    if ss.options.backend == 'python':
         return uncompiled()
-    K = ss.solvers.numba.compartmental
-    if chosen or is_compiled():
-        return K
-    if mode == 'numba':
-        chosen = True # Each part says so as it is compiled: see announce()
-        return K
-    total = plain_total + seconds
-    if total < compile_seconds:
-        plain_total = total
-        if seconds >= note_after and not noted:
-            noted = True
-            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; 15 to 300 times faster compiled, after compiling once per install for about {compile_seconds/60:.0f} minutes: ss.compile())')
-        return uncompiled()
-    chosen = True
-    which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
-    print(f'Note: compiling the solver (once per install), since {which} would take about {total:.0f} s as plain Python')
-    return K
+    return ss.solvers.numba.compartmental
 
 
 def compile(check=False, verbose=True):
@@ -295,7 +192,7 @@ def compile(check=False, verbose=True):
 
     Compiling takes about five minutes (`compile_all_seconds`), once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, then a temporary folder, or in
-    `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.backend`. With the
+    `NUMBA_CACHE_DIR` if it is set). Otherwise, the first run that needs them compiles them. With the
     Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile(check=True)`.
 
     Args:
@@ -422,7 +319,6 @@ def typical_sims():
         ss.Sim(diseases=ssl.HIV(), networks='sexual', demographics=True, **small),
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', **small),
-        ss.Sim(diseases=ss.SEIR(beta=0.1), networks='random', solver=ss.solvers.abm(step='events'), **small), # The agents taken event by event (ss.solvers.numba.agent_events)
     ]
     if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
         sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.numba.passes.min_threaded, dur=ss.days(5), verbose=0))

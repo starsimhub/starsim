@@ -412,27 +412,28 @@ def test_layers():
 
 
 def test_matrix():
-    """ A matrix of numbers, or one distribution of matrices, makes no pool for each pair of groups, and gives the epidemic those pools would """
+    """ A matrix of numbers, or one distribution of matrices, gives the epidemic of a mixing pool for each pair of groups """
     sc.heading('Testing MixingPools with a matrix...')
     groups = dict(young=ss.person.age < 30, old=ss.person.age >= 30)
-    run = lambda n: ss.Sim(ss.SIS(init_prev=0.02, beta=ss.perday(0.05)), networks=ss.networks.MixingPools(source=groups, target=groups, n_contacts=n), n_agents=5000, unit='day', stop=40, solver='abm', verbose=0).run()
+    run = lambda nets: ss.Sim(ss.SIS(init_prev=0.1, beta=ss.perday(0.05)), networks=nets, n_agents=5000, unit='day', stop=40, solver='abm', verbose=0).run()
+    pools = lambda make: [ss.MixingPool(source=groups[sk], target=groups[dk], n_contacts=make(i, j), name=f'{sk}_{dk}') for i,dk in enumerate(groups) for j,sk in enumerate(groups)] # Row i is the contacts of a person in target group i
     matrix = np.array([[3.0, 1], [1, 2]])
-    sims = [run(matrix), run(np.vectorize(lambda v: ss.uniform(v, v), otypes=[object])(matrix))] # A distribution makes a pool for each pair, here with the same contacts for everyone
-    assert len(sims[0].networks[0].pools) == 0 and len(sims[1].networks[0].pools) == 4
+    sims = [run(ss.networks.MixingPools(source=groups, target=groups, n_contacts=matrix)), run(pools(lambda i, j: matrix[i, j]))]
     assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.05)
 
     matrix = np.array([[2.4, 0.9], [0.5, 1.6]])
-    sims = [run(ss.poisson(matrix)), run(np.vectorize(ss.poisson, otypes=[object])(matrix))]
+    sims = [run(ss.networks.MixingPools(source=groups, target=groups, n_contacts=ss.poisson(matrix))), run(pools(lambda i, j: ss.poisson(matrix[i, j])))]
     net = sims[0].networks[0]
-    assert len(net.pools) == 0 and len(sims[1].networks[0].pools) == 4
     auids = sims[0].people.auids
     contacts = net.contacts_0.raw[auids][sims[0].people.age.raw[auids] < 30] # Each young person's contacts with the young: a Poisson of mean 2.4
     assert np.isclose(contacts.mean(), 2.4, rtol=0.1) and np.isclose(contacts.var(), 2.4, rtol=0.2)
     assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.1)
+    with pytest.raises(TypeError, match='one distribution'): # Not a matrix of distributions
+        ss.networks.MixingPools(source=groups, target=groups, n_contacts=np.vectorize(ss.poisson, otypes=[object])(matrix))
 
     # Through ss.contacts(), from a country's table of contacts a day, in a sim by week
     sim = ss.Sim(ss.SIS(beta=ss.perday(0.02)), networks=ss.contacts(ss.poisson(ss.data.contacts('Kenya'))), n_agents=2000, unit='week', stop=4, verbose=0).run()
-    assert sim.networks[0].contact_scale == 7 and len(sim.networks[0].pools) == 0
+    assert sim.networks[0].contact_scale == 7
 
     # A matrix given by position alone is over the stratification with as many levels, as if given by name; with none or several, it is an error
     C = [[10, 3, 1], [3, 5, 2], [1, 2, 4]]

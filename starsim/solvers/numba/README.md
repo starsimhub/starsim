@@ -13,7 +13,6 @@ The kernels are the compiled functions that the solvers run. Numba's, here, are 
 | `compartmental.py`, section "register" (movement registers, deliveries) | `compartmental/register.rs` | The entry points (section "run") |
 | `compartmental.py`, section "run" (the entry points, `entries`) | `compartmental.rs`, bound in `compartmental/bind.rs` | `ss.solvers.Compartmental` (`../compartmental.py`), `JointStates`, `Particles`, `ss.fitting` |
 | `passes.py` | `passes.rs` | `ss.solvers.Agents` (`../agents*.py`), `ss.People`, the networks, `ss.Births`, `ss.dimensions` |
-| `agent_moves.py` | `agent_moves.rs` | `ss.solvers.Compiled` (`../agents_compiled.py`), the default engine of `solver='abm'` |
 | `agent_events.py` | `agent_events.rs` | `ss.solvers.Events` (`../agents_events.py`), for `ss.solvers.abm(step='events')` |
 | `draws.py` | `draws.rs` | The other kernels, and `ss.Dist` |
 | Small kernels in `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py`, `people.py` | `small.rs` | Those modules |

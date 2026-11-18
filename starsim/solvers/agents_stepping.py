@@ -13,7 +13,6 @@ from .agents_moving import add_events
 
 __all__ = ['Stepping']
 
-check_counts = sc.parse_env('STARSIM_CHECK_COUNTS', False, bool) # Whether the agent engine checks the counts it keeps against a new count at each step: see ss.solvers.Agents.check_counts()
 
 
 class Stepping:
@@ -40,7 +39,7 @@ class Stepping:
             self.step_held(dt)
         missed = {name:self.schedule(self.graph.states[name], members[name]) if self.unscheduled is None or name in self.unscheduled else None for name in members if name in self.listed} # Who has a draw of the competing rates to catch up on, by state: see schedule()
         self.unscheduled = set() if self.live is not None else None
-        for name in self.listed: # In order, since each state's moves are made as it is taken (see Compiled.step_state(), which collects them, so draws the states that share rates together)
+        for name in self.listed: # In order, since each state's moves are made as it is taken
             if name in quick:
                 self.leave(self.graph.states[name])
             elif len(members[name]):
@@ -78,8 +77,6 @@ class Stepping:
         if sim.groups.group_fold is not None: # Counts by place taken from the agents (see local_count()): counted again at each step
             self.live = None
             self.unscheduled = None # Writes are not watched while nothing is counted
-        elif self.live is not None and check_counts:
-            self.check_counts()
         if self.live is None:
             listed = self.listed if sim.contact_rates.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
             members = self.census(listed) # Who is where before anyone moves, in one pass over the agents
@@ -90,7 +87,7 @@ class Stepping:
         self._members = members
         return members
 
-    def leave(self, state, uids=None, missed=None, pending=None):
+    def leave(self, state, uids=None, missed=None):
         """
         At the start of the step: who of the agents in a state leaves it now, by a scheduled exit that is due, or by its competing rates
         (one draw per agent); `missed` are those who have a draw of the competing rates to catch up on (see `schedule()`). With no `uids`,
@@ -153,11 +150,8 @@ class Stepping:
             self.draw_competing(state, uids[early], 0.5*dt, key=f'entry_{name}')
             mod[f'late_{name}'][uids[early]] = 0.0
             uids = uids[~early]
-        if competing and len(uids): # Competing rates: one draw per agent (with those of other states with the same rates, if `pending` is given, for an engine that collects the moves: see draw_pending())
-            if pending is not None:
-                pending.append((state, uids))
-            else:
-                self.draw_competing(state, uids, dt)
+        if competing and len(uids): # Competing rates: one draw per agent
+            self.draw_competing(state, uids, dt)
         return
 
     def draw_competing(self, state, uids, dt, key=None):
@@ -221,7 +215,7 @@ class Stepping:
             part = slice(start, start + m)
             start += m
             stream = f'exit_{state.name}' if key is None else key # The stream drawn from (the entry draws have their own)
-            crn = self.crn_key(stream, u) if m else None
+            crn = self.crn_key(stream) if m else None
             if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
                 if same:
                     pos, which = ss.solvers.numba.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
@@ -256,15 +250,6 @@ class Stepping:
         if np.ndim(val) == 0 and self.is_route_fixed(tr.rate):
             kept[key] = val
         return val
-
-    def draw_pending(self, pending):
-        """ The competing rates left by `leave()` to draw, as `draw_competing_in()` for each set of states with the same rates: for an engine that collects the moves of the states and takes them together (see Compiled.step_state()), so that the order they are drawn in does not matter """
-        groups = {}
-        for state,uids in pending:
-            groups.setdefault(tuple(tr.name for tr in self.competing[state.name]), []).append((state, uids))
-        for parts in groups.values():
-            self.draw_competing_in(parts, self.dt)
-        return
 
     def after_of(self, tr):
         """ A transition's minimum stay (`min_stay=`), in the sim's unit """
@@ -663,7 +648,7 @@ class Stepping:
         self.end_contact_step()
         return
 
-    #%% The parts of a step that the engines share (see Compiled and Events)
+    #%% The parts of a step that the engines share (see Events)
 
     def begin_state_step(self):
         """ The start of the step's first part (see `step_state()`): its first round of draws, and the people made, or moved by code, since the last step """
@@ -707,13 +692,12 @@ class Stepping:
         return
 
     def end_contact_step(self):
-        """ The end of the step's contact-mediated part: derived attributes and results, the movement register's events at the step's end, and the counts """
+        """ The end of the step's contact-mediated part: derived attributes and results, and the movement register's events at the step's end (the counts are taken at the next `record_states()`) """
         mod = self.mod
         self.write_derived(self.sim.people.auids)
         self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.current_value('rel_sus')) are worked out again
         if self.sim.contact_rates.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti + 1)
-        self.count_stocks() # Deaths later in the step are taken out of them: see die()
         return
 
     def shift_states(self, uids, states, to_states, ti):

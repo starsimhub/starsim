@@ -35,7 +35,6 @@ Starsim's global options are in `ss.options`: set one for the session with `ss.o
 | `warnings` | What to do with a warning: `'warn'` (default), `'print'`, `'error'`, or `'ignore'` |
 | `backend` | How the numbers are computed: `'auto'` (default), `'rust'`, `'numba'`, `'python'`, or `'jax'` |
 | `threads` | Threads for the passes over the agents of a large sim; `1` on a cluster, where tasks already run in parallel |
-| `precision` | `32` (default) or `64` bits for the numbers kept for each agent |
 | `style` | The plotting style: `'starsim'` (default), `'simple'`, or a Matplotlib style |
 
 ## Further reading

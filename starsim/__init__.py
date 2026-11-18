@@ -67,7 +67,7 @@ from .internals.parameters import Pars, by, timeseries, seasonal
 #%% People and modules
 from .people import People, population, person
 from .internals import modules
-from .internals.modules import register_modules, required, Module
+from .internals.modules import register_modules, Module
 from .networks import (
     Network, DynamicNetwork,
     RandomNet, DegreeNet, SexualNet,

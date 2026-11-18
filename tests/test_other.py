@@ -305,15 +305,11 @@ def test_skills():
 
 def test_options():
     """ An option is checked before it is set, so a value it doesn't take leaves it as it was """
-    for key,value in dict(precision=16, warnings='eror', backend='fortran').items():
+    for key,value in dict(warnings='eror', backend='fortran').items():
         before = ss.options[key]
         with pytest.raises(ValueError):
             ss.options(**{key:value})
         assert ss.options[key] == before
-    assert ss.dtypes.float == np.float32
-    with ss.options(precision=64):
-        assert ss.dtypes.float == np.float64 and ss.arrays.ss_float == np.float64
-    assert ss.dtypes.float == np.float32
     return
 
 

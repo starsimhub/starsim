@@ -417,7 +417,8 @@ class Isolate(ss.Intervention):
 
     def step(self):
         uids = self.check_eligibility()
-        self.sim.diseases.flu.move(uids, 'R', p=self.pars.p) # A fraction of those eligible (here the infectious)
+        flu = self.sim.diseases.flu
+        flu.move(flu.R, uids=uids, p=self.pars.p) # A fraction of those eligible (here the infectious)
         return
 
 isolate = Isolate(who='flu.I')

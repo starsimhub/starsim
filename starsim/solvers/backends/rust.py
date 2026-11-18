@@ -20,7 +20,7 @@ import importlib.util
 import collections
 import sciris as sc
 import starsim as ss
-from ..numba import passes, agent_events, agent_moves, draws
+from ..numba import passes, agent_events, draws
 
 __all__ = ['use', 'built', 'on', 'fell', 'compartmental']
 
@@ -47,13 +47,13 @@ def fallback(rs, nb):
 
 def modules():
     """ Where the kernels are: modules, a class (whose kernels are static methods), and `draws.many` (a dict) """
-    return sc.obj(passes=passes, agent_events=agent_events, agent_moves=agent_moves, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
+    return sc.obj(passes=passes, agent_events=agent_events, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
                       multi_random=ss.distributions.multi_random, many=draws.many)
 
 single = ['levels', 'crossed', 'infection_probs', 'put_count', 'set_exits', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.numba.passes with no threaded version
 drivers = sorted(k.removesuffix('_drivers') for k,v in vars(passes).items() if k.endswith('_drivers') and isinstance(v, (list, tuple))) # Those with a serial and a threaded driver (X_drivers), both the Rust kernel X (the number of chunks says which); a pass Rust lacks fails use(True)
 names = dict(passes=single + [f'{k}_drivers' for k in drivers],
-             agent_events=['step_events'], agent_moves=['due_agents', 'step_moves'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
+             agent_events=['step_events'], arrays=['nb_true_raw', 'nb_indexer', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
              multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
 numba = None # The Numba kernels, once replaced
 
@@ -121,7 +121,7 @@ def use(rust=True):
             raise AttributeError(errormsg)
         kernels = {('passes', k): fallback(getattr(rs, k), numba['passes', k]) for k in single}
         kernels.update({('passes', f'{k}_drivers'): tuple(fallback(getattr(rs, k), nb) for nb in numba['passes', f'{k}_drivers']) for k in drivers})
-        for m in ['agent_events', 'agent_moves', 'arrays', 'networks', 'dists', 'multi_random']: # Each Rust kernel has the name of the Numba one
+        for m in ['agent_events', 'arrays', 'networks', 'dists', 'multi_random']: # Each Rust kernel has the name of the Numba one
             for k in names[m]:
                 nb = numba[m, k]
                 kernels[m, k] = fallback(getattr(rs, k), nb.__func__ if isinstance(nb, staticmethod) else nb) # A static method of multi_random, as its function

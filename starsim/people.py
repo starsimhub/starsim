@@ -427,10 +427,9 @@ class People:
         each kept only if something in the sim can make it, even at a rate of zero (see `ss.Sim.drop_unused_flows()`); the crude birth and
         mortality rates are results of the demographics modules (`ss.Births`, `ss.Deaths`, and `ss.Pregnancy`).
 
-        With `ss.solvers.abm(record_people=False)` (or a compartmental run, which records them in its own way), there are none of these (and `record_states()` and
-        `record_events()` are skipped in the loop), which saves a little time and memory.
+        A compartmental run records them in its own way, so there are none of these (and `record_states()` and `record_events()` are skipped in the loop).
         """
-        if not getattr(self.sim.solver, 'record_people', False):
+        if not getattr(self.sim.solver, 'agents', False):
             return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = [ss.Result(state.name, label=state.label, kind='stock', **kw) for state in self.auto_state_list]
@@ -688,6 +687,14 @@ class People:
         claims, self._claims = self._claims, []
         if not claims:
             return
+        if len(claims) == 1: # One claim (the usual case: one module's deaths), so no person has several causes to choose between
+            uids, code, _ = claims[0]
+            uids = uids if ss.uids._increasing(uids) else uids.unique()
+            people = uids[np.isin(uids, death_uids, kind='sort')]
+            self.cause_of_death[people] = code
+            name = self.causes[code]
+            self._died_of[name] = self._died_of[name].concatenate(people) if name in self._died_of else people
+            return
         uids = np.concatenate([u for u,c,h in claims]).astype(np.int64)
         codes = np.concatenate([np.full(len(u), c) for u,c,h in claims])
         hazards = np.concatenate([h for u,c,h in claims])
@@ -868,7 +875,6 @@ class People:
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
             w = self.scale.raw[self.auids]
             counts = [float(w[state.raw[self.auids]].sum()) for state in states]
-            self._float_results([state.name for state in states])
         elif all(state.raw.ndim == 1 for state in states):
             counts = ss.solvers.numba.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
             counts = counts[:-1] if counts[-1] == len(self.auids) else [state.count() for state in states]
@@ -890,7 +896,6 @@ class People:
         dying = self.dying() # Those who died or left in the step, who are all the active agents not alive
         if self.scale.weighted:
             gone = [float(self.scale.raw[dying[arr.raw[dying] <= ti]].sum()) for arr in [self.ti_dead, self.ti_removed]]
-            self._float_results(['birth', 'death', 'emigration'])
         else:
             gone = [np.count_nonzero(arr.raw[dying] <= ti) for arr in [self.ti_dead, self.ti_removed]]
         unborn = self.unborn_uids()
@@ -905,14 +910,6 @@ class People:
     def _weights(self, uids):
         """ The weight of each of some agents (see `AgentScale`): ones if they all weigh the same """
         return self.scale.raw[uids] if self.scale.weighted else np.ones(len(uids))
-
-    def _float_results(self, keys):
-        """ Make results that count agents hold floats, since agents of different weights make fractions of people """
-        res = self.sim.results
-        for key in keys:
-            if res[key].values.dtype.kind in 'iu':
-                res[key]._init_values(dtype=float, force=True)
-        return
 
     def unborn_uids(self):
         """ The active agents not yet born, with a negative age (e.g. made at conception by `ss.Pregnancy`), who are not counted among the people (e.g. in the result `alive`) """

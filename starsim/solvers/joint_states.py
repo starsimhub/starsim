@@ -9,7 +9,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
-from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts, given_start
+from .compartmental import Compartmental, kernel_list, run_many_parts, given_start
 
 __all__ = ['JointStates', 'Joint']
 
@@ -98,7 +98,6 @@ class JointStates:
         self.program = None # The program of the diseases together: see build()
         self.built = None # What it was built from
         self.y = None # Its compartments, by group
-        self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see kernels()
         self._lead = None
         return
 
@@ -116,11 +115,6 @@ class JointStates:
                 counts = [len(named & set(self.sim._declared_module(name).graph.states)) for name in self.names]
                 self._lead = self.names[int(np.argmax(counts))]
         return self._lead
-
-    def reset(self):
-        """ Forget the kernels chosen, before the run starts again """
-        self.compiled = None
-        return
 
     def shrink(self):
         """ Drop the arrays the run worked in, for saving """
@@ -194,7 +188,6 @@ class JointStates:
         for engine in self.engines:
             engine.count_stocks()
         self.kernel_rng = self.engines[0].make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
-        self.reset()
         return
 
     def check(self):
@@ -701,16 +694,9 @@ class JointStates:
         J = self.numbers([dict(zip(TABLES, engine.tables(start, stop))) for engine in self.engines])
         return [np.ascontiguousarray(J[key]) for key in TABLES]
 
-    def kernels(self, runs=1):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.compartmental.choose_kernels()` """
-        return choose_kernels(self, runs, self.plain_seconds)
-
-    def plain_seconds(self):
-        """ About how long the run would take as plain Python, from the size of the program and the rates of its diseases at the start, as `ss.solvers.Compartmental.plain_seconds()` works it out for one engine """
-        first = self.engines[0]
-        solver = ss.solvers.numba.compartmental.solver_code(self.sim)
-        n_sub = ss.solvers.backends.compiling.substeps(np.concatenate([rate for e in self.engines for rate in e.start_rates()] + [self.program.mov_rate]), first.dt, first.substeps(), solver)
-        return ss.solvers.backends.compiling.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub)
+    def kernels(self):
+        """ The kernels to take the run with: see `ss.solvers.backends.compiling.choose()` """
+        return ss.solvers.backends.compiling.choose()
 
     def run(self, use_jax=False):
         """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """

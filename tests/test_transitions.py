@@ -4,7 +4,6 @@ Test models written as declared states and transitions, the solvers that run the
 
 # %% Imports and settings
 import warnings
-from unittest import mock
 import pytest
 import numpy as np
 import scipy.stats as stats
@@ -432,7 +431,7 @@ def test_dwells():
 
 
 def test_agent_steps():
-    sc.heading('Testing the agent engine: half a step of rates at the first draw, whole steps, the compiled moves, and values fixed for life')
+    sc.heading('Testing the agent engine: half a step of rates at the first draw, whole steps, the same-step cascade, and values fixed for life')
     S, I, R = ss.states(3)
     sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.25)*I, recovery=I >> R @ ss.perday(1/8), init_prev=0.001, name='sir') # R0 = 2
     attack = lambda solver: 1 - ss.Sim(sir, solver=solver, n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir.S[-1]/20_000
@@ -446,7 +445,7 @@ def test_agent_steps():
     res = {}
     for step in ['midstep', 'wholestep']:
         sim = ss.Sim(make(), solver=ss.solvers.abm(step=step), n_agents=10_000, unit='day', stop=10, verbose=0).run()
-        assert not sim.diseases.d.engine.uncompiled and sim.diseases.d.engine.wholestep == (step == 'wholestep')
+        assert sim.diseases.d.engine.wholestep == (step == 'wholestep')
         res[step] = sim.results.d
     assert res['midstep'].tick[3] == 10_000 and np.isclose(res['midstep'].leave[3]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['wholestep'].leave[3] == 0
     assert np.isclose(res['wholestep'].leave[4]/10_000, 1 - np.exp(-0.5), atol=0.02)
@@ -454,7 +453,7 @@ def test_agent_steps():
     assert wholestep('abm', solver=ss.solvers.abm(step='wholestep')) and not wholestep(ss.solvers.abm(step='wholestep'), solver=ss.solvers.abm(step='midstep')) # A module's own step wins
     assert wholestep(ss.solvers.abm(step='wholestep'), solver='abm') # A module's own solver with no step takes the sim's
 
-    # The compiled moves make the draws the agent engine's own moves make
+    # Splits, branches, a time after an event, a condition, and a competing rate beside a dwell time: each moves people, the same way each run
     def make(seed):
         S, E, I, H, R, F = ss.states('S E I H R F')
         infection = S >> E @ ss.perday(0.3)*(I + H)
@@ -466,19 +465,13 @@ def test_agent_steps():
             unflag  = ss.Transition(F, {I: 0.5, R: None}, dur=0), # Taken on in the same step
             release = ss.Transition(H, R, when=H.time_in > ss.days(5)), # A condition
             die     = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
-            wane    = ss.Transition(R, S, dur=ss.normal(ss.by(sex=dict(female=ss.days(25), male=ss.days(35))), ss.days(5))), # Drawn by the engine after the call
+            wane    = ss.Transition(R, S, dur=ss.normal(ss.by(sex=dict(female=ss.days(25), male=ss.days(35))), ss.days(5))), # A dwell time by sex
             init_prev=0.02, name='d')
         return ss.Sim(d, networks=ss.RandomNet(n_contacts=4, method='safe'), n_agents=1000, unit='day', stop=60, rand_seed=seed, **kw)
-    for seed in [0, 1]:
-        sims = [make(seed).run()]
-        with mock.patch.object(ss.solvers.agents_compiled, 'compiled_reasons', lambda engine: ['off']): # The agent engine's own moves
-            sims.append(make(seed).run())
-        compiled, own = [sim.diseases.d for sim in sims]
-        assert not compiled.engine.uncompiled and own.engine.uncompiled == ['off']
-        assert ss.debugtools.check_sims_match(*sims)
-        for k,v in compiled.__dict__.items():
-            if isinstance(v, ss.Arr):
-                assert np.array_equal(v.raw, own[k].raw, equal_nan=True), k
+    sims = [make(0).run() for _ in range(2)]
+    assert ss.debugtools.check_sims_match(*sims)
+    res = sims[0].results.d
+    assert all(res[name].sum() > 0 for name in ['infection', 'onset', 'severe', 'mild', 'flag', 'unflag', 'release', 'die', 'wane']), {name: res[name].sum() for name in sims[0].diseases.d.graph.transitions}
 
     # A function marked with ss.lifelong() is worked out once for each person, and gives the same run as unmarked
     female = lambda sim: np.asarray(sim.people.female.raw, dtype=bool)

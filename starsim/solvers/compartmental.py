@@ -39,23 +39,6 @@ def synced_event(tr, sim, home):
     return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
 
 
-def choose_kernels(owner, runs, seconds):
-    """
-    The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.solvers.backends.compiling.choose()`), for an
-    engine or joint states (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
-    """
-    if ss.solvers.backends.rust.on: # Compiled ahead of time, so nothing to choose
-        return ss.solvers.backends.compiling.choose()
-    if runs == 1 and owner.compiled is not None:
-        return ss.solvers.numba.compartmental if owner.compiled else ss.solvers.backends.compiling.uncompiled()
-    if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-        return ss.solvers.backends.compiling.choose()
-    kn = ss.solvers.backends.compiling.choose(runs*seconds())
-    if runs == 1:
-        owner.compiled = kn is ss.solvers.numba.compartmental
-    return kn
-
-
 def fingerprint(raw):
     """ What a parameter holds, to compare at each step: its numbers, or else the object itself, which an id stands for in the comparison (see `Compartmental.settled()`) """
     if isinstance(raw, (float, int)):
@@ -93,7 +76,7 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
     y0, program, dt, npts, solver, n_sub = args
     stocks, flows, stocks_g, flows_g, tally, tally_g = outputs
     length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*n_cols*8)), 1) # Steps per part
-    kn = owner.kernels(runs=len(rngs))
+    kn = owner.kernels()
     while start < npts:
         end = min(start + length, npts) # The steps from start to end-1
         kn.run_many(rngs, ys, program, dt, start, end, solver, n_sub, *owner.tables(start, end), owner.register, owner.shifts, stocks, flows, stocks_g, flows_g,
@@ -757,7 +740,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.steady = self.last_values = self.step_rows = self.res_found = None
         self.rng = self.make_rng()
         self.kernel_rng = self.make_rng(stream=1)
-        self.compiled = None
         self.cache.clear()
         key = self.start_key()
         if key is not None and key == self.start_held: # As the last start: see start_key()
@@ -2975,20 +2957,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
-    def kernels(self, runs=1):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.backends.compiling.choose()` """
-        return choose_kernels(self, runs, self.plain_seconds)
-
-    def plain_seconds(self):
-        """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.solvers.backends.compiling.plain_seconds()`) """
-        p = self.program
-        solver = ss.solvers.numba.compartmental.solver_code(self.sim)
-        n_sub = ss.solvers.backends.compiling.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
-        return ss.solvers.backends.compiling.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
-
-    def start_rates(self):
-        """ The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for, each as an array """
-        return [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and flow.known and flow.kind != 'conveyor']
+    def kernels(self):
+        """ The kernels to take the run with: see `ss.solvers.backends.compiling.choose()` """
+        return ss.solvers.backends.compiling.choose()
 
     def init_shifts(self):
         """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.solvers.numba.compartmental.Shifts` """
@@ -3167,11 +3138,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         store = self.store_run
         stock_g = lambda i: groups.stocks[:, pos_s[i]] if i in pos_s else None # By group, if needed
         flow_g = lambda ind: groups.flows[:, pos_f[ind]] if ind in pos_f else None
-        n = sc.obj({name:store(name, totals.stocks[i], stock_g(i)) for i,name in enumerate(states)})
+        for i,name in enumerate(states):
+            store(name, totals.stocks[i], stock_g(i))
         new = sc.obj({name:store(name, totals.flows[ind], flow_g(ind)) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, totals.flows[ind], flow_g(ind))
-        derived = self.derived(n, new, outcomes=not grouped)
+        outcomes = self.derived_outcomes(new) if not grouped else {} # The results given as expressions are worked out once the run is done (see store_derived())
         stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
         if stratified: # Sums and ratios of states by group: from the states at the start of each row, and the flows over it
             ctx = StockCtx(self, sc.obj({name:stock_g(i) for i,name in enumerate(states)}), sc.obj({name:flow_g(ind) for name,ind in self.tr_index.items()}), ti=np.arange(npts) if self.rows is None else self.group_ti)
@@ -3180,7 +3152,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     res[name].strata[:], res[name].denom[:] = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
                 else:
                     res[name].strata[:] = ss.expressions.evaluate(graph.exprs[name], ctx)
-        for key,vals in derived.items():
+        for key,vals in outcomes.items():
             res[key][:] = vals
         self.cache.clear()
         return
@@ -3308,35 +3280,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         out = sc.obj({name:vals for name,vals in n.items()})
         out.update(new)
         out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
-        out.update(self.derived(n, new, outcomes=outcomes is None, expected=expected, seeds=seeds))
+        out.update(self.derived_values(n, new, outcomes=outcomes is None, expected=expected, seeds=seeds))
         if outcomes is not None:
             out.update(outcomes)
         out.groups = groups
         out.denoms = denoms
         out.group_ti = group_ti
         self.cache.clear()
-        return out
-
-    def derived(self, n, new, outcomes=True, expected=False, seeds=None):
-        """
-        The results that are worked out from the number in each state and the flow along each transition
-
-        Args:
-            n (dict): the number in each state at each step: a series, or an array whose last dimension is the steps
-            new (dict): the same for the flow along each transition
-            outcomes (bool): whether to work out the outcomes
-            expected (bool): see `derived_outcomes()`
-            seeds (list): see `derived_outcomes()`
-
-        Returns a dict of the outcomes and the results given as expressions.
-        This is what `record_events()` does on each step, for every step at once.
-        """
-        graph = self.graph
-        out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.obj()
-        if graph.exprs:
-            ctx = StockCtx(self, n, new)
-            for name,expr in graph.exprs.items():
-                out[name] = ss.expressions.evaluate(expr, ctx)
         return out
 
     def derived_outcomes(self, new, expected=False, names=None, seeds=None):
@@ -3596,6 +3546,5 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 self.flowcounts[mover.name] += totals[self.n_trans + i]
                 if grouped:
                     self.flow_groups[mover.name] = flows[self.n_trans + i]
-        self.count_stocks()
         self.stepped = self.mod.ti
         return

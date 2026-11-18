@@ -565,8 +565,6 @@ class Transition(Nameable):
         self.module = None # The module it is part of, once built
         self.source = None
         self.dest = None
-        self._p = None # See the p and dur properties
-        self._dur = None
         self.rest = p is None # Whether it takes the rest of what the branches out of its source leave over (p=None, as given)
         self.p_rest = None # What the rest is, once its module is built (see ss.graph.Graph.resolve_transitions())
         self._given = (source, dest) # As given, for a transition made again with the keywords after @ (I >> R @ dict(dur=ss.days(8), p=None))
@@ -609,15 +607,14 @@ class Transition(Nameable):
             errormsg = f'who= of a transition is who it applies to, a condition on people (e.g. who=ss.person.age >= 5); {who} reaches people as they reach an age, which is an event: use ss.Event(S >> I, who={who})'
             raise TypeError(errormsg)
         self.who = None if who is None else check_who(who, 'a transition') # As given (a path as ss.ref())
-        self.when = when # As given; what it decides is worked out below (self._trigger, self._who_now)
         trigger, delay, where = self._parse_when(when, rate, dur)
         self._check_driver(rate, dur, noise, stages, trigger)
         self._trigger = None if trigger is None else ss.on(trigger)
         if delay is not None:
             self._trigger.delay = as_expr(delay) # A time drawn for each person when the event happens to them: see ss.solvers.Agents.triggered()
-        self.p = None
+        self.p = None # The branch probabilities, one for each destination (or None)
         self.rate = None if rate is None else as_expr(rate)
-        self.dur = None if dur is None else as_expr(dur)
+        self.dur = as_dur(dur) # The dwell time, as a parameter (or None, if the transition has a rate)
         self.stages = stages
         self._who_now = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
@@ -736,7 +733,7 @@ class Transition(Nameable):
             self._set_dest(dest)
         if p is None:
             return
-        self.p = sc.tolist(p)
+        self.p = [None if v is None else as_expr(v) for v in sc.tolist(p)]
         if self.may_die and len(self.p) == 1 and len(self.dest) + len(self._ends_at) == 2: # With two destinations, a single value is the first one's probability
             self.p = [self.p[0], None]
         if self._ends_at and len(self.p) == len(self.dest) + len(self._ends_at):
@@ -875,39 +872,6 @@ class Transition(Nameable):
             raise ValueError('a transition splits between ss.dead and a state called "dead", whose flows would have the same name (res.<transition>.dead); rename the state, e.g. "D"')
         return self
 
-    @property
-    def p(self):
-        """ The branch probabilities, one for each destination (or None) """
-        return self._p
-
-    @p.setter
-    def p(self, value):
-        current = self._p
-        if current and isinstance(current[0], par) and current[0].module is not None and not isinstance(value, (list, tuple, Expr)): # Once the model is built, a new value is the parameter's value, e.g. d.death.p = ss.by(age=[0.1, 0.01])
-            current[0].value = value
-        elif value is None:
-            self._p = None
-        elif current is None and self.module is not None: # Too late to make it a branch
-            errormsg = f'p= makes "{self.name}" a branch, which changes the model, so it is given when the transition is made, e.g. ss.Transition(..., p={value!r}), not set once its module is built'
-            raise ValueError(errormsg)
-        else: # Set before the model is built, as in the constructor
-            self._p = [None if v is None else as_expr(v) for v in (value if isinstance(value, (list, tuple)) else [value])]
-        return
-
-    @property
-    def dur(self):
-        """ The dwell time, as a parameter (or None, if the transition has a rate) """
-        return self._dur
-
-    @dur.setter
-    def dur(self, value):
-        current = self._dur
-        if isinstance(current, par) and current.module is not None and not isinstance(value, Expr): # Once the model is built, a new value is the parameter's value, e.g. sir.recovery.dur = ss.erlang(k=3, mean=10)
-            current.value = value
-        else:
-            self._dur = None if value is None else value if isinstance(value, par) else par.inline(value) if isinstance(value, Expr) else as_expr(value) # An expression (e.g. of attributes, or a distribution times a factor) is held as a parameter, as the other values in the slot are
-        return
-
     def __matmul__(self, driver):
         """ What follows "@": a duration or a distribution is a dwell time, a dict of the transition's keywords is those (`@ dict(dur=ss.days(8), p=0.002)`), and anything else is a rate """
         if self.rate is not None or self.dur is not None or self._trigger is not None:
@@ -935,7 +899,7 @@ class Transition(Nameable):
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
         new = self._copy()
         if isinstance(value, (ss.Duration, ss.Dist)) or any(isinstance(v, (ss.Duration, ss.Dist)) for v in typed): # Including ss.by(sex=[dist, dist])
-            new.dur = as_expr(driver)
+            new.dur = as_dur(driver)
         else:
             new.rate = as_expr(driver)
         new._check_dimensions()
@@ -1076,7 +1040,7 @@ class Transition(Nameable):
         return f'Transition({name}{self._arrow}{driver})'
 
 
-def move(*args, p=None, n=None, uids=None, who=None):
+def move(src, dst, p=None, n=None, uids=None, who=None):
     """
     Move people between states of a declared disease from code, the same way under every solver
 
@@ -1089,15 +1053,14 @@ def move(*args, p=None, n=None, uids=None, who=None):
     loses them from its states in proportion, in each group, as it has them (it runs apart since its states do not
     depend on the others'). People added are placed in groups as declared births (`ss.unborn`) or arrivals
     (`ss.outside`) are. A count that is not people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way.
-    Also `disease.move(...)`, the same with the disease given.
+
+    As agents, particular agents can also be moved by setting their states, e.g. `sir.R[uids] = True`, which
+    takes them out of the state they were in, and is the same move (see `ss.Disease.move()`).
 
     Args:
-        args: in any order, told apart by what they are: a move written with the states (`sir.I >> sir.R`), or the state (or a list of states) to move people from and the
-            state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first; or several moves at once (or a list of them),
-            each from its own states (`sir.E >> sir.R, sir.I >> sir.R`), none of them into a state another moves out of;
-            the disease, which is enough to say where they come from (any of its states of people); and the agents to
-            move (`ss.uids`), as `uids=`
-        p (float): the fraction of the people in the source to move, in each group (by default, everyone); with several destinations (a list), the fraction going to each (a list, one of them None for the rest)
+        src (State/list): the state (or a list of states) to move people from, as the code sees it at run time (`sir.I`), or `ss.unborn` or `ss.outside`
+        dst (State): the state to move them to, or `ss.dead` or `ss.outside`
+        p (float): the fraction of the people in the source to move, in each group (by default, everyone)
         n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
         uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a fraction or number of them
         who (Cond/State/func/str): only the people for whom a condition holds (e.g. `ss.person.age < 15`, a group, or a state by its path, `'sir.I'`), under every solver; with `p=` or `n=`, a fraction or number of them
@@ -1108,49 +1071,23 @@ def move(*args, p=None, n=None, uids=None, who=None):
     Examples:
         ```python
         ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
-        ss.move(sir.I >> sir.R, p=0.5) # The same, written as a move, as for ss.Event()
         ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
-        ss.move(hiv.A, [hiv.D, hiv.R], p=[0.3, None]) # Of those in A, 30% to D and the rest to R: each to one of them
         ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5) # Protect 80% of the susceptible children under 5
-        ss.move(hiv.dx1 >> hiv.tx1, hiv.dx2 >> hiv.tx2, uids=uids) # These agents, each to the state for the one they are in
-        sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
-        self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
+        ss.move(sir.I, sir.R, uids=uids) # These agents, if they are infectious
         ss.move(sir.I, ss.dead, p=0.1) # A tenth of those infectious die
         ss.move(ss.outside, sir.I, n=20) # Twenty people arrive infectious
-        sir.move(uids, ss.dead) # These agents die, whatever their state
         ss.move(mosq.Sv, ss.dead, p=0.1) # A tenth of the mosquitoes die
         ```
     """
     where = None if who is None else check_who(who, 'ss.move()')
     if p is not None and n is not None:
         raise ValueError('ss.move() moves a fraction of the people (p=) or a number of them (n=), not both')
-
-    # Tell the arguments apart
-    args = [x for arg in args for x in (arg if isinstance(arg, list) and arg and all(isinstance(a, Transition) for a in arg) else [arg])] # A list of moves, as the moves themselves
-    moves = [arg for arg in args if isinstance(arg, Transition)] # A move written with the states, sir.I >> sir.R, as for ss.Event() and ss.Treatment(moves=)
-    if len(moves) > 1: # Several at once, each from its own states, e.g. the same agents each to the state for the one they are in
-        return move_each(moves, args, p=p, n=n, uids=uids, who=who)
-    diseases, ends, uids = move_args(args, moves, uids)
-    home = diseases[0] if diseases else None
-    find = lambda x: find_state(x, home)
-    if isinstance(ends[-1], (list, tuple)): # A split between several destinations, each a fraction of those in the source
-        return move_split(diseases, ends, p=p, n=n, uids=uids, who=who)
-    outs = [end for end in ends if isinstance(end, Outside)]
-    if len(ends) == 2 and len(outs) == 2:
-        raise ValueError(f'ss.move() moves people into or out of a state, not from {outs[0]} to {outs[1]}')
-    outside = outs[0].kind if outs else None # Where people come from or go to outside the model, if they do
-    to = None if isinstance(ends[-1], Outside) else find(ends[-1])
-    if len(ends) == 2:
-        src = ends[0]
-        srcs = [] if isinstance(src, Outside) else [find(x) for x in sc.tolist(src)]
-    elif home is None:
-        raise ValueError('ss.move() was given only the state people move to; give the state they move from too, or the disease, for any of its states (e.g. sir.move(uids, sir.R))')
-    elif to is not None and not to[1].people:
-        raise ValueError('ss.move() of a count needs the state it comes from (or ss.outside)')
-    else: # Any of the disease's states of people but the destination (e.g. sir.move(uids, ss.dead): these agents die, whatever state they are in)
-        srcs = [(home, state) for state in home.graph.people_states if to is None or state is not to[1]]
+    if isinstance(src, Outside) and isinstance(dst, Outside):
+        raise ValueError(f'ss.move() moves people into or out of a state, not from {src} to {dst}')
+    srcs = [] if isinstance(src, Outside) else [run_state(x) for x in sc.tolist(src)]
+    to = None if isinstance(dst, Outside) else run_state(dst)
     pairs = srcs + ([] if to is None else [to])
-    mods = {id(mod):mod for mod,_ in pairs} | ({id(home):home} if home is not None else {})
+    mods = {id(mod):mod for mod,_ in pairs}
     if len(mods) != 1:
         raise ValueError(f'ss.move() moves people between the states of one disease, not {len(mods) or "none"}')
     mod = next(iter(mods.values()))
@@ -1163,10 +1100,10 @@ def move(*args, p=None, n=None, uids=None, who=None):
     if people and len(people) < len(states):
         counts = [state.name for state in states if not state.people]
         raise ValueError(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
-    if people and isinstance(ends[-1], Outside) and ends[-1].kind not in Outside.dests:
-        raise ValueError(f'ss.move() cannot move people to {ends[-1]}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
-    if people and len(ends) == 2 and isinstance(ends[0], Outside) and ends[0].kind not in Outside.sources:
-        raise ValueError(f'ss.move() cannot move people from {ends[0]}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
+    if people and isinstance(dst, Outside) and dst.kind not in Outside.dests:
+        raise ValueError(f'ss.move() cannot move people to {dst}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
+    if people and isinstance(src, Outside) and src.kind not in Outside.sources:
+        raise ValueError(f'ss.move() cannot move people from {src}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
     if not srcs and n is None:
         raise ValueError('ss.move() from outside the model adds a number: give n=')
     if not srcs and (where is not None or uids is not None):
@@ -1177,105 +1114,13 @@ def move(*args, p=None, n=None, uids=None, who=None):
         raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a fraction (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
     if n is None and p is None:
         p = 1.0
-    kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
+    kw = dict(uids=ss.uids(uids)) if uids is not None else dict()
     if where is not None:
         kw['where'] = where
+    outside = next((x.kind for x in (src, dst) if isinstance(x, Outside)), None) # Where people come from or go to outside the model, if they do
     if people and outside is not None:
         kw['outside'] = outside
     return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
-
-
-def move_each(moves, args, p=None, n=None, uids=None, who=None):
-    """ For `ss.move()`: several moves at once, each from its own states """
-    if n is not None:
-        raise ValueError('ss.move() of several moves takes a share (p=) or the agents (uids=), not a number (n=), which would not say how to share it among them')
-    srcs = {s.name for tr in moves for s in tr.source}
-    dsts = {s.name for tr in moves for s in tr.dest}
-    if srcs & dsts:
-        raise ValueError(f'ss.move() of several moves moves people out of and into {sc.strjoin(srcs & dsts)} at once, so whether they move on again would depend on the order; make the moves in separate calls')
-    rest = [arg for arg in args if not isinstance(arg, Transition)]
-    return sum(move(*rest, tr, p=p, uids=uids, who=who) for tr in moves)
-
-
-def move_args(args, moves, uids):
-    """ For `ss.move()`: its arguments told apart by what they are, as (diseases, ends, uids): the disease (if given), the source (if given) and the destination, and the agents """
-    if moves:
-        others = [arg for arg in args if arg is not moves[0] and not is_uids(arg) and not isinstance(getattr(arg, 'graph', None), ss.graph.Graph)] # Besides the agents and the disease
-        if len(moves[0].dest) != 1 or others:
-            raise ValueError('ss.move() takes moves, each from one or more states to one (e.g. ss.move(sir.I >> sir.R, p=0.5)), or the states (ss.move(sir.I, sir.R, p=0.5)), not both')
-        if moves[0].rate is not None:
-            raise ValueError('ss.move() moves people now, so its move has no rate: give the fraction as p= or the number as n= (e.g. ss.move(sir.I >> sir.R, p=0.5))')
-        args = [arg for arg in args if arg is not moves[0]] + [moves[0].source, moves[0].dest[0]]
-    diseases, ends = [], []
-    for arg in args:
-        if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
-            diseases.append(arg)
-        elif isinstance(arg, ss.Module): # Written as code, with no states and transitions of its own to move people between
-            raise TypeError(f'ss.move() moves people between the states of a declared disease, and "{arg.name}" is written as code: set its states in code instead, e.g. {arg.name}.<state>[uids] = True')
-        elif is_uids(arg):
-            if uids is not None:
-                raise ValueError('ss.move() was given the agents to move twice')
-            uids = arg
-        else:
-            ends.append(arg)
-    if len(diseases) > 1:
-        raise ValueError(f'ss.move() moves people between the states of one disease, not {len(diseases)}')
-    if not 1 <= len(ends) <= 2:
-        raise ValueError(f'ss.move() takes the state people move to, and the state (or states) they move from unless the disease is given; not {len(ends)} of them')
-    return diseases, ends, uids
-
-
-def find_state(x, home):
-    """ For `ss.move()`: the disease and the declared state of a state as code sees it at run time, or by name in the disease `home` """
-    if isinstance(x, str):
-        if home is None:
-            raise ValueError(f'ss.move() was given the state "{x}" by name, so it needs the disease too, e.g. sir.move(..., "{x}")')
-        if x not in home.graph.states:
-            raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
-        x = getattr(home, x)
-    return run_state(x)
-
-
-def move_split(diseases, ends, p=None, n=None, uids=None, who=None):
-    """ For `ss.move()`: a split between several destinations, each a fraction of those in the source """
-    home = diseases[0] if diseases else None
-    dsts, ps = [find_state(x, home) for x in ends[-1]], (list(p) if isinstance(p, (list, tuple)) else None)
-    if n is not None or ps is None or len(ps) != len(dsts) or sum(x is None for x in ps) > 1:
-        raise ValueError(f'ss.move() to several states splits the people between them: give the fraction going to each as a list of {len(dsts)}, e.g. p=[0.3, None] (None for the rest), not n=')
-    known = sum(x for x in ps if x is not None)
-    if known > 1 + 1e-9:
-        raise ValueError(f'ss.move() to several states was given shares that add up to {known:g}, more than everyone')
-    if len(ends) == 2:
-        srcs = ends[0]
-    elif home is None:
-        raise ValueError('ss.move() to several states needs the state people move from too, or the disease, for any of its other states')
-    else:
-        srcs = [state for state in home.graph.people_states if all(state is not d[1] for d in dsts)]
-    moved, left = 0.0, 1.0
-    for (_,dst),q in zip(dsts, ps): # Each a fraction of those still in the source, so each person is moved to at most one, with the chance given
-        q = max(1.0 - known, 0.0) if q is None else q
-        if q > 0:
-            moved += move(*diseases, srcs, dst, p=min(q/left, 1.0) if left > 0 else 0.0, uids=uids, who=who)
-        left -= q
-    return moved
-
-
-def is_uids(x):
-    """ Whether an argument of `ss.move()` is agents: `ss.uids`, an array of integers, or a mask of agents (an `ss.BoolArr` that is not a disease's state) """
-    if isinstance(x, ss.uids):
-        return True
-    elif isinstance(x, np.ndarray):
-        return np.issubdtype(x.dtype, np.integer)
-    elif isinstance(x, ss.BoolArr):
-        return getattr(x, 'name', None) not in getattr(getattr(getattr(x, 'mod', None), 'graph', None), 'states', {})
-    elif isinstance(x, (list, tuple)) and x:
-        return all(isinstance(v, (int, np.integer)) and not isinstance(v, bool) for v in x)
-    return False
-
-
-def run_move(src, dst):
-    """ The move from one state to another as code sees them at run time (`sir.I >> sir.R`), for `ss.move()`: the transition between the declared states, with no rate """
-    return run_state(src)[1] >> run_state(dst)[1]
 
 
 def run_state(x):
@@ -1793,6 +1638,14 @@ def route_rate(rates):
     states = list(dict.fromkeys(state for const,terms in split.values() for state in terms))
     parts = [BinOp('*', par.inline({route:terms.get(state, 0.0) for route,(const,terms) in split.items()}), state) for state in states]
     return total(parts)
+
+
+def as_dur(value):
+    """ A dwell time as a parameter: an expression (e.g. of attributes, or a distribution times a factor) is held as one, as the other values in the slot are """
+    if value is None:
+        return None
+    value = as_expr(value)
+    return value if isinstance(value, par) else par.inline(value)
 
 
 def is_declaration(obj):

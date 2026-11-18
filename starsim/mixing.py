@@ -25,7 +25,6 @@ class PoolRoute(Route):
         self.diseases = None
         self.source_uids = None # The people in the source and target groups, from step()
         self.target_uids = None
-        self.p_acquire = ss.bernoulli(p=0) # Placeholder value: see acquire()
         return
 
     def init_post(self):
@@ -50,12 +49,6 @@ class PoolRoute(Route):
                         groups[k] = group.remove(uids)
         return
 
-    def acquire(self, uids, exposure, disease_beta):
-        """ The people among `uids` infected in the step, for each one's exposure (contacts × infectiousness × susceptibility): the hazard of the
-        step, from the disease's beta, is scaled by the exposure before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission) """
-        self.p_acquire.set(p=1 - (1 - disease_beta)**exposure) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
-        return self.p_acquire.filter(uids)
-
     def shrink(self):
         """ Remove the people in each group, to save memory (e.g. before saving the sim) """
         super().shrink()
@@ -68,7 +61,7 @@ class PoolRoute(Route):
 
 class MixingPools(PoolRoute):
     """
-    Mixing between groups of people, by a matrix of contacts between them: a mixing pool (`ss.MixingPool`) for each pair of groups, without edges
+    Mixing between groups of people, by a matrix of contacts between them, without edges
 
     Usually made by `ss.contacts()`, from a contact matrix. With no edges, mixing pools suit mixing
     in which who meets whom matters only by group (e.g. age group), not person by person.
@@ -80,7 +73,7 @@ class MixingPools(PoolRoute):
     Args:
         source (dict): the infectious groups, by name: each a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim
         target (dict): the susceptible groups; as above
-        n_contacts (array/`ss.Dist`): `n_contacts[i,j]`, the number of contacts that one person in target group `i` has with people in source group `j` (rows are the people who have the contacts, as in a contact survey and `ss.contacts()`). A matrix of numbers is the same for everyone in each group. One distribution whose parameters are matrices (e.g. `ss.poisson(M)`, or `ss.nbinom(mean=M, n=2)` for more spread) is drawn for each person when they enter a target group, and kept while they are in it. A matrix of distributions (one for each entry) is also drawn for each person, but is slower (a mixing pool for each pair of groups)
+        n_contacts (array/`ss.Dist`): `n_contacts[i,j]`, the number of contacts that one person in target group `i` has with people in source group `j` (rows are the people who have the contacts, as in a contact survey and `ss.contacts()`). A matrix of numbers is the same for everyone in each group. One distribution whose parameters are matrices (e.g. `ss.poisson(M)`, or `ss.nbinom(mean=M, n=2)` for more spread) is drawn for each person when they enter a target group, and kept while they are in it
         pars (dict): the same parameters, as a dict
 
     Examples:
@@ -121,9 +114,7 @@ class MixingPools(PoolRoute):
                 ss.IntArr('contact_group', default=-1, label='Target group the contacts were drawn for'),
                 *[ss.FloatArr(f'contacts_{j}', default=0.0, label=f'Contacts with source group {j}') for j in range(len(self.pars.source))],
             )
-        self.pools = [] # A pool for each pair of groups, only if contacts differ between people and are a matrix of distributions: see plain_contacts()
-        self.pool_groups = [] # The (target, source) groups of each pool, by position
-        self.matrix = None # Otherwise, the number of contacts between groups, [target, source]
+        self.matrix = None # With a matrix of numbers, the number of contacts between groups, [target, source]
         self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
         self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
         self.age_edges = None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.ContactRates.dim_matrices())
@@ -147,12 +138,6 @@ class MixingPools(PoolRoute):
                 self.full.matrix = self.full.matrix*factor
             self.unit = None
         return
-
-    pools = () # Made in __init__()
-
-    def __len__(self):
-        """ The number of pools """
-        return len(self.pools)
 
     def validate_pars(self):
         """ Check that source and target are dicts of groups, and n_contacts has a row for each target group (who has the contacts) and a column for each source group """
@@ -180,6 +165,9 @@ class MixingPools(PoolRoute):
         if actual != expected:
             errormsg = f'The mixing matrix has a row for each target group (who has the contacts) and a column for each source group, so shape {expected}, not {actual}.'
             raise ValueError(errormsg)
+        if any(isinstance(n, ss.Dist) and not isinstance(n, ss.constant) for n in p.n_contacts.flat):
+            errormsg = 'The contacts of ss.networks.MixingPools that differ between people are one distribution whose parameters are matrices, e.g. ss.poisson(M), not a matrix of distributions'
+            raise TypeError(errormsg)
         return
 
     def check_full(self, sim):
@@ -208,30 +196,16 @@ class MixingPools(PoolRoute):
         return None
 
     def init_pre(self, sim):
-        """ Create a mixing pool for each pair of groups, unless the contacts between groups can be used directly
+        """ Put the contacts in the sim's unit, and find the matrix of numbers, unless the contacts are used from the counts in each group or band
 
         Args:
             sim (Sim): the sim being initialized
         """
         super().init_pre(sim)
         self.to_unit(sim)
-        p = self.pars
-        time_args = {k:p.get(k) for k in ss.Timeline.time_args} # get() allows None
-        self.pools = []
-        self.pool_groups = []
-        if self.edges is not None or self.dims is not None or self.full is not None or self.name in sim.contact_rates.pool_terms: # Used from the counts in each group or band, not with a pool for each pair: see ss.solvers.ContactRates.init_pools()
+        if self.edges is not None or self.dims is not None or self.full is not None or self.name in sim.contact_rates.pool_terms: # Used from the counts in each group or band: see ss.solvers.ContactRates.init_pools()
             return
         self.matrix = self.plain_contacts()
-        if self.matrix is not None or self.contact_dist is not None: # Everyone in a group has the same contacts, or one distribution: one pass over the groups does the work of a pool for each pair
-            return
-        for i,dk,target in p.target.enumitems():
-            for j,sk,source in p.source.enumitems():
-                n_contacts = p.n_contacts[i,j] # A number is the same for everyone in the group, as with no pools (a distribution elsewhere in the matrix does not change that)
-                name = f'{self.name}:{sk}->{dk}' # Named after the whole, so that two of them (e.g. home and school contacts) can be in one sim
-                mp = MixingPool(name=name, n_contacts=n_contacts, source=source, target=target, **time_args)
-                mp.init_pre(sim)
-                self.pools.append(mp)
-                self.pool_groups.append((i, j))
         return
 
     def agent_reasons(self, sim):
@@ -252,19 +226,11 @@ class MixingPools(PoolRoute):
             nc = [[type(nc)(**{k:v[i,j] if sc.isarray(v) else v for k,v in pars.items()}, **options) for j in range(shape[1])] for i in range(shape[0])]
         return self.contact_scale*np.vectorize(lambda n: ss.solvers.ContactRates.mean(n, unit), otypes=[float])(np.array(nc, dtype=object))
 
-    def init_post(self):
-        """ Find the diseases that use them, and initialize each mixing pool """
-        super().init_post()
-        for mp in self.pools:
-            mp.init_post()
-        return
-
     def band_exposure(self, weights):
         """
-        As agents, for a matrix with its own age bands (`ss.contacts('Kenya')`), with no pool for each pair of bands: the
-        UIDs of the people alive, and the exposure of each, from the infectiousness-weighted fraction of each band (`weights`,
-        one for each agent) and the contacts between bands, as those pools would give, since everyone in a band has the
-        same contacts. People younger than the first band (e.g. not yet born) have none
+        As agents, for a matrix with its own age bands (`ss.contacts('Kenya')`): the UIDs of the people alive, and the exposure
+        of each, from the infectiousness-weighted fraction of each band (`weights`, one for each agent) and the contacts between
+        bands, since everyone in a band has the same contacts. People younger than the first band (e.g. not yet born) have none
         """
         ppl = self.sim.people
         auids = ppl.auids
@@ -279,8 +245,8 @@ class MixingPools(PoolRoute):
 
     def group_exposure(self, weights):
         """
-        As agents, for a matrix of numbers: the UIDs of the people alive, and the exposure of each, as the pools for each pair of
-        groups would give, from the infectiousness-weighted fraction of each source group (`weights`, one for each agent)
+        As agents, for a matrix of numbers (or one distribution): the UIDs of the people alive, and the exposure of each, from the
+        infectiousness-weighted fraction of each source group (`weights`, one for each agent)
         """
         frac = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.source_uids])
         auids = self.sim.people.auids
@@ -293,55 +259,16 @@ class MixingPools(PoolRoute):
         return auids, expo[auids]
 
     def exposure(self, weights):
-        """ As agents, with no pool for each pair of groups: see `band_exposure()` and `group_exposure()` """
+        """ As agents: see `band_exposure()` and `group_exposure()` """
         return self.band_exposure(weights) if self.edges is not None else self.group_exposure(weights)
 
-    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
-        """
-        Calculate transmission, for a disease written as code: through each pool, or for a matrix, from the fraction of each group or band
-        that is infectious, as a declared disease's is (see `ss.solvers.Agents.transmit()`), since everyone in a group has the same contacts
-
-        Args:
-            rel_sus (Arr): Relative susceptibility
-            rel_trans (Arr): Relative infectiousness
-            disease_beta (float): The beta value for the disease, as the probability in the step
-            disease (Disease): The disease
-        """
-        if disease_beta == 0 or disease not in self.diseases:
-            return ss.uids()
-        if self.pools:
-            return ss.uids.concatenate([ss.uids(mp.compute_transmission(rel_sus, rel_trans, disease_beta, disease)) for mp in self.pools])
-        sim = self.sim
-        if self.name in sim.contact_rates.pool_terms:
-            auids = sim.people.auids
-            groups = sim.groups.group_raw()[auids]
-            n, infectious = [np.bincount(groups, weights=w, minlength=sim.groups.n_groups) for w in [None, rel_trans.raw[auids]]]
-            expo = sim.contact_rates.term_exposure(sim.contact_rates.pool_terms[self.name], infectious, n.astype(float))[groups]
-        else:
-            auids, expo = self.exposure(rel_trans.raw)
-        return self.acquire(auids, expo*rel_sus.raw[auids], disease_beta)
-
-    def remove_uids(self, uids):
-        """ Remove people who leave from each mixing pool, and from the groups given as UIDs
-
-        Args:
-            uids (array): the agents to remove
-        """
-        for mp in self.pools:
-            mp.remove_uids(uids)
-        super().remove_uids(uids)
-        return
-
     def step(self):
-        """ Find the people in each group, once per step, and give them to each mixing pool (rather than each pool finding its own) """
-        if not (self.pools or self.matrix is not None or self.contact_dist is not None): # From the counts in each group or band (ss.contacts()): see init_pre()
+        """ Find the people in each group, once per step """
+        if not (self.matrix is not None or self.contact_dist is not None): # From the counts in each group or band (ss.contacts()): see init_pre()
             return
         self.source_uids = [pool_uids(self.sim, group) for group in self.pars.source.values()]
         known = {id(group):uids for group,uids in zip(self.pars.source.values(), self.source_uids)} # A target group that is a source group (as for a matrix by age) is not found again
         self.target_uids = [known[id(group)] if id(group) in known else pool_uids(self.sim, group) for group in self.pars.target.values()]
-        for mp,(i,j) in zip(self.pools, self.pool_groups):
-            mp.target_uids = self.target_uids[i]
-            mp.source_uids = self.source_uids[j]
         if self.contact_dist is not None:
             self.draw_contacts()
         return
@@ -372,14 +299,6 @@ class MixingPools(PoolRoute):
                 check_drawn(draws, self.name, self.pars.n_contacts)
                 contacts[into] = draws*self.contact_scale
         return
-
-    def shrink(self):
-        """ Remove the people in each group, to save memory (e.g. before saving the sim) """
-        super().shrink()
-        for mp in self.pools:
-            mp.shrink()
-        return
-
 
 def age_band(group):
     """
@@ -496,7 +415,7 @@ class MixingPool(PoolRoute):
         return []
 
     def shrink(self):
-        """ Remove the people in each group, and its own copy of the timeline (one for each of what can be many pools), to save memory """
+        """ Remove the people in each group, and its own copy of the timeline, to save memory """
         super().shrink()
         self.setattribute('t', ss.utils.shrink())
         return
@@ -526,28 +445,6 @@ class MixingPool(PoolRoute):
         if isinstance(self.pars.n_contacts, ss.Dist):
             check_drawn(self.eff_contacts.values, self.name, self.pars.n_contacts) # Over the people at the start, not each new one, which would cost a check of each pool on every step
         return
-
-    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
-        """
-        The people infected over the pool in a step
-
-        This is called by transmission (`ss.Disease.transmit()`, declared, or as code from `ss.AgentDisease`) together with network transmission.
-
-        Args:
-            rel_sus (float): Relative susceptibility
-            rel_trans (float): Relative infectiousness
-            disease_beta (float): The beta value for the disease, as the probability in the step
-            disease (Disease): The disease
-
-        Returns:
-            UIDs of agents who acquired the disease at this step
-        """
-        if disease_beta == 0 or disease not in self.diseases or len(self.source_uids) == 0 or len(self.target_uids) == 0:
-            return ss.uids()
-
-        trans = np.mean(rel_trans[self.source_uids])
-        acq = self.eff_contacts[self.target_uids] * rel_sus[self.target_uids]
-        return self.acquire(self.target_uids, trans*acq, disease_beta)
 
     def step(self):
         """ Update the UIDs of the source and target """

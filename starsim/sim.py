@@ -41,7 +41,7 @@ class Sim(ss.modules.Base):
         analyzers (str/Analyzer/list): as above, for analyzers
         modules (Module/list): modules of any kind, sorted by kind, as the model is
         custom (Module/list): as above, for modules of your own of no standard kind (an `ss.Module`, or a function of the sim, which becomes its `step()`); kept in `sim.custom`
-        solver (str/Solver): how a declared model is run: 'auto' (the default: chosen from the model; `sim.solver_reason` says why), 'ode' (deterministic and fastest), 'binomial' (stochastic compartments, a chain binomial), 'gillespie' (stochastic and exact, event by event), 'tau' (tau-leaping, a faster approximation to Gillespie), or 'abm' (agents, for detail about individuals). A solver can take options, e.g. `ss.solvers.ode(integrator=, substeps=, dwells=)` (`dwells='exact'` keeps each dwell time as it is, rather than as a chain of stages), `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=, rescale=, even_draws=, keep_times=, record_people=)` (e.g. `step='events'` for agents in continuous time, or `rescale=True` for dynamic rescaling, as in Covasim). How strict to be about approximations, common random numbers, and requiring compiled runs are `ss.options` (`approximations`, `crn`, `require_compiled`). A declared module can have its own way of running as agents, `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`, which the sim's does not override. `sim.solver` is the one that runs, e.g. `isinstance(sim.solver, ss.solvers.abm)`
+        solver (str/Solver): how a declared model is run: 'auto' (the default: chosen from the model; `sim.solver_reason` says why), 'ode' (deterministic and fastest), 'binomial' (stochastic compartments, a chain binomial), 'gillespie' (stochastic and exact, event by event), 'tau' (tau-leaping, a faster approximation to Gillespie), or 'abm' (agents, for detail about individuals). A solver can take options, e.g. `ss.solvers.ode(integrator=, substeps=, dwells=)` (`dwells='exact'` keeps each dwell time as it is, rather than as a chain of stages), `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=, rescale=, keep_times=)` (e.g. `step='events'` for agents in continuous time, or `rescale=True` for dynamic rescaling, as in Covasim). How strict to be about approximations, common random numbers, and requiring compiled runs are `ss.options` (`approximations`, `crn`, `require_compiled`). A declared module can have its own way of running as agents, `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`, which the sim's does not override. `sim.solver` is the one that runs, e.g. `isinstance(sim.solver, ss.solvers.abm)`
         branching (bool): run the declared model as a branching process, under any solver: infection takes no one from the uninfected and gives no one back, so the susceptible side stays as it would with no infection. This is useful for the early growth or extinction of an outbreak, and for the size of chains of transmission; as agents, only the infected are made, so a large population costs little. See `sim.branching` for the size and outcome of each run, and `sim.run(until=)` to stop one
         unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
         stratify (dict): stratify every module by properties of people, e.g. `dict(age=[0, 15, 65], risk={'low': 0.8, 'high': 0.2})`, as `sim.stratify()` takes them
@@ -55,7 +55,6 @@ class Sim(ss.modules.Base):
         dt (float/dur): the timestep, in the sim's unit (default 1.0); a smaller step is more accurate but slower (`sim.check_dt()` shows how much the results depend on it)
         rand_seed (int): the random seed, from which every module's random numbers are drawn; the same seed gives the same results, and different seeds give different runs of a stochastic model
         aging (bool): whether agents age (by default, they age if there are births or deaths)
-        step_order (str): the order in which the modules step: 'type' (default) at the place of each kind of module in the loop (see `ss.Loop`), or 'given' in the order they were given (the model and `modules=` first, then the modules given by kind, e.g. `diseases=`), before the deaths and results of the step; 'given' is for when one module must act on what another did earlier in the same step. Analyzers, which read the step's results, still step last
         group_results (list): the results to keep by group (e.g. by age), by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals, which saves memory in a sim with many groups (default: all, at every few steps if every step would take more than about 100 MB)
         verbose (int/float): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress at each such fraction of the run (e.g. 0.1 for every 10%)
         kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.SimPars`)
@@ -90,7 +89,6 @@ class Sim(ss.modules.Base):
     _data_source = None # The ss.SimData the data were loaded from, to drop the columns that match no result once the results exist (see _load_data())
     _restarted = None # How sim.restart() left the sim for the next run: 'same' (the same values) or 'new' (new values), or None if it wasn't restarted
     _kernels_known = False # Whether the sim has been restarted and run in one call to the kernels, so a number in place of a number can be restarted without asking again
-    _backend_known = None # The backend and whether JAX ran the last whole run, to reuse for a restart with the same values
     _branching = None # What came of a run as a branching process (see the branching property)
 
     def __init_subclass__(cls, **kwargs):
@@ -114,10 +112,7 @@ class Sim(ss.modules.Base):
         self.pars = ss.SimPars() # Make default parameters
         args = {key:val for key,val in dict(label=label, people=people, **mods).items() if val is not None} # Remove None inputs
         input_pars = ss.simpars.copy_given(args, inputs.settings, copy_inputs=copy_inputs)
-        if copy_inputs: # Only the sim's copies keep their place, so the modules given can be given to another sim in another order
-            for mod in inputs.given_order:
-                vars(mod).pop('_model_index', None) if isinstance(mod, ss.Module) else None
-        else: # Nothing to start again from, since the modules given are the ones that run
+        if not copy_inputs: # Nothing to start again from, since the modules given are the ones that run
             self._no_new = 'This sim was made with copy_inputs=False, so it runs the modules it was given themselves, and can\'t be run again or copied with sim.new(): make it again instead (with new modules)'
         self.pars.update(input_pars)  # Update the parameters
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -708,7 +703,7 @@ class Sim(ss.modules.Base):
         self.dists.init(obj=self) # Only initializes the new distributions
         self.dists.copy_to_module(module)
         module.init_post()
-        module.t.ti = np.searchsorted(module.t.yearvec, self.t.yearvec[self.ti]) # Start the module at the current time point
+        module.t.ti = int(np.searchsorted(module.t.yearvec, self.t.yearvec[self.ti])) # Start the module at the current time point (the sim's, if it shares its timeline)
         for mod in self.declared: # What the engines keep for the run can depend on the other modules (e.g. a modifier of a beta)
             if hasattr(mod.engine, 'modules_changed'):
                 mod.engine.modules_changed()
@@ -1096,10 +1091,8 @@ class Sim(ss.modules.Base):
         return
 
     def advance(self):
-        """ Move the time to the step about to be taken, from the time point it starts at, where whatever it does is dated and recorded: for the sim, and the modules on its timeline (see `ss.loop.Loop`) """
+        """ Move the time to the step about to be taken, from the time point it starts at, where whatever it does is dated and recorded: for the sim, and the modules on its timeline, which share it (see `ss.loop.Loop`) """
         self.t.ti += 1
-        for t in self.loop.shared_timelines:
-            t.ti += 1
         return
 
     def finish_step(self):
@@ -1212,7 +1205,7 @@ class Sim(ss.modules.Base):
             # Main simulation loop
             whole = self._runs_whole(until, profile)
             if whole: # Nothing needs to happen between the steps, so each module takes all of them at once, with JAX or the compiled backend
-                use_jax = self._use_jax()
+                use_jax = ss.solvers.choose_backend(self)[0]
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)
                 self.complete = True # Without making the loop's plan, which is not needed
@@ -1231,10 +1224,11 @@ class Sim(ss.modules.Base):
                     self._blank_after(self.stopped)
                 if self.pars.branching:
                     self._summarize_branching()
-                if not whole:
-                    self._check_method_calls()
                 if self.progress is not None:
                     self.progress.finish(ss.progress.end_line(self))
+            else: # Paused: the results given as expressions, so far
+                for mod in self.declared:
+                    mod.engine.store_derived(mod.ti)
         finally:
             self._restarted = None # Only for the run that follows the restart
             self.dists.clear_run_caches()
@@ -1257,15 +1251,6 @@ class Sim(ss.modules.Base):
         if ss.options.require_compiled and not whole:
             raise ss.CapabilityError(f'ss.options.require_compiled is True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
         return whole
-
-    def _use_jax(self):
-        """ Whether JAX runs the whole run (see `ss.solvers.choose_backend()`); the choice is kept for a restart with the same values, which would choose the same """
-        known = self._backend_known
-        if self._restarted == 'same' and known is not None and known[0] == ss.options.backend != 'jax': # A choice from the model and its values, which are as they were
-            return known[1]
-        use_jax, _ = ss.solvers.choose_backend(self) # The reason is for when JAX was asked for and can't run it, which is a note
-        self._backend_known = (ss.options.backend, use_jax)
-        return use_jax
 
     def _condition_holds(self, cond):
         """ Whether a condition given as `sim.run(until=)` holds now: an expression of the declared modules' states (`sir.I.n == 0`), or a function of the sim """
@@ -1437,8 +1422,6 @@ class Sim(ss.modules.Base):
         self.complete = False
         self.results_ready = False
         self.t.ti = 0
-        for joint in self.joint_states: # Nothing left over from the run that has ended
-            joint.reset()
         ss.solvers.hold_flows(self, restore=True) # The results the run writes to
         for mod in self.declared:
             mod.t.ti = 0
@@ -1624,27 +1607,6 @@ class Sim(ss.modules.Base):
         if not self.results_ready:
             raise RuntimeError(errormsg)
         return
-
-    def _check_method_calls(self):
-        """
-        Warn about any method marked as required (`@ss.required()`) that was not called, e.g. a `super()` call left out of a module of your own; called by `sim.run()`
-
-        Returns:
-            A list of the methods not called, by module
-        """
-        missing = []
-        for mod in self.modules:
-            modmissing = mod.check_method_calls()
-            if modmissing:
-                missing.append([type(mod), modmissing])
-        if missing:
-            errormsg = 'The following methods are required, but were not called.\n'
-            errormsg += 'Did you mistype a method name, forget a super() call,\n'
-            errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
-            for modtype,modmissing in missing:
-                errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
-            ss.warn(errormsg)
-        return missing
 
     def to_df(self, **kwargs):
         """ The results as a dataframe, with a column for each (e.g. `sir_prevalence`); see `ss.Results.to_df()` for the arguments

@@ -46,7 +46,7 @@ class Loop:
 
         1. sim:               advance()        # Move the time to this step's time point (from the second step on)
         2. sim:               start_step()     # Initialize the sim, including plotting progress
-        3. all modules:       start_step()     # Initialize the modules, including the random number distribution
+        3. all modules:       start_step()     # Start the step of each module that has anything to start (e.g. a disease)
         4. people:            record_states()  # Record the basic states at the start of the step
         5. all modules:       record_states()  # Record each module's states at the start of the step
         6. sim.custom:        step()           # Run any custom modules
@@ -63,9 +63,6 @@ class Loop:
         17. all modules:      finish_step()    # Do any final tidying
         18. people:           finish_step()    # Clean up dead agents
         19. sim:              finish_step()    # Finish the step
-
-    With `ss.Sim(step_order='given')`, steps 4 to 10 are instead each module's step in the
-    order the modules were given (a disease's `step_state()` and then its `step()`).
 
     A sim that is nothing but compartments the kernels can run from start to finish goes
     through them in one call instead, not this order step by step (see `sim.describe()`).
@@ -84,7 +81,6 @@ class Loop:
     def __init__(self, sim):
         self.sim = sim
         self.funcs = None
-        self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
         self._plan = None # Made when it is first needed: see the plan property
@@ -123,8 +119,8 @@ class Loop:
         return len(self.plan) if self.initialized else 0
 
     def add(self, func):
-        """ Add a function (a method of the sim, the people, or a module) to the end of the list of functions of a step, unless it would do nothing (see `_keep()`) """
-        if not self._keep(func):
+        """ Add a function (a method of the sim, the people, or a module) to the end of the list of functions of a step, unless it would do nothing (see `_noop()`) """
+        if self._noop(func):
             return self
         parent = func.__self__
         func_name = func.__name__
@@ -166,9 +162,8 @@ class Loop:
         sim = self.sim
 
         # Move the time to the step about to be taken, so that it is the same in every function of the step: the sim's time,
-        # with that of the modules on its timeline; a module with a timeline of its own moves its own. The first step is at the
+        # which the modules on its timeline share; a module with a timeline of its own moves its own. The first step is at the
         # time the sim starts at, so these are not called then (see make_plan())
-        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
         self.add(sim.advance)
         for mod in sim.modules:
             if not self._on_sim_time(mod):
@@ -181,7 +176,7 @@ class Loop:
 
         # Record the state at the start of the step. A module's record_states() is skipped only when it is the inherited
         # base method and the module has no auto-generated boolean-state results to count (see _noop())
-        if sim.solver.record_people: # People results can be opted out for lightweight sims
+        if sim.solver.agents: # A compartmental run records the people's results in its own way
             self.add(sim.people.record_states)
         for mod in sim.modules:
             self.add(mod.record_states)
@@ -190,16 +185,13 @@ class Loop:
         if sim.solver.rescale:
             self.add(sim.rescale)
 
-        if sim.pars.step_order == 'given': # Each module steps in the order it was given in (analyzers still last, after the results)
-            self.collect_given(sim)
-        else:
-            self.collect_by_type(sim)
+        self.collect_by_type(sim)
 
         # Update people who died -- calls each module's on_death() internally
         self.add(sim.people.step_die)
 
         # Record what happened in the step
-        if sim.solver.record_people:
+        if sim.solver.agents:
             self.add(sim.people.record_events)
         for mod in sim.modules:
             self.add(mod.record_events)
@@ -216,9 +208,8 @@ class Loop:
         return self.funcs
 
     def _on_sim_time(self, mod):
-        """ Whether a module shares the sim's timeline (the usual case: the same time points in the same unit), so its time moves with the sim's """
-        t, sim_t = mod.t, self.sim.t
-        return len(t.yearvec) == len(sim_t.yearvec) and getattr(t.tvec, 'unit', None) is getattr(sim_t.tvec, 'unit', None) and np.array_equal(t.yearvec, sim_t.yearvec)
+        """ Whether a module is on the sim's timeline (the usual case: the same time points in the same unit), so its time moves with the sim's (see `ss.Module.init_pre()`) """
+        return mod.t is self.sim.t
 
     def collect_by_type(self, sim):
         """ The steps of the modules, each kind at its place in the loop (the default; see `ss.Loop`) """
@@ -256,37 +247,15 @@ class Loop:
             self.add(disease.step)
         return
 
-    def collect_given(self, sim):
-        """ The steps of the modules in the order they were given in, with `ss.Sim(step_order='given')`; a disease takes its state changes and then its step together, and analyzers still step last """
-        mods = [mod for mod in sim.modules if not isinstance(mod, (ss.Analyzer, ss.Product))]
-        mods.sort(key=lambda mod: getattr(mod, '_given_index', np.inf)) # Modules added later (e.g. by sim.add_module()) after those given, by kind
-        for mod in mods:
-            if isinstance(mod, ss.Disease):
-                self.add(mod.step_state)
-            self.add(mod.step)
-        return
-
-    def _keep(self, func):
-        """ Whether to put a call in the plan (see `_noop()`); one left out counts as called, for `ss.Sim._check_method_calls()` """
-        if not self._noop(func):
-            return True
-        required = getattr(func.__self__, '_call_required', {})
-        for key in required:
-            if key.endswith(f'.{func.__name__}'):
-                required[key] += 1
-        return False
-
     def _noop(self, func):
         """
         Whether a call of the step is sure to do nothing in this sim, so is left out of the plan
 
-        This is so only for Starsim's own methods, when nothing has been changed that they
-        would act on, and for a `step()` with nothing in it: a module's `start_step()` with no random numbers to move on, its
-        `finish_step()`, `record_states()` and `record_events()` when inherited
-        unchanged, and the people's deaths and removals in a run without agents (in which nobody
-        dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
-        module overrides is always kept, so a module written as code costs the loop only the
-        methods it defines.
+        This is so for a module's `step()`, `start_step()`, `finish_step()` and `record_events()` when
+        empty or inherited unchanged, its `record_states()` when inherited with nothing to count, and the
+        people's deaths and removals in a run without agents (in which nobody dies as an agent). The sim's
+        own calls are always kept, as places to insert others. A method that a module overrides with
+        anything in it is always kept, so a module written as code costs the loop only the methods it defines.
         """
         obj, name = func.__self__, func.__name__
         sim = self.sim
@@ -296,11 +265,9 @@ class Loop:
             elif name not in ['start_step', 'finish_step', 'record_states', 'record_events']: # An intervention given as a function
                 return False
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
-            if name == 'start_step':
-                return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
-            elif name == 'record_states': # Counting its states is all it does
+            if name == 'record_states': # Counting its states is all it does
                 return inherited and not obj.auto_state_list and not obj.derived_state_names
-            return inherited # finish_step() and record_events()
+            return inherited or empty_function(func) # start_step(), finish_step() and record_events()
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
             same = all(getattr(people, m) is getattr(ss.People, m) for m in ['step_die', 'finish_step', 'update_post', 'remove_dead'])

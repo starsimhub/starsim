@@ -3,7 +3,6 @@ Test the distributions (distributions.py and internals/dists.py), and the random
 """
 
 # %% Imports and settings
-from unittest import mock
 import numpy as np
 import pytest
 import sciris as sc
@@ -435,8 +434,6 @@ def test_crn_one_agent():
 
     for seed in [0, 1]:
         assert not (diff := changed(seed)), f'Making one agent immune changed other agents\' {diff} (seed {seed})'
-        with mock.patch.object(ss.solvers.agents_compiled, 'compiled_reasons', lambda engine: ['off']): # The agent engine's own moves, not the compiled ones
-            assert not (diff := changed(seed)), f'Making one agent immune changed other agents\' {diff} with the agent engine\'s own moves (seed {seed})'
     assert changed(0, crn=False), 'Without CRN, making one agent immune should change other agents' # So the test can see CRN being lost
     return
 
@@ -451,7 +448,7 @@ def test_crn_code_moves():
         class Mover(ss.Intervention):
             def step(self):
                 if move:
-                    ss.move(self.sim.diseases.sir.R >> self.sim.diseases.sir.W, uids=moved)
+                    ss.move(self.sim.diseases.sir.R, self.sim.diseases.sir.W, uids=moved)
         sim = ss.Sim(sir, interventions=Mover(name='mover'), networks='random', n_agents=2000, start=0, stop=60, rand_seed=3, solver=ss.solvers.abm(keep_times=True), verbose=0).run()
         return sim.diseases.sir
 

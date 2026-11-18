@@ -13,7 +13,7 @@ Starsim 4 adds a way to write models using declared states and transitions, whic
 - **Agents by events** (a prototype): `ss.solvers.abm(step='events')` steps agents event by event in continuous time; a class can suggest how it runs as agents (`suggested_solver`).
 - **Stratification**: `sim.stratify(age=[0, 15, 65])` and other properties, with aging, transfers (`ss.transfer()`), contact matrices (`ss.contacts()`) and results by group.
 - **Places**: `ss.geo.geography()`, with movement between places (`ss.geo.gravity()`, `ss.geo.radiation()`), maps and animations.
-- **Strains**: `ss.Strains`, with immunity between them (`ss.immunity()`), also for diseases written as code.
+- **Strains**: `ss.Strains`, with immunity between them (`ss.immunity()`), for declared diseases.
 - **Partnerships**: `ss.DegreeNet` and `ss.SexualNet`, with target numbers of partners, matching and acts.
 - **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age or on events (`who=`, `when=`), with priorities, queues and delays; `ss.modify()` changes any named quantity.
 - **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`, the one way to give births and deaths; UN data by country (`ss.population('Kenya')`, `ss.birth(rate='Kenya')`).

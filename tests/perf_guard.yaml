@@ -4,7 +4,6 @@ machines:
     times:
       bare_init: 0.008
       bare_run: 0.0821
-      bare_run_no_people: 0.0466
       births_run: 0.0108
       by_age_init: 0.0596
       by_age_run: 0.6862

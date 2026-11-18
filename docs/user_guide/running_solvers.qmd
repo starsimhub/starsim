@@ -34,7 +34,7 @@ The name is the solver with its defaults: `solver='ode'` is the same as `solver=
 
 A declared module can also set its own way of running as agents (`ss.Disease(..., solver=ss.solvers.abm(step='events'))`). Once the sim is initialized, `sim.solver` is the solver that runs, with its options, and `sim.describe()` says how each module runs, and why.
 
-The first four are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them, except agents by events, can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)). The options that only agents take are those of `ss.solvers.abm()` (`rescale=`, `even_draws=`, `keep_times=`, `record_people=`); `n_agents=` without `total_pop=` is an error for a compartmental run, rather than ignored.
+The first four are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them, except agents by events, can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)). The options that only agents take are those of `ss.solvers.abm()` (`rescale=`, `keep_times=`); `n_agents=` without `total_pop=` is an error for a compartmental run, rather than ignored.
 
 ## How Starsim chooses
 
@@ -350,7 +350,7 @@ This appendix answers "will my model run as an ODE?", feature by feature, and th
 | Write a module that reads counts and results? | Supported | Supported | `sir.I.n`, `sim.results` ([Modules](architecture_index.qmd)) |
 | Write a module that keeps a value for each person? | Unsupported | Supported | Arrays such as `ss.FloatArr` ([Custom modules](building_modules.qmd)) |
 | Write a rate as a Python function? | Supported, if it works on groups | Supported | ([Severity by age](../gallery/hospitalization.qmd)) |
-| Read or change counts by group from code? | Supported: `sir.y[sir.I.rows].sum(0)` is per group, and changing `sir.y` changes the model | Read `sir.I.n` or the results; change agents' states (`sir.I[uids] = False`) | |
+| Read or change counts by group from code? | Supported: `sir.y[sir.I.rows].sum(0)` is per group, and changing `sir.y` between steps (e.g. in a module's `step()`) changes the model. A change in the middle of the disease's own step (e.g. from a function in one of its rates) is not seen by the rates worked out for that step already, and a write is not rounded to whole people under `binomial`, as `ss.move()` is | Read `sir.I.n` or the results; change agents' states (`sir.I[uids] = False`) | |
 | Write my own ODE in NumPy? | Supported | Supported, running beside the agents, unconnected to them | ([Measles in London](../gallery/measles_london.qmd)) |
 
 ### The rules Starsim checks

@@ -80,8 +80,7 @@ class Particles(sc.prettyobj):
         tables = self.tables if tables is None else tables
         fracs = self.fracs if fracs is None else fracs
         rest = (self.solver, self.n_sub, *tables, fracs, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
-        n_sub = ss.solvers.backends.compiling.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
-        kn = ss.solvers.backends.compiling.choose(len(self.ys)*ss.solvers.backends.compiling.plain_seconds(self.program, self.ys[0], end - self.done, self.solver, n_sub))
+        kn = ss.solvers.backends.compiling.choose()
         if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
             self.rngs = nb.typed.List(self.rngs)
             if self.n_threads > 1:

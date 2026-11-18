@@ -45,7 +45,6 @@ class Intervention(ss.Module):
     sim = ss.Sim(diseases='sis', networks='random', interventions=Discount(who=ss.person.age < 15)).run()
     ```
     """
-    timepar_skip = ['when'] # Its schedule and condition refer to other modules, which hold their own time parameters (see Module.link_timepars())
     who = None # By default everyone, at every step (also for a subclass that does not call Intervention.__init__())
     when = None
     product = None # The product it delivers, if any
@@ -466,6 +465,7 @@ class Event(ss.products.EventSource, Intervention):
     _disease = None # The disease, as given or once worked out (see _find_disease())
     move_module = None # With move=S >> V: the module of those states (as an object until named)
     _coded = False # Whether the disease is written as code (see _find_disease())
+    _dis = None # The disease module the product acts on, declared or written as code (see _find_disease())
 
     def __init__(self, what=None, who=None, when=None, n=None, p=None, rate=None, strain=None, increment=None, start=None, stop=None, name=None, label=None, **kwargs):
         if isinstance(what, ss.Product):
@@ -674,9 +674,7 @@ class Event(ss.products.EventSource, Intervention):
     def agent_reasons(self, sim):
         """ The reasons, if any, that this event needs agents """
         out = super().agent_reasons(sim)
-        def leaves(cond):
-            return [] if not isinstance(cond, ss.conditions.Cond) else [cond] if cond.op in ss.conditions.leaves else [l for arg in cond.args for l in leaves(arg)]
-        for leaf in leaves(self._trigger):
+        for leaf in ss.expressions.nodes(self._trigger) if isinstance(self._trigger, ss.conditions.Cond) else []:
             if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.dimensions.Transfer):
                 out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1].name}", which only agents keep as an event (yet)')
         if self._delay is not None:
@@ -686,13 +684,6 @@ class Event(ss.products.EventSource, Intervention):
         return out
 
     #%% Initialization
-
-    @property
-    def _dis(self):
-        """ The disease the product acts on: declared, or written as code """
-        if self._coded: # Written as code: see _check_coded()
-            return ss.solvers.deliveries.coded_disease(self.sim, self.disease)
-        return self.sim._declared_module(self.disease)
 
     @property
     def _eng(self):
@@ -755,6 +746,7 @@ class Event(ss.products.EventSource, Intervention):
         elif self.disease not in declared + coded:
             raise sc.KeyNotFoundError(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
         self._coded = self.disease in coded
+        self._dis = ss.solvers.deliveries.coded_disease(sim, self.disease) if self._coded else sim._declared_module(self.disease)
         if self._coded:
             self._check_coded(sim)
         return
@@ -1176,12 +1168,13 @@ class Event(ss.products.EventSource, Intervention):
         errormsg = f'{self._keys["coverage"]}= of "{self.name}" is a fraction of those eligible, but its function returned {val!r}, a rate; give the function as rate= instead'
         raise TypeError(errormsg)
 
-    def _new_spells(self):
-        """ Routine delivery is once per spell of being eligible: those offered it who are no longer eligible can be offered it again when they are """
+    def _new_spells(self, now=None):
+        """ Routine delivery is once per spell of being eligible: those offered it who are no longer eligible (`now`, if already evaluated) can be offered it again when they are """
         selector = self._selector
         d = self.sim.groups.dim_index(self._offered)
         gone = (selector.dim(self._offered) == 1)*selector.everyone()
-        now = self._eligible_now(held=False) # Holding the product does not end a spell, so it is not offered again when protection is lost
+        if now is None:
+            now = self._eligible_now(held=False) # Holding the product does not end a spell, so it is not offered again when protection is lost
         gone = gone*(1 - now) if self.in_compartments is not None else gone & ~now
         if np.any(gone):
             self._shift(gone, {d:0})
@@ -1190,9 +1183,10 @@ class Event(ss.products.EventSource, Intervention):
     def _offer(self, sel):
         """ Those of some people who are eligible now, and not yet offered it (for routine delivery) """
         selector = self._selector
+        now = self._eligible_now(held=False)
         if self._remembers:
-            self._new_spells()
-        sel = sel*self._eligible_now()
+            self._new_spells(now)
+        sel = sel*self._unheld(now)
         if self._remembers:
             sel = sel*(selector.dim(self._offered) == 0)
         return sel
@@ -1212,6 +1206,10 @@ class Event(ss.products.EventSource, Intervention):
             sel = sel*np.isin(selector.dim(self.sim.groups.strats[d].name), levels)
         if selector.abm:
             sel = sel & selector.to_selection(self.sim.people.auids)
+        return sel
+
+    def _unheld(self, sel):
+        """ Those of some people eligible who do not hold the product already: all of them for an event (see `ss.Delivery`) """
         return sel
 
     @property
@@ -1660,8 +1658,12 @@ class Delivery(Event):
         sel = super()._eligible_now(held)
         if self.reached_recently is not None: # Not to people it reached within skip_reached_within=
             sel = sel*~np.asarray(selector.select(self.reached_recently), dtype=bool)
-        if self._holds and held and not self.product.fades: # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it
-            level = selector.dim(self.product.dim)
+        return self._unheld(sel) if held else sel
+
+    def _unheld(self, sel):
+        """ Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it """
+        if self._holds and not self.product.fades:
+            level = self._selector.dim(self.product.dim)
             doses = self.product.doses
             sel = sel*((level < len(doses)) if doses else (level == 0))
         return sel

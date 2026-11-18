@@ -8,7 +8,6 @@ import sciris as sc
 import starsim as ss
 from .engine import times
 from .compartmental import Compartmental
-from .agents_moving import check_draws
 
 __all__ = ['Branching']
 

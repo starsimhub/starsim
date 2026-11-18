@@ -3,7 +3,6 @@ Numba's kernels: the compiled functions that the solvers run, the reference copy
 
     ss.solvers.numba.compartmental  # The compartmental kernels (compartmental.rs): a whole run, or a step, of every compartmental solver
     ss.solvers.numba.passes         # Passes over the agents and a network's edges, serial and threaded (passes.rs)
-    ss.solvers.numba.agent_moves    # The agent engine's moves through a step, as one call (agent_moves.rs)
     ss.solvers.numba.agent_events   # The agent engine taken event by event within a step (agent_events.rs)
     ss.solvers.numba.draws          # Exact draws from counter-based uniforms, which the others and ss.Dist use (draws.rs); also ss.draws
 
@@ -14,5 +13,4 @@ Used with: agents and compartments; declared and coded modules
 from . import draws
 from . import compartmental
 from . import passes
-from . import agent_moves
 from . import agent_events

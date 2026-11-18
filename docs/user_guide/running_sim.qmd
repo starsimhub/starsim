@@ -133,7 +133,7 @@ Each step, the sim calls the modules in a fixed order (Starsim's long-standing o
 
 | Order | Who | What happens |
 |---|---|---|
-| 1 | sim, then every module | `advance()` (from the second step on) and `start_step()`: move time and the random number streams on |
+| 1 | sim, then every module | `advance()` (from the second step on) and `start_step()`: move time on, and start the step |
 | 2 | people, then every module | `record_states()`: the stocks, the state at the start of the step |
 | 3 | custom modules, then demographics | `step()`: custom modules; births add agents, and deaths are requested |
 | 4 | diseases | `step_state()`: state updates of a disease written as code |
@@ -291,7 +291,6 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | first argument | | The model: a module, transitions, or a list of them (modules of any kind, sorted by kind); or a dict of settings |
 | `diseases`, `networks`, `demographics`, `interventions`, `analyzers`, `connectors` | none | Modules of each kind: a module, a name (`'sir'`), a dict with `type`, or a list. `networks` default to everyone mixing with everyone ([Mixing](populations_mixing.qmd)); `demographics=True` gives births and deaths at 20 and 10 per 1,000 people per year |
 | `custom` | none | Modules of your own of no standard kind (kept in `sim.custom`) |
-| `step_order` | 'type' | The order the modules step in: `'type'`, each kind at its place in the step, or `'given'`, in the order they were given (the modules given as arguments first) |
 | `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (or as keywords, `ss.Sim(sir, beta=0.1)`, if no setting has the name); it can hold settings too (`pars=dict(start=2000, beta=0.1)`), told apart by name, or be a whole `ss.SimPars` |
 | `data` | none | Data to plot with the results and to fit to, with a `time` column and columns named like `measles.infection` |
 | `people` | none | An `ss.People` to use, rather than making one (see [People and demographics](populations_people.qmd)) |
@@ -306,7 +305,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `dt` | 1 | The step, in the unit of time |
 | `unit` | the model's | The unit of time, and of bare numbers in declared transitions (`'day'`, `'week'`, `'year'`, ...) |
 | **How it is run** | | |
-| `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.solvers.ode(integrator=, substeps=, dwells=)`, `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=, rescale=, even_draws=, keep_times=, record_people=)`: dynamic rescaling, evenly spaced draws, keeping the time of entering every state, and recording the people's results each step (see [Solvers and backends](running_solvers.qmd)) |
+| `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.solvers.ode(integrator=, substeps=, dwells=)`, `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=, rescale=, keep_times=)`: dynamic rescaling, and keeping the time of entering every state (see [Solvers and backends](running_solvers.qmd)) |
 | `branching` | False | Run as a branching process: infection takes no one from the uninfected (see [Branching and rescaling](running_branching.qmd)) |
 | `rand_seed` | 1 | The random seed, from which each module's seeds are made |
 | **Output** | | |
