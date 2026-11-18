@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Merged with the first two steps of the agent-based diseases tutorial (A1) on Nov 11 by AI. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI and lightly edited by a human; merged with a second AI draft. Merged with the first two steps of the agent-based diseases tutorial (A1) on Nov 11 by AI. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; Explicit tab that repeated the Python tab removed on Nov 17 by AI
 ---
 
 Starsim is a framework for modeling the spread of disease. In Starsim, you write a model as an epidemiologist would describe it: the states people can be in, and the transitions between them and their rates. Starsim runs it as a compartmental model (equations for the number of people in each state) or as agents (one simulated person at a time). Starsim is in Python, and can also be used from R with [R-Starsim](https://r.starsim.org).
@@ -68,35 +68,11 @@ sim$plot()
 sim$measles$plot()
 ```
 
-## Explicit
-
-```{python}
-import starsim as ss
-
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of β = 1.9 per day times the fraction infectious
-recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
-measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
-
-sim_explicit = ss.Sim(
-    diseases  = measles_explicit,
-    networks  = ss.MixingPool(n_contacts=1), # Everyone mixes with everyone, with one contact per person per day
-    total_pop = 100_000,
-    start     = ss.days(0),
-    stop      = ss.days(50),
-    dt        = ss.days(1),     # Steps of a day
-    unit      = 'day',          # The unit of bare numbers
-    solver    = 'ode',          # Run as an ODE
-)
-sim_explicit.run()
-sim_explicit.plot()
-sim_explicit.measles.plot()
-```
 :::
 
 That is a complete model of a measles outbreak, written, run, and plotted.
 
-In Starsim, compartments are states, and each transition gives where people move from and to, and its rate (after `@`). Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". A state in a rate, like `I` in `1.9*I`, is the fraction of people in it. A duration, like `ss.days(8)`, is the average time in a state, 1/γ. A plain number takes the unit of the duration, so β = 1.9 is per day (`ss.perday(1.9)`). The shorthand builds an [`ss.Transition`](../api/internals.transitions.qmd), written out in full in the Explicit tab. [`ss.Disease`](../api/diseases.qmd) puts the transitions into a disease, named `measles` after its variable; `init_prev=0.001` starts with 0.1% of people (100) infectious.
+In Starsim, compartments are states, and each transition gives where people move from and to, and its rate (after `@`). Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". A state in a rate, like `I` in `1.9*I`, is the fraction of people in it. A duration, like `ss.days(8)`, is the average time in a state, 1/γ. A plain number takes the unit of the duration, so β = 1.9 is per day (`ss.perday(1.9)`). The shorthand builds an [`ss.Transition`](../api/internals.transitions.qmd); [Writing models](../user_guide/building_writing.qmd) shows it written out in full. [`ss.Disease`](../api/diseases.qmd) puts the transitions into a disease, named `measles` after its variable; `init_prev=0.001` starts with 0.1% of people (100) infectious.
 
 Starsim names the parameters itself: `beta` for β, and `dur_I` for the infectious period, 1/γ. `equations()` gives the standard SIR equations:
 

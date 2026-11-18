@@ -10,6 +10,8 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 
+__all__ = ['Intervention', 'at_age', 'capacity', 'Event', 'Delivery', 'vaccinate', 'treat', 'screen'] # The public names, shown in the API reference; the rest are helpers
+
 
 
 class Intervention(ss.Module):

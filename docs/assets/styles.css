@@ -67,3 +67,15 @@ table td:first-child a {
 .cell-output-display {
   overflow-x: auto;
 }
+
+/* Mermaid diagrams: Quarto's theme fills a subgraph with a solid dark gray, under nodes that are 10% blue, and gives edge labels a gray background. Use a faint tint that works in light and dark mode, and give labels the page's background */
+.mermaid svg .cluster rect, .cell-output-display svg .cluster rect {
+    fill: rgba(39, 128, 227, 0.04) !important;
+    stroke: var(--mermaid-edge-color) !important;
+}
+.mermaid svg .edgeLabel, .mermaid svg .labelBkg, .cell-output-display svg .edgeLabel, .cell-output-display svg .labelBkg {
+    background-color: var(--bs-body-bg) !important;
+}
+.mermaid svg .edgeLabel rect, .cell-output-display svg .edgeLabel rect {
+    fill: var(--bs-body-bg) !important;
+}

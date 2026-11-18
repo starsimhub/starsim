@@ -26,4 +26,4 @@ The [gallery](gallery.qmd) has complete models, each with its diagram, code, and
 :::
 :::
 
-Also: [import a model](user_guide/building_import.qmd) from another framework, [AI tools](https://ai.starsim.org) for coding agents, [what's new](whatsnew.qmd), and [contributing](contributing/index.qmd).
+Also: [import a model](user_guide/library_import.qmd) from another framework, [AI tools](https://ai.starsim.org) for coding agents, [what's new](whatsnew.qmd), and [contributing](contributing/index.qmd).

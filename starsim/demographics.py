@@ -18,6 +18,8 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
+__all__ = ['Demographics', 'Births', 'Deaths', 'preterm', 'Pregnancy'] # The public names, shown in the API reference; the rest are helpers
+
 ss_float = ss.dtypes.float
 _ = None # For function signatures
 

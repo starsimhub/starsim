@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, from the earlier AI-written calibration tutorials; its data, the posterior, and the check against what happened next rewritten by AI. Merged on Nov 11 by AI with the sections on real places (from the AI-written geography tutorial), on a real population and on births and deaths (from the AI-written tutorial on age groups), and on a country's population (from the agent-based demographics tutorial, based on an AI draft with text from the Starsim 3 demographics tutorial). Shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review, with the population material trimmed and moved to the end, a projection from the best fit added, and the posterior marked as advanced and found with pmcmc rather than NUTS
+  note: Written by AI, from the earlier AI-written calibration tutorials; its data, the posterior, and the check against what happened next rewritten by AI. Merged on Nov 11 by AI with the sections on real places (from the AI-written geography tutorial), on a real population and on births and deaths (from the AI-written tutorial on age groups), and on a country's population (from the agent-based demographics tutorial, based on an AI draft with text from the Starsim 3 demographics tutorial). Shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review, with the population material trimmed and moved to the end, a projection from the best fit added, and the posterior marked as advanced and found with pmcmc rather than NUTS; Explicit tab that repeated the Python tab removed on Nov 17 by AI
 ---
 
 **How big will this outbreak get, and would a vaccination campaign now make a difference?**
@@ -73,30 +73,6 @@ make_sim <- function(...) { # A sim with these settings, and any others given
 }
 ```
 
-## Explicit
-
-```{python}
-S, E, I, R = ss.State(name='S'), ss.State(name='E'), ss.State(name='I'), ss.State(name='R')
-beta_explicit     = ss.par(ss.perday(0.14), bounds=[ss.perday(0.05), ss.perday(0.5)], name='beta') # Per contact with an infectious person
-reported_explicit = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1), name='reported')
-
-infection_explicit = ss.Transition(source=S, dest=E, rate=beta_explicit*I, name='infection')
-measles_explicit = ss.Disease(
-    transitions = [
-        infection_explicit,
-        ss.Transition(source=E, dest=I, dur=ss.expon(mean=ss.days(10)), name='progression'),
-        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'),
-        ss.outcome(source=reported_explicit*infection_explicit, name='cases'), # Moves nobody: a result worked out from the infections
-    ],
-    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The rest start in S
-    init_n = dict(I=10),
-    name   = 'measles',
-)
-measles_explicit.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people would age through
-
-contacts_explicit = ss.contacts(matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]], ages=[0, 15, 65], name='contacts')
-settings_explicit = dict(networks=contacts_explicit, total_pop=100_000, start='2025-01-01', stop='2025-09-01', dt=ss.days(1), unit='day', solver='ode', aging=False)
-```
 :::
 
 First, data rarely measure a model's states directly: a health office counts only reported cases. An **outcome** is a result computed from the model's states and transitions, to compare with what was observed (see [Outcomes](../user_guide/building_outcomes.qmd)). Here, `cases` is `reported` times the new infections each day.

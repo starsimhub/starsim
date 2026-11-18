@@ -27,7 +27,6 @@ Each page of the user guide covers one topic in full, to read through or to look
 - [Outcomes](user_guide/building_outcomes.qmd): what is observed, such as reported cases
 - [Results and plotting](user_guide/building_results.qmd): reading, summarizing, exporting, and plotting
 - [Custom modules](user_guide/building_modules.qmd): behavior written as code
-- [Import/export](user_guide/building_import.qmd): models from and to other frameworks
 
 ## Populations and data
 
@@ -48,6 +47,7 @@ Each page of the user guide covers one topic in full, to read through or to look
 - [Scenarios](user_guide/running_scenarios.qmd): paired comparisons, repeated runs, and uncertainty
 - [Solvers and backends](user_guide/running_solvers.qmd): which solver, and what needs agents
 - [Speed and scale](user_guide/running_performance.qmd): finding the bottleneck, many runs, and clusters
+- [Command line and options](user_guide/running_cli.qmd): the `starsim` command, and every global option
 - [Branching and rescaling](user_guide/running_branching.qmd): large populations and small outbreaks
 - [Profiling and debugging](user_guide/running_debugging.qmd): symptoms, causes, and fixes
 
@@ -66,6 +66,7 @@ Each page of the user guide covers one topic in full, to read through or to look
 - [Library: networks](user_guide/library_networks.qmd): household, spatial, and theoretical networks
 - [Library: maternal-child health](user_guide/library_mnch.qmd): fetal health, maternal infections, and neonatal outcomes
 - [Library: health economics](user_guide/library_econ.qmd): the costs of interventions, DALYs, and cost per outcome averted
+- [Import/export](user_guide/library_import.qmd): models from and to other frameworks
 
 ## Mechanics
 

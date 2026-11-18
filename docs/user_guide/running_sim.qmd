@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 19
   ai: 81
-  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; Explicit tab that repeated the Python tab removed on Nov 17 by AI
 ---
 
 A sim (`ss.Sim`) is one model put together with everything needed to run it: the diseases, the population, the time span, how people mix, and any births and deaths, interventions, and analyzers. It runs them in the right order, and holds the results afterwards. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd) build and run the measles model used here; running many sims and comparing them is in [Scenarios](running_scenarios.qmd).
@@ -48,35 +48,6 @@ sim$run()
 sim$plot()
 ```
 
-## Explicit
-
-```{python}
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-beta_explicit = ss.par(ss.perday(1.9), name='beta') # Transmission rate per day
-measles_explicit = ss.Disease(
-    transitions = [
-        ss.Transition(source=S, dest=I, rate=beta_explicit*I, name='infection'),
-        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'), # Infectious for an exponentially distributed time of 8 days on average
-    ],
-    init_prev = 0.001,
-    name = 'measles',
-)
-
-sim_explicit = ss.Sim(
-    diseases  = measles_explicit,
-    networks  = ss.MixingPool(n_contacts=1), # Everyone mixes with everyone, with one contact per person per day
-    total_pop = 100_000,
-    start     = ss.days(0),
-    stop      = ss.days(50),
-    dt        = ss.days(1),     # Steps of a day
-    unit      = 'day',          # The unit of bare numbers
-    solver    = 'ode',          # Run as an ODE
-    rand_seed = 1,              # The random seed (it matters only for a stochastic run)
-    verbose   = 1,              # Print a line for what it runs, and one when it is done
-)
-sim_explicit.run()
-sim_explicit.plot()
-```
 :::
 
 A run prints:
@@ -223,7 +194,7 @@ loaded = ss.load('my-measles.sim')
 loaded.plot('measles')
 ```
 
-By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). `sim.shrink()` does the same in memory, and `ss.parallel(..., shrink=True)` does it to each run (by default, runs keep their people). A sim that keeps its people can be looked at person by person (`sim.people.to_df()`; see [People and demographics](populations_people.qmd)), but a declared disease run as agents keeps only the times and histories the model reads (such as `ti_I`, when a duration needs it): make the sim with `solver=ss.solvers.abm(keep_times=True)` to read any other. A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table and `sim.to_json()` as JSON (see [Results](building_results.qmd)); to write the model itself in another format (SBML, odin), see [Import and export](building_import.qmd).
+By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). `sim.shrink()` does the same in memory, and `ss.parallel(..., shrink=True)` does it to each run (by default, runs keep their people). A sim that keeps its people can be looked at person by person (`sim.people.to_df()`; see [People and demographics](populations_people.qmd)), but a declared disease run as agents keeps only the times and histories the model reads (such as `ti_I`, when a duration needs it): make the sim with `solver=ss.solvers.abm(keep_times=True)` to read any other. A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table and `sim.to_json()` as JSON (see [Results](building_results.qmd)); to write the model itself in another format (SBML, odin), see [Import and export](library_import.qmd).
 
 ## Larger projects: `make_sim()`
 

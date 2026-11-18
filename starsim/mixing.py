@@ -13,6 +13,8 @@ import pandas as pd
 import starsim as ss
 from .networks import Route, people_mask
 
+__all__ = ['MixingPool', 'contacts'] # The public names, shown in the API reference; the rest are helpers
+
 _ = None
 
 

@@ -18,6 +18,8 @@ import sciris as sc
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 import starsim as ss
 
+__all__ = ['ndict', 'warn', 'load', 'save', 'plot_args', 'show', 'return_fig', 'count_by'] # The public names, shown in the API reference; the rest are helpers
+
 
 # %% Helper functions
 

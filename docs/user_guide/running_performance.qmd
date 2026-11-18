@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 24
   ai: 76
-  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, and an appendix of the starsim command, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; "A step as one compiled pass" added on Nov 17 by AI
+  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; "A step as one compiled pass" added on Nov 17 by AI; the appendices moved to "Command line and options" on Nov 17 by AI
 ---
 
 Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. The first half of this page covers what makes a run slow and what to do about it; the second, running many sims from a script, on a large computer, on a cluster, or behind a dashboard. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd), and making and comparing many sims in [Scenarios](running_scenarios.qmd).
@@ -250,7 +250,7 @@ msim.plot('measles.I')
 
 Making sims in parallel copies each one back to the main process, which takes time for a large sim; `sc.parallelize(..., serial=True)` makes them one after another, to check whether parallel is faster. A remote computer can be used through SSH, from an editor that connects to a remote Python (such as [VS Code](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) or [Positron](https://positron.posit.co)), or with a Jupyter server on it ([The Littlest JupyterHub](https://tljh.jupyter.org/)).
 
-Starsim sets NumPy's linear algebra library (BLAS) to one thread when imported; for large matrix calculations of your own, `ss.options.blas_threads` gives it more (see the [appendix](#appendix-every-option)).
+Starsim sets NumPy's linear algebra library (BLAS) to one thread when imported; for large matrix calculations of your own, `ss.options.blas_threads` gives it more (see [Command line and options](running_cli.qmd#options)).
 
 ## On a cluster
 
@@ -305,10 +305,10 @@ sim.save(f'results/sim_{task}.sim')  # Shrunk by default, since it has finished
 
 ```python
 # collect.py: once every task has finished
-import glob
+import sciris as sc
 import starsim as ss
 
-sims = [ss.load(filename) for filename in sorted(glob.glob('results/sim_*.sim'))]
+sims = [ss.load(filename) for filename in sc.getfilelist('results/*.sim')]
 msim = ss.MultiSim(sims)  # Collects sims that have already run; sims with the same label are runs of one scenario
 msim.summarize()
 ```
@@ -317,7 +317,7 @@ Some things matter more on a cluster than on a laptop:
 
 - **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., workers=1)` within a task, or limit it with `workers=`. Starsim's own threads (used only for passes over 200,000 agents or more, and never in the workers of `ss.parallel()`) are turned off with `STARSIM_THREADS=1`, and NumPy's with `SCIRIS_NUM_THREADS=1` in the task's environment.
 - **Compile once, before the runs.** With the Numba backend, run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile them ([Backends](#backends)); `starsim init compile --check` says whether it has been done.
-- **Settings from the environment.** Every option in `ss.options` can be set by an environment variable (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`), the easiest way to set it for every task of a job (see the [appendix](#appendix-every-option)).
+- **Settings from the environment.** Every option in `ss.options` can be set by an environment variable (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`), the easiest way to set it for every task of a job (see [Command line and options](running_cli.qmd#options)).
 - **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment): sims are sent between computers as Python pickles, which need the same code to load.
 - **A seed for each run.** Give each run its own `rand_seed`, or every run of a stochastic model is the same.
 
@@ -357,34 +357,3 @@ Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run a
 - [Slurm: Job arrays](https://slurm.schedmd.com/job_array.html): running the same script many times with a task number
 - [Streamlit: Get started](https://docs.streamlit.io/get-started): building a dashboard around a model
 - [Sciris: Parallelization](https://docs.sciris.org/tutorials/tut_parallel.html): `sc.parallelize()`, which `ss.parallel()` is built on
-
-## Appendix: every option
-
-Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
-
-```{python}
-import pandas as pd
-pd.set_option('display.max_colwidth', None) # Show each entry in full
-
-rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optdesc[key]) for key in ss.options.keys()}
-pd.DataFrame.from_dict(rows, orient='index')
-```
-
-Starsim also reads `SCIRIS_NUM_THREADS` for the threads of linear algebra, and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent solver for testing it, at a cost in speed. The settings of a sim that affect speed or memory (`n_agents`, `dt`, `solver`, `require_compiled`, `group_results`, `record_people`) are in [Running sims](running_sim.qmd#appendix-every-sim-setting).
-
-## Appendix: the starsim command
-
-Installing Starsim also installs a `starsim` command, for setting up an environment and converting models (`starsim` lists these, and `starsim <command> --help` the options of each):
-
-| Command | What it does |
-|---|---|
-| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust backend is in use (`-y` not to ask) |
-| `starsim init compile` | Compiles the Numba backend ahead of time, as `ss.compile()` does (a few minutes, once per install); optional, since it is otherwise compiled on first use. `--rust` builds the Rust backend instead, in a clone of Starsim; `--check` says which backend is in use and whether it is compiled, exiting with 1 if not |
-| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, as `starsim ai install` does; `--global` installs a short skill for all projects, `--to=claude,agents` chooses the agents, and `--force` replaces a skill of the same name |
-| `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both compiled backends (Rust and Numba) |
-| `starsim ai` | Where the skills are installed; `list`, `show` (the guide, or one skill), `install` and `uninstall`, and `off` and `on` (whether other commands suggest the skills) |
-| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or `--from=`); `--to=` another format, `--out=` the file, `--force` to replace it. `starsim convert` lists the formats |
-| `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills (`--headless` to run it on its own; `--ai=claude` names the agent, by default the one in `STARSIM_AGENT` or the only one installed) |
-| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim`; a second argument gives the format (`starsim import model.json epipack`), and other options go to the importer (`--databook=data.xlsx`) |
-| `starsim export model.py sbml` | Writes the sim that `model.py` makes (as `sim`, or `--sim=`) in another format |
-| `starsim --version` | The version of Starsim |

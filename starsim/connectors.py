@@ -15,6 +15,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
+__all__ = ['Connector', 'modify'] # The public names, shown in the API reference; the rest are helpers
+
 
 class Connector(ss.Module):
     """

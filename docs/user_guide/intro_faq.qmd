@@ -44,7 +44,7 @@ They are starting points, not models of a particular setting. The [library](libr
 
 ### I have a model in Starsim 3 or another framework. Can I bring it over?
 
-In almost all cases, yes. Starsim imports models from more than a dozen frameworks, including EpiModel, odin, and epydemix, and Starsim 3 code can be rewritten with `python -m starsim.converters.migrate`. See [Import/export](building_import.qmd) and the [migration guide](../migration/v3_v4.md). If a model doesn't translate, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues).
+In almost all cases, yes. Starsim imports models from more than a dozen frameworks, including EpiModel, odin, and epydemix, and Starsim 3 code can be rewritten with `python -m starsim.converters.migrate`. See [Import/export](library_import.qmd) and the [migration guide](../migration/v3_v4.md). If a model doesn't translate, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues).
 
 ## Running and fitting
 

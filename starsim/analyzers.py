@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+
+__all__ = ['Analyzer', 'infection_log'] # The public names, shown in the API reference; the rest are helpers
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 

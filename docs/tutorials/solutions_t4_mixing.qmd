@@ -75,12 +75,12 @@ beta = ss.par(0.14, bounds=[0.05, 0.5])
 away = ss.par(0.01, bounds=[0.001, 0.1]) # The fraction of time spent in other towns
 measles = ss.Disease(S >> E @ beta*I, E >> I @ ss.days(10), I >> R @ ss.days(8),
     init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
-    init_n = dict(I=ss.by(patch=[10, 0, 0, 0])), # The outbreak starts in Riverton
+    init_n = dict(I=ss.by(patch=[10, 0, 0, 0])), # The outbreak starts in Upelis
     name   = 'measles',
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
 towns = ss.geo.geography(
-    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    names       = ['Upelis', 'Kalnava', 'Ezerynas', 'Laukava'],
     populations = [100_000, 40_000, 20_000, 10_000],
     x           = [0, 20, 35, 60],
     y           = [0, 10, -15, 5],
@@ -98,7 +98,7 @@ for sim in msim.sims:
         print(f'  {town}: peak on {peak}, {res.infection.select(patch=town).sum():,.0f} infections')
 ```
 
-Movement changes when the outbreak reaches each town, not how large it is. With 0.1% of time away, Fairfield's outbreak peaks almost three months after Riverton's; with 5%, all four towns peak within about two weeks of each other. Riverton's own peak comes a few days later with more movement, since more of its infectious time is spent elsewhere. Each town has the same number of infections in every run, since in this deterministic model each town's outbreak, once started, is decided by its own immunity and contacts. (As the tutorial showed, with chance and little movement, an outbreak may never reach a small town at all.)
+Movement changes when the outbreak reaches each town, not how large it is. With 0.1% of time away, Laukava's outbreak peaks almost three months after Upelis's; with 5%, all four towns peak within about two weeks of each other. Upelis's own peak comes a few days later with more movement, since more of its infectious time is spent elsewhere. Each town has the same number of infections in every run, since in this deterministic model each town's outbreak, once started, is decided by its own immunity and contacts. (As the tutorial showed, with chance and little movement, an outbreak may never reach a small town at all.)
 
 Exercises 4 to 6 use networks, so they run as agents. Each holds β per contact fixed, so a network with more contacts adds transmission.
 

@@ -1,0 +1,45 @@
+---
+title: Command line and options
+authorship:
+  human: 10
+  ai: 90
+  note: Moved on Nov 17 by AI from the appendices of "Speed and scale" (the starsim command, and every option), both written by AI
+---
+
+This page lists the `starsim` command that comes with Starsim, and Starsim's global options (`ss.options`), which can be set from Python or from the shell.
+
+## The starsim command
+
+Installing Starsim also installs a `starsim` command, for setting up an environment and converting models (`starsim` lists these, and `starsim <command> --help` the options of each):
+
+| Command | What it does |
+|---|---|
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust backend is in use (`-y` not to ask) |
+| `starsim init compile` | Compiles the Numba backend ahead of time, as `ss.compile()` does (a few minutes, once per install); optional, since it is otherwise compiled on first use. `--rust` builds the Rust backend instead, in a clone of Starsim; `--check` says which backend is in use and whether it is compiled, exiting with 1 if not |
+| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, as `starsim ai install` does; `--global` installs a short skill for all projects, `--to=claude,agents` chooses the agents, and `--force` replaces a skill of the same name |
+| `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both compiled backends (Rust and Numba) |
+| `starsim ai` | Where the skills are installed; `list`, `show` (the guide, or one skill), `install` and `uninstall`, and `off` and `on` (whether other commands suggest the skills) |
+| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or `--from=`); `--to=` another format, `--out=` the file, `--force` to replace it. `starsim convert` lists the formats |
+| `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills (`--headless` to run it on its own; `--ai=claude` names the agent, by default the one in `STARSIM_AGENT` or the only one installed) |
+| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim`; a second argument gives the format (`starsim import model.json epipack`), and other options go to the importer (`--databook=data.xlsx`) |
+| `starsim export model.py sbml` | Writes the sim that `model.py` makes (as `sim`, or `--sim=`) in another format |
+| `starsim --version` | The version of Starsim |
+
+## Options {#options}
+
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options(threads=1):`, or before Python starts with `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.help()` lists them all, with what each does; they are also in the [API reference](../api/settings.qmd). The ones most often changed:
+
+| Option | What it does |
+|---|---|
+| `verbose` | How much a sim prints: `0` for nothing, e.g. in a batch of runs |
+| `warnings` | What to do with a warning: `'warn'` (default), `'print'`, `'error'`, or `'ignore'` |
+| `backend` | How the numbers are computed: `'auto'` (default), `'rust'`, `'numba'`, `'python'`, or `'jax'` |
+| `threads` | Threads for the passes over the agents of a large sim; `1` on a cluster, where tasks already run in parallel |
+| `precision` | `32` (default) or `64` bits for the numbers kept for each agent |
+| `style` | The plotting style: `'starsim'` (default), `'simple'`, or a Matplotlib style |
+
+## Further reading
+
+- [Speed and scale](running_performance.qmd): compiling once, threads, and running on a cluster
+- [Import/export](library_import.qmd): what `starsim convert`, `import`, and `export` do, format by format
+- [Running sims](running_sim.qmd#appendix-every-sim-setting): the settings of a sim, as opposed to the global options

@@ -12,6 +12,8 @@ import scipy.special as sp_special
 import sciris as sc
 import starsim as ss
 from .internals.dists import Dist, every, inverse, positive, some, sps
+
+__all__ = ['random', 'uniform', 'normal', 'truncnorm', 'lognormal', 'expon', 'poisson', 'beta_dist', 'nbinom', 'binom', 'randint', 'weibull', 'gamma', 'erlang', 'constant', 'bernoulli', 'choose_n', 'choice', 'histogram', 'multi_random'] # The public names, shown in the API reference; the rest are helpers
 ss_int = ss.dtypes.int
 
 

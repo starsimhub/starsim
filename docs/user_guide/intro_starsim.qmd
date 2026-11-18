@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 30
   ai: 70
-  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI; repeated catalogs cut on Nov 12 by AI after the docs review
+  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI; repeated catalogs cut on Nov 12 by AI after the docs review; Explicit tab that repeated the Python tab removed on Nov 17 by AI
 ---
 
 ## Introduction
@@ -19,7 +19,7 @@ Mechanistic models of transmission differ in how they represent the population. 
 
 ![Types of model](assets/types_of_model.png)
 
-Tools differ as much in how a model is written: by hand in a general-purpose language (NumPy, deSolve), in a model language (odin), in configuration files (flepiMoP, Atomica), as a library of compartmental models (summer2, epydemix, MEmilio, SimInf), as a network or agent-based framework (EpiModel, LASER, EMOD, Mesa), or with statistical tools that fit mechanistic models to data (pomp, Stan). Models from many of these can be read into Starsim, and Starsim models written out to several (see [Import and export](building_import.qmd)); the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo has a model from each written both ways, with how their results and speed compare. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
+Tools differ as much in how a model is written: by hand in a general-purpose language (NumPy, deSolve), in a model language (odin), in configuration files (flepiMoP, Atomica), as a library of compartmental models (summer2, epydemix, MEmilio, SimInf), as a network or agent-based framework (EpiModel, LASER, EMOD, Mesa), or with statistical tools that fit mechanistic models to data (pomp, Stan). Models from many of these can be read into Starsim, and Starsim models written out to several (see [Import and export](library_import.qmd)); the [lingua_franca](https://github.com/starsimhub/lingua_franca) repo has a model from each written both ways, with how their results and speed compare. If you are coming from Starsim 3, see the [migration guide](../migration/v3_v4.md).
 
 ## Where Starsim fits
 
@@ -78,32 +78,6 @@ sim <- Sim(measles, total_pop = N, stop = days(50), verbose = 0)$run()
 cat("Most infectious at once:", round(max(sim$results$measles$I$values)), "\n")
 ```
 
-## Explicit
-
-```{python}
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-measles = ss.Disease(
-    transitions = [
-        ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection'),       # β S I / N
-        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'), # γ I, with γ = 1/8
-    ],
-    init_n = dict(I=100), # 100 infectious at the start, and the rest susceptible
-    name   = 'measles',
-)
-sim = ss.Sim(
-    diseases  = measles,
-    networks  = ss.MixingPool(n_contacts=1), # Everyone mixes with everyone, with one contact per person per day
-    total_pop = N,
-    start     = ss.days(0),
-    stop      = ss.days(50),
-    dt        = ss.days(1),
-    unit      = 'day',
-    solver    = 'ode',
-    verbose   = 0,
-)
-sim.run()
-print('Most infectious at once:', round(sim.results.measles.I.max()))
-```
 :::
 
 The two agree to within a couple of people. If this is the whole job (one model, run deterministically, read by you), the plain version is fine, as is deSolve or odin in R; Starsim is not faster than good code of your own for a model like this.
@@ -158,7 +132,7 @@ Starsim suits modelers who write code (or are willing to), and is a good fit:
 It may not be the best choice:
 
 - For one run of a simple SIR or SEIR model, where plain Python or R is enough ([above](#when-your-own-code-is-enough)).
-- If your team has a working model, highly specialized to its context, in another tool: the cost of switching may not be worth it. Starsim can import models from several frameworks ([Import and export](building_import.qmd)), so get in touch if this interests you.
+- If your team has a working model, highly specialized to its context, in another tool: the cost of switching may not be worth it. Starsim can import models from several frameworks ([Import and export](library_import.qmd)), so get in touch if this interests you.
 - For networks estimated from survey data with exponential random graph models (`nodemix`, `gwesp`): EpiModel. Starsim's networks target degrees and matching.
 - For the fastest agent-based runs at national scale (tens of millions of agents): LASER, which is about 4 times faster on the England and Wales model.
 - For many small stochastic runs: odin and its companions, whose compiled models start slower but run faster.

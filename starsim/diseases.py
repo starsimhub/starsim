@@ -12,6 +12,8 @@ import sciris as sc
 import starsim as ss
 from .internals import declaring
 
+__all__ = ['Disease', 'AgentDisease', 'SIR', 'SEIR', 'SIS'] # The public names, shown in the API reference; the rest are helpers
+
 
 
 class BuiltAfterInit(type):

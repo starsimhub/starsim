@@ -18,6 +18,8 @@ import sciris as sc
 import matplotlib.font_manager as fm
 import starsim as ss # Only used to set references
 
+__all__ = ['options', 'dtypes', 'style'] # The public names, shown in the API reference; the rest are helpers
+
 backends = ['auto', 'rust', 'numba', 'python', 'jax'] # The values of ss.options.backend: how the solvers' numbers are computed
 approximations = ['note', 'allow', 'error'] # The values of ss.options.approximations: what a sim does with each approximation a solver makes
 warning_options = ['warn', 'print', 'error', 'errors', 'ignore'] # The values of ss.options.warnings: what ss.warn() does ('errors' is the same as 'error')

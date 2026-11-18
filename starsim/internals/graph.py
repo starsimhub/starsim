@@ -488,7 +488,7 @@ class Graph:
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
-            self.guessed['init_prev'] = 'the default, 1%'
+            self.guessed['init_prev'] = '1%'
         return
 
     def resolve_starting(self):

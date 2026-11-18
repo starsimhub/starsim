@@ -217,19 +217,22 @@ def describe_graph(graph, sim=None, out=None):
     if graph.init_prev is not None and not (sc.isnumber(graph.init_prev) and graph.init_prev == 0):
         inits['init_n' if graph.seed_n else 'init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
     rest_in = graph.rest if not getattr(engine, 'rest_empty', False) else None # Not said when the initial values account for everyone
-    guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'default_state', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
+    keys = [key for key in ['init', 'init_prev', 'default_state', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
+    guesses = [graph.guessed[key] for key in keys]
+    init_label = lambda keys: 'Default' if set(keys) <= {'init_prev'} else 'Guessed' # The default seeding is a default; where people start, worked out from the model, is a guess
     fracs = getattr(engine, 'start_fracs', None) # The fractions people start in, once the sim is initialized (unless some are chosen agent by agent)
     if fracs:
         people = {s.name for s in graph.people_states}
         given = lambda k: '' if k not in inits or sc.isnumber(inits[k]) else f' ({inits[k]})' # How it was given, if not as a number, e.g. I = 0.1 (start(sim))
         used = [f'{k} = {ss.results.format_value(v)}{given(k)}' for k,v in fracs.items() if v > 0] + [f'{k} = {v}' for k,v in inits.items() if k not in people and k not in ['init_prev', 'init_n']] # Each state of people by its fraction, then the counts of the others as given
-        guesses = [g for key,g in graph.guessed.items() if key in ['init', 'init_prev']] or (['nothing given'] if not inits else [])
-        add('', 'Init: ' + ', '.join(used), f'Guessed: {"; ".join(guesses)}' if guesses else None)
+        keys = [key for key in ['init', 'init_prev'] if key in graph.guessed]
+        guesses = [graph.guessed[key] for key in keys] or (['nothing given'] if not inits else [])
+        add('', 'Init: ' + ', '.join(used), f'{init_label(keys)}: {"; ".join(guesses)}' if guesses else None)
     elif inits:
         rest = f'; the rest in {rest_in.name}' if rest_in is not None else ''
-        add('', 'Init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'Guessed: {"; ".join(guesses)}' if guesses else None)
+        add('', 'Init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'{init_label(keys)}: {"; ".join(guesses)}' if guesses else None)
     elif graph.default_state is not None:
-        add('', f'Init: {graph.default_state.name} = 1.0', f'Guessed: {"; ".join(["nothing given"] + guesses)}')
+        add('', f'Init: {graph.default_state.name} = 1.0', f'{init_label(keys)}: {"; ".join(["nothing given"] + guesses)}')
     add('', '')
 
     def flow_line(tr):
@@ -342,7 +345,7 @@ def dwell_line(tr, engine, unit):
         text = f'{within} Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
     else:
         text = f'{within} exponential(mean = {quantity_str(raw, "dur", unit)})'
-    guess = 'Guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages
+    guess = 'Default: exponential, for a single duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages
     return text, guess
 
 
@@ -473,6 +476,7 @@ def plot_diagram(graphs, titles=None, links=None, fig=None):
     dx, dy, gap = 2.5, 1.2, 0.5 # Between layers, between states in a layer, and between graphs (in inches, at one inch a unit)
     colors = sc.objdict(people='#dbe9f6', count='#fbe5c8', edge='#333333', link='#c0392b', null='#999999')
     titles = titles or [None]*len(graphs)
+    box_width = lambda text: max(0.6, 0.11*len(text) + 0.35) # Of a state's box, from its label
     nodes = {} # By (graph index, state name): the patch, and its center
     mids = {} # By (graph index, transition name): the middle of its first arrow
     items = [] # What to draw, once the size of the figure is known: (kind, args)
@@ -560,7 +564,9 @@ def plot_diagram(graphs, titles=None, links=None, fig=None):
                     g_points += [(mid[0] - width/2, mid[1]), (mid[0] + width/2, mid[1])]
                 g_items.append(('edge', (ends, a, b, rad, kind == 'contact', label, place)))
                 g_points += [a, b, mid]
-            g_points += [(x, y + 0.25) for x,y in pos.values()] + [(x, y - 0.25) for x,y in pos.values()] # The tops and bottoms of the boxes
+            for name,(x,y) in pos.items(): # The corners of the boxes
+                half = box_width(graph.states[name].label_name)/2 + 0.05
+                g_points += [(x - half, y + 0.25), (x + half, y - 0.25)]
             return g_items, g_points, g_mids
 
         g_items, g_points, g_mids = lay(0)
@@ -586,7 +592,7 @@ def plot_diagram(graphs, titles=None, links=None, fig=None):
             ax.text(xmin + 0.2, y, text, fontsize=12, fontweight='bold', va='top', ha='left')
         elif kind == 'node':
             gi, name, (x, y), text, people = args
-            w, h = max(0.6, 0.11*len(text) + 0.35), 0.5
+            w, h = box_width(text), 0.5
             patch = FancyBboxPatch((x - w/2, y - h/2), w, h, boxstyle='round,pad=0.02,rounding_size=0.2' if people else 'square,pad=0.02',
                                    facecolor=colors.people if people else colors.count, edgecolor=colors.edge, linewidth=1.2, zorder=3)
             ax.add_patch(patch)
@@ -893,8 +899,8 @@ def describe_sim(sim):
     desc = Description()
     add = desc.add
     named = getattr(sim, 'named_people', None)
-    popguess = '' if ('total_pop' in sim.given or 'n_agents' in sim.given or getattr(sim, 'pop_from', None)) else ' [Guessed]'
-    stopguess = '' if ('stop' in sim.given or 'dur' in sim.given) else ' [Guessed]' # The default length of a run
+    popguess = '' if ('total_pop' in sim.given or 'n_agents' in sim.given or getattr(sim, 'pop_from', None)) else ' [Default]'
+    stopguess = '' if ('stop' in sim.given or 'dur' in sim.given) else ' [Default]' # The default length of a run
     t = sim.t
     when = f'{unit}s {t.start} to {t.stop}' if sim.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
     pop = f'in proportions (total_pop={pars.total_pop:g})' if ss.solvers.in_proportions(sim) else f'{pars.total_pop:,.0f} people'
@@ -913,7 +919,7 @@ def describe_sim(sim):
                 add('', 'Auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
         if isinstance(sim.solver, ss.solvers.abm):
             scale = f', each standing for {sim.pop_scale:n} people' if sim.pop_scale != 1 else ''
-            add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'Guessed')
+            add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'Default')
             ways = {} # How each declared module runs as agents, and where that came from (see ss.solvers.agent_solver())
             for mod in sim.declared:
                 ways.setdefault(ss.solvers.agent_solver(mod, sim, why=True), []).append(mod.name)
@@ -921,7 +927,7 @@ def describe_sim(sim):
                 add('', f'step={solver!r}: {sc.strjoin(names)}', dict(own='Its own solver=', sim=None, suggested="its class's suggested_solver", default='The default for agents')[source])
         if named is not None: # Where a named population came from
             ref = named.ref
-            guess = None if named.year is not None else 'Guessed: the year the sim starts' if sim.t.is_absolute else 'Guessed: the year of the revision'
+            guess = None if named.year is not None else 'Default: the year the sim starts' if sim.t.is_absolute else 'Default: the year of the revision'
             if sim.people_from is not None:
                 guess = f'Guessed: the ages of the country of "{sim.people_from}"'
             add('People', f"{named.place}, {ref['year']}, from starsim_data {ref['version']} ({ref.get('study', '?')} {ref.get('revision', '')})".rstrip(), guess)
@@ -976,7 +982,7 @@ def describe_sim(sim):
                 how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {sc.strjoin([sim.groups.strats[d].name for d in term[0].get("dims", [term[0].dim])], sep=" and ")}' # Every dimension it is over, e.g. age and area
                 add('Mixing', f'{net.name} ({type(net).__name__}){how}')
         elif any(mod.graph.transmissions for mod in sim.declared): # How a state in a rate is read is shown with each rate
-            add('Mixing', f'Homogeneous{place}, 1 contact per {unit}', 'Guessed: no network given')
+            add('Mixing', f'Homogeneous{place}, 1 contact per {unit}', 'Default: no network given')
         for mod in list(sim.connectors()) + list(sim.interventions()):
             if isinstance(mod, ss.modify):
                 add('Modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
@@ -992,7 +998,7 @@ def describe_sim(sim):
             ti = getattr(mod.engine, 'group_ti', None)
             if ti is not None: # Kept by group every few steps
                 text += f'; by group every {ti[1]} {unit}s'
-            add('Results', text, 'Guessed: to keep them by group within 100 MB; group_results=[...] keeps fewer, more often' if ti is not None else None)
+            add('Results', text, 'Default: to keep them by group within 100 MB; group_results=[...] keeps fewer, more often' if ti is not None else None)
         # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python
         stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
         declared = [mod.name for mod in sim.declared]
@@ -1142,7 +1148,7 @@ def par_str(p, kind, unit):
 def midpoint_guess(p):
     """ The guess of a parameter given only its bounds, which starts from their middle """
     midpoint = getattr(p, 'midpoint', None)
-    return 'Guessed: the middle of its bounds' if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint else None
+    return 'Default: the middle of its bounds' if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint else None
 
 
 def delay_str(val, unit):

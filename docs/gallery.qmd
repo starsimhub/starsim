@@ -35,7 +35,7 @@ Longer pages, each with more than one model or many runs.
 
 ## Models from other frameworks
 
-Each framework that Starsim can [import from](user_guide/building_import.qmd), from Atomica and EpiModel to odin and summer2, has a page in the [Lingua Franca](https://starsim.org/lingua_franca/) docs with a showcase model written in that framework and in Starsim, and how their results and run times compare; [Comparison with other frameworks](https://starsim.org/lingua_franca/models/comparison.html) lists them all.
+Each framework that Starsim can [import from](user_guide/library_import.qmd), from Atomica and EpiModel to odin and summer2, has a page in the [Lingua Franca](https://starsim.org/lingua_franca/) docs with a showcase model written in that framework and in Starsim, and how their results and run times compare; [Comparison with other frameworks](https://starsim.org/lingua_franca/models/comparison.html) lists them all.
 
 ## Library modules
 
