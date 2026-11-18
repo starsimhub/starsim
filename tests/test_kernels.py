@@ -53,7 +53,7 @@ def test_weighted_count():
 def test_factored_mixing():
     sc.heading('Testing that a contact matrix within places, with commuting, mixes as the product of the time fractions and the matrix')
     sim = models.commute().init()
-    mixing = sim.mixing
+    mixing = sim.contact_rates
     term = mixing.terms[0]
     pre, post = np.kron(mixing.time_frac.toarray(), np.eye(3)), np.kron(mixing.time_frac.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
     rng = np.random.default_rng(1)

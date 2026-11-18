@@ -41,7 +41,7 @@ def people_scale(sim):
     As agents, the results of declared modules and deliveries are scaled when written, so they are
     people when read during a run, and capacities and counts given to deliveries are people.
     """
-    return sim.current_scale if isinstance(sim.solver, ss.solvers.abm) else 1.0
+    return sim.current_scale if sim.solver.agents else 1.0
 
 
 def agent_weights(sim):
@@ -167,9 +167,10 @@ class Result(ss.arrays.BaseArr):
         return
 
     @staticmethod
+    @functools.cache
     def reserved():
         """ The attributes of every result, which a destination's flow (`res.cin.X`) cannot be named like """
-        return set(dir(Result)) | set(Result('x', kind=None).__dict__)
+        return frozenset(dir(Result)) | frozenset(Result('x', kind=None).__dict__)
 
     def __repr__(self):
         """ The values in full: as an array, or for a result split into groups, as a table with a column for each """
@@ -184,10 +185,10 @@ class Result(ss.arrays.BaseArr):
         """ One line: the key, and the smallest, mean, and largest value """
         try:
             valstr = f'min={self.values.min():n}, mean={self.values.mean():n}, max={self.values.max():n}'
-        except Exception: # E.g. no values yet, or values that are not numbers
+        except (AttributeError, TypeError, ValueError): # No values yet, values that are not numbers, or none
             valstr = f'{self.values}'
         labelstr = f'{self.key}: ' if label else ''
-        runstr = f'{self.n_runs} runs, ' if self.runs is not None and 'quantile' not in self.runs else ''
+        runstr = f'{self.n_runs} runs, ' if self.runs is not None and not self.is_quantiles else ''
         return f'{self.__class__.__name__}({labelstr}{runstr}{valstr})'
 
     def to_str(self, label=True):
@@ -224,8 +225,8 @@ class Result(ss.arrays.BaseArr):
     @property
     def has_dates(self):
         """ Whether the time points are dates (rather than numbers) """
-        try:    return not sc.isnumber(self.timevec[0])
-        except Exception: return False # No time points
+        tv = self.timevec
+        return tv is not None and len(tv) > 0 and not sc.isnumber(tv[0])
 
     def _init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Make the array of values, if there is none yet (or if `force`): from the values given, else zeros of the shape given (with a column axis for a 2D result), else None """
@@ -291,10 +292,12 @@ class Result(ss.arrays.BaseArr):
         if run is not None and self.runs is None:
             errormsg = f'The result "{self.name}" is of one run, so it has no runs to select'
             raise ValueError(errormsg)
+        axes = self.axes()
         for dim in dims:
-            self._axis(dim)
+            if dim not in axes:
+                self._axis(dim) # Raises, saying what there is
         out = self
-        for dim in self.axes(): # In this order, since e.g. the flow to a destination is stratified, but a group of a result has no destinations
+        for dim in axes: # In this order, since e.g. the flow to a destination is stratified, but a group of a result has no destinations
             if dim in dims:
                 out = out._axis(dim)[1](sc.tolist(dims[dim]))
         if run is not None:
@@ -429,12 +432,17 @@ class Result(ss.arrays.BaseArr):
         """ The axis of the time points: 0, or 1 for a result across runs """
         return 0 if self.runs is None else 1
 
+    @property
+    def is_quantiles(self):
+        """ Whether this is quantiles over runs (see `quantiles()`), rather than the runs themselves or one run """
+        return self.runs is not None and 'quantile' in self.runs
+
     def _check_runs(self, what):
         """ Raise an error saying why `what` can't be done, unless this is a result across runs (and not their quantiles) """
         if self.runs is None:
             errormsg = f'{what} is for a result across the runs of a MultiSim; "{self.name}" is the result of one run'
             raise ValueError(errormsg)
-        elif 'quantile' in self.runs:
+        elif self.is_quantiles:
             errormsg = f'{what} is for a result across runs, not for quantiles of one'
             raise ValueError(errormsg)
         return
@@ -732,18 +740,17 @@ class Result(ss.arrays.BaseArr):
         self.values = self.values*scale
         return self
 
-    def update(self, *args, **kwargs):
+    def update(self, **kwargs):
         """ Set attributes of the result, and make its values if it has none yet
 
         Args:
-            args (list): the attributes to update, as a dict
-            kwargs (dict): the attributes to update, by name
+            kwargs (dict): the attributes to update, by name (e.g. `res.update(label='New infections')`)
         """
         if 'shape' in kwargs: # Stored as _shape
             kwargs['_shape'] = kwargs.pop('shape')
-        super().update(*args, **kwargs)
+        super().update(**kwargs)
         self._init_values()
-        return
+        return self
 
     @property
     def key(self):
@@ -802,7 +809,7 @@ class Result(ss.arrays.BaseArr):
             name = str(name)
             if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
                 kind = 'flow'
-            elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
+            elif name.startswith('n_') or '_n_' in name or cumulative(name):
                 kind = 'stock'
             elif name.endswith('prevalence'):
                 kind = 'ratio'
@@ -1198,14 +1205,14 @@ class Result(ss.arrays.BaseArr):
             ax.plot(self.timevec, self.values, **sc.mergedicts(kw.plot, dict(label=label)))
             groups = {}
         else: # Across runs
-            res = self if lines or 'quantile' in self.runs else self.quantiles()
+            res = self if lines or self.is_quantiles else self.quantiles()
             groups = res.scenarios()
         named = len(groups) > 1 or len(colors or {}) > 1 # Scenarios among several are labeled by their names
         for scenario,inds in groups.items():
             plot_kw = sc.mergedicts(kw.plot, dict(label=scenario if named else label))
             if colors and scenario in colors and not {'color', 'c'} & set(plot_kw):
                 plot_kw['color'] = colors[scenario]
-            if 'quantile' in res.runs: # The middle quantile, and the interval between the outer ones
+            if res.is_quantiles: # The middle quantile, and the interval between the outer ones
                 q = res.runs['quantile'].to_numpy()[inds]
                 vals = res.values[inds]
                 line, = ax.plot(res.timevec, vals[np.argmin(np.abs(q - 0.5))], **plot_kw)
@@ -1321,15 +1328,17 @@ class Results(ss.ndict):
             name (str): the name, in any case
         """
         spelled = name.replace('.', '_')
-        def same(entries, part):
-            return {e[0]:e[3] for e in entries if e[part].replace('.', '_') == spelled} or {e[0]:e[3] for e in entries if e[part].replace('.', '_').lower() == spelled.lower()}
+        def same(entries, field):
+            """ The entries whose name (field 'full' or 'short') is the name given: exactly, else in any case """
+            names = [(getattr(e, field).replace('.', '_'), e) for e in entries]
+            return {e.full:e.result for n,e in names if n == spelled} or {e.full:e.result for n,e in names if n.lower() == spelled.lower()}
 
         entries = list(spellings(self))
         implicit = self._implicit
-        found = same(entries, 0)
+        found = same(entries, 'full')
         if not found and isinstance(implicit, dict): # Results of their own
             found = implicit.matches(name)
-        found = found or same([e for e in entries if e[2] == implicit], 1) or same(entries, 1)
+        found = found or same([e for e in entries if e.module == implicit], 'short') or same(entries, 'short')
         if not found and spelled.lower().endswith('_cum'): # A flow's cumulative total, e.g. 'sis.infection.cum'
             found = {f'{key}_cum':res.cum for key,res in self.matches(name[:-4]).items() if isinstance(res, Result) and res.kind == 'flow'}
         if not found and (real := self._aliased(name)) is not None: # With the module by its default name, e.g. 'sir.I' for 'measles.I'
@@ -1398,7 +1407,7 @@ class Results(ss.ndict):
             found = self.matches(key)
             if len(found) > 1:
                 return f'"{key}" could be any of {sc.strjoin(found)}: name one of them'
-            keys = [entry[0] for entry in spellings(self) if not entry[0].endswith('timevec')]
+            keys = [e.full for e in spellings(self) if not e.full.endswith('timevec')]
             near = [k for k in keys if key.replace('.', '_').lower() in k.lower()] # A part of a name is only a suggestion
             owner = f'"{self._module}"' if self._module else 'the sim'
             several, mods = self._modules_msg(key) or (False, None)
@@ -1476,7 +1485,7 @@ class Results(ss.ndict):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
 
-    def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, **kwargs):
+    def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, resample=None, **kwargs):
         """
         Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
 
@@ -1487,13 +1496,13 @@ class Results(ss.ndict):
             only_results (bool): whether to keep only results
             only_auto (bool): whether to keep only results that are plotted by default
             columns (bool): whether to split each 2D result into one per column
-            kwargs (dict): `resample=` to resample each result, with any other keywords for `ss.Result.resample()`
+            resample (str/dur): the time unit to resample each result to (e.g. 'year'), if any
+            kwargs (dict): passed to `ss.Result.resample()`
         """
         out = sc.flattendict(self, sep=sep)
         if columns:
             out = split_columns(out, sep=sep)
-        if 'resample' in kwargs and kwargs['resample'] is not None:
-            resample = kwargs.pop('resample')
+        if resample is not None:
             out = {k:(v.resample(new_unit=resample, **kwargs) if isinstance(v, Result) else v) for k,v in out.items() if resamplable(v, kwargs)}
         if only_results:
             out = sc.obj({k:v for k,v in out.items() if isinstance(v, Result)})
@@ -1523,7 +1532,7 @@ class Results(ss.ndict):
             new.timevec = timevec # Replace the original timevec with the resampled one
         return new
 
-    def to_df(self, sep='_', set_date_index=False, **kwargs):
+    def to_df(self, sep='_', set_date_index=False, resample=None, **kwargs):
         """
         All the results, as one dataframe with a column for each: e.g. `alive` for the sim's own, `sir_prevalence` for a module's,
         and `bysex_n_infected_male` for each column of a 2D result
@@ -1534,24 +1543,26 @@ class Results(ss.ndict):
         Args:
             sep (str): separator for the column names
             set_date_index (bool): if True, use the times as the index rather than as the column `time`
-            kwargs (dict): passed to `ss.Result.resample()`, e.g. `resample='year'`
+            resample (str/dur): the time unit to resample each result to (e.g. 'year'), if any
+            kwargs (dict): passed to `ss.Result.resample()`
         """
-        flat = self.flatten(sep=sep, columns=True, **kwargs)
+        flat = self.flatten(sep=sep, columns=True, resample=resample, **kwargs)
         if not flat:
             return None
-        if len({len(res) for res in flat.values()}) > 1 and kwargs.get('resample') is not None: # Resampled to the same periods, apart from a whole period at the end that some have (see resample()): those they all have
+        ragged = len({len(res) for res in flat.values()}) > 1
+        if ragged and resample is not None: # Resampled to the same periods, apart from a whole period at the end that some have (see resample()): those they all have
             times = {key:np.asarray(res._convert_timevec()) for key,res in flat.items()}
             common = functools.reduce(np.intersect1d, times.values())
             if len(common):
                 data = {key:res.values[np.isin(times[key], common)] for key,res in flat.items()}
                 return time_frame(data, flat[0]._convert_timevec()[np.isin(times[flat.keys()[0]], common)], set_date_index)
-        if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
+        if ragged: # Different time points: one dataframe for the sim's own results and one for each module
             own = Results(self._module)
             for key,val in self.items():
                 if isinstance(val, Result):
                     own[key] = val
-            parts = sc.obj(sim=own.to_df(sep=sep, set_date_index=set_date_index, **kwargs))
-            parts.update({key:val.to_df(sep=sep, set_date_index=set_date_index, **kwargs) for key,val in self.items() if isinstance(val, Results)})
+            parts = sc.obj(sim=own.to_df(sep=sep, set_date_index=set_date_index, resample=resample, **kwargs))
+            parts.update({key:val.to_df(sep=sep, set_date_index=set_date_index, resample=resample, **kwargs) for key,val in self.items() if isinstance(val, Results)})
             return sc.obj({key:df for key,df in parts.items() if df is not None})
         return time_frame({key:res.values for key,res in flat.items()}, flat[0]._convert_timevec(), set_date_index)
 
@@ -1604,7 +1615,7 @@ class Results(ss.ndict):
             fig, axs = grid_axes(len(groups), fig, kw)
             many = False
             for ax,group in zip(axs, groups):
-                summed = False
+                summed = None # The times of the periods that a flow with data at a longer period is summed over
                 for i,res in enumerate(group):
                     entry = data.get((res.module, res.name))
                     if entry is not None: # Plot the data
@@ -1612,7 +1623,7 @@ class Results(ss.ndict):
                         if len(entry) == 4 and res.columns is None and entry[3].shape[1] == len(res.timevec): # A flow with data at a longer period: its totals over each period of the run, as the fit compares them with the data (see plot_data())
                             vals = sum_steps(entry[3], res.values)
                             res = group[i] = res.asnew(values=vals, _shape=vals.shape, timevec=entry[2], low=None, high=None, strata=None)
-                            summed = True
+                            summed = entry[2]
                     several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines, floor=False, colors=colors)
                     many = many or (several and res.columns is None) # Several scenarios, labeled once
                 if log:
@@ -1624,8 +1635,8 @@ class Results(ss.ndict):
                 if marks and not annualize and group[0].timevec is not None:
                     draw_marks(ax, marks, colors)
                 format_axes(ax, group[0])
-                if summed:
-                    ax.set_title(ax.get_title() + f'\n({period_totals(entry[2])})')
+                if summed is not None:
+                    ax.set_title(ax.get_title() + f'\n({period_totals(summed)})')
                 if len(group) > 1: # Titled by what the results have in common
                     ax.set_title(group[0].module if len({res.module for res in group}) == 1 else '')
             if legend and many: # Every scenario, even if the first axes have only some of them
@@ -1807,7 +1818,7 @@ def distinct(column):
 
 
 def spellings(results, prefix='', top=None):
-    """ Each result, however deep (and each column of a 2D result), as a tuple: its name in `to_df()`, that name without its module, its module, and the result """
+    """ Each result, however deep (and each column of a 2D result), as an `sc.obj`: `full` (its name in `to_df()`), `short` (that name without its module), `module` (its module), and `result` """
     for key,val in results.items():
         full = f'{prefix}{key}'
         if isinstance(val, dict):
@@ -1815,7 +1826,7 @@ def spellings(results, prefix='', top=None):
             continue
         cols = val._columns() if isinstance(val, Result) and val.columns is not None and val.values is not None else {}
         for name,res in {full:val, **{f'{full}_{col}':res for col,res in cols.items()}}.items():
-            yield name, name.removeprefix(f'{top}_'), top, res
+            yield sc.obj(full=name, short=name.removeprefix(f'{top}_'), module=top, result=res)
 
 
 def split_columns(flat, sep='_'):
@@ -1908,18 +1919,14 @@ class SimData:
     time_cols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year']
 
 
-def validate_sim_data(data=None, die=None):
+def validate_sim_data(data=None):
     """
-    Data to compare with the sim's results (e.g. for calibration), as a dataframe with its time column as the index, and times written as dates (e.g. '2020-01-08') as `ss.date`s, so they can be plotted against the sim's
+    Data to compare with the sim's results (e.g. for calibration), as a dataframe with its time column as the index, and times written as dates (e.g. '2020-01-08') as `ss.date`s, so they can be plotted against the sim's; None for no data
 
     Args:
         data (df/dict): a dataframe (or dict) of data, with a time column (see `ss.SimData`) plus one column per result, e.g. "cases" or "hiv.infection"
-        die (bool): whether to raise an error if the data cannot be converted (by default, yes); False prints the error instead, e.g. to look at data that will not load. With True, no data (None) is an error too
     """
     if data is None:
-        if die == True:
-            errormsg = 'There is no data to validate (data=None), and die=True'
-            raise ValueError(errormsg)
         return data
     try:
         data = sc.dataframe(data)
@@ -1932,12 +1939,9 @@ def validate_sim_data(data=None, die=None):
         dates = isinstance(data.index, pd.DatetimeIndex) or all(isinstance(v, (str, dt.date, np.datetime64)) for v in data.index) # Dates written as text (e.g. '2020-01-08'), or as dates in pandas (as from sim.to_synthetic_data())
         if len(data.index) and dates:
             data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
-    except Exception as E:
+    except Exception as E: # Whatever went wrong, said as what was expected
         errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
-        if die == False:
-            print(errormsg)
-        else:
-            raise ValueError(errormsg)
+        raise ValueError(errormsg) from E
     return data
 
 
@@ -1983,7 +1987,7 @@ def match_column(sim, col):
     col, dims = parse_column(col)
     res = match_name(sim, col)
     if res is not None and dims:
-        if getattr(res, 'strata', None) is None:
+        if res.strata is None:
             return None
         res = res.select(**column_levels(sim, dims))
     return res
@@ -2010,9 +2014,16 @@ def check_data(sim, df, die=False):
         df (dataframe): the data
         die (bool): whether a column that matches no result is an error
     """
-    options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
+    matched = {col:match_column(sim, col) for col in df.columns} # Each column's result, or None
+    check_columns(sim, df, matched, die)
+    check_times(sim, df, matched)
+    return
+
+
+def check_columns(sim, df, matched, die=False):
+    """ Check that each data column (other than a time column) matches a result, and that its stratum is one the result is kept by (see `check_data()`) """
     for col in df.columns:
-        if col in ss.SimData.time_cols and match_column(sim, col) is None: # A time column kept beside the index (e.g. Covasim's "date"), not a result
+        if col in ss.SimData.time_cols and matched[col] is None: # A time column kept beside the index (e.g. Covasim's "date"), not a result
             continue
         name, dims = parse_column(col)
         base = match_name(sim, name)
@@ -2021,45 +2032,56 @@ def check_data(sim, df, die=False):
                 strat = sim.groups.strats[sim.groups.dim_index(dim)]
                 if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
                     raise sc.KeyNotFoundError(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
-            if getattr(base, 'strata', None) is None:
+            if base.strata is None:
                 raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
-            elif getattr(base, 'group_ti', None) is not None:
+            elif base.group_ti is not None:
                 raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
                                            f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with group_results=[...].')
-        if match_column(sim, col) is None:
-            several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
-            if len(several) > 1: # The name of a result of more than one module
-                msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.SimData(..., aliases=dict(...)).'
-            else:
-                short = [o.split('.')[-1] for o in options]
-                names = [s if short.count(s) == 1 else o for o,s in zip(options, short)] # A result of one module by its name, as a column can be named; of several, by module and name
-                matches = sc.suggest(col, names, n=3) or []
-                found = f'The closest results are {sc.strjoin(matches)}' if matches else f'No result is close; the results are {sc.strjoin(names)}'
-                key = matches[0] if matches else 'result'
-                alias = f"dict({key}='{col}')" if key.isidentifier() else f"{{'{key}': '{col}'}}" # A result named by module and name (sir.infection) is not a keyword
-                msg = (f'the data column "{col}" matches no result. {found}.\n'
-                       f"     Rename it with ss.SimData(..., aliases={alias}), or drop it with ss.SimData(..., ignore_extra=True).")
+        if matched[col] is None:
+            msg = unmatched_msg(sim, col, name)
             if die:
                 raise sc.KeyNotFoundError(msg)
             ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)
-    sim_t, data_t = data_times(sim, df)
-    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared; partly outside, the rest is left out of the comparison
-        eps = np.median(np.diff(sim_t))/2
-        outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
-        if outside.any() and not outside.all():
-            ss.note(f'{outside.sum()} of the {len(data_t)} times in the data are outside the simulated period ({sim.t.start} to {sim.t.stop}), so are not compared with the results', sim=sim)
+    return
 
-        # Data on a flow by period whose last period starts inside the run but ends after it, so is not compared: a sign of data labeled by the end of each period (e.g. weeks ending on a date)
-        flows = [col for col in df.columns if getattr(match_column(sim, col), 'kind', None) == 'flow' and np.isfinite(np.asarray(df[col], dtype=float)[-1])]
-        spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else 0
-        last = data_t[-1]
-        if flows and not by_year(df) and spacing > 3*eps and sim_t.min() - eps <= last <= sim_t.max() + eps and last + spacing > sim_t.max() + 3*eps:
-            msg = (f'the last row of the data on {sc.strjoin(flows)} ({df.index[-1]}) starts a period that ends after the run, so it is not compared with the results. '
-                   f'Starsim labels each row of data on a flow by the start of the period it covers; if these data are labeled by its end (e.g. weeks ending on a date), '
-                   f'subtract one period from their times; if not, run the sim to the end of that period.')
-            if msg not in warned_data: # Once, not again for each sim of a fit
-                warned_data.add(msg)
-                ss.warn(msg)
+
+def unmatched_msg(sim, col, name):
+    """ What to say about a data column that matches no result: which modules' results it could be, or the closest results """
+    several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
+    if len(several) > 1: # The name of a result of more than one module
+        return f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.SimData(..., aliases=dict(...)).'
+    options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
+    short = [o.split('.')[-1] for o in options]
+    names = [s if short.count(s) == 1 else o for o,s in zip(options, short)] # A result of one module by its name, as a column can be named; of several, by module and name
+    matches = sc.suggest(col, names, n=3) or []
+    found = f'The closest results are {sc.strjoin(matches)}' if matches else f'No result is close; the results are {sc.strjoin(names)}'
+    key = matches[0] if matches else 'result'
+    alias = f"dict({key}='{col}')" if key.isidentifier() else f"{{'{key}': '{col}'}}" # A result named by module and name (sir.infection) is not a keyword
+    return (f'the data column "{col}" matches no result. {found}.\n'
+            f"     Rename it with ss.SimData(..., aliases={alias}), or drop it with ss.SimData(..., ignore_extra=True).")
+
+
+def check_times(sim, df, matched):
+    """ Note data partly outside the run, and warn about data on a flow that looks labeled by the end of each period (see `check_data()`) """
+    sim_t, data_t = data_times(sim, df)
+    if len(sim_t) < 2 or not len(data_t): # Data entirely outside is an error when it is compared; partly outside, the rest is left out of the comparison
+        return
+    _, eps = step_eps(sim_t)
+    outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
+    if outside.any() and not outside.all():
+        ss.note(f'{outside.sum()} of the {len(data_t)} times in the data are outside the simulated period ({sim.t.start} to {sim.t.stop}), so are not compared with the results', sim=sim)
+
+    # Data on a flow by period whose last period starts inside the run but ends after it, so is not compared: a sign of data labeled by the end of each period (e.g. weeks ending on a date)
+    flows = [col for col in df.columns if matched[col] is not None and matched[col].kind == 'flow' and np.isfinite(np.asarray(df[col], dtype=float)[-1])]
+    spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else 0
+    last = data_t[-1]
+    if flows and not by_year(df) and spacing > 3*eps and sim_t.min() - eps <= last <= sim_t.max() + eps and last + spacing > sim_t.max() + 3*eps:
+        msg = (f'the last row of the data on {sc.strjoin(flows)} ({df.index[-1]}) starts a period that ends after the run, so it is not compared with the results. '
+               f'Starsim labels each row of data on a flow by the start of the period it covers; if these data are labeled by its end (e.g. weeks ending on a date), '
+               f'subtract one period from their times; if not, run the sim to the end of that period.')
+        if msg not in warned_data: # Once, not again for each sim of a fit
+            warned_data.add(msg)
+            ss.warn(msg)
     return
 
 
@@ -2091,6 +2113,12 @@ def data_times(sim, df, res=None):
     return sim_t, data_t
 
 
+def step_eps(sim_t):
+    """ The step of a timeline (0 for one time point), and half of it: times within that of each other are the same time point up to rounding (e.g. 84.00000015 days from 12 weeks) """
+    step = np.median(np.diff(sim_t)) if len(sim_t) > 1 else 0.0
+    return step, (step/2 if len(sim_t) > 1 else 1e-9)
+
+
 def time_weights(sim_t, data_t, flow, annual=False):
     """
     The weights of the steps for each data time (see `lineup()`), and which data times are inside the simulated period
@@ -2100,8 +2128,7 @@ def time_weights(sim_t, data_t, flow, annual=False):
     over the interval up to the next data time; for a stock or ratio, the value interpolated at that time. Data by calendar
     year (`annual`; see `by_year()`) is compared with the year it names: a flow summed over it, and a stock or ratio averaged over it.
     """
-    step = np.median(np.diff(sim_t)) if len(sim_t) > 1 else 0.0
-    eps = step/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    step, eps = step_eps(sim_t)
     end = sim_t.max() + step # The end of the last step, which starts at the last time point
     if annual:
         lo, hi = data_t, data_t + 1
@@ -2159,13 +2186,13 @@ def compare(sim, data=None):
     """
     df = given_data(sim, data)
     kept = sim.__dict__.get('_lined') # The data cannot change between the runs of a sim, so they are lined up with its time points once
-    if kept is None or kept[0] is not df or kept[1] is not sim.t:
+    if kept is None or kept.df is not df or kept.t is not sim.t:
         sim_t, data_t = data_times(sim, df)
         if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
             raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
-        kept = sim._lined = (df, sim.t, [(col, W, expected) for col,(W,expected,rows) in lineup(sim, df).items()])
+        kept = sim._lined = sc.objdict(df=df, t=sim.t, lined=lineup(sim, df))
     out = sc.obj()
-    for col,W,expected in kept[2]:
+    for col,(W,expected,_) in kept.lined.items():
         values = np.asarray(match_column(sim, col).values, dtype=float)
         out[col] = (expected, np.where(W != 0, W*values, 0).sum(axis=1)) # Only the steps used, so a value missing elsewhere (e.g. the prevalence among no one) is not read
     return out
@@ -2211,9 +2238,8 @@ def flow_periods(sim, col, res, x):
     if len(data_t) < 2: # No period to repeat
         return x[summed[0]], summed[1]
     step = 1.0 if annual else np.median(np.diff(data_t))
-    sim_step = np.median(np.diff(sim_t)) if len(sim_t) > 1 else 0.0
-    eps = sim_step/2 if len(sim_t) > 1 else 1e-9
-    first, last = (data_t[0], data_t[-1] + 1) if annual else (data_t[0], data_t[-1] + step) # Where the data's periods start and end
+    sim_step, eps = step_eps(sim_t)
+    first, last = data_t[0], data_t[-1] + step # Where the data's periods start and end
     n_before = max(0, int(np.floor((first - sim_t.min() + eps)/step)))
     n_after = max(0, int(np.floor((sim_t.max() + sim_step + eps - last)/step))) # To the end of the last step
     before = data_t[0] - step*np.arange(n_before, 0, -1)

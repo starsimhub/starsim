@@ -16,6 +16,29 @@ __all__ = ['geography', 'gravity', 'radiation', 'Mobility', 'register']
 shapefiles = ('.shp', '.geojson', '.gpkg') # Files of shapes, read with geopandas
 
 
+def is_place_name(data):
+    """ Whether `data` of `ss.geo.geography()` names places (a country, or a list of them), rather than a file or a table """
+    if isinstance(data, str):
+        return not data.endswith(('.csv', '.xlsx') + shapefiles)
+    return isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data)
+
+
+def one_kind_of_position(found, given):
+    """
+    The positions of the places, as x and y or as latitudes and longitudes, not both, so that the distances and the map agree: the pair given by
+    hand wins over the pair found (e.g. a country's latitudes and longitudes), and x and y win over latitudes and longitudes found together
+    """
+    has = lambda d, keys: any(d.get(key) is not None for key in keys)
+    xy, ll = ('x', 'y'), ('lat', 'lon')
+    if not (has(found, xy) and has(found, ll)):
+        return found
+    if has(given, xy) and has(given, ll):
+        errormsg = 'ss.geo.geography() takes positions as x and y, or as lat and lon, not both'
+        raise ValueError(errormsg)
+    drop = xy if has(given, ll) else ll
+    return {key:val for key,val in found.items() if key not in drop}
+
+
 class geography:
     """
     A geography: named places with populations and positions, used as the levels of a spatial stratification
@@ -53,14 +76,39 @@ class geography:
         self.ref = None # Where a named geography came from, for describe()
         self.area = None
         self.codes = None
-        named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx') + shapefiles) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
-        if named: # A country's administrative units, from starsim_data
-            found = ss.data.geography(data, level=level, year=year, places=places)
-            names, lat, lon, adjacency = [found[key] for key in ['names', 'lat', 'lon', 'adjacency']]
-            populations = found['pop'] if populations is None else populations # Populations given by hand win
-            self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
-            data = None
-        elif isinstance(data, str) and data.endswith(shapefiles):
+        self.shapes = None # Kept for drawing maps
+        if is_place_name(data): # A country's administrative units, from starsim_data
+            found = self.from_country(data, level=level, year=year, places=places)
+        else: # A table, or shapes
+            found = self.from_table(data)
+        given = dict(names=names, populations=populations, x=x, y=y, lat=lat, lon=lon, adjacency=adjacency)
+        found |= {key:val for key,val in given.items() if val is not None} # Those given by hand win
+        found = one_kind_of_position(found, given)
+        if found.get('names') is None:
+            errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
+            raise ValueError(errormsg)
+        array = lambda key, dtype=float: None if found.get(key) is None else np.array(found[key], dtype=dtype)
+        self.names = list(found['names'])
+        self.populations = array('populations')
+        self.x, self.y = array('x'), array('y')
+        self.lat, self.lon = array('lat'), array('lon')
+        self.adjacency = array('adjacency', dtype=bool)
+        self.distances = np.array(distances, dtype=float) if distances is not None else self.distances_between()
+        for key,val in dict(populations=self.populations, distances=self.distances, adjacency=self.adjacency).items():
+            if val is not None and len(val) != len(self.names):
+                errormsg = f'ss.geo.geography() has {len(self.names)} places but {len(val)} entries in {key}'
+                raise ValueError(errormsg)
+        return
+
+    def from_country(self, data, level, year, places):
+        """ The names, populations, positions, and borders of a country's administrative units (see `ss.data.geography()`), and where they came from """
+        found = ss.data.geography(data, level=level, year=year, places=places)
+        self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
+        return dict(names=found['names'], populations=found['pop'], lat=found['lat'], lon=found['lon'], adjacency=found['adjacency'])
+
+    def from_table(self, data):
+        """ The places of a table (or a file of one), or of shapes (a GeoDataFrame, or a file of them), whose places are at their centroids: in degrees if they have a coordinate reference system """
+        if isinstance(data, str) and data.endswith(shapefiles):
             try:
                 import geopandas as gpd # Optional, since only files of shapes need it
             except ImportError as E:
@@ -69,45 +117,30 @@ class geography:
             data = gpd.read_file(data)
         elif isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
-        if data is not None:
-            cols = {key:data[key].tolist() for key in ['name', 'population', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
-            found = {key:cols.get(key) for key in ['name', 'population', 'x', 'y', 'lat', 'lon']}
-            found['population'] = sc.ifelse(found['population'], cols.get('pop'))
-            if 'geometry' in data.columns: # Shapes: each place is at the centroid of its shape
-                if getattr(data, 'crs', None) is not None: # Found on an equal-area projection, in degrees
-                    centroids = data.geometry.to_crs('EPSG:6933').centroid.to_crs('EPSG:4326')
-                    found['lat'], found['lon'] = centroids.y.tolist(), centroids.x.tolist()
-                else: # Positions in the shapes' own units
-                    centroids = data.geometry.centroid
-                    found['x'], found['y'] = centroids.x.tolist(), centroids.y.tolist()
-            given = dict(name=names, population=populations, x=x, y=y, lat=lat, lon=lon)
-            names, populations, x, y, lat, lon = [sc.ifelse(given[key], found[key]) for key in given] # Those given by hand win, as for a country
-        if names is None:
-            errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
-            raise ValueError(errormsg)
-        self.shapes = data.geometry if data is not None and 'geometry' in data.columns else None # Kept for drawing maps
-        self.names = list(names)
-        self.populations = None if populations is None else np.array(populations, dtype=float)
-        self.x = None if x is None else np.array(x, dtype=float)
-        self.y = None if y is None else np.array(y, dtype=float)
-        self.lat = None if lat is None else np.array(lat, dtype=float)
-        self.lon = None if lon is None else np.array(lon, dtype=float)
-        self.adjacency = None if adjacency is None else np.array(adjacency, dtype=bool)
-        self.distances = None
-        if distances is not None:
-            self.distances = np.array(distances, dtype=float)
-        elif x is not None and y is not None:
-            x, y = self.x, self.y
-            self.distances = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :])
-        elif lat is not None and lon is not None: # Great-circle distances, in km
+        if data is None:
+            return {}
+        cols = {key:data[key].tolist() for key in ['name', 'population', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
+        found = dict(names=cols.get('name'), populations=sc.ifelse(cols.get('population'), cols.get('pop')), x=cols.get('x'), y=cols.get('y'), lat=cols.get('lat'), lon=cols.get('lon'))
+        if 'geometry' in data.columns: # Shapes: each place is at the centroid of its shape
+            if getattr(data, 'crs', None) is not None: # Found on an equal-area projection, in degrees; the shapes are kept in degrees too, as the positions are
+                centroids = data.geometry.to_crs('EPSG:6933').centroid.to_crs('EPSG:4326')
+                found['lat'], found['lon'] = centroids.y.tolist(), centroids.x.tolist()
+                self.shapes = data.geometry.to_crs('EPSG:4326')
+            else: # Positions in the shapes' own units
+                centroids = data.geometry.centroid
+                found['x'], found['y'] = centroids.x.tolist(), centroids.y.tolist()
+                self.shapes = data.geometry
+        return found
+
+    def distances_between(self):
+        """ The distance between each pair of places, from their positions: straight lines between x and y, or great circles between latitudes and longitudes, in km; None with neither """
+        if self.x is not None and self.y is not None:
+            return np.hypot(self.x[:, None] - self.x[None, :], self.y[:, None] - self.y[None, :])
+        if self.lat is not None and self.lon is not None:
             lat, lon = np.radians(self.lat), np.radians(self.lon)
             a = np.sin((lat[:, None] - lat[None, :])/2)**2 + np.cos(lat[:, None])*np.cos(lat[None, :])*np.sin((lon[:, None] - lon[None, :])/2)**2
-            self.distances = 2*6371*np.arcsin(np.sqrt(a))
-        for key,val in dict(populations=self.populations, distances=self.distances, adjacency=self.adjacency).items():
-            if val is not None and len(val) != len(self.names):
-                errormsg = f'ss.geo.geography() has {len(self.names)} places but {len(val)} entries in {key}'
-                raise ValueError(errormsg)
-        return
+            return 2*6371*np.arcsin(np.sqrt(a))
+        return None
 
     def __repr__(self):
         if self.ref is not None:
@@ -172,7 +205,7 @@ class geography:
             biggest = 1500/max(1, len(self)/5)**0.5 # Smaller points for more places, so they overlap less
             sizes = biggest/4 if self.populations is None else 10 + biggest*self.populations/self.populations.max() # Area in proportion to population
             drawn = ax.scatter(x, y, s=sizes, c='0.6' if colors is None else colors, edgecolor='white', linewidth=0.8, zorder=2)
-        if self.lon is not None or shapes is not None: # Degrees of longitude are shorter away from the equator
+        if self.lon is not None: # Degrees of longitude are shorter away from the equator (shapes with a coordinate reference system are kept in degrees, as the positions are)
             ax.set_aspect(1/np.cos(np.radians(np.nanmean(y))))
         else:
             ax.set_aspect('equal')
@@ -249,6 +282,7 @@ def draw_map(res, t=None, animate=False, shapes=None, names=None, cmap='Reds', v
 
     # What to draw: the summary over the run (by default), the times given, or several across the time when something is happening
     dated = isinstance(byplace.timevec[0], ss.date)
+    time_label = lambda i: str(byplace.timevec[i]) if dated else f'{times[i]:g}'
     if t is None and n is None and not animate: # The summary of each place, as summarize() gives it
         values = np.asarray(byplace.summarize(), dtype=float)[None, :]
         inds = [0]
@@ -259,13 +293,13 @@ def draw_map(res, t=None, animate=False, shapes=None, names=None, cmap='Reds', v
             raise ValueError(errormsg)
         targets = [float(ss.date(ti)) if isinstance(ti, str) else float(ti) for ti in sc.tolist(t)]
         inds = [int(np.argmin(np.abs(times - target))) for target in targets]
+        labels = [time_label(i) for i in inds]
     else:
         active = np.nonzero(np.nanmax(np.abs(values), axis=1) > 0.01*np.nanmax(np.abs(values)))[0]
         first, last = (active[0], active[-1]) if len(active) else (0, len(times)-1)
         n = sc.ifelse(n, 60 if animate else 6)
         inds = np.unique(np.linspace(first, last, min(n, last - first + 1)).round().astype(int))
-    if t is not None or n is not None or animate:
-        labels = [str(byplace.timevec[i]) if dated else f'{times[i]:g}' for i in inds]
+        labels = [time_label(i) for i in inds]
 
     single = animate or len(inds) == 1
     kw = ss.plot_args(kwargs, **(dict(figsize=(6, 5)) if single else {}))
@@ -326,7 +360,13 @@ class MovementModel:
         self.kind = kind
         return
 
-    def geography(self, strat):
+    def args(self):
+        """ The amount and kind of movement as given, for the repr: `away=` or `scale=`, and `kind=` """
+        amount = f'away={self.away}' if self.away is not None else f'scale={self.scale}' if self.scale is not None else None
+        kind = f'kind={self.kind!r}' if self.kind is not None else None
+        return [arg for arg in [amount, kind] if arg is not None]
+
+    def pops_and_distances(self, strat):
         """ The populations and distances of the places of a stratification, from its geography """
         place = strat.geo
         if place is None or place.distances is None or place.populations is None:
@@ -370,9 +410,7 @@ class gravity(MovementModel):
         return
 
     def __repr__(self):
-        amount = f'away={self.away}, ' if self.away is not None else f'scale={self.scale}, ' if self.scale is not None else ''
-        kind = f'kind={self.kind!r}, ' if self.kind is not None else ''
-        return f'gravity({amount}{kind}source_power={self.source_power}, dest_power={self.dest_power}, distance_power={self.distance_power})'
+        return f'gravity({", ".join(self.args() + [f"source_power={self.source_power}", f"dest_power={self.dest_power}", f"distance_power={self.distance_power}"])})'
 
     def matrix(self, strat):
         """ The movement between each pair of levels of a stratification, from its geography
@@ -380,7 +418,7 @@ class gravity(MovementModel):
         Args:
             strat (Strat): the stratification, whose geography gives the populations and distances
         """
-        pop, dist = self.geography(strat)
+        pop, dist = self.pops_and_distances(strat)
         scale, a, b, c = [float(v) for v in [sc.ifelse(self.scale, 1.0), self.source_power, self.dest_power, self.distance_power]] # Any can be a fitted ss.par
         with np.errstate(divide='ignore'):
             out = scale*pop[:, None]**(a - 1)*pop[None, :]**b/dist**c # Without a scale, only the shape matters: see Mobility.time_frac()
@@ -411,8 +449,7 @@ class radiation(MovementModel):
         ```
     """
     def __repr__(self):
-        args = [f'away={self.away}' if self.away is not None else f'scale={self.scale}' if self.scale is not None else '', f'kind={self.kind!r}' if self.kind is not None else '']
-        return f'radiation({", ".join(a for a in args if a)})'
+        return f'radiation({", ".join(self.args())})'
 
     def matrix(self, strat):
         """ The movement between each pair of levels of a stratification, from its geography
@@ -420,7 +457,7 @@ class radiation(MovementModel):
         Args:
             strat (Strat): the stratification, whose geography gives the populations and distances
         """
-        pop, dist = self.geography(strat)
+        pop, dist = self.pops_and_distances(strat)
         order = np.argsort(dist, axis=1, kind='stable')
         nearer = np.zeros((len(pop), len(pop) + 1))
         nearer[:, 1:] = np.cumsum(pop[order], axis=1) # The population of the n nearest places to each, itself included

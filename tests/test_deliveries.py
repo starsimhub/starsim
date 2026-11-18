@@ -207,6 +207,13 @@ def test_transfer():
     sir = make_sir().stratify(risk={'low': 1, 'high': 0})
     sim = ss.Sim(sir, interventions=ss.Event(dict(risk=('low', 'high')), when=[5], p=0.4, name='riskier'), solver='ode', stop=10, **kw).run()
     assert np.isclose(sim.results.riskier.delivered[5], 0.4*kw['total_pop'], rtol=0.01)
+
+    # The disease is the one whose dimension it moves people along, not the one a condition in who= names
+    S2, I2 = ss.states('S I')
+    sis = ss.Disease(infection=S2 >> I2 @ 0.3*I2, recovery=I2 >> S2 @ 0.1, init_prev=0.01, name='sis')
+    ev = ss.Event(dict(risk=('low', 'high')), who=I2, when=[5], p=0.5, name='ev')
+    sim = ss.Sim(make_sir().stratify(risk=['low', 'high']), sis, interventions=ev, n_agents=200, stop=10, verbose=0).init()
+    assert sim.interventions.ev.disease == 'sir'
     return sims
 
 

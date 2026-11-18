@@ -4,6 +4,7 @@ draws against their distributions
 """
 
 # %% Imports and settings
+import pytest
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -111,7 +112,16 @@ def test_jit_numba():
     p = np.linspace(0, 1, 20)
     lam = np.array([0, 0.5, 5, 20, 1000.]*4) # Poisson means of 10 or more are drawn as NumPy does, not as Numba does
     assert np.array_equal(ss.jit(draws)(n, p, lam, np.random.default_rng(2)), draws(n, p, lam, np.random.default_rng(2)))
+    assert np.array_equal(ss.jit(draws)(n, p, lam, rng=np.random.default_rng(2)), draws(n, p, lam, rng=np.random.default_rng(2))) # A Generator given by name
 
+    # Arrays broadcast as NumPy's do, and an error if they don't
+    def binom(n, p, rng):
+        return rng.binomial(n, p)
+    jb = ss.jit(binom)
+    for n,p in [(np.full((3, 1), 5), np.full((1, 4), 0.3)), (np.array([5]), np.full(3, 0.3))]:
+        assert np.array_equal(jb(n, p, np.random.default_rng(3)), binom(n, p, np.random.default_rng(3)))
+    with pytest.raises(ValueError):
+        jb(np.ones((2, 3), np.int64), np.full((3, 2), 0.5), np.random.default_rng(3))
     return
 
 
@@ -199,6 +209,19 @@ def test_other_draws():
     return
 
 
+def test_caches():
+    sc.heading('Testing that the kernels are cached so that they are found again in the next session, and go stale with the draws they inline')
+    import os
+    compiling = ss.solvers.backends.compiling
+    deps = {os.path.basename(k):[os.path.basename(f) for f in v] for k,v in compiling.deps.items()}
+    for name in ['passes.py', 'agent_moves.py', 'agent_events.py', 'compartmental.py']:
+        assert 'draws.py' in deps.get(name, []), f'{name} does not depend on draws.py: {deps}'
+    for name in ['expon', 'weibull', 'binomial', 'poisson', 'nbinom']: # Numba keys its cache by a closure's variables, which change each session, so none is a closure
+        func = compiling.numba_kernel('many', name) if ss.solvers.backends.rust.numba else D.many[name]
+        assert func.py_func.__closure__ is None, f'draws.many.{name} is a closure, so it is compiled again in every session'
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_stochastic()
@@ -206,4 +229,5 @@ if __name__ == '__main__':
     test_jit_numba()
     test_binomial_poisson()
     test_other_draws()
+    test_caches()
     T.toc()

@@ -28,13 +28,18 @@ bool_ops = {'==': operator.eq, '>': operator.gt, '<': operator.lt, '>=': operato
 math_ufuncs = {'+': np.add, '-': np.subtract, '*': np.multiply, '/': np.divide, '//': np.floor_divide, '**': np.power, '%': np.mod} # For Arr._math()
 
 
+def nan_of(dtype):
+    """ The value that stands for NaN in an array of this dtype, e.g. `int_nan` for integers; None for objects """
+    return {'b':False, 'i':int_nan, 'f':np.nan, 'U':''}.get(np.dtype(dtype).kind)
+
+
 def np_indexer(arr, inds):
-    """ Much faster than Numba for small numbers of indices (<1k) """
+    """ Much faster than Numba for small numbers of indices (<1k); for `Arr._index()` """
     return arr[inds]
 
 @nb.jit(fastmath=True, parallel=False, cache=True)
 def nb_indexer(arr, inds):
-    """ Roughly 30% faster than NumPy for large numbers of indices (>10k)
+    """ Roughly 30% faster than NumPy for large numbers of indices (>10k); for `Arr._index()`
 
     NB: in some versions of Numba (>0.62), the explicit loop is much faster than array indexing.
     """
@@ -325,7 +330,7 @@ class Arr(BaseArr):
         self.default = default
         if dtype is None: dtype = np.asarray(raw).dtype if raw is not None else np.asarray(default).dtype if np.isscalar(default) else ss_float # Infer from the values
         if dtype is str: dtype = object # NumPy's str holds 1 character
-        if nan is None: nan = {'b':False, 'i':int_nan, 'f':np.nan, 'U':''}.get(np.dtype(dtype).kind) # E.g. None for objects
+        if nan is None: nan = nan_of(dtype) # E.g. None for objects
         self.dtype = dtype
         self.nan = nan
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
@@ -379,7 +384,10 @@ class Arr(BaseArr):
         return
 
     def __repr__(self):
-        arr_str = np.array2string(self.values, max_line_width=200)
+        try:
+            arr_str = np.array2string(self.values, max_line_width=200)
+        except ValueError: # Not initialized yet
+            arr_str = f'(not initialized; raw={self.raw})'
         if self.name:
             string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
         else:
@@ -456,7 +464,7 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def _boolmath(self, op, other=None, inplace=False):
+    def _boolmath(self, op, other, inplace=False):
         """ Helper function for boolean operations.
 
         Args:
@@ -473,7 +481,7 @@ class Arr(BaseArr):
         both_raw = True # Assume this by default
         if isinstance(other, Arr):
             other_raw = other.raw # Also always size N
-        elif isinstance(other, (numbers.Number, type(None))):
+        elif isinstance(other, numbers.Number):
             other_raw = other # If it's a scalar, we don't have to worry about array size
         elif isinstance(other, ss.date):
             other_raw = other.years
@@ -483,30 +491,20 @@ class Arr(BaseArr):
         else:
             self._type_error(other)
 
-        # Figure out the two arrays to operate on
-        if both_raw:
-            a = self_raw
-            b = other_raw
-        else:
-            a = self.values
-            b = other
-            inds = self.auids
-
-        if op == '~':
-            c = ~a
-        elif op in bool_ops:
-            c = bool_ops[op](a, b)
-        else:
+        func = bool_ops.get(op)
+        if func is None:
             errormsg = f'Unrecognized operator "{op}"'
             raise ValueError(errormsg)
 
-        if both_raw:
-            result_raw = c
-        else:
-            result_raw = np.empty(self_raw.shape, dtype=np.bool_)
-            result_raw[inds] = c
+        if both_raw: # On every agent's value
+            result_raw = func(self_raw, other_raw)
+        else: # On the active agents' values, spread to their places (False elsewhere)
+            result_raw = np.zeros(self_raw.shape, dtype=np.bool_)
+            result_raw[self.auids] = func(self.values, other)
 
         if inplace:
+            if self.shared is not None:
+                self.own()
             self.raw[:] = result_raw
             return self
         else:
@@ -595,21 +593,13 @@ class Arr(BaseArr):
         return self._retyped(c, copy=False)
 
     def _retyped(self, arr, copy=None):
-        """ A new array of the class for the dtype of `arr` (e.g. a BoolArr for a comparison), with its NaN value (set here, since `asnew()` does not call `__init__()`) """
-        dtype = np.dtype(arr.dtype)
-        if np.issubdtype(dtype, np.bool_):
-            cls, nan = BoolArr, False
-        elif np.issubdtype(dtype, np.integer):
-            cls, nan = IntArr, int_nan
-        elif np.issubdtype(dtype, np.floating):
-            cls, nan = FloatArr, np.nan
-        else:
-            errormsg = f'Unsupported arithmetic result dtype {dtype}'
+        """ A new array of the class for the dtype of `arr` (e.g. a BoolArr for a comparison) """
+        kind = np.dtype(arr.dtype).kind
+        cls = {'b':BoolArr, 'i':IntArr, 'u':IntArr, 'f':FloatArr}.get(kind)
+        if cls is None:
+            errormsg = f'Unsupported arithmetic result dtype {arr.dtype}'
             raise TypeError(errormsg)
-        new = self.asnew(arr, cls=cls, copy=copy)
-        new.nan = nan
-        new.nan_eq = (nan == nan)
-        return new
+        return self.asnew(arr, cls=cls, copy=copy)
 
     def __add__(self, other): return self._math('+', other)
     def __radd__(self, other): return self._math('+', other, reverse=True)
@@ -639,7 +629,7 @@ class Arr(BaseArr):
         """ Link to the indices of active agents -- sim.people.auids """
         try:
             return self.people.auids
-        except AttributeError:
+        except AttributeError: # No people yet, or people still being made (before people.auids)
             if not self.initialized:
                 ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
@@ -659,15 +649,14 @@ class Arr(BaseArr):
     @property
     def values(self):
         """ Return the values of the active agents """
-        if len(self.raw) == self.auids.size:
+        auids = self.auids
+        if len(self.raw) == auids.size:
             return self.raw
-        else:
-            try:
-                return self._index(self.raw, self.auids) # Optimized for speed
-            except Exception as E:
-                warnmsg = f'Trying to access an uninitialized array; use arr.raw to see the underlying values (if any).\n{E}'
-                ss.warn(warnmsg)
-                return np.array([])
+        try:
+            return self._index(self.raw, auids) # Optimized for speed
+        except IndexError as E: # E.g. a module's state before the sim is initialized
+            errormsg = f'The array "{self.name}" has {len(self.raw)} values, fewer than the agents: it may not be initialized yet; use arr.raw to see its values'
+            raise ValueError(errormsg) from E
 
     def set(self, uids, new_vals=None):
         """
@@ -820,22 +809,36 @@ class Arr(BaseArr):
             copy = True if (arr is None) or (arr.size != self.raw.size) else False
         if arr is None:
             arr = self.values
-        new = object.__new__(cls) # Create a new Arr instance
-        new.__dict__ = self.__dict__.copy() # Copy pointers
-        new.dtype = arr.dtype # Set to correct dtype
-        new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        new.shared = None # It has values of its own
-        new.raw = self.raw # Stored, if it was made when read (see IndexArr.raw)
         if copy:
-            new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
-            new.raw[new.auids] = arr
+            raw = np.zeros(self.raw.shape, dtype=arr.dtype) # Copy values, breaking reference; zero (not left as they were in memory) for the inactive
+            raw[self.auids] = arr
+        elif isinstance(arr, np.ndarray):
+            raw = arr
+        elif isinstance(arr, Arr):
+            raw = arr.raw
         else:
-            if isinstance(arr, np.ndarray):
-                new.raw = arr
-            elif isinstance(arr, Arr):
-                new.raw = arr.raw
-            else:
-                self._type_error(arr)
+            self._type_error(arr)
+        new = self._derived(raw, cls)
+        new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
+        return new
+
+    def _derived(self, raw, cls):
+        """
+        A new array of class `cls` holding `raw`, read for the same people; for `asnew()` and `astype()`
+
+        If the class or the dtype changes, so do the value that stands for NaN and the default (e.g. a comparison of
+        `age` is a BoolArr whose NaN is False, not NaN), since these belong to the type, not to the array it came from.
+        """
+        new = object.__new__(cls) # No __init__(): the people, name, etc. are those of this array
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+        new.shared = None # It has values of its own
+        new.raw = raw
+        new.dtype = raw.dtype
+        if cls is not type(self) or raw.dtype != self.dtype:
+            new.nan = nan_of(raw.dtype)
+            new.nan_eq = (new.nan == new.nan)
+            if cls is not type(self):
+                new.default = None
         return new
 
     def astype(self, cls, copy=False):
@@ -848,21 +851,11 @@ class Arr(BaseArr):
         """
         if not (isinstance(cls, type) and issubclass(cls, Arr)):
             return self.values.astype(cls)
-
-        # Create the new object
-        new = object.__new__(cls) # Create a new Arr instance
-        new.__dict__ = self.__dict__.copy() # Copy pointers
-        new.raw = self.raw # Stored, if it was made when read (see IndexArr.raw)
-
-        # Reset Arr properties
-        tmp = cls() # dtype and nan are only defined on instances
-        new.dtype = tmp.dtype # Set to correct dtype
-        new.nan = tmp.nan
-        new.nan_eq = (new.nan == new.nan)
-
-        # Optionally copy the array values (slow), and update the dtype
-        new.raw = new.raw.astype(new.dtype, copy=copy)
-        return new
+        if issubclass(cls, CatArr) and not isinstance(self, CatArr):
+            errormsg = f'Cannot convert "{self.name}" to a categorical array, which needs its categories; use ss.CatArr(name, categories=..., raw=arr.raw) instead'
+            raise TypeError(errormsg)
+        dtype = next((dtype for base, dtype in [(BoolArr, ss_bool), (IndexArr, np.int32), (IntArr, ss_int), (FloatArr, ss_float)] if issubclass(cls, base)), self.dtype) # The dtype each kind of array is made with
+        return self._derived(self.raw.astype(dtype, copy=copy), cls)
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
@@ -964,13 +957,9 @@ class TimeArr(FloatArr):
         self.shift = None # Steps added when read, from the engine's time of a move to the index of the step it happened in: by agent (an Arr) for a declared state's time of entering (a scheduled exit is taken at the start of a step, whose index is its engine time)
         return
 
-    def shifted(self, vals, key=None):
-        """ Add the shift to some values read, by agent (all of them, or those of `key`) """
-        if self.shift is None:
-            return vals
-        elif isinstance(self.shift, int):
-            return vals + self.shift
-        return vals + (self.shift.raw if key is None else self.shift.values if key is Ellipsis else self.shift[key])
+    def shifted(self, raw):
+        """ Add the shift (if any) to every agent's value, e.g. to `raw` """
+        return raw if self.shift is None else raw + self.shift.raw
 
     def due(self):
         """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is rounded up or down at random in proportion, by each agent's phase (see `ss.People.phase()`) """
@@ -1012,22 +1001,20 @@ class TimeArr(FloatArr):
 
     def __getitem__(self, key):
         vals = super().__getitem__(key)
-        return vals if self.shift is None else self.shifted(vals, key)
+        return vals if self.shift is None else vals + self.shift[key]
 
     def __setitem__(self, key, value): # A step number as read (e.g. sim.ti)
-        if isinstance(self.shift, int):
-            value = np.asarray(value, dtype=float) - self.shift if not isinstance(value, numbers.Integral) else value - self.shift
         super().__setitem__(key, value)
-        if isinstance(self.shift, Arr):
+        if self.shift is not None:
             self.shift[key] = 0
         return
 
     @property
     def values(self):
         vals = super().values
-        return vals if self.shift is None else self.shifted(vals, Ellipsis)
+        return vals if self.shift is None else vals + self.shift.values
 
-    def _boolmath(self, op, other=None, inplace=False):
+    def _boolmath(self, op, other, inplace=False):
         if self.shift is None or not self.initialized:
             return super()._boolmath(op, other, inplace=inplace)
         if inplace:
@@ -1040,7 +1027,7 @@ class TimeArr(FloatArr):
             return super()._math(op, other, reverse=reverse, inplace=inplace)
         result = self.asnew(self.shifted(self.raw), cls=FloatArr)._math(op, other, reverse=reverse)
         if inplace:
-            self.raw[:] = result.raw - self.shifted(np.zeros(len(self.raw), dtype=ss_float))
+            self.raw[:] = result.raw - self.shift.raw
             return self
         return result
 
@@ -1090,7 +1077,7 @@ class GroupAges(FloatArr):
     """
     edges = None # The edges of the age groups; set by the sim
 
-    def _boolmath(self, op, other=None, inplace=False):
+    def _boolmath(self, op, other, inplace=False):
         if op not in ['>', '<', '>=', '<='] or not isinstance(other, numbers.Number):
             return super()._boolmath(op, other, inplace)
         inside = other > self.edges[0] and other not in self.edges # Not an edge, and above the lowest one
@@ -1289,6 +1276,8 @@ class BoolArr(Arr):
     def __iand__(self, other):
         """ In-place AND """
         if isinstance(other, uids):
+            if self.shared is not None:
+                self.own()
             tmp = self.raw[other]
             self.raw[:] = False
             self.raw[other] = tmp
@@ -1299,6 +1288,8 @@ class BoolArr(Arr):
     def __ior__(self, other):
         """ In-place OR """
         if isinstance(other, uids):
+            if self.shared is not None:
+                self.own()
             self.raw[other] = True
             return self
         else:
@@ -1307,6 +1298,8 @@ class BoolArr(Arr):
     def __ixor__(self, other):
         """ In-place XOR """
         if isinstance(other, uids):
+            if self.shared is not None:
+                self.own()
             self.raw[other] = ~self.raw[other]
             return self
         else:
@@ -1359,8 +1352,8 @@ class BoolState(BoolArr):
     @property
     def n(self):
         """ The number of people in the state: its agents, each counted by the people it stands for (its weight and the sim's scale), as `I.n` in a rate counts them, and as a compartmental run's state gives it; `count()` is the number of agents """
-        engine = getattr(self.watch, 'engine', None)
-        if engine is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
+        if self.watch is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
+            engine = self.watch.engine
             return float(engine.n_of(self.uids))*engine.scale
         return super().n
 
@@ -1375,16 +1368,10 @@ class BoolState(BoolArr):
         UID, as `P.time_in` is in `p=`; e.g. `hpv.P.time_in[uids]` in a function. A duration in the sim's unit, so
         `preg.P.time_in < ss.weeks(13)` compares like with like; NaN for anyone not in the state
         """
-        engine = getattr(self.watch, 'engine', None)
-        if engine is None:
-            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.time)')
-        steps = engine.ti - engine.mod[f'ti_{self.name}'].raw.astype(float)
-        inside = self.raw.copy()
-        leaving = getattr(engine, '_leaving', None)
-        if leaving is not None: # Being split as they leave: still in the state they left, as for a clock in p= (see Agents.clock_values())
-            inside[leaving[0][np.broadcast_to(leaving[1], len(leaving[0])) == engine.state_index[self.name]]] = True
-        steps[~inside] = np.nan
-        return ss.time.get_dur_class(engine.sim.unit)(steps*engine.dt)
+        engine = self._engine('time in state (.time_in)')
+        clock = ss.expressions.Clock([(engine.mod, self.name)])
+        times = engine.clock_values(clock, uids(np.arange(len(self.raw)))) # The engine's own clock, as p= reads it
+        return ss.time.get_dur_class(engine.sim.unit)(times)
 
     @property
     def stays(self):
@@ -1398,9 +1385,7 @@ class BoolState(BoolArr):
         count from the start of the run. It needs the time of entering the state to be kept (e.g. any state with a
         dwell time; otherwise, see `ss.solvers.abm(keep_times=True)`).
         """
-        engine = getattr(self.watch, 'engine', None)
-        if engine is None:
-            raise TypeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no stays (.stays)') # Not an AttributeError, which __getattr__ would hide
+        engine = self._engine('stays (.stays)')
         arr = engine.mod[f'ti_{self.name}']
         if isinstance(arr, Unkept): # Not an AttributeError, as above
             raise ValueError(f'{self.name}.stays needs the time of entering {self.name}: {arr.unkept()}')
@@ -1409,6 +1394,12 @@ class BoolState(BoolArr):
         left[left < entered] = np.nan # Left an earlier stay: still in it, or died in it
         done = ~self.raw & np.isfinite(entered) & np.isfinite(left)
         return ss.time.get_dur_class(engine.sim.unit)((left[done] - entered[done])*engine.dt)
+
+    def _engine(self, what):
+        """ The engine of the declared disease run as agents whose state this is, for `time_in` and `stays` """
+        if self.watch is None:
+            raise TypeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no {what}') # Not an AttributeError, which __getattr__ would hide
+        return self.watch.engine
 
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
@@ -1446,6 +1437,8 @@ class BoolState(BoolArr):
         if not isinstance(key, uids):
             key = self._convert_key(key)
         inds, old = self._before_write(engine, key)
+        if self.shared is not None:
+            self.own()
         self.raw[key] = value
         if np.ndim(value) == 0 and value: # One value (the usual case): those it changes are those not at it before
             engine.wrote(self.name, inds[~old], uids())
@@ -1851,7 +1844,7 @@ class uids(np.ndarray):
     def __or__(self, other)  : return self.union(other)
     def __sub__(self, other) : return self.remove(other)
     def __xor__(self, other) : return self.xor(other)
-    def __invert__(self)     : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+    def __invert__(self)     : raise TypeError(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
     # Set-like operations change the size, so in place they return a new object; element-wise arithmetic changes it in place
     def __iadd__(self, other):

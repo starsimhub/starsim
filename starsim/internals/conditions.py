@@ -25,6 +25,7 @@ comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.person.age)
 leaves = ['people', 'state', 'dim', 'kind', 'array', 'incidence', 'event', 'memory', 'move']
 memory_kinds = ['ever', 'n_times', 'since']
+bool_ops = comparisons + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # The operations whose value is true or false (see Cond.is_bool)
 
 
 class Cond(Shared): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
@@ -48,6 +49,9 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
         ```
     """
     _is_cond = True
+    state = None # For a declared state: the state itself, for a count of it in a rate ((I | R).n; see as_cond())
+    path = None # For an event given by its path: the path, checked when the sim is initialized (see path_events())
+    owner = None # For a dimension of a disease's own: the disease (see ss.Disease.stratify())
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ A NumPy function of a condition (np.exp(b*ss.person.age), expit(...)) is an expression, for a rate; arithmetic and comparisons with NumPy numbers stay conditions """
@@ -103,9 +107,49 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
             a = ss.expressions.as_expr(self)
             return {'>':a.__gt__, '<':a.__lt__, '>=':a.__ge__, '<=':a.__le__}[op](other)
         return Cond(op, self, other)
+
     def __eq__(self, other): return Cond('==', self, other)
     def __ne__(self, other): return Cond('!=', self, other)
     def __and__(self, other): return NotImplemented if defers(other) else Cond('&', self, other)
+    def __or__(self, other):  return NotImplemented if defers(other) else Cond('|', self, unbracketed(self, other))
+    def __rand__(self, other): return NotImplemented if defers(other) else Cond('&', other, self)
+    def __ror__(self, other):  return NotImplemented if defers(other) else Cond('|', unbracketed(self, other), self)
+    def __invert__(self):     return Cond('~', self)
+    __hash__ = object.__hash__
+
+    def __rshift__(self, other):
+        """ (I | R) >> D: a set of states as the sources of a transition, the same as I + R >> D """
+        states = state_objects(self)
+        if states is None:
+            errormsg = f'Only a set of states can be the sources of a transition, e.g. (I | R) >> D or I + R >> D, not the condition {self!r}'
+            raise TypeError(errormsg)
+        return ss.expressions.total(states) >> other
+    def __add__(self, other): return self.arith('+', self, other)
+    def __sub__(self, other): return self.arith('-', self, other)
+    def __mul__(self, other): return self.arith('*', self, other)
+    def __truediv__(self, other): return self.arith('/', self, other)
+    def __pow__(self, other): return self.arith('**', self, other)
+    def __radd__(self, other): return self.arith('+', other, self)
+    def __rsub__(self, other): return self.arith('-', other, self)
+    def __rmul__(self, other): return self.arith('*', other, self)
+    def __rtruediv__(self, other): return self.arith('/', other, self)
+    def __neg__(self): return self.arith('*', -1, self)
+
+    @staticmethod
+    def arith(op, a, b):
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.person.age; otherwise a condition. A set of states (Ia | Is) is their sum, so 0.3*(Ia | Is) is 0.3*(Ia + Is) """
+        a, b = [ss.expressions.as_expr(x) if ss.expressions.states_of(x) is not None else x for x in (a, b)]
+        if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+            return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
+        elif op == '**':
+            return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
+        return Cond(op, a, b)
+
+    @property
+    def is_bool(self):
+        """ Whether it is true or false for each person (a comparison, a logical operation, a state, an event, or whether an event ever happened), as opposed to a quantity such as `ss.person.age` """
+        return self.op in bool_ops or (self.op == 'memory' and self.args[1] == 'ever')
+
     @property
     def time_in(self):
         """ For a set of states (`A | B`): the time since entering it from outside it, in the sim's unit (moves within the set do not reset it; NaN outside it) """
@@ -120,11 +164,6 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
     def exit(self):
         """ For a set of states (`A | B`): the event of leaving it for a state outside it """
         return Event('exit', self.as_states('exit'))
-
-    def __or__(self, other):  return NotImplemented if defers(other) else Cond('|', self, unbracketed(self, other))
-    def __rand__(self, other): return NotImplemented if defers(other) else Cond('&', other, self)
-    def __ror__(self, other):  return NotImplemented if defers(other) else Cond('|', unbracketed(self, other), self)
-    def __invert__(self):     return Cond('~', self)
 
     @property
     def ever(self):
@@ -184,44 +223,15 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
     @property
     def uids(self):
         """ The agents the condition holds for now, in a sim that is running or has run (agents only): e.g. `sim.interventions.screening.ever.uids`, everyone ever screened (the sim's copy of the delivery, not the one given, which the sim copies) """
-        sim = self.evaluate_in(sim_only=True)
+        sim, mod = self.running_sim()
         auids = sim.people.auids
-        return auids[np.asarray(self.evaluate_in(), dtype=bool)[auids]]
+        return auids[np.asarray(self.evaluate_in(sim, mod), dtype=bool)[auids]]
 
     def memory(self, kind):
         if self.op != 'event' and not isinstance(self, Event):
             errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, a declared transition such as tb.diagnosis, one branch of it, tr.to(B), or entering or leaving a state, sir.I.enter), not of {self!r}'
             raise TypeError(errormsg)
         return Cond('memory', self, kind)
-
-    def __rshift__(self, other):
-        """ (I | R) >> D: a set of states as the sources of a transition, the same as I + R >> D """
-        states = state_objects(self)
-        if states is None:
-            errormsg = f'Only a set of states can be the sources of a transition, e.g. (I | R) >> D or I + R >> D, not the condition {self!r}'
-            raise TypeError(errormsg)
-        return sum(states[1:], states[0]) >> other
-    def __add__(self, other): return self.arith('+', self, other)
-    def __sub__(self, other): return self.arith('-', self, other)
-    def __mul__(self, other): return self.arith('*', self, other)
-    def __truediv__(self, other): return self.arith('/', self, other)
-    def __pow__(self, other): return self.arith('**', self, other)
-    def __radd__(self, other): return self.arith('+', other, self)
-    def __rsub__(self, other): return self.arith('-', other, self)
-    def __rmul__(self, other): return self.arith('*', other, self)
-    def __rtruediv__(self, other): return self.arith('/', other, self)
-    def __neg__(self): return self.arith('*', -1, self)
-
-    @staticmethod
-    def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.person.age; otherwise a condition. A set of states (Ia | Is) is their sum, so 0.3*(Ia | Is) is 0.3*(Ia + Is) """
-        a, b = [ss.expressions.as_expr(x) if ss.expressions.states_of(x) is not None else x for x in (a, b)]
-        if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
-            return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
-        elif op == '**':
-            return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
-        return Cond(op, a, b)
-    __hash__ = object.__hash__
 
     def isin(self, values):
         """
@@ -242,11 +252,11 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
     @property
     def values(self):
         """ In a running sim, as agents: the condition's value for each agent alive, in the order of `sim.people.auids` (as `ss.Arr.values`) """
-        sim = self.evaluate_in(sim_only=True)
-        return self.evaluate_in()[sim.people.auids]
+        sim, mod = self.running_sim()
+        return self.evaluate_in(sim, mod)[sim.people.auids]
 
-    def evaluate_in(self, sim_only=False):
-        """ For `cond[uids]` and `cond.values`: the value for each agent (by UID), in the sim of a module the condition reads """
+    def running_sim(self):
+        """ For `cond[uids]`, `cond.values`, and `cond.uids`: the sim of a module the condition reads, and the module, as (sim, mod), once the sim is initialized and as agents """
         mod = find_module(self)
         sim = getattr(mod, 'sim', None)
         if sim is None and getattr(mod, '_given', False):
@@ -256,10 +266,14 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
         if sim is None or not sim.initialized:
             errormsg = f'{self!r} has no values yet: cond[uids] and cond.values are for a condition on a module in a sim that has been initialized'
             raise ValueError(errormsg)
-        if sim_only:
-            return sim
         if not isinstance(sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'{self!r}[uids] is a value for each agent, which exist only with solver="abm"; with solver="{sim.solver}", read the counts in its results')
+        return sim, mod
+
+    def evaluate_in(self, sim=None, mod=None):
+        """ For `cond[uids]` and `cond.values`: the value for each agent (by UID), in the sim of a module the condition reads (see `running_sim()`) """
+        if sim is None:
+            sim, mod = self.running_sim()
         selector = Selector(sim, mod if getattr(mod, 'graph', None) is not None else None)
         try:
             out = self.eval(selector)
@@ -292,6 +306,11 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
                 return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
+
+
+def edge_list(edges):
+    """ Bin edges as a list for a message, whole numbers without a decimal point, e.g. [0, 5, 0.5] """
+    return [int(e) if e == int(e) else e for e in edges]
 
 
 def on_edge(strat, value):
@@ -391,47 +410,63 @@ class Event(Cond):
     __hash__ = Cond.__hash__
 
     @property
+    def kind(self):
+        """ 'tr', 'to', 'enter', or 'exit' """
+        return self.args[0]
+
+    @property
+    def obj(self):
+        """ The transition, or the states entered or left """
+        return self.args[1]
+
+    @property
+    def dst(self):
+        """ For 'to', the destination """
+        return self.args[2]
+
+    @property
     def names(self):
         """ For entering or leaving: the names of the states """
-        return [s.name if isinstance(s, ss.State) else s[1] for s in self.args[1]]
+        return [s.name if isinstance(s, ss.State) else s[1] for s in self.obj]
 
     @property
     def module(self):
-        kind, obj, dst = self.args
-        if kind in ['tr', 'to']:
-            return getattr(obj, 'module', None) # None for a transition not yet part of a module (e.g. in an error message as it is declared)
-        mods = [s.module if isinstance(s, ss.State) else s[0] for s in obj]
+        if self.kind in ['tr', 'to']:
+            return getattr(self.obj, 'module', None) # None for a transition not yet part of a module (e.g. in an error message as it is declared)
+        mods = [s.module if isinstance(s, ss.State) else s[0] for s in self.obj]
         return next((m for m in mods if m is not None), None)
 
     @property
+    def dst_name(self):
+        """ For 'to', the name of the destination """
+        return getattr(self.dst, 'name', self.dst)
+
+    @property
     def label(self):
-        kind, obj, dst = self.args
         mod = modname(self.module)
         prefix = f'{mod}.' if mod else ''
-        if kind in ['tr', 'to']:
-            out = f'{prefix}{obj.name or f"({obj._arrow})"}' # By its source and destinations before it has a name
-            return out if kind == 'tr' else f'{out}.to({getattr(dst, "name", dst)})'
+        if self.kind in ['tr', 'to']:
+            out = f'{prefix}{self.obj.name or f"({self.obj._arrow})"}' # By its source and destinations before it has a name
+            return out if self.kind == 'tr' else f'{out}.to({self.dst_name})'
         names = self.names
-        return f'{prefix}{names[0] if len(names) == 1 else "(" + " | ".join(names) + ")"}.{kind}'
+        return f'{prefix}{names[0] if len(names) == 1 else "(" + " | ".join(names) + ")"}.{self.kind}'
 
     def spec(self):
         """ What the engine is asked for: see `ss.solvers.Agents.event_uids()` """
-        kind, obj, dst = self.args
-        if kind == 'tr':
-            return dict(tr=obj.name)
-        elif kind == 'to':
-            return dict(tr=obj.name, to=getattr(dst, 'name', dst))
-        return {kind: self.names}
+        if self.kind == 'tr':
+            return dict(tr=self.obj.name)
+        elif self.kind == 'to':
+            return dict(tr=self.obj.name, to=self.dst_name)
+        return {self.kind: self.names}
 
     @property
     def memory_key(self):
         """ The name its memory is kept under in its module (see `ss.solvers.Agents.record()`): the transition's, or e.g. `infection_to_I`, `I_enter` """
-        kind, obj, dst = self.args
-        if kind == 'tr':
-            return obj.name
-        elif kind == 'to':
-            return f'{obj.name}_to_{getattr(dst, "name", dst)}'
-        return f'{"_".join(self.names)}_{kind}'
+        if self.kind == 'tr':
+            return self.obj.name
+        elif self.kind == 'to':
+            return f'{self.obj.name}_to_{self.dst_name}'
+        return f'{"_".join(self.names)}_{self.kind}'
 
     @property
     def uids(self):
@@ -477,8 +512,7 @@ def unbracketed(cond, other):
 def state_objects(cond):
     """ The declared states a condition is a set of (`I | R`, or one state), for a count of them in a rate; None if it is anything else """
     if cond.op == 'state':
-        state = getattr(cond, 'state', None)
-        return None if state is None else [state]
+        return None if cond.state is None else [cond.state]
     if cond.op == '|':
         parts = [state_objects(as_cond(arg)) for arg in cond.args]
         return None if any(p is None for p in parts) else list({id(s):s for p in parts for s in p}.values())
@@ -567,10 +601,10 @@ def bounding_states(cond):
 
 def check_clocks(amount, where, what):
     """ A modifier whose amount reads a clock needs a who= inside the clock's states, where the clock has a value """
+    if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
+        return
     for clock in ss.expressions.clocks_in(amount):
         names = set(clock.names)
-        if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
-            continue
         inside = bounding_states(where)
         if inside is None or not inside <= names:
             raise ValueError(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
@@ -716,10 +750,10 @@ def state_refs(obj):
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
         elif cond.op == 'dim':
-            if getattr(cond, 'owner', None) is not None: # See ss.Disease.stratify()
+            if cond.owner is not None: # See ss.Disease.stratify()
                 out.append((modname(cond.owner), cond.args[0]))
         elif isinstance(cond, Event): # The transition, or the states entered or left
-            kind, obj, dst = cond.args
+            kind, obj = cond.kind, cond.obj
             name = modname(cond.module)
             if name is not None:
                 out.extend([(name, obj.name)] if kind in ['tr', 'to'] else [(name, n) for n in cond.names])
@@ -768,6 +802,7 @@ def is_static(cond, sim):
 
 
 def evaluate(obj, ctx):
+    """ The value of one operand of a condition in `ctx` (a `Selector`), for `Cond.eval()`: a condition, an expression, a function of the sim, or a plain value """
     if isinstance(obj, Cond):
         return obj.eval(ctx)
     elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.State): # E.g. a clock compared with a duration
@@ -879,13 +914,14 @@ def rebind(cond, memo):
     if not isinstance(cond, Cond):
         return cond
     if isinstance(cond, Event):
-        kind, obj, dst = cond.args
-        return Event(kind, memo[id(obj)], memo.get(id(dst), dst)) if kind in ['tr', 'to'] and id(obj) in memo else cond
+        if cond.kind in ['tr', 'to'] and id(cond.obj) in memo:
+            return Event(cond.kind, memo[id(cond.obj)], memo.get(id(cond.dst), cond.dst))
+        return cond
     args = tuple(rebind(arg, memo) for arg in cond.args)
     if all(new is old for new,old in zip(args, cond.args)):
         return cond
     out = object.__new__(type(cond))
-    out.__dict__.update(cond.__dict__, args=args)
+    out.__dict__.update(cond.__dict__, _args=args)
     return out
 
 
@@ -939,7 +975,7 @@ def path_module(sim, path):
 def check_path_events(sim, cond, owner):
     """ Check that each path an event's when= gives (see `split_where()`) is a transition of a module in the sim """
     for leaf in event_leaves(cond) if isinstance(cond, Cond) else []:
-        path = getattr(leaf, 'path', None)
+        path = leaf.path
         if path is None:
             continue
         modname, name, mod = path_module(sim, path)
@@ -960,7 +996,7 @@ def resolve_paths(cond, sim):
     """
     if not isinstance(cond, Cond):
         return cond
-    if isinstance(cond, StatePath) or getattr(cond, 'path', None) is not None:
+    if isinstance(cond, StatePath) or cond.path is not None:
         path = cond if isinstance(cond, StatePath) else cond.path
         modname, name, mod = path_module(sim, path)
         graph = getattr(mod, 'graph', None)
@@ -1031,27 +1067,27 @@ def split_delivery(trigger=None, who=None, gate=None):
     eligible). gate (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
     condition on people too. who and gate are joined with &, and neither takes an event.
     """
-    on, where = trigger, gate
+    when, where = trigger, gate # As given to the delivery: when= and who=
     for val in [who, where]:
         check_not_time(val, 'an event')
-    for key,val in dict(on=on, who=who, where=where).items():
+    for key,val in dict(when=when, who=who, where=where).items():
         if isinstance(val, (list, tuple)):
-            errormsg = f'{"when" if key == "on" else "who"}= of an event takes one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. when=a.positive | b.positive'
+            errormsg = f'{"when" if key == "when" else "who"}= of an event takes one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. when=a.positive | b.positive'
             raise TypeError(errormsg)
     trigger = None
-    if on is not None:
-        if isinstance(on, str):
-            trigger, rest = split_where(on)
+    if when is not None:
+        if isinstance(when, str):
+            trigger, rest = split_where(when)
         else:
-            cond = path_events(as_cond(on)) # A path (ss.ref('sir.infection')) is taken for a transition, as a string is (see split_where())
+            cond = path_events(as_cond(when)) # A path (ss.ref('sir.infection')) is taken for a transition, as a string is (see split_where())
             if not isinstance(cond, (Cond, ss.expressions.Expr)):
-                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive, when=sir.infection, or a transition by its path, when="sir.infection"), not {on!r}'
+                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive, when=sir.infection, or a transition by its path, when="sir.infection"), not {when!r}'
                 raise TypeError(errormsg)
             trigger, rest = split_events(cond)
         if trigger is None or rest is not None:
             what = 'a condition' if trigger is None else f'an event joined to a condition ({rest})'
             if trigger is None or on_people(as_cond(rest)):
-                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who='
+                errormsg = f'when= of an event, as a trigger, is another event (e.g. when=screening.positive); {when!r} has {what}, which says who is eligible, so give it as who='
                 raise TypeError(errormsg)
             where = join('&', [where, rest]) # An event joined to a condition on the population (when=screening.positive & (sir.I.n > 1000)): while it holds
     for key,val in [('who', who), ('where', where)]:
@@ -1229,7 +1265,7 @@ class Selector(sc.prettyobj):
         """ The number who went through a transition over a window, as a fraction of the people at the same level of a stratification, for each agent or group (see `ss.Transition.incidence()`) """
         sim = self.sim
         tr, over, by = cond.args
-        mod = self.mod if getattr(tr, 'module', None) is None else self.module(modname(tr.module))
+        mod = self.mod if tr.module is None else self.module(modname(tr.module))
         name = tr.name
         res = mod.results
         def strata(key): # By group; a result of a model without groups has no strata, so it is one group
@@ -1332,7 +1368,7 @@ class Selector(sc.prettyobj):
         if not is_dim or not sc.isnumber(b) or isinstance(b, (bool, np.bool_)) or not self.is_binned(a.args[0]):
             return op, a, b
         strat = self.sim.groups.strats[self.sim.groups.dim_index(a.args[0])]
-        edges = [int(e) if e == int(e) else e for e in strat.edges]
+        edges = edge_list(strat.edges)
         if op in ['==', '!=']:
             errormsg = f'The condition {a} {op} {b:n} compares the bins of "{strat.name}" ({sc.strjoin(strat.labels)}) with a number; give a bin by its label, e.g. {strat.name} == "{strat.labels[0]}", or a range by its edges, e.g. {strat.name} < {edges[-1]}'
             raise ValueError(errormsg)
@@ -1354,9 +1390,8 @@ class Selector(sc.prettyobj):
             if edge is not None:
                 return edge
             if strat.edges[0] < value:
-                edges = sorted(set(strat.edges.tolist() + [value]))
-                edges = [int(e) if e == int(e) else e for e in edges]
-                raise ss.CapabilityError(f'a condition uses people.{name} and {value:n}, but the model\'s {name} bins are {[int(e) if e == int(e) else e for e in strat.edges]} and {value:n} falls inside a bin.\n'
+                edges = edge_list(sorted(set(strat.edges.tolist() + [value])))
+                raise ss.CapabilityError(f'a condition uses people.{name} and {value:n}, but the model\'s {name} bins are {edge_list(strat.edges)} and {value:n} falls inside a bin.\n'
                                          f'     Fix: add {value:n} as a bin edge, stratify({name}={edges}), or run with solver="abm".')
         return value
 

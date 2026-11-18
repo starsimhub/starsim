@@ -36,7 +36,8 @@ Used with: agents and compartments; declared and coded modules
 """
 
 import math
-import importlib
+import types as pytypes
+import importlib.util
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -129,6 +130,11 @@ def mix(z):
     z = (z ^ (z >> U30))*MIX1
     z = (z ^ (z >> U27))*MIX2
     return z ^ (z >> U31)
+
+@jit(inline='always')
+def mid_uniform(z):
+    """ A uniform in (0, 1) from the top 53 bits of z, in the middle of its step, so never 0 or 1 (as the agent engine's events draw them); `uniform()` takes the bottom of the step instead (0 being raised to half a step), as `ss.dists.hash_uniforms()` does, and the two must stay as they are """
+    return (float(z >> U11) + 0.5)*INV53
 
 @jit()
 def key(seed, ind):
@@ -355,11 +361,16 @@ def poisson_ptrs(lam, st):
         if math.log(V) + math.log(invalpha) - math.log(a/(us*us) + b) <= -lam + k*loglam - math.lgamma(k + 1):
             return float(k)
 
-@jit()
+@jit(inline='always')
 def binomial_bound(n, q):
     """ How far the inversion of Binomial(n, q) walks at most (as NumPy's): beyond it the mass is below 1e-20 """
     m = n*q
     return min(n, m + 10.0*math.sqrt(m*(1.0 - q) + 1.0))
+
+@jit(inline='always')
+def poisson_bound(lam):
+    """ How far the inversion of Poisson(lam) walks at most """
+    return lam + 10.0*math.sqrt(lam) + 10.0
 
 @jit()
 def binomial(n, p, u):
@@ -406,7 +417,7 @@ def poisson(lam, u):
     if u <= 1.0 - lam:
         return 0.0
     px = exp(-lam)
-    bound = lam + 10.0*math.sqrt(lam) + 10.0
+    bound = poisson_bound(lam)
     cdf = px
     X = 0.0
     while u > cdf and X < bound:
@@ -449,18 +460,19 @@ def _prep_walk(nn, qq, rr, bb, px):
     for i in range(nn.size):
         q = qq[i]
         n = nn[i] if q > 0.0 else 0.0
-        m = n*q
         rr[i] = q/(1.0 - q)
-        bb[i] = min(n, m + 10.0*math.sqrt(m*(1.0 - q) + 1.0))
+        bb[i] = binomial_bound(n, q)
         px[i] = exp(n*log1p(-q))
 
 @jit()
 def _exp_row(x, out):
+    """ exp() of each lane, in a loop of its own so LLVM vectorizes it: the chance of 0, exp(-lam), for `poissons()` """
     for i in range(x.size):
         out[i] = exp(x[i])
 
 @jit()
 def _start(px, cdf, X, uu, bb):
+    """ The start of the walk of `binomials()` and `poissons()`, at 0 for every lane: the number of lanes still to walk """
     left = 0
     for j in range(px.size):
         cdf[j] = px[j]
@@ -482,6 +494,7 @@ def _step_binomial(px, cdf, X, uu, nn, rr, bb, k, inv):
 
 @jit()
 def _step_poisson(px, cdf, X, uu, ll, bb, k, inv):
+    """ One step of the walk for all lanes, as `_step_binomial()`: as poisson() takes it """
     left = 0
     for j in range(px.size):
         a = (uu[j] > cdf[j]) & (k - 1.0 < bb[j])
@@ -534,7 +547,7 @@ def poissons(lam, u, out, w):
         walk = (L > 0.0) & (not large) & (u[i] > 1.0 - L)
         ll[i] = L if walk else 0.0
         uu[i] = u[i] if walk else 0.0
-        bb[i] = L + 10.0*math.sqrt(max(L, 0.0)) + 10.0
+        bb[i] = poisson_bound(max(L, 0.0))
         px[i] = -ll[i]
         big += large
         need += walk
@@ -585,6 +598,7 @@ def ndtri(u):
 
 @jit(inline='always')
 def expon(scale, u):
+    """ Exponential with a scale (the mean), by inversion """
     return -scale*log1p(-u)
 
 @jit(inline='always')
@@ -642,21 +656,29 @@ def nbinom(n, p, u):
 
 #%% Many draws at once, with parameters that are numbers or arrays (one per draw)
 
+def from_u1(a, u, out):
+    """ The template of many draws with one parameter: out[i] = f(a, u[i]), `f` being a global of each copy (see `arrays()`) """
+    for i in range(out.size):
+        out[i] = f(at(a, i), u[i])
+    return out
+
+def from_u2(a, b, u, out):
+    """ The template of many draws with two parameters: out[i] = f(a, b, u[i]) """
+    for i in range(out.size):
+        out[i] = f(at(a, i), at(b, i), u[i])
+    return out
+
 def arrays(f, npars):
-    """ For a draw f(*pars, u) with one or two parameters: from_u(*pars, u, out), which sets out[i] = f(*pars, u[i]); each parameter is a number or an array (one value per draw) """
-    if npars == 1:
-        @jit()
-        def from_u(a, u, out):
-            for i in range(out.size):
-                out[i] = f(at(a, i), u[i])
-            return out
-    else:
-        @jit()
-        def from_u(a, b, u, out):
-            for i in range(out.size):
-                out[i] = f(at(a, i), at(b, i), u[i])
-            return out
-    return from_u
+    """
+    For a draw f(*pars, u) with one or two parameters: from_u(*pars, u, out), which sets out[i] = f(*pars, u[i]); each parameter is a number or an array (one value per draw)
+
+    A copy of a template that sees `f` as a global, not a closure's variable: Numba keys its cache by a closure's variables, pickled, and a compiled
+    function pickles differently in each session, so a closure over `f` would be compiled again in every session (as `ss.solvers.numba.passes.specialize()`)
+    """
+    template = from_u1 if npars == 1 else from_u2
+    func = pytypes.FunctionType(template.__code__, dict(globals(), f=f), f'{f.__name__}_{template.__name__}')
+    func.__qualname__ = func.__name__ # Each cached under a name of its own
+    return jit()(func)
 
 many = sc.obj({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull(c, scale, u, out)
     ('expon', expon, 1), ('weibull', weibull, 2), ('binomial', binomial, 2), ('poisson', poisson, 1), ('nbinom', nbinom, 2)]})

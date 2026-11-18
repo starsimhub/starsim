@@ -29,6 +29,12 @@ def member(a, b):
     return b[np.minimum(np.searchsorted(b, a), len(b) - 1)] == a
 
 
+def add_events(events, key, uids):
+    """ Add agents to those who went through a transition this step (`events`, by its name) """
+    events[key] = uids if key not in events else ss.uids.concatenate([events[key], uids])
+    return
+
+
 no_groups = np.empty(0, dtype=np.int64) # For a kernel that takes each agent's group, when there is one group
 
 
@@ -77,14 +83,19 @@ class Moving:
         self.put(src.name, uids, False)
         self.clear_exit(src.name, uids)
         self.flowcounts[tr.name] += self.n_of(uids)
-        self.events[tr.name] = uids if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], uids])
-        if self.sim.groups.n_groups > 1 and not (self.enters(tr, src) and not (tr.contact and self.strain is not None)): # A move into a dimension is recorded at the level people arrive at, once they have one: see finish_moves()
+        add_events(self.events, tr.name, uids)
+        strained = self.strained(tr)
+        if self.sim.groups.n_groups > 1 and (strained or not self.enters(tr, src)): # A move into a dimension is recorded at the level people arrive at, once they have one: see finish_moves()
             groups = self.groups(uids, src)
-            if tr.contact and self.strain is not None and not self.applies[src.name][self.strain]: # A new infection is recorded under the strain acquired (which, for someone infected again, is already their strain)
+            if strained and not self.applies[src.name][self.strain]: # A new infection is recorded under the strain acquired (which, for someone infected again, is already their strain)
                 groups = groups + self.strain_raw()[uids]*int(self.sim.groups.group_mults[self.strain])
-            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(groups, weights=self.weights(uids), minlength=self.sim.groups.n_groups)
+            self.add_flow_groups(tr.name, groups, uids)
         self._moved.append((tr, src, uids))
         return
+
+    def strained(self, tr):
+        """ Whether a transition is an infection with strains, which is recorded under the strain acquired, as people leave (see `move()`) """
+        return tr.contact and self.strain is not None
 
     def finish_moves(self, ti):
         """
@@ -160,7 +171,7 @@ class Moving:
         of its scheduled exits, so a trigger moves people ahead of an exit due at the same time. A loop is broken at the transition declared first.
         Returns the order, each transition's position in it, and the transitions whose event a trigger before them waits for
         """
-        if self.__dict__.get('_sweep') is None:
+        if self._sweep is None:
             trs = list(self.graph.transitions.values())
             after = {tr.name:set() for tr in trs} # The transitions each comes after
             events = {tr.name:self.event_transitions(tr) for tr in trs}
@@ -234,7 +245,7 @@ class Moving:
                 self.move_levels_of(tr, dst, inds)
                 self.fire(tr, inds, came, index[dst.name]) # The attributes the move sets, before the dwell times that can read them
                 self.enter(dst, inds, ti, tr=tr, srcs=came) # Once their levels are known, since dwell times can depend on them
-                if entering and not (tr.contact and self.strain is not None):
+                if entering and not self.strained(tr):
                     self.add_flow_groups(name, self.groups(inds, dst), inds)
                     if tr._ends:
                         self.add_flow_groups(f'{name}.{dst.name}', self.groups(inds, dst), inds)
@@ -255,26 +266,28 @@ class Moving:
             self.stay(tr, uids[stayed], frm[stayed])
         if tr._ends: # The flow to each destination
             left = np.concatenate([self.groups(u, src) for u,src in zip(uidlist, srcs)]) if self.sim.groups.n_groups > 1 and not entering else None # The groups they left, where the total is recorded (see move()), before any change of level
-            for (dst,inds,_),mask in zip(dsts + [(ss.dead, uids[masks[-1]], None)]*tr.may_die, masks):
+            for (dst,inds,_),mask in zip(dsts + ([(ss.dead, uids[masks[-1]], None)] if tr.may_die else []), masks):
                 key = f'{tr.name}.{"dead" if dst is ss.dead else dst.name}'
                 self.flowcounts[key] += self.n_of(inds)
                 if left is not None:
                     self.add_flow_groups(key, left[mask], inds)
         return dsts
 
+    def dest_fixed(self, tr):
+        """ Whether the fractions of a transition's destinations depend only on fixed values (see `is_fixed()`), worked out once """
+        key = ('dest', tr.name)
+        if key not in self._fixed:
+            dies = not tr.may_die or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.dead') and self.unmodified('branch', f'{tr.name}.stay')) # The fraction of ss.dead, from those of the others, and of ss.stay (see die_frac())
+            self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dest)
+        return self._fixed[key]
+
     def dest_edges(self, tr, uids, frm):
         """ Where each destination of a transition with several starts, as a cumulative probability, for some agents leaving by it from the states `frm` (one row per destination, ss.dead last if it is one, and its end); what is beyond is ss.stay """
-        key = ('dest', tr.name)
-        fixed = self.__dict__.setdefault('_fixed', {}).get(key)
-        if fixed is None:
-            dies = not tr.may_die or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.dead') and self.unmodified('branch', f'{tr.name}.stay')) # The fraction of ss.dead, from those of the others, and of ss.stay (see die_frac())
-            fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dest)
-        return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
+        return self.fixed_edges(('dest', tr.name), self.dest_fixed(tr), lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
 
     def dest_edges_for(self, tr, uids, frm):
         """ As dest_edges(), worked out for these agents """
-        self._uids = uids
-        with self.evaluating(leaving=(uids, frm)): # Decided as they leave: the time in a clock is the time they spent there (see clock_values())
+        with self.evaluating(uids=uids, leaving=(uids, frm)): # Decided as they leave: the time in a clock is the time they spent there (see clock_values())
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
             if tr.may_die:
                 ps.append(np.broadcast_to(self.die_frac(tr, ps, lambda p: self.eval_for(p, uids), uids), len(uids)))
@@ -294,7 +307,7 @@ class Moving:
             out.append((name, uids))
             if row is not None and self.competing[name] and not self.wholestep: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
                 now = self.due(name, uids, ti)
-                stay = uids[~np.isin(uids, now[1])] if now is not None else uids
+                stay = uids[~member(uids, now[1])] if now is not None else uids
                 hz = stay[~row[stay]]
                 row[hz] = True
                 if len(hz):
@@ -313,9 +326,10 @@ class Moving:
         which = mod[f'exit_{name}'].raw[now]
         return [(tr, state, now[which == i]) for i,tr in enumerate(self.exits_of[name])], now
 
-    def add_flow_groups(self, key, groups, uids):
-        """ Add some agents to a flow by group (each counted by its weight, if agents' weights differ) """
-        self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(groups, weights=self.weights(uids), minlength=self.sim.groups.n_groups)
+    def add_flow_groups(self, key, groups, uids, sign=1):
+        """ Add some agents to a flow by group (each counted by its weight, if agents' weights differ), or take them out of it (`sign=-1`) """
+        counts = np.bincount(groups, weights=self.weights(uids), minlength=self.sim.groups.n_groups)
+        self.flow_groups[key] = self.flow_groups.get(key, 0) + (counts if sign > 0 else -counts)
         return
 
     def triggered(self, triggers=None):
@@ -351,7 +365,7 @@ class Moving:
                 for s in srcs:
                     out.append((tr, s, ss.uids(uids[mod[s.name].raw[uids]])))
                 if taken is None:
-                    taken = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+                    taken = np.zeros(self.n_slots, dtype=bool)
                 taken[uids] = True
         return out
 
@@ -382,7 +396,8 @@ class Moving:
         last, now, before = self._fired_seen.get(tr.name, (None, None, None))
         pad = lambda m: np.zeros(len(mask), dtype=bool) if m is None else np.pad(m, (0, len(mask) - len(m)))
         if last != ti: # A new step: what was seen now was seen on the last step, if it was the last step
-            now, before = None, (now if last == ti - 1 else None) # The old now, as the right side is evaluated first
+            before = now if last == ti - 1 else None
+            now = None
         seen = pad(now) | pad(before)
         self._fired_seen[tr.name] = (ti, pad(now) | mask, before)
         return mask & ~seen
@@ -418,16 +433,18 @@ class Moving:
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new):
                 self.record(tr, new, -1, self.state_index[tr.dest[0].name]) # An event, e.g. preg.birth
-                self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
+                add_events(self.events, tr.name, new)
                 if self.sim.groups.n_groups > 1:
-                    self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
-                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(when=) of the same transition, and recorded there as its event (for when= and conditions)
-                    other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'birth_on', None) is not None and o.birth_on.name == tr.birth_on.name and ss.conditions.modname(o.birth_on.module) == self.mod.name), None)
-                    if other is not None:
-                        engine = mod.engine
-                        engine.flowcounts[other.name] += self.n_of(new)
-                        engine.record(other, new, -1, engine.state_index[other.dest[0].name])
-                        engine.events[other.name] = new if other.name not in engine.events else ss.uids.concatenate([engine.events[other.name], new])
+                    self.add_flow_groups(tr.name, self.groups(new), new)
+                others = {} # Counted in the flow of each other module's own ss.birth(when=) of the same transition (its first), and recorded there as its event (for when= and conditions)
+                for mod,other in self.births_on(tr):
+                    if mod is not self.mod:
+                        others.setdefault(mod.name, (mod, other))
+                for mod,other in others.values():
+                    engine = mod.engine
+                    engine.flowcounts[other.name] += self.n_of(new)
+                    engine.record(other, new, -1, engine.state_index[other.dest[0].name])
+                    add_events(engine.events, other.name, new)
                 born.append(new)
         if born:
             born = ss.uids.concatenate(born)
@@ -483,7 +500,7 @@ class Moving:
         moms = np.repeat(np.asarray(parents), counts)
         if not len(moms):
             return ss.uids()
-        places = self.place_raw()[moms] if sim.mixing.space is not None else np.zeros(len(moms), dtype=int)
+        places = self.place_raw()[moms] if sim.contact_rates.space is not None else np.zeros(len(moms), dtype=int)
         states = () if into is False else tuple(self.into(tr))
         born = np.all(np.asarray(age) >= 0) # Or fetuses, aged below 0
         npl = np.bincount(places, minlength=1)
@@ -492,8 +509,7 @@ class Moving:
         people.parent[new] = order
         if f'sex_{tr.name}' in self.dists:
             people.female[new] = self.draw(f'sex_{tr.name}', new)
-            self.sim.groups.set_sex(new) # A dimension called sex follows (it was set from the default when they were made)
-            self.sim.groups.groups_changed(new)
+            sim.groups.set_sex(new) # A dimension called sex follows (it was set from the default when they were made)
             sim.groups.groups_changed(new)
         if not born: # Fetuses, so that they are born at 0
             byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])
@@ -506,12 +522,14 @@ class Moving:
     def into(self, tr):
         """ The states that children born by a transition are put in, as (module name, state name): this inflow's, and that of each declared module's own `ss.birth(when=)` of the same transition """
         out = [(self.mod.name, d.name) for d in tr.dest]
-        per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
-        for mod in self.sim.declared:
-            for other in mod.graph.inflows:
-                if getattr(other, 'birth_on', None) is not None and (ss.conditions.modname(other.birth_on.module) or mod.name, other.birth_on.name) == per:
-                    out += [(mod.name, d.name) for d in other.dest]
+        for mod,other in self.births_on(tr):
+            out += [(mod.name, d.name) for d in other.dest]
         return list(dict.fromkeys(out))
+
+    def births_on(self, tr):
+        """ The `ss.birth(when=)` of each declared module (this one's included) on the same transition as the inflow `tr`'s, as (module, inflow) """
+        per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
+        return [(mod, other) for mod in self.sim.declared for other in mod.graph.inflows if getattr(other, 'birth_on', None) is not None and (ss.conditions.modname(other.birth_on.module) or mod.name, other.birth_on.name) == per]
 
     def fresh(self, key, tr, unique=True):
         """
@@ -592,8 +610,7 @@ class Moving:
                 continue
             self.schedule(state, uids)
             which = mod[f'exit_{state.name}'][uids]
-            exits = self.graph.exits[state.name]
-            for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder)):
+            for i,tr in enumerate(self.branches_of(state.name)):
                 self.move(tr, state, uids[which == i])
             moved = True
         if self.triggers: # Seeds a trigger holds for move on before the start (see finish_moves())
@@ -614,7 +631,7 @@ class Moving:
         if self._junctions is None:
             self._junctions = set()
             for name,exits in self.graph.exits.items():
-                branches = exits.branches + sc.tolist(exits.remainder)
+                branches = self.branches_of(name)
                 if branches and not exits.timed and not self.competing.get(name) and all(tr.name not in self.dwells and not self.after_of(tr) for tr in branches):
                     self._junctions.add(name)
             def walk(name, path=()): # People passed through at once must reach a state they wait in
@@ -623,8 +640,7 @@ class Moving:
                     raise ValueError(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
                                          f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
                 if name in self._junctions:
-                    exits = self.graph.exits[name]
-                    for tr in exits.branches + sc.tolist(exits.remainder):
+                    for tr in self.branches_of(name):
                         for dst in tr.dest:
                             walk(dst.name, path + (name,))
                 return
@@ -638,7 +654,7 @@ class Moving:
             return
         self.fire(tr, uids, src_idx, -1)
         self.record(tr, uids, src_idx, -1)
-        self.sim.people.request_death(uids, cause=self.mod)
+        self.sim.people.request_death(uids, cause=self.cause_of(tr)) # As the other deaths by a transition (see uncount_deaths())
         self._died.append((tr, srcs, [u[np.isin(u, uids)] for u in uidlist]))
         return
 
@@ -670,7 +686,7 @@ class Moving:
                     mod[f'ti_exit_{state.name}'][inds] = np.inf
                     mod[f'exit_{state.name}'][inds] = -2 # Stays: never scheduled again (see schedule())
             if self.sim.groups.n_groups > 1 and tr.name in self.flow_groups:
-                self.flow_groups[tr.name] = self.flow_groups[tr.name] - np.bincount(self.groups(inds, state), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
+                self.add_flow_groups(tr.name, self.groups(inds, state), inds, sign=-1)
         self.flowcounts[tr.name] -= self.n_of(uids)
         return
 
@@ -688,11 +704,9 @@ class Moving:
         return
 
     def branch_probs_for(self, tr, uids):
-        self._memo = {} # A part that several entries frac (e.g. p_use in 1 - p_use and p_use*frac) is evaluated once for all of them (see memoized())
-        try:
+        """ The probability of each destination of a transition (None for the remainder), for some agents """
+        with self.evaluating(memo={}): # A part that several entries frac (e.g. p_use in 1 - p_use and p_use*frac) is evaluated once for all of them (see memoized())
             ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
-        finally:
-            self._memo = None
         if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of fractions for each person (a switching matrix): not supported yet
             raise ss.CapabilityError(f'the destinations of "{tr.name}" gave a row of probabilities for each person, but each is one destination\'s probability (one value per person); '
                                      f'give one per destination, e.g. {{{tr.dest[0].name}: f_{tr.dest[0].name}, ...: None}}, where each function returns one value per person')
@@ -861,7 +875,7 @@ class Moving:
         if isinstance(arr, ss.arrays.Unkept):
             return
         arr.raw[uids] = ti
-        arr.shift.raw[uids] = self.index_of(ti) - ti if ti == ti else 0
+        arr.shift.raw[uids] = 0 if np.isnan(ti) else self.index_of(ti) - ti
         return
 
     def index_of(self, ti):
@@ -1059,14 +1073,16 @@ class Moving:
             mod[f'mult_{name}'][new] = mults
         return missed
 
+    def branch_fixed(self, state):
+        """ Whether the fractions of the branches out of a state depend only on fixed values (see `is_fixed()`), worked out once """
+        key = ('branch', state.name)
+        if key not in self._fixed:
+            self._fixed[key] = all(tr is None or ((tr.p is None or self.is_fixed(tr.p[0])) and self.unmodified('branch', tr.name) and self.is_fixed(getattr(tr, '_who_now', None))) for tr in self.branches_of(state.name))
+        return self._fixed[key]
+
     def branch_edges(self, state, uids):
         """ Where each branch out of a state starts, as a cumulative probability, for some agents entering it (one row per branch, and its end): with their modifiers, and each branch's who= closed to the others """
-        key = ('branch', state.name)
-        fixed = self.__dict__.setdefault('_fixed', {}).get(key)
-        if fixed is None:
-            branches = self.branches_of(state.name)
-            fixed = self._fixed[key] = all(tr is None or ((tr.p is None or self.is_fixed(tr.p[0])) and self.unmodified('branch', tr.name) and self.is_fixed(getattr(tr, '_who_now', None))) for tr in branches)
-        return self.fixed_edges(key, fixed, lambda u: self.branch_edges_for(state, u), uids)
+        return self.fixed_edges(('branch', state.name), self.branch_fixed(state), lambda u: self.branch_edges_for(state, u), uids)
 
     def branch_edges_for(self, state, uids):
         """ As branch_edges(), worked out for these agents """
@@ -1095,17 +1111,17 @@ class Moving:
     @property
     def changing_dims(self):
         """ The dimensions whose level a person can change during the run: by age, a transfer, a move= on a transition or a delivery, or migration between places (worked out once the mixing is known) """
-        if getattr(self, '_changing_dims', None) is not None:
+        if self._changing_dims is not None:
             return self._changing_dims
         sim = self.sim
         out = {d for d,strat in enumerate(sim.groups.strats) if strat.kind == 'age'}
         for mod in sim.declared:
             out |= {sim.groups.dim_index(tf.dim) for tf in mod.graph.transfers.values()}
-        out |= {d for tr in self.graph.transitions.values() for d,level in (self.moves(tr) or ())}
+        out |= {d for tr in self.graph.transitions.values() for d,level in self.moves(tr)}
         names = [strat.name for strat in sim.groups.strats]
         out |= {names.index(dim) for iv in sim.interventions() for dim in list(ss.dimensions.delivery_moves(iv)) + list(ss.dimensions.delivery_moves(iv, 'increment')) if dim in names} # A delivery's move= or increment=
-        if getattr(sim.mixing, 'migration', None) is not None:
-            out.add(sim.mixing.space)
+        if getattr(sim.contact_rates, 'migration', None) is not None:
+            out.add(sim.contact_rates.space)
         if getattr(sim, 'initialized', False):
             self._changing_dims = out
         return out
@@ -1117,14 +1133,14 @@ class Moving:
         p = dw.par
         if callable(p.raw):
             return True
-        return bool(p.name and not p.literal and self.sim.modifiers.get((self.mod.name, 'par', p.name)))
+        return bool(self.par_mods(p))
 
     def speed(self, tr, uids):
         """ How fast a scheduled exit runs for some agents: the multiplier on its rate, over its mean dwell time if that can change """
         out = np.broadcast_to(self.adjusted(tr.name, uids), len(uids)).astype(float)
         if self.varies(self.dwells[tr.name]):
-            self._uids = uids
-            mean = self.dwell_mean(tr.name)
+            with self.evaluating(uids=uids):
+                mean = self.dwell_mean(tr.name)
             mean = mean if np.ndim(mean) == 0 or len(mean) == len(uids) else np.asarray(mean)[uids]
             out = out/np.maximum(mean, 1e-12) # A mean of inf (a rate of 0) is a speed of 0
         return out
@@ -1276,7 +1292,7 @@ class Moving:
             mod[f'ti_{state.name}'][inds] = np.nan
         for key,arr in self.sets.items():
             mod[arr][uids] = np.nan
-        for a in getattr(self, 'attrs', {}).values():
+        for a in self.attrs.values():
             if a.kind not in ['derived', 'trait']:
                 mod[a.name][uids] = a.default if a.init_value is None else self.draw_attr(a, uids, value=a.init_value)
         mod[first][uids] = True
@@ -1297,7 +1313,7 @@ class Moving:
         saved = mod.t.ti
         saved_round = self.round # The rounds of the step they are back-dated to (see new_round())
         self._backfill = True
-        active = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+        active = np.zeros(self.n_slots, dtype=bool)
         self._moved = []
         try:
             for k in range(int(t0.min()), 0):
@@ -1325,9 +1341,9 @@ class Moving:
                             self.move(tr, state, uids[due & (which == i)])
                         uids = uids[~due]
                     if self.competing[name] and len(uids):
-                        self.draw_competing(state, uids, self.dt, key=f'exit_{name}')
+                        self.draw_competing(state, uids, self.dt)
                 self._drawn_ti = k
-                self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool)
+                self._row = np.zeros(self.n_slots, dtype=bool)
                 self.finish_moves(k)
                 self._row = None
         finally:

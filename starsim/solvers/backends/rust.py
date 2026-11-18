@@ -51,8 +51,7 @@ def modules():
                       multi_random=ss.distributions.multi_random, many=draws.many)
 
 single = ['levels', 'crossed', 'infection_probs', 'put_count', 'set_exits', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.numba.passes with no threaded version
-drivers = ['census', 'flatnonzero', 'exit_due', 'group_sums', 'infect', 'due', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw', 'random_edges', 'candidates', 'can_transmit', 'ending', 'touching',
-           'women', 'debuts', 'compress', 'competing_exits', 'competing_agent_exits'] # Those with a serial and a threaded driver (X_drivers), both the Rust kernel X (the number of chunks says which)
+drivers = sorted(k.removesuffix('_drivers') for k,v in vars(passes).items() if k.endswith('_drivers') and isinstance(v, (list, tuple))) # Those with a serial and a threaded driver (X_drivers), both the Rust kernel X (the number of chunks says which); a pass Rust lacks fails use(True)
 names = dict(passes=single + [f'{k}_drivers' for k in drivers],
              agent_events=['step_events'], agent_moves=['due_agents', 'step_moves'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
              multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])

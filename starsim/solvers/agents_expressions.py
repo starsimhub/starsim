@@ -64,17 +64,13 @@ class Expressions:
           is taken from it.
         """
         E = ss.expressions
-        if isinstance(expr, E.BinOp):
-            if expr.op == '*' and self.gated(expr):
-                return self.compile_gated(expr)
-            if self.groupwise(expr):
-                return self.compile_grouped(expr)
-            return self.memoized(expr, self.compile_op(expr))
-        elif isinstance(expr, E.Func):
-            if self.groupwise(expr):
-                return self.compile_grouped(expr)
-            return self.memoized(expr, self.compile_op(expr))
-        return self.compile_leaf(expr)
+        if not isinstance(expr, (E.BinOp, E.Func)):
+            return self.compile_leaf(expr)
+        if self.gated(expr): # Only a product can be
+            return self.compile_gated(expr)
+        if self.groupwise(expr):
+            return self.compile_grouped(expr)
+        return self.memoized(expr, self.compile_op(expr))
 
     def compile_op(self, expr, compile=None):
         """ Arithmetic or a NumPy function of the parts of an expression, each made with `compile` (by default `compile()`) """
@@ -96,7 +92,9 @@ class Expressions:
         elif op == '-': return lambda: a() - b()
         elif op == '*': return lambda: a() * b()
         elif op == '/': return lambda: E.divide(a(), b())
-        else:           return lambda: power(a(), b())
+        elif op == '**': return lambda: power(a(), b())
+        errormsg = f'Unknown operator "{op}" in {expr}'
+        raise ValueError(errormsg)
 
     def compile_leaf(self, expr):
         """ A part of an expression with no arithmetic in it: a parameter, a count, a property of people, ... """
@@ -245,14 +243,18 @@ class Expressions:
             return out
         return gated
 
+    def engine_of(self, module, what):
+        """ The engine of a module that something (`what`, as said if it is not in the sim) belongs to: this one, or another declared module's, by its name (else its default name) """
+        name = ss.conditions.modname(module)
+        engine = self if name in [None, self.mod.name] else getattr(ss.utils.find_module(self.sim.declared, name), 'engine', None)
+        if engine is None:
+            errormsg = f'{what} belongs to the module "{name}", which is not in the sim'
+            raise KeyError(errormsg)
+        return engine
+
     def clock(self, clock):
         """ The value of a clock for the agents being evaluated, from the engine of the module its states belong to """
-        name = ss.conditions.modname(clock.module)
-        engine = self if name in [None, self.mod.name] else getattr(ss.utils.find_module(self.sim.declared, name), 'engine', None) # By its name, else its default name
-        if engine is None:
-            errormsg = f'{clock} is a clock of the module "{name}", which is not in the sim'
-            raise KeyError(errormsg)
-        return engine.clock_values(clock, self._uids)
+        return self.engine_of(clock.module, f'The clock {clock}').clock_values(clock, self._uids)
 
     def mother(self, expr):
         """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID; with include_born=True, each agent's), and 0 for everyone else """
@@ -280,14 +282,7 @@ class Expressions:
         """ Time in some states (or the fraction of the dwell time elapsed), for some agents; NaN for those not in them """
         mod = self.mod
         names = clock.names
-        inside = np.zeros(len(uids), dtype=bool)
-        for name in names:
-            inside |= mod[name].raw[uids]
-        leaving = getattr(self, '_leaving', None)
-        if leaving is not None: # Being split as they leave: still in the state they left
-            src = np.full(len(mod.rel_sus.raw), -1)
-            src[leaving[0]] = leaving[1]
-            inside |= np.isin(src[uids], [self.state_index[name] for name in names])
+        inside = self.in_states_for(names, uids) # Those being split as they leave are still in the state they left
         if len(set(names)) == 1:
             arr = mod[f'ti_{names[0]}']
         else:
@@ -309,7 +304,7 @@ class Expressions:
             if not (exits.branches or exits.remainder or exits.timed):
                 raise ValueError(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
             end = np.asarray(mod[f'ti_exit_{name}'].raw[uids], dtype=float) # The step the exit is due in (from its start)
-            if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
+            if self._leaving is not None and self.on_event: # Leaving it now: the exit they had (kept in left_exit for the attributes set at events)
                 end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
             with np.errstate(divide='ignore', invalid='ignore'):
                 out = np.clip(np.where(end > start, (ti - start)/(end - start), 1.0), 0, 1)
@@ -324,22 +319,18 @@ class Expressions:
         for name in names:
             out |= mod[name].raw[uids]
         leaving = self._leaving
-        if isinstance(leaving, tuple):
-            src = np.full(len(mod.rel_sus.raw), -1)
+        if leaving is not None: # (uids, the states they leave)
+            src = np.full(self.n_slots, -1)
             src[leaving[0]] = leaving[1]
             out |= np.isin(src[uids], [self.state_index[name] for name in names])
         return out
 
     def attr(self, a):
         """ The value of an attribute for the agents being evaluated, from the engine of the module it belongs to """
-        name = ss.conditions.modname(a.module)
-        engine = self if name in [None, self.mod.name] else getattr(ss.utils.find_module(self.sim.declared, name), 'engine', None) # By its name, else its default name
-        if engine is None:
-            errormsg = f'The attribute "{a.name}" belongs to the module "{name}", which is not in the sim'
-            raise KeyError(errormsg)
-        if getattr(self, '_for_uids', False):
+        engine = self.engine_of(a.module, f'The attribute "{a.name}"')
+        if self._for_uids:
             return engine.attr_values(a, self._uids)
-        return engine.attr_values(a, ss.uids(np.arange(len(self.mod.rel_sus.raw)))) # For every agent, by UID (e.g. in a modifier's amount)
+        return engine.attr_values(a, ss.uids(np.arange(self.n_slots))) # For every agent, by UID (e.g. in a modifier's amount)
 
     def values_for(self, expr, uids):
         """ An expression for some agents, as one value each, leaving the agents being evaluated as they were """
@@ -390,9 +381,9 @@ class Expressions:
         """ The traits of agents who have just been made (or placed at the start), and their derived attributes from them """
         if not len(uids):
             return
-        for a in getattr(self, 'traits', []):
+        for a in self.traits:
             self.mod[a.name][uids] = self.draw_attr(a, uids)
-        for a in getattr(self, 'attrs', {}).values(): # The value before any event, drawn for each person
+        for a in self.attrs.values(): # The value before any event, drawn for each person
             if a.init_value is not None and a.kind not in ['derived', 'trait']:
                 self.mod[a.name][uids] = self.draw_attr(a, uids, value=a.init_value)
         self.write_derived(uids)
@@ -426,7 +417,7 @@ class Expressions:
     def attrs_on(self, tr, dst):
         """ The attributes that a move along a transition to a state can set, kept for the run """
         key = (None if tr is None else tr.name, dst)
-        out = self.__dict__.setdefault('_attrs_on', {}).get(key)
+        out = self._attrs_on.get(key)
         if out is None:
             def can(e):
                 kind, obj, to = e.args
@@ -448,7 +439,7 @@ class Expressions:
             srcs (array): the index of the state each came from (-1 for none), or one for all
             dst (int): the index of the state they go to (-1 for none)
         """
-        if not getattr(self, 'on_event', None) or not len(uids):
+        if not self.on_event or not len(uids):
             return
         on_move = self.attrs_on(tr, dst)
         if not on_move:
@@ -523,7 +514,7 @@ class Expressions:
 
     def derived_strat(self, by):
         """ The stratification by a derived attribute that a value by level (`ss.by`) is given by, if it is one """
-        if not getattr(self, 'derived', None) or by.dim is None:
+        if not self.derived or by.dim is None:
             return None
         return next((strat for strat in self.derived if strat.name == by.dim), None)
 

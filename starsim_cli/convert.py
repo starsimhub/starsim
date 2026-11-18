@@ -9,10 +9,9 @@ mechanical conversion (e.g. LASER) or needs judgment.
 import sys
 import ast
 import warnings
-import subprocess
 from pathlib import Path
 
-from .ai import agents, choose_agent # The agents that --ai can run, and which one
+from . import ai
 
 __all__ = ['convert', 'formats']
 
@@ -65,7 +64,7 @@ def load_sim(filename, name='sim'):
     sys.exit(f'{filename} makes no sim called "{name}" ({found}); give --sim=<name>')
 
 
-def convert(args, extra=()):
+def convert(args):
     """ Convert a model from one format to another (see `formats()`), or with --ai, have an AI coding agent do it """
     if not args.input:
         args.parser.print_help()
@@ -80,7 +79,7 @@ def convert(args, extra=()):
     import sciris as sc
     import starsim as ss
     conv = ss.converters
-    kwargs = parse_extra(extra)
+    kwargs = parse_extra(args.extra)
     fmt = args.source
     if fmt == 'auto':
         fmt = conv.sniff(source)
@@ -138,8 +137,7 @@ def prompt(args):
 
 def run_agent(args):
     """ Run an AI coding agent on the conversion, interactively or (with --headless) on its own """
-    name = choose_agent(None if args.ai is True else args.ai, option='--ai')
+    name = ai.choose_agent(None if args.ai is True else args.ai, option='--ai')
     text = prompt(args)
-    command = [text if word == '{}' else word for word in agents[name]['headless' if args.headless else 'interactive']]
     print(f'Starting {name}{" (headless)" if args.headless else ""} to convert {args.input} ...')
-    sys.exit(subprocess.run(command).returncode)
+    ai.run_agent(name, 'headless' if args.headless else 'interactive', text)

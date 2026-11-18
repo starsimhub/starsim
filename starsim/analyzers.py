@@ -164,7 +164,7 @@ class infection_log(Analyzer):
                 plt.scatter(frame.x, frame.y, c=frame.c, **kw.plot)
                 plt.xlabel('Agent x')
                 plt.ylabel('Agent y')
-                plt.title(f't = {ss.date(frame.t)} (step {i+1} of {len(frames)})')
+                plt.title(f'{ss.utils.time_str(frame.t, self.sim)} (step {i+1} of {len(frames)})') # A date, or e.g. "day 27" in a sim without dates
                 plt.xlim(0, side)
                 plt.ylim(0, side)
                 plt.pause(1/framerate)

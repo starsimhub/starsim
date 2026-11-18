@@ -316,6 +316,40 @@ def test_schedule():
     return
 
 
+@sc.timer()
+def test_time_regressions():
+    sc.heading('Testing fixed bugs in time, dates, and timelines')
+    # A sim with no calendar has its times as numbers, not dates in the year 10 AD, and they can be added to
+    sim = ss.Sim(diseases='sis', networks='random', n_agents=200, unit='year', start=10, stop=20, verbose=0).run()
+    assert sim.t.calendar is None and np.array_equal(sim.timevec[:2], [10, 11])
+    assert np.array_equal(sim.timevec + 1, np.arange(11, 22))
+
+    # A failed addition leaves a date a date; an object array of dates minus a date is in days
+    d = ss.date(2020)
+    with pytest.raises(Exception):
+        d + ss.dates.datedur(years=10_000)
+    assert type(d) is ss.date
+    diffs = np.array([ss.date(2020), ss.date(2021)], dtype=object) - ss.date(2019)
+    assert [x.value for x in diffs] == [365, 731]
+    assert abs(ss.dates.datedur(months=-1)) == ss.months(1)
+
+    # Outside the run, now() gives each key's own kind of time
+    t = ss.Timeline(start='2020-01-01', stop='2020-12-31', dt=ss.weeks(1))
+    t.ti = -1
+    assert t.now('ti') == -1 and t.now('rel') == -1 and t.now() == ss.date('2019-12-25')
+
+    # A module whose timeline is shifted from the sim's, with as many points, is not read as on the sim's times
+    sim = ss.Sim(n_agents=100, start=2000, stop=2010, demographics=ss.Births(start=2002, stop=2012), verbose=0).init()
+    births = sim.demographics.births
+    assert births.match_time_inds() is not Ellipsis and births.match_time_inds()[0] == 2
+
+    # Rates: a probability times an array of numbers; equality with something that is not a rate; a rate times ss.by(patch=fn)
+    assert np.allclose((ss.probperyear(0.1)*np.array([1, 2])).value, [0.1, 0.19])
+    assert ss.peryear(1) != ss.days(1) and ss.peryear(1) == ss.permonth(1/12)
+    assert isinstance(ss.perday(1)*ss.by(patch=lambda sim: [1, 2]), ss.expressions.Expr)
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer('\nTotal time')
     test_dates()
@@ -326,4 +360,5 @@ if __name__ == '__main__':
     test_timeline()
     test_sim_times()
     test_schedule()
+    test_time_regressions()
     T.toc()

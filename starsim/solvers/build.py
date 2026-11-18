@@ -5,6 +5,8 @@ It exists so that what a model means is settled once, whichever solver then runs
 
 Used with: agents and compartments; declared and coded modules
 """
+import operator
+import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -38,7 +40,7 @@ def init_model(sim):
     check_par_values(sim) # Not on a restart, so a fit can probe values at its bounds
     init_named_people(sim)
     sim.groups.init()
-    sim.mixing = ss.solvers.Mixing(sim)
+    sim.contact_rates = ss.solvers.ContactRates(sim)
     init_unit(sim)
     return
 
@@ -107,9 +109,30 @@ def set_par_values(sim):
         for p in mod.graph.pars.values():
             if p.module is None or not any(p.module is m for m in sim.declared):
                 p.module = mod
-    coded = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None]
-    for mod in coded: # A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))): its code uses the value, and it is fitted and set by name as a parameter is
-        if type(mod).__module__.partition('.')[0] == 'starsim': # Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
+    coded = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module) and getattr(mod, 'graph', None) is None] # Written as code
+    collect_attr_pars(coded)
+    for key,val in values_by_name(sim, coded).items():
+        mods, name = par_owners(sim, coded, key)
+        if len(mods) > 1: # One ss.par shared by several modules written as code (e.g. a beta for every genotype): set in each
+            for mod in mods:
+                mod.pars.update({name:val})
+            continue
+        attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
+        if attrs is None:
+            mods[0].pars.update({name:val})
+        else: # A setting kept as an attribute, or several holding the same ss.par (see collect_attr_pars())
+            for attr in attrs:
+                mods[0].setattribute(attr, val)
+    return
+
+
+def collect_attr_pars(coded):
+    """
+    A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))):
+    its code uses the value, and it is fitted and set by name as a parameter is. Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
+    """
+    for mod in coded:
+        if type(mod).__module__.partition('.')[0] == 'starsim':
             continue
         held = sc.ddict(list) # The attributes holding each ss.par, so that one held by two (e.g. symp_quar_prob copied from symp_prob) is one parameter
         for key,val in list(vars(mod).items()):
@@ -122,6 +145,11 @@ def set_par_values(sim):
             object.__setattr__(mod, '_par_attrs', getattr(mod, '_par_attrs', {}) | {keys[0]:keys})
             for key in keys:
                 mod.setattribute(key, val.value)
+    return
+
+
+def values_by_name(sim, coded):
+    """ The values given by name, by the name of each parameter, with those given for one level at a time ('beta[a]') joined into one value by level """
     values = {}
     levels = sc.ddict(dict)
     for key,val in (sim._par_values or {}).items():
@@ -133,38 +161,40 @@ def set_par_values(sim):
             values[key] = val
     for base,given in levels.items():
         values[base] = by_levels(sim, base, given, values.get(base))
-    for key,val in values.items():
-        modname, _, name = key.rpartition('.')
-        mods = [mod for mod in sim.declared if name in mod.pars and modname in ['', mod.name]]
-        if len(mods) > 1 and all(mod.graph.pars.get(name) is mods[0].graph.pars.get(name) is not None for mod in mods): # One parameter shared by several modules
-            mods = mods[:1]
-        if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it; "cin_fn.k" for a value in a dict parameter, or "hpv16.cin_fn.k"), else any
-            found = [(mod, b) for mod in coded for b in mod.pars.bounded() if key in [b, f'{mod.name}.{b}']]
-            mods, name = ([mod for mod,b in found], found[0][1]) if found else ([], name)
-            mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
-            if len(mods) > 1 and all(mod.pars.bounded().get(name) is mods[0].pars.bounded().get(name) is not None for mod in mods): # One ss.par shared by several modules (e.g. a beta for every genotype): set in each
-                for mod in mods:
-                    mod.pars.update({name:val})
-                continue
-        if len(mods) != 1:
-            options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
-            listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
-            if key in ss.SimPars.names(): # A sim setting, given by value
-                listed += f' "{key}" is also a setting of the sim: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
-            if not mods and key in ss.solvers.abm.options: # An option of the agents
-                listed += f' "{key}" is an option of the agents: solver=ss.solvers.abm({key}=...).'
-            elif not mods and key in ss.options: # An option of Starsim, for every sim
-                listed += f' "{key}" is an option of Starsim: ss.options.{key} = ..., or for one sim, with ss.options.context({key}=...): sim.run().'
-            elif not mods and (near := ss.expressions.did_you_mean(key, sorted(ss.SimPars.names()))) != '.': # Perhaps a setting of the sim, misspelled
-                listed += f' Of the settings of the sim, {near[2:]}'
-            raise sc.KeyNotFoundError(f'"{key}" (given by keyword, or in pars=) {"is no setting of the sim or parameter of the model" if not mods else "is a parameter of more than one module"}. {listed}')
-        attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
-        if attrs is None:
-            mods[0].pars.update({name:val})
-        else: # A setting kept as an attribute, or several holding the same ss.par (see above)
-            for attr in attrs:
-                mods[0].setattribute(attr, val)
-    return
+    return values
+
+
+def par_owners(sim, coded, key):
+    """ The module that a parameter given by name belongs to, as ([module], name), or several modules written as code that share one ss.par; raises if there is none, or more than one """
+    modname, _, name = key.rpartition('.')
+    mods = [mod for mod in sim.declared if name in mod.pars and modname in ['', mod.name]]
+    if len(mods) > 1 and all(mod.graph.pars.get(name) is mods[0].graph.pars.get(name) is not None for mod in mods): # One parameter shared by several modules
+        mods = mods[:1]
+    if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it; "cin_fn.k" for a value in a dict parameter, or "hpv16.cin_fn.k"), else any
+        found = [(mod, b) for mod in coded for b in mod.pars.bounded() if key in [b, f'{mod.name}.{b}']]
+        mods, name = ([mod for mod,b in found], found[0][1]) if found else ([], name)
+        mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
+        if len(mods) > 1 and all(mod.pars.bounded().get(name) is mods[0].pars.bounded().get(name) is not None for mod in mods): # One ss.par shared by several of them
+            return mods, name
+    if len(mods) != 1:
+        raise unknown_par(sim, coded, key, mods)
+    return mods, name
+
+
+def unknown_par(sim, coded, key, mods):
+    """ The error for a parameter given by name that belongs to no module (`mods` empty), or to more than one """
+    options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
+    listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
+    if key in ss.SimPars.names(): # A sim setting, given by value
+        listed += f' "{key}" is also a setting of the sim: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
+    if not mods and key in ss.solvers.abm.options: # An option of the agents
+        listed += f' "{key}" is an option of the agents: solver=ss.solvers.abm({key}=...).'
+    elif not mods and key in ss.options: # An option of Starsim, for every sim
+        listed += f' "{key}" is an option of Starsim: ss.options.{key} = ..., or for one sim, with ss.options.context({key}=...): sim.run().'
+    elif not mods and (near := ss.expressions.did_you_mean(key, sorted(ss.SimPars.names()))) != '.': # Perhaps a setting of the sim, misspelled
+        listed += f' Of the settings of the sim, {near[2:]}'
+    what = 'is no setting of the sim or parameter of the model' if not mods else 'is a parameter of more than one module'
+    return sc.KeyNotFoundError(f'"{key}" (given by keyword, or in pars=) {what}. {listed}')
 
 
 def by_levels(sim, key, given, whole=None):
@@ -351,7 +381,7 @@ def init_lifetables(sim):
             if table is None:
                 continue
             p = tr.rate.leaves[0]
-            if isinstance(sim.solver, ss.solvers.abm):
+            if sim.solver.agents:
                 ages = table.edges[:-1]
                 p.value = ss.by(dict(age=ages, value=[ss.peryear(h) for h in table.hazards(ages)]))
                 continue
@@ -367,7 +397,7 @@ def init_group_values(sim):
     """ The values of the dimensions in the people: as agents, each person's level of each; in a compartmental run, with one row per group, the age of each group (the middle of its age group) and its sex """
     if not sim.groups.strats:
         return
-    if isinstance(sim.solver, ss.solvers.abm):
+    if sim.solver.agents:
         sim.groups.init_vals()
         return
     for d,strat in enumerate(sim.groups.strats):
@@ -382,7 +412,7 @@ def init_group_values(sim):
 
 def settle_start(sim):
     """ Once every module has its people: as agents, those placed in a state nobody waits in move on at once; and the diseases tracked jointly take their initial conditions """
-    if isinstance(sim.solver, ss.solvers.abm):
+    if sim.solver.agents:
         for mod in sim.declared:
             mod.engine.settle_start()
     for joint in sim.joint_states: # Once every disease in it has its initial conditions
@@ -394,7 +424,7 @@ def settle_start(sim):
 
 def group_people(sim):
     """ In a compartmental run, one row per group: the properties that are not dimensions have no values to give, so are removed, as are the active agents (`auids`), and counting who is alive counts the people, not the groups """
-    if isinstance(sim.solver, ss.solvers.abm):
+    if sim.solver.agents:
         return
     dims = [strat.name for strat in sim.groups.strats]
     missing = [key for key in ['age', 'female'] if key not in dims and not (key == 'female' and 'sex' in dims)]
@@ -408,44 +438,57 @@ def group_people(sim):
 
 def init_where(sim):
     """ The modifiers that are members of a disease, those that `who=` on a transition stands for, and the parameters of modifiers, given to the modules they modify """
-    for mod in sim.declared: # Given to the sim as a connector, under the disease's name, so two of them can have the same member
+    add_member_modifiers(sim)
+    add_who_modifiers(sim)
+    adopt_modifier_pars(sim)
+    add_inflow_pars(sim)
+    return
+
+
+def add_member_modifiers(sim):
+    """ The modifiers that are members of a disease, given to the sim as connectors, under the disease's name, so two of them can have the same member """
+    for mod in sim.declared:
         for name,modifier in mod.graph.modifiers.items():
             key = f'{mod.name}_{name}'
             if key not in sim.pars.connectors:
                 modifier.name = modifier.label = key
                 sim.pars.connectors[key] = modifier
-    for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
+    return
+
+
+def add_who_modifiers(sim):
+    """ A transition for some people only (`who=`): a modifier that sets its rate to 0 for everyone else (a trigger takes who= into its condition instead) """
+    connectors = sim.pars.connectors
+    for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
-            where = getattr(tr, '_who_now', None)
+            where = tr._who_now
             key = f'where_{mod.name}_{name}'
-            if where is not None and key not in sim.pars.connectors and tr._trigger is None: # A trigger takes who= into its condition
-                if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
-                    sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
-                    sim.pars.connectors[key].on_rate = True
-                    continue
-                if isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(where): # Counts joined together, e.g. (Q.n < 20) & (I.n > 5): the rate is 0 while it does not hold
-                    sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, when=~ss.conditions.as_cond(where), name=key)
-                    sim.pars.connectors[key].on_rate = True
-                    continue
+            if where is None or key in connectors or tr._trigger is not None:
+                continue
+            if isinstance(where, ss.expressions.Func) and where.name in ['less', 'less_equal', 'greater', 'greater_equal']: # A comparison of counts or parameters (Q.n < 20), which is 1 or 0: the rate times it
+                connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=where, name=key)
+            elif isinstance(where, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(where): # Counts joined together, e.g. (Q.n < 20) & (I.n > 5): the rate is 0 while it does not hold
+                connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, when=~ss.conditions.as_cond(where), name=key)
+            else:
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
                     others = (lambda func: lambda self, sim: ~np.asarray(ss.utils.call_fn(func, self=self, sim=sim), dtype=bool))(where)
                     if ss.transitions.is_lifelong(where): # So is who it is not for
                         others = ss.lifelong(others)
                 else: # A condition, a state, or an array
                     others = ~ss.conditions.as_cond(where)
-                sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, who=others, name=key)
-                sim.pars.connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in who=
+                connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, who=others, name=key)
                 level_key = f'level_{mod.name}_{name}'
-                if tr.move_from and tr.p is not None and level_key not in sim.pars.connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
-                    at = None
-                    for dim,levels in tr.move_from.items():
-                        here = None
-                        for level in levels: # At any of the levels it moves people from
-                            eq = ss.conditions.Cond('dim', dim) == level
-                            here = eq if here is None else here | eq
-                        at = here if at is None else at & here
-                    sim.pars.connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, who=~at, name=level_key)
-    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted
+                if tr.move_from and tr.p is not None and level_key not in connectors: # A branch for the people at some levels only (a move= arrow): never drawn by people at the others, who would never leave by it
+                    Cond = ss.conditions.Cond
+                    at = ss.conditions.join('&', [functools.reduce(operator.or_, [Cond('dim', dim) == level for level in levels]) for dim,levels in tr.move_from.items()]) # At any of the levels it moves people from, of each dimension
+                    connectors[level_key] = ss.modify(f'{mod.name}.{name}', multiply=0, who=~at, name=level_key)
+            connectors[key].on_rate = True # Its rate, even for a branch with p= (whose probability a modifier otherwise scales), so people leave by it once they are in who=
+    return
+
+
+def adopt_modifier_pars(sim):
+    """ A parameter used only by a modifier (its amount, e.g. ss.par(0.6, bounds=[0.1, 1])) belongs to the module it modifies, so it can be set by name and fitted """
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()):
         if isinstance(m, ss.modify) and isinstance(m.amount, ss.par):
             p = m.amount
             target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
@@ -453,7 +496,12 @@ def init_where(sim):
             if target is not None and p.name not in target.graph.pars:
                 target.graph.pars[p.name] = p
                 target.define_pars(**{p.name:p})
-    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.outside or ss.unborn), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to
+    return
+
+
+def add_inflow_pars(sim):
+    """ An amount added to an inflow from outside the model (from ss.outside or ss.unborn), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to """
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()):
         if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
             target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
             tr = target.graph.transitions.get(m.target_name) if target is not None else None
@@ -470,7 +518,7 @@ def init_where(sim):
 
 def check_routes(sim):
     """ A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own; checked when the sim is built """
-    nets = list(sim.mixed if not isinstance(sim.solver, ss.solvers.abm) else sim.pars.networks.values())
+    nets = list(sim.mixed if not sim.solver.agents else sim.pars.networks.values())
     routes = [net.name for net in nets]
     for mod in sim.declared:
         for tr in mod.graph.transmissions:

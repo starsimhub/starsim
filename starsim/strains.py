@@ -166,7 +166,7 @@ class Strain:
 
 
 def as_cond(x):
-    """ A strain as a condition (the people who carry it), and anything else as it is """
+    """ A strain as a condition (the people who carry it), and anything else as it is: so a strain can be joined to a condition with `&` and `|` (see `Strain.__and__()`) """
     return x.cond if isinstance(x, Strain) else x
 
 
@@ -442,7 +442,7 @@ class Strains:
         sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
         carriers = self._carriers(graph)
         out.add('strains', f'{sc.strjoin(self.names)} ("{self.name}"): one course; {sets}; carried in {sc.strjoin(carriers)}')
-        per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
+        per = {tr.name:tr.per_given for tr in graph.transitions.values() if tr.per_given}
         chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
         for key,vals in self.values.items():
             how = f' (each strain\'s chance in {chances[key]})' if key in chances else ' (the sum of a set\'s, each strain alone)' if per.get(key, {}).get('single_strain') else ' (a set takes the largest)' if self.max_strains > 1 and key != 'rel_trans' else ''
@@ -465,7 +465,7 @@ def attach(dis, strains):
     graph = dis.graph
     if graph is None:
         raise ss.CapabilityError(f'"{dis.name}" is written as code, so its strains cannot be added to its states; declare its states and transitions')
-    chances = {tr.per_given['p'] for tr in graph.transitions.values() if isinstance(getattr(tr, 'per_given', {}).get('p'), str)} # Values named by p= of a transition with an outcome for each strain
+    chances = {tr.per_given['p'] for tr in graph.transitions.values() if isinstance(tr.per_given.get('p'), str)} # Values named by p= of a transition with an outcome for each strain
     unknown = [key for key in strains.values if key != 'rel_trans' and key not in graph.transitions and key not in chances]
     if unknown:
         raise sc.KeyNotFoundError(f'the values of the strains of "{dis.name}" are for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its transitions ({sc.strjoin(graph.transitions.keys())}); a value of a strain multiplies a transition (its rate, a duration divided, or a branch\'s probability), or rel_trans')
@@ -476,7 +476,6 @@ def attach(dis, strains):
     protecting = [name for imm in strains.immunity for name in imm.names] # States whose people are protected by the strains they had there (due_to=R)
     strat.states = [s.name for s in graph.people_states if s.name in strat.carried or (s.name in protecting and s.name not in graph.uninfected)]
     strat.guessed['states'] = f'the states of an infection, and those leading back to one ({sc.strjoin(strat.carried)})' + (f', and {sc.strjoin(n for n in strat.states if n not in strat.carried)} for its protection' if len(strat.states) > len(strat.carried) else '')
-    infected = set(strat.carried)
     for tr in graph.transmissions:
         refuse_by_strain(strat, tr, tr.rate, f'the rate of "{tr.name}"')
     primary = [tr for tr in graph.transmissions if all(s.name in graph.uninfected for s in tr.source)] # The transmissions to people who carry no strain
@@ -490,12 +489,12 @@ def attach(dis, strains):
                 raise sc.KeyNotFoundError(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", which is not a state of people of it; its states are {sc.strjoin(s.name for s in graph.people_states)}')
             if name not in strat.states:
                 raise ValueError(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", in which people carry no strain (they have never been infected), so it protects against none')
-            if name in infected and name not in super_states:
+            if name in strat.carried and name not in super_states:
                 super_states.append(name)
     for tr in graph.transitions.values(): # With an outcome for each strain carried (see prepare())
-        if getattr(tr, 'strain_adjust', None) is not None:
-            strat.adjust[tr.name] = tr.strain_adjust
-        if isinstance(getattr(tr, 'per_given', {}).get('p'), str): # Chances, not multipliers
+        if tr.level_mult is not None:
+            strat.adjust[tr.name] = tr.level_mult
+        if isinstance(tr.per_given.get('p'), str): # Chances, not multipliers
             strat.adjust.pop(tr.per_given['p'], None)
     for name in super_states: # Superinfection: people infected with some strains can be infected with another as well, staying where they are
         for tr in primary:
@@ -529,10 +528,13 @@ def prepare(strains, trs):
             if tr.p is not None or tr.rate is None:
                 errormsg = f'"{name}" has per_strain="first", so each strain carried has its own rate, given as rate=; not dur= or a split'
                 raise ValueError(errormsg)
-            tr.strain_adjust = np.array([vals[list(s)].sum() for s in strains.sets]) # The rate of a set: the sum of its strains'
+            tr.level_mult = np.array([vals[list(s)].sum() for s in strains.sets]) # The rate of a set: the sum of its strains'
             for l,s in enumerate(strains.sets):
+                if tr.level_mult[l] == 0: # No strain of the set moves on (e.g. all have a value of 0): nobody leaves the level
+                    Q[l, l] = 1
+                    continue
                 for k in s:
-                    Q[l, strains.level_of([k])] += vals[k]/tr.strain_adjust[l]
+                    Q[l, strains.level_of([k])] += vals[k]/tr.level_mult[l]
             tr.per_given = dict(single_strain=True)
         else:
             if tr.p is None or len(tr.dest or []) != 2:
@@ -562,7 +564,7 @@ def prepare(strains, trs):
             tr.per_given = dict(p=given)
             tr.p = [ss.by(**{strains.name:none.tolist()}), None]
             named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
-            tr.strain_adjust = strains._level_values(name) if named else np.ones(L)
+            tr.level_mult = strains._level_values(name) if named else np.ones(L)
         tr.move = sc.obj({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
     return
 

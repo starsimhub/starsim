@@ -131,7 +131,7 @@ class StaticNet(ss.Network):
             return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
         elif graph is None or getattr(graph, '__name__', None) in ['fast_gnp_random_graph', 'gnp_random_graph', 'erdos_renyi_graph']: # A random graph: a number of contacts, or a chance of each pair
             p = self.pars.get('p')
-            return (ss.solvers.Mixing.mean(self.pars.get('n_contacts'), sim.unit_base), 'its mean number of contacts') if p is None else (p*sim.pars.total_pop, 'its chance of each pair, times the population')
+            return (ss.solvers.ContactRates.mean(self.pars.get('n_contacts'), sim.unit_base), 'its mean number of contacts') if p is None else (p*sim.pars.total_pop, 'its chance of each pair, times the population')
         return None, f' (it is made by {getattr(graph, "__name__", "a function")}, whose mean degree is not known before it runs)'
 
     def init_post(self):

@@ -13,14 +13,14 @@ from . import ai
 __all__ = ['compile', 'build_rust', 'init_dev']
 
 
-def compile(args=None, needed=False):
+def compile(args, needed=False):
     """
     Compile Starsim's Numba kernels now, so that no run waits for them (see `ss.compile()`), even if the Rust kernels are in use;
     or with --check, say whether they are compiled. With `needed` (as for "starsim init"), only if Numba's are the ones in use.
     In a clone of Starsim whose Rust kernels are not built, offer to build them instead (or do so with --rust; --numba skips asking).
     """
     import starsim as ss
-    if getattr(args, 'check', False):
+    if args.check:
         status = ss.compile(check=True) # Prints the summary
         sys.exit(0 if status.compiled else 1)
     if choose_rust(args, built=ss.solvers.backends.rust.built()):
@@ -44,16 +44,16 @@ def rust_crate():
 
 def choose_rust(args, built):
     """ Whether to build the Rust kernels rather than compile Numba's: as --rust or --numba say, or else, in a clone without them, as the user answers """
-    if getattr(args, 'rust', False):
+    if args.rust:
         if built:
             print('The Rust kernels are built already: to rebuild them, run "./build" in starsim/solvers/rust/')
             return False
         if not rust_crate():
             sys.exit('The Rust kernels can only be built in a clone of Starsim (git clone https://github.com/starsimhub/starsim, then pip install -e . there); without one, Starsim uses its Numba kernels')
         return True
-    if built or getattr(args, 'numba', False) or not rust_crate():
+    if built or args.numba or not rust_crate():
         return False
-    if getattr(args, 'yes', False) or not sys.stdin.isatty():
+    if args.yes or not sys.stdin.isatty():
         print('The Rust kernels are not built, so compiling the Numba ones ("starsim init compile --rust" builds the Rust ones instead)')
         return False
     steps = ['Install Rust with rustup (https://rustup.rs), in ~/.cargo and ~/.rustup, since it is not installed'] if not find_cargo() else []

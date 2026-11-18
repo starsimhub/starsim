@@ -56,12 +56,12 @@ When a solver is asked for that the model doesn't natively fit, Starsim uses the
 >>> ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), solver='ode', unit='day', stop=100).init()
 Sim: sir, 10,000 people, as an ODE, days 0 to 100
   sir: R0 = 30, with 100 infectious at the start
-  Note: RandomNet approximated by homogeneous mixing with 10 contacts per day (its mean number of contacts)
+  Note: RandomNet approximated by homogeneous mixing with 10 contacts per day (its mean number of contacts); solver="abm" runs it as agents
 ```
 
 Each ingredient has one standard approximation (lasting partnerships use the Anderson–May partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
 
-By default each approximation prints a note; `ss.options.approximations = 'allow'` keeps the notes without printing them, and `'error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
+By default each approximation prints a note; `ss.options.approximations = 'allow'` keeps the notes without printing them, and `'error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output. In code, an approximation is a note that says so: `ss.note(msg, sim=sim, approx=True)`.
 
 ### What decides which engine runs a model
 
@@ -77,8 +77,8 @@ Each declared module gets one engine when the sim is initialized. A module writt
 
 | Engine | Files | What it does |
 |---|---|---|
-| Compartmental | `solvers/compartmental.py`, `solvers/mixing.py`, `solvers/numba/compartmental.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/numba/compartmental.py`, compiled with Numba, or their Rust copies) step that program for all the compartmental solvers. `mixing.py` turns networks and mixing pools into contact rates between groups. |
-| Agents | `solvers/agents.py` (with its parts `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, `agents_branching.py`); its variants `agents_compiled.py` (`Compiled`, the default, whose moves of a step are one call to `solvers/numba/agent_moves.py`) and `agents_events.py` (event by event, `solvers/numba/agent_events.py`); `solvers/numba/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
+| Compartmental | `solvers/compartmental.py`, `solvers/contact_rates.py`, `solvers/numba/compartmental.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/numba/compartmental.py`, compiled with Numba, or their Rust copies) step that program for all the compartmental solvers. `contact_rates.py` turns networks and mixing pools into contact rates between groups. |
+| Agents | `solvers/agents.py` (with its parts `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, `agents_transmission.py`, `agents_branching.py`); its variants `agents_compiled.py` (`Compiled`, the default, whose moves of a step are one call to `solvers/numba/agent_moves.py`) and `agents_events.py` (event by event, `solvers/numba/agent_events.py`); `solvers/numba/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
 | JointStates | `solvers/joint_states.py` | Diseases tracked jointly, when a condition in one refers to a state of another (`ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`). Their compartments are crossed and run as one program, up to a budget (`ss.options.max_joint`); above it, `'auto'` uses agents. |
 
 Three details of the compartmental engine explain most of its behavior:
@@ -107,7 +107,7 @@ A bare state in a rate means contact with people in that state, through whatever
 
 Each engine computes the rule in its own terms, from the same declaration:
 
-- **As compartments**, the routes are turned into contact rates between groups when the sim is initialized (`ss.solvers.Mixing`, in `solvers/mixing.py`): homogeneous mixing is one contact per unit of time, a mixing pool sets the number of contacts, mixing pools between age groups give a contact matrix, and space adds the movement between patches. The force of infection on each group is then `beta` times the contact rates times the fraction infectious in each group it meets, which the kernels evaluate as part of the program. Nothing is drawn per contact.
+- **As compartments**, the routes are turned into contact rates between groups when the sim is initialized (`ss.solvers.ContactRates`, in `solvers/contact_rates.py`): homogeneous mixing is one contact per unit of time, a mixing pool sets the number of contacts, mixing pools between age groups give a contact matrix, and space adds the movement between patches. The force of infection on each group is then `beta` times the contact rates times the fraction infectious in each group it meets, which the kernels evaluate as part of the program. Nothing is drawn per contact.
 - **As agents**, transmission is drawn over each network's edges (`ss.solvers.Transmission`, in `solvers/agents.py`): for each edge with an infectious person at one end and a susceptible at the other, the chance in the step is `1 − exp(−beta·dt·rel_trans·rel_sus)`, with the effective `rel_trans` of the source and `rel_sus` of the target. Every factor of a contact's hazard is in the exponent: `beta`, the source state's coefficient, `rel_trans`, `rel_sus`, the edge's weight, and the modifiers on the route. So a contact infects at most once in a step, and an effect gives the same answer wherever it is written (halving `rel_sus` is the same as halving `beta`). One consequence: a chance of 1 per contact stays 1 under any factor above 0, since it is an infinite hazard. A network with acts per partnership works out a hazard per act, and the acts in the step scale it the same way. The routes are taken in the order of `sim.networks`, and someone reached by several sources is infected by the first, who is recorded as the source in the infection log. A mixing pool as agents is a force of infection on each agent from the fraction infectious in the pool, with no edges.
 - **A disease written as code** (`ss.AgentDisease`) transmits through the same `ss.solvers.Transmission` code, so it sees the same modifiers and products, gives the same edges the same random numbers, and attributes infections the same way; a bare `beta` is a rate in the sim's unit, as in a declared disease, and on a network with acts a probability per act.
 
@@ -123,7 +123,7 @@ Each of these is a separate object from the disease, so changing one doesn't tou
 
 **Results.** Every state gets a count and every transition a flow of the same name. Each result knows its `kind` (flow, stock, or ratio), which sets how it is summarized, resampled, and compared with data, so no caller needs to know which it is; a ratio is never averaged across groups. An `ss.MultiSim`'s results are the same `ss.Result` objects with a row for each run, so the same methods work on one run or many.
 
-The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`.
+The code is in `starsim/networks.py` and `solvers/contact_rates.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`.
 
 ## Limits
 

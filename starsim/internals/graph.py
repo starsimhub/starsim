@@ -6,11 +6,12 @@ It exists as the one description of a declared model, which every solver runs an
 Used with: agents and compartments; declared modules
 """
 import types
+import functools
 import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, as_frac, BinOp, Count, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
+from .expressions import as_expr, as_frac, BinOp, Count, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, total, unheld
 from .parameters import by, TimeValue
 from .transitions import FlowSum, outcome, State, Transition
 
@@ -66,7 +67,7 @@ class TransitionTable(sc.obj):
         for name,tr in self.items():
             src = ' | '.join(s.name for s in tr.source) or '(outside)'
             dst = ' | '.join(s.name for s in tr.dest) or '(outside)'
-            counted = tr.module.graph.counted(tr) if getattr(getattr(tr, 'module', None), 'graph', None) is not None else []
+            counted = tr.module.graph.counted(tr) if getattr(tr.module, 'graph', None) is not None else []
             kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else f'transmission, from {" + ".join(s.name for s in counted)} ({tr.module.graph.dependence(tr)}-dependent)' if counted else 'spontaneous'
             rows.append([name, src, dst, tr._driver_str, kind])
 
@@ -84,6 +85,36 @@ class TransitionTable(sc.obj):
 def is_zero(rate):
     """ Whether a transition's rate is a 0 written as a number (`I >> R @ 0`), not a parameter, which marks it as moved only by products, deliveries, or code """
     return isinstance(rate, ss.expressions.par) and rate.literal and sc.isnumber(rate.value) and rate.value == 0
+
+
+def new_exits():
+    """ The transitions out of a state, by how they decide who leaves: for `Graph.resolve_exits()` """
+    return sc.obj(
+        branches = [], # Each with p=, split on entry
+        timed = [], # With a dwell time
+        hazards = [], # With a rate
+        contact = [], # With a rate that reads states (a transmission)
+        triggered = [], # Moved when a condition holds or an event happens (ss.on)
+        rest = [], # Immediate, before the remainder is chosen from them (then None)
+        remainder = None, # The transition that takes what the branches leave over
+        held = False, # Whether some people stay with no exit of their own (ss.stay)
+    )
+
+
+def split_hint(name, exits, total):
+    """ For branches out of a state whose fractions do not sum to 1: what to write instead """
+    undriven = [tr.name for tr in exits.hazards if tr.undriven]
+    driven = [tr for tr in exits.hazards if not tr.undriven]
+    out = ''
+    if undriven:
+        out += f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} a rate of 0 (@ 0) and no p=, so {"is" if len(undriven) == 1 else "are"} moved only by products or code, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).'
+    if total < 1 and driven and not exits.timed:
+        out += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=) and p=None, to take the rest.'
+    if total < 1 and exits.timed:
+        out += f' For {sc.strjoin(tr.name for tr in exits.timed)} to take the rest ({1 - total:n}), give {"it" if len(exits.timed) == 1 else "one of them"} p=None.'
+    if total < 1:
+        out += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].'
+    return out
 
 
 class Graph:
@@ -104,7 +135,7 @@ class Graph:
         init (dict): the fraction of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
         seed_n (bool): whether `init_prev` is a number of people (given as `init_n=10`) rather than a fraction
-        default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
+        default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_default_state()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
     grouped = ['transitions', 'outcomes', 'results'] # The keywords that each take several members, the keyword form of giving them positionally: ss.Disease(transitions=[infection, recovery]) is ss.Disease(infection, recovery)
@@ -146,7 +177,10 @@ class Graph:
         self.resolve_states()
         self.resolve_transitions()
         self.resolve_init_prev()
-        self.resolve_people()
+        self.resolve_default_state()
+        self.resolve_rest()
+        self.resolve_people_flows()
+        self.check_counts()
         self.resolve_attrs()
         self.resolve_acquisition()
         self.resolve_pars()
@@ -184,10 +218,10 @@ class Graph:
             return
         cls = type(self.module)
         if not self.taken('infected') and not hasattr(cls, 'infected'):
-            self.add(self.exprs, 'infected', ss.expressions.as_stocks(sum(marked[1:], marked[0])))
+            self.add(self.exprs, 'infected', ss.expressions.as_stocks(total(marked)))
             self.marked_results.add('infected')
         if not self.taken('prevalence') and not hasattr(cls, 'prevalence'):
-            self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(sum(marked[1:], marked[0])/sum(self.people_states[1:], self.people_states[0])))
+            self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(total(marked)/total(self.people_states)))
             self.marked_results.add('prevalence')
         return
 
@@ -227,7 +261,7 @@ class Graph:
             if isinstance(obj, ss.conditions.Cond) and obj.op == '|' and (name or self.names.get(id(obj))) is not None and ss.conditions.state_objects(obj) is not None: # A named set of states, e.g. infected = E | I, is a result: the number in them, as for E + I
                 name = name or self.names.get(id(obj))
                 states = ss.conditions.state_objects(obj)
-                self.add(self.exprs, name, ss.expressions.as_stocks(sum(states[1:], states[0])))
+                self.add(self.exprs, name, ss.expressions.as_stocks(total(states)))
                 continue
             if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
                 self.add(self.exprs, name, ss.expressions.as_stocks(obj))
@@ -276,12 +310,17 @@ class Graph:
                 self.add(self.transitions, tr.name, tr)
         return
 
+    @functools.cached_property
+    def _reserved(self):
+        """ The names a member cannot have: the attributes of every module, and (except for a parameter) this module's methods, as (every, methods) """
+        every = set(self.grouped) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'}
+        methods = {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
+        return every, methods
+
     def add(self, container, name, obj):
         """ Add a named member, checking the name """
-        reserved = set(self.grouped) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
-        if container is not self.pars: # And this module's methods, e.g. a transition named "describe" would replace the method (parameters are kept in pars, so may be named "R0")
-            reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
-        if name in reserved:
+        every, methods = self._reserved
+        if name in every or (name in methods and container is not self.pars): # A transition named "describe" would replace the method (parameters are kept in pars, so may be named "R0")
             raise ValueError(f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
         for other in self.containers:
             if name in other and other[name] is not obj:
@@ -347,7 +386,7 @@ class Graph:
         for state in statelist:
             if state.module is not None and state.module is not self.module:
                 raise ValueError(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
-            if state.module is None and getattr(state, 'init_from_module', False): # A copy of another disease's state (see ss.Disease.reuse()): that disease's init= was its own
+            if state.module is None and state.init_from_module: # A copy of another disease's state (see ss.Disease.reuse()): that disease's init= was its own
                 state.init, state.init_n = state.declared_init
                 state.init_from_module = False
             state.module = self.module
@@ -363,17 +402,19 @@ class Graph:
         for state in statelist:
             if state.init is not None and state.init_n is not None:
                 raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a fraction of people) and init_n= (a number of people); give one or the other')
+        self.people_states = [s for s in statelist if s.people] # Every state, unless it is declared a count (ss.State(people=False), e.g. mosquitoes or bacteria in the water)
+        self.count_states = [s for s in statelist if not s.people]
         return
 
     def resolve_transitions(self):
         """ Give every transition a name, a source, and a rate or a dwell time """
         for tr in list(self.transitions.values()) + self._unnamed:
             name = tr.name or tr._arrow # Not named yet: see below
-            if tr.dest is None and not (tr._inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_people())
+            if tr.dest is None and not (tr._inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_default_state())
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
 
-            undriven = tr.dur is None and tr.p is None and tr._trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state
+            undriven = tr.dur is None and tr.p is None and tr._trigger is None and tr.birth_on is None and not tr.every_state
             if undriven and tr.rate is None and not tr.undriven: # What would it mean? A transition that nothing moves people along is written @ 0
                 arrow = tr._arrow.replace(' -> ', ' >> ')
                 if not tr.source:
@@ -386,11 +427,10 @@ class Graph:
 
             # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
             if tr.rate is not None:
-                people = [st for st in self.states.values() if st.people]
-                rate = per_person(tr.rate, tr.source, people)
+                rate = per_person(tr.rate, tr.source, self.people_states)
                 if rate is not tr.rate:
                     tr.flow_given, tr.rate = tr.rate, rate
-                tr.rate = as_frac(tr.rate, people) # beta*I/N is beta*I
+                tr.rate = as_frac(tr.rate, self.people_states) # beta*I/N is beta*I
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
@@ -434,13 +474,12 @@ class Graph:
 
     def counts_in(self, tr):
         """ The counts (`I.n`, `I.frac`) in the rate of a transition, other than the total of the people it is divided by, e.g. `I.n` and not `N.n` in `beta*I.n/N.n` """
-        people = [st for st in self.states.values() if st.people]
-        total = {id(leaf) for f in factors(tr.rate)[1] if is_total(f, people) for leaf in f.leaves}
+        total = {id(leaf) for f in factors(tr.rate)[1] if is_total(f, self.people_states) for leaf in f.leaves}
         return [leaf for leaf in tr.rate.leaves if isinstance(leaf, Count) and id(leaf) not in total]
 
     def dependence(self, tr):
         """ How the rate of a transition grows with the people in other states it counts: 'density' (`beta*I.n`), 'frequency' (`beta*I.frac`, or `beta*I.n/N.n`), or None (see `ss.expressions.dependence()`) """
-        return dependence(tr.rate, [st for st in self.states.values() if st.people])
+        return dependence(tr.rate, self.people_states)
 
     def resolve_init_prev(self):
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
@@ -466,7 +505,7 @@ class Graph:
         return
 
     def unset_default_init_prev(self):
-        """ Remove the default init_prev """
+        """ Remove the default init_prev, when a starting value is set after the disease was made (e.g. by an importer); see `ss.Disease.init_pre()` """
         if self.guessed.pop('init_prev', None) is not None:
             self.init_prev = None
             self.pars.pop('init_prev')
@@ -481,17 +520,13 @@ class Graph:
                 out.update({id(s):s for s in tr.source if s.people})
         return list(out.values())
 
-    def resolve_people(self):
+    def resolve_default_state(self):
         """
-        Which states are people: every state, unless it is declared a count (`ss.State(people=False)`, e.g. mosquitoes or
-        bacteria in the water); and the first state, where people are unless they are put elsewhere: `default_state=` if given,
+        The first state, where people are unless they are put elsewhere: `default_state=` if given,
         else the state named `S` or `susceptible` (in any case), else the one state transmission infects people from, else the first state of people made (states are kept in the
         order they were created: see `resolve_states()`), which `describe()` shows as a guess. Not the state a birth goes to
         (`ss.birth(NB)` says where births go, not where everyone starts), nor the order of the transitions
         """
-        states = list(self.states.values())
-        self.people_states = [s for s in states if s.people]
-        self.count_states = [s for s in states if not s.people]
         if self.default_given is not None:
             name = self.default_given.name if isinstance(self.default_given, State) else self.default_given
             if name not in self.states:
@@ -510,9 +545,10 @@ class Graph:
         for tr in self.transitions.values(): # A birth or immigration with no state given
             if tr.dest is None and self.default_state is not None:
                 tr.dest = [self.default_state]
-        self.resolve_rest()
+        return
 
-        # Now that the people are known, fill in the things that depend on them
+    def resolve_people_flows(self):
+        """ Now that the people are known, fill in what depends on them: each transition's sources and rates per person (see `fill_people()`), and whether it moves people or counts """
         for name,tr in self.transitions.items():
             self.fill_people(tr)
             for state in tr.terms:
@@ -527,7 +563,6 @@ class Graph:
                 counts = [s.name for s in ends if not s.people]
                 raise ValueError(f'"{name}" moves between people ({sc.strjoin(s.name for s in ends if s.people)}) and counts ({sc.strjoin(counts)}, declared with people=False). '
                                          f'If {sc.strjoin(counts)} {"is" if len(counts) == 1 else "are"} people, leave out people=False.')
-        self.check_counts()
         return
 
     def check_counts(self):
@@ -540,7 +575,7 @@ class Graph:
         group = {id(s) for s in next(g for g in self.linked() if any(s is self.default_state for s in g))} # The states linked to the first
         for tr in self.transitions.values():
             dst = [s for s in tr.dest or [] if id(s) not in group]
-            if tr._inflow and tr.people and dst and not getattr(tr, 'per_capita', False) and tr.birth_on is None and not any(s.people_given for s in dst):
+            if tr._inflow and tr.people and dst and not tr.per_capita and tr.birth_on is None and not any(s.people_given for s in dst):
                 others = [s.name for s in self.people_states if id(s) not in group]
                 raise ValueError(f'"{tr.name}" ({tr._arrow}) fills {sc.strjoin(others)}, which no transition links to {self.default_state.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
                                                 f'Every state is people unless declared a count: if {"it is" if len(others) == 1 else "they are"} not people, declare {sc.strjoin(others)} with ss.State(people=False) (or ss.states(n, people=False)); if {"it is" if len(others) == 1 else "they are"} people, say so with people=True.')
@@ -602,7 +637,7 @@ class Graph:
         out_of_first = [tr for tr in self.transitions.values() if any(src is first for src in tr.source or [])]
         by_contact = [tr.name for tr in out_of_first if tr.contact]
         for name,tr in self.transitions.items():
-            given = getattr(tr, 'acquisition_given', None)
+            given = tr.acquisition_given
             if given is not None:
                 tr.acquisition = bool(given)
             elif tr.contact:
@@ -716,24 +751,19 @@ class Graph:
                     if isinstance(q, par) and not q.literal and q.name is None and self.names.get(id(q)) is None:
                         q.name = f'{p.name}_{field}'
 
-        # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the fractions of ss.dead and ss.stay among the destinations
-        used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
-        used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
+        # Register the explicit ss.par objects used in the module
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
             for key,val in oc.likelihood_pars.items():
                 if isinstance(val, par) and not val.literal and val.name is None and self.names.get(id(val)) is None:
                     val.name = f'{oc.name}_{key}'
-        used += [(f'init of {state.name}', init) for state in self.states.values() for init in [state.init, state.init_n] if isinstance(init, Expr)] # So an initial count can be fitted
-        used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
-        used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [e for _,e in a.by_event] if a.by_event is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
-        used += [(name, val) for name,a in self.attrs.items() for _,v in (a.by_event or []) for p in ss.expressions.dists_in(v) for val in p.value.pars.values() if isinstance(val, par)]
-        used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
-        used += [(name, a.init_value) for name,a in self.attrs.items() if isinstance(a.init_value, Expr)] # And in its value before any event
-        used += [(name, val) for name,a in self.attrs.items() if a.init_value is not None for p in ss.expressions.dists_in(a.init_value) for val in p.value.pars.values() if isinstance(val, par)]
-        used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
-        used += [(name, w) for name,expr in list(used) if expr is not None for w in count_weights(expr)] # And in the weights of a weighted count, e.g. (ss.by(biting=w)*I).n
-        used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
+        used = self.exprs_with_pars()
+        inside = [
+            lambda expr: [leaf.value for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)], # Inside a dwell time given as an expression (of attributes)
+            count_weights, # In the weights of a weighted count, e.g. (ss.by(biting=w)*I).n
+            lambda expr: [inner for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)], # Inside a value that varies in time, a probability per act, or a beta for each route
+        ]
+        for find in inside: # Each looks in what those before it found too
+            used += [(name, x) for name,expr in list(used) if expr is not None for x in find(expr)]
         for name,expr in used:
             if expr is not None:
                 for leaf in expr.leaves:
@@ -746,11 +776,39 @@ class Graph:
                         self._add_par(leaf, name=leaf.name)
         return
 
+    def exprs_with_pars(self):
+        """ Each expression of the module that a parameter can be written in, as (where, expression): for `resolve_pars()` """
+        attr_dists = lambda value: [val for p in ss.expressions.dists_in(value) for val in p.value.pars.values() if isinstance(val, par)] # The parameters of a distribution, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
+        used = []
+        for tr in self.transitions.values(): # Including the fractions of ss.dead and ss.stay among the destinations
+            used += [(tr.name, expr) for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [tr.p_die, tr.p_stay]]
+        for oc in self.outcomes.values(): # The weights and likelihoods of the outcomes
+            used += [(oc.name, weight) for weight in oc.weights]
+        for oc in self.outcomes.values():
+            used += [(oc.name, val) for val in oc.likelihood_pars.values() if isinstance(val, par)]
+        for state in self.states.values(): # An initial value, so it can be fitted
+            used += [(f'init of {state.name}', init) for init in [state.init, state.init_n] if isinstance(init, Expr)]
+        for name,tf in self.transfers.items(): # The rate of a transfer
+            used += [(name, expr) for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)]
+        for name,a in self.attrs.items(): # The value of an attribute, in each case or after each event
+            exprs = [e for names,e in a.cases] if a.cases is not None else [e for _,e in a.by_event] if a.by_event is not None else [a.value]
+            used += [(name, expr) for expr in exprs if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)]
+        for name,a in self.attrs.items(): # The distribution drawn after each event
+            used += [(name, val) for _,v in (a.by_event or []) for val in attr_dists(v)]
+        for name,a in self.attrs.items(): # The distribution an attribute is drawn from
+            if a.kind in ['drawn', 'trait']:
+                used += [(name, val) for val in attr_dists(a.value)]
+        for name,a in self.attrs.items(): # Its value before any event
+            if isinstance(a.init_value, Expr):
+                used.append((name, a.init_value))
+        for name,a in self.attrs.items():
+            if a.init_value is not None:
+                used += [(name, val) for val in attr_dists(a.init_value)]
+        return used
+
     def resolve_exits(self):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
-        self.exits = sc.obj()
-        for state in self.states.values():
-            self.exits[state.name] = sc.obj(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
+        self.exits = sc.obj({state.name:new_exits() for state in self.states.values()})
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
@@ -778,45 +836,44 @@ class Graph:
                     exits.rest.append(tr)
                 else:
                     exits.hazards.append(tr)
-
-        # What the branches leave over goes to the transition given p=None (a timed one, or an immediate one), e.g. recovery = I >> R @ dict(dur=ss.days(8), p=None); with no branches, an immediate transition takes everyone; one with no driver and no p= is undriven, not the remainder
         for name,exits in self.exits.items():
-            exits.remainder = None
-            rest = exits.pop('rest')
-            if len(rest) > 1:
-                raise ValueError(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
-            elif rest and (rest[0].rest or not exits.branches):
-                exits.remainder = rest[0]
-            elif rest:
-                tr = rest[0]
-                raise ValueError(f'"{tr.name}" out of state "{name}" has no wait (dur=0), and the other transitions out of {name} are branches with p=: for it to take what they leave over, give it p=None, e.g. ss.Transition({name}, ..., dur=0, p=None)')
-            marked = [tr for tr in exits.timed if tr.rest]
-            if exits.branches and marked:
-                if len(marked) > 1 or exits.remainder is not None:
-                    raise ValueError(f'{sc.strjoin(tr.name for tr in marked + sc.tolist(exits.remainder))} out of state "{name}" are each given p=None, but only one transition can take what the branches leave over')
-                exits.remainder = marked[0]
-                exits.timed.remove(marked[0])
-            if exits.branches:
-                ps = [tr.p[0] for tr in exits.branches]
-                const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
-                total = sum(p.raw for p in ps) if const else None
-                if exits.remainder is not None: # What the branches leave over, for describe()
-                    exits.remainder.p_rest = f'{1 - total:n}' if const else f'1 - {" - ".join(tr.name for tr in exits.branches)}'
-                if not const and exits.remainder is None and exits.timed: # A fraction that is worked out as the sim runs (e.g. a function): the rest needs a transition of its own
-                    raise ValueError(f'the branches out of state "{name}" ({sc.strjoin(tr.name for tr in exits.branches)}) have fractions worked out as the sim runs, so they may not sum to 1: give the transition that takes the rest p=None (e.g. {exits.timed[0].name}).')
-                elif const and (bad := self.bad_splits(exits)):
-                    group, total = bad[0]
-                    undriven = [tr.name for tr in exits.hazards if tr.undriven]
-                    driven = [tr for tr in exits.hazards if not tr.undriven]
-                    why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} a rate of 0 (@ 0) and no p=, so {"is" if len(undriven) == 1 else "are"} moved only by products or code, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
-                    why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=) and p=None, to take the rest.' if total < 1 and driven and not exits.timed else ''
-                    why += f' For {sc.strjoin(tr.name for tr in exits.timed)} to take the rest ({1 - total:n}), give {"it" if len(exits.timed) == 1 else "one of them"} p=None.' if total < 1 and exits.timed else ''
-                    why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
-                    raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
-                                            f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{why}')
-        for name,exits in self.exits.items():
+            self.resolve_remainder(name, exits)
             outs = exits.branches + exits.timed + exits.hazards + exits.triggered + sc.tolist(exits.remainder)
             exits.held = any(tr.stays for tr in outs) # Whether some people stay with no exit of their own (ss.stay): see ss.solvers.Compartmental.build_layout()
+        return
+
+    def resolve_remainder(self, name, exits):
+        """
+        What the branches out of a state leave over goes to the transition given p=None (a timed one, or an immediate one), e.g. recovery = I >> R @ dict(dur=ss.days(8), p=None);
+        with no branches, an immediate transition takes everyone; one with no driver and no p= is undriven, not the remainder. Check that the branches sum to 1, or leave a remainder
+        """
+        rest, exits.rest = exits.rest, None
+        if len(rest) > 1:
+            raise ValueError(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
+        elif rest and (rest[0].rest or not exits.branches):
+            exits.remainder = rest[0]
+        elif rest:
+            tr = rest[0]
+            raise ValueError(f'"{tr.name}" out of state "{name}" has no wait (dur=0), and the other transitions out of {name} are branches with p=: for it to take what they leave over, give it p=None, e.g. ss.Transition({name}, ..., dur=0, p=None)')
+        marked = [tr for tr in exits.timed if tr.rest]
+        if exits.branches and marked:
+            if len(marked) > 1 or exits.remainder is not None:
+                raise ValueError(f'{sc.strjoin(tr.name for tr in marked + sc.tolist(exits.remainder))} out of state "{name}" are each given p=None, but only one transition can take what the branches leave over')
+            exits.remainder = marked[0]
+            exits.timed.remove(marked[0])
+        if not exits.branches:
+            return
+        ps = [tr.p[0] for tr in exits.branches]
+        const = all(isinstance(p, par) and sc.isnumber(p.raw) for p in ps)
+        total = sum(p.raw for p in ps) if const else None
+        if exits.remainder is not None: # What the branches leave over, for describe()
+            exits.remainder.p_rest = f'{1 - total:n}' if const else f'1 - {" - ".join(tr.name for tr in exits.branches)}'
+        if not const and exits.remainder is None and exits.timed: # A fraction that is worked out as the sim runs (e.g. a function): the rest needs a transition of its own
+            raise ValueError(f'the branches out of state "{name}" ({sc.strjoin(tr.name for tr in exits.branches)}) have fractions worked out as the sim runs, so they may not sum to 1: give the transition that takes the rest p=None (e.g. {exits.timed[0].name}).')
+        elif const and (bad := self.bad_splits(exits)):
+            group, total = bad[0]
+            raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
+                             f'({sc.strjoin([f"{tr.name}: p={tr.p[0]}" for tr in group])}).{split_hint(name, exits, total)}')
         return
 
     @staticmethod
@@ -891,8 +948,12 @@ class Graph:
                     outside = [n for n in names if n not in [c.name for c in clock.states]]
                     if outside:
                         raise ValueError(f'the attribute "{name}" reads {clock} for people in {sc.strjoin(outside)}, but it has a value only for people in {sc.strjoin(c.name for c in clock.states)}.')
-        self.dwell_trs = {name for name,tr in self.transitions.items() if len(tr.dest or []) > 1 and ss.expressions.clocks_in(sc.tolist(tr.p))} # Split as people leave, by their time in the state
         return
+
+    @property
+    def dwell_trs(self):
+        """ The names of the transitions split as people leave, by their time in the state (a p= that reads a clock) """
+        return {name for name,tr in self.transitions.items() if len(tr.dest or []) > 1 and ss.expressions.clocks_in(sc.tolist(tr.p))}
 
     def resolve_attrs(self):
         """ Resolve each attribute: another attribute given by name, the cases of a derived one by state (a state, a sum of states, or a | of them), and its events """
@@ -928,7 +989,7 @@ class Graph:
                     raise ValueError(errormsg)
                 a.value = self.attrs[a.value]
             if isinstance(a.value, dict) and all(ss.expressions.is_event(key) for key in a.value): # A value for each event
-                a.by_event = [(ss.expressions.events_in(key, self), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
+                a.by_event = [(ss.expressions.events_in(key), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
             elif isinstance(a.value, dict):
                 if a.when is not None:
                     errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no when='
@@ -940,7 +1001,7 @@ class Graph:
                     raise ValueError(errormsg)
             elif a.kind in ['recorded', 'derived'] and not isinstance(a.value, ss.Dist):
                 a.value = as_expr(a.value)
-            a.events = [] if a.when is None else ss.expressions.events_in(a.when, self)
+            a.events = [] if a.when is None else ss.expressions.events_in(a.when)
         for obj in self.attrs.values():
             for e in obj.events:
                 kind, target, dst = e.args
@@ -959,24 +1020,7 @@ class Graph:
                 errormsg = f'A stratification by the attribute "{by_attr[0]}" is worked out from it, so is given in a stratify() of its own, not with {sc.strjoin(others)}'
                 raise ValueError(errormsg)
             for name in by_attr:
-                a, levels = self.attrs[name], kwargs[name]
-                states = None
-                if isinstance(levels, ss.dimensions.levels):
-                    extra = [key for key,val in levels.options.items() if val is not None and key != 'states']
-                    if extra:
-                        errormsg = f'A stratification by the attribute "{name}" is worked out from it, so takes only states=; give a value by level in a rate with ss.by({name}=[...]), not {sc.strjoin(extra)}'
-                        raise ValueError(errormsg)
-                    levels, states = levels.levels, levels.options['states']
-                if states is not None:
-                    states = [leaf.name for leaf in states.leaves if isinstance(leaf, State)] if isinstance(states, Expr) and not isinstance(states, State) else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
-                if a.kind != 'derived' or not all(sc.isnumber(v) for v in levels):
-                    errormsg = f'A stratification by the attribute "{name}" takes bin edges, and the attribute must be derived (worked out when it is read); "{name}" is {a.kind}'
-                    raise ValueError(errormsg)
-                if any(s.name == name for s in self.strats + self.derived):
-                    raise ValueError(f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
-                strat = ss.dimensions.Strat(name, levels, kind='derived', states=states or [s.name for s in self.people_states])
-                strat.attr_of = a
-                self.derived.append(strat)
+                self.stratify_derived(name, kwargs[name])
             return self.module
         strats, transfers = ss.dimensions.parse_stratify(kwargs, graphs=[self])
         old = {s.name:s for s in self.strats}
@@ -995,11 +1039,44 @@ class Graph:
             tf.module = self.module
             self.add(self.transfers, name, tf)
             self.module.setattribute(name, tf) # So it can be the target of ss.modify()
-            for expr in [tf.rate, tf.dur]: # Register its parameters, as for those of the transitions
-                for leaf in [] if expr is None else expr.leaves:
-                    if isinstance(leaf, par) and not leaf.literal and not any(p is leaf for p in self.pars.values()):
-                        self._add_par(leaf, name=leaf.name or f'rate_{name}', define=True)
+            self.register_pars([tf.rate, tf.dur], f'rate_{name}') # Its parameters, as for those of the transitions
         return self.module
+
+    def stratify_derived(self, name, levels):
+        """ Stratify by a derived attribute, whose level is worked out from the attribute, so adds no groups: see `stratify()` """
+        a = self.attrs[name]
+        states = None
+        if isinstance(levels, ss.dimensions.levels):
+            extra = [key for key,val in levels.options.items() if val is not None and key != 'states']
+            if extra:
+                errormsg = f'A stratification by the attribute "{name}" is worked out from it, so takes only states=; give a value by level in a rate with ss.by({name}=[...]), not {sc.strjoin(extra)}'
+                raise ValueError(errormsg)
+            levels, states = levels.levels, levels.options['states']
+        if states is not None:
+            states = [leaf.name for leaf in states.leaves if isinstance(leaf, State)] if isinstance(states, Expr) and not isinstance(states, State) else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
+        if a.kind != 'derived' or not all(sc.isnumber(v) for v in levels):
+            errormsg = f'A stratification by the attribute "{name}" takes bin edges, and the attribute must be derived (worked out when it is read); "{name}" is {a.kind}'
+            raise ValueError(errormsg)
+        if any(s.name == name for s in self.strats + self.derived):
+            raise ValueError(f'"{self.module.name}" is already stratified by "{name}". stratify() works in place, so this is what running the same line (or notebook cell) twice gives.')
+        strat = ss.dimensions.Strat(name, levels, kind='derived', states=states or [s.name for s in self.people_states])
+        strat.attr_of = a
+        self.derived.append(strat)
+        return
+
+    def register_pars(self, exprs, fallback, slots=()):
+        """
+        Register the parameters in some expressions of a member added after the module is made (see `stratify()` and `add_flow()`), as
+        `resolve_pars()` does for those of the transitions: each not registered yet, and not a value written in place unless it fills a slot (`slots`, by id)
+        """
+        for expr in exprs:
+            for leaf in [] if expr is None else expr.leaves:
+                if not isinstance(leaf, par) or any(p is leaf for p in self.pars.values()):
+                    continue
+                if leaf.literal and id(leaf) not in slots: # A value inside a rate (e.g. the trend in ss.peryear(0.01) * ts), which stays a number, as in a transition (see resolve_pars())
+                    continue
+                self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else fallback, define=True)
+        return
 
     def add_flow(self, tr):
         """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.solvers.build.init_flows()` """
@@ -1023,13 +1100,7 @@ class Graph:
         slots = {id(p) for slot,p in self.set_slots(tr)}
         self.add(self.transitions, name, tr)
         self.module.setattribute(name, tr) # e.g. sir.births, so it can be the target of ss.modify()
-        for expr in [tr.rate, tr.dur]: # Register its parameters, as for those of the transitions
-            for leaf in [] if expr is None else expr.leaves:
-                if not isinstance(leaf, par) or any(p is leaf for p in self.pars.values()):
-                    continue
-                if leaf.literal and id(leaf) not in slots: # A value inside a rate (e.g. the trend in ss.peryear(0.01) * ts), which stays a number, as in a transition (see resolve_pars())
-                    continue
-                self._add_par(leaf, name=leaf.name if not leaf.literal and leaf.name else f'rate_{name}', define=True)
+        self.register_pars([tr.rate, tr.dur], f'rate_{name}', slots=slots) # Its parameters, as for those of the transitions
         self.resolve_exits()
         return tr
 
@@ -1051,7 +1122,7 @@ class Graph:
     @property
     def met_counts(self):
         """
-        The counts in a rate that a contact matrix acts on (see `ss.solvers.Mixing.count_terms()`): in the rate of an acquisition, the number
+        The counts in a rate that a contact matrix acts on (see `ss.solvers.ContactRates.count_terms()`): in the rate of an acquisition, the number
         (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_infectious`) or fraction (`I.frac`) of the people in states of this disease that it does not take
         people from, as `I` in `S >> I @ beta*I.n`; not one inside a function of the rate (e.g. `np.clip(I.n/K, 0, 1)`), which modifies the rate by
         the total rather than being met

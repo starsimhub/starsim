@@ -5,7 +5,8 @@ Most errors are Python's own (`ValueError`, `TypeError`, a `KeyError` for a name
 that is not found); the few kept as classes here are those that code may want to
 catch by kind, e.g. `ss.CapabilityError`. A note is a line about something that
 was assumed or approximated: it is kept in `sim.notes` and printed when `verbose`
-is 1 or more (see `ss.note()`).
+is 1 or more; one on how a solver approximates the model (`approx=True`) is instead
+an error with `ss.options.approximations="error"` (see `ss.note()`).
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -15,23 +16,32 @@ import starsim as ss
 __all__ = ['note', 'CapabilityError', 'AlreadyRunError'] # The error for what a solver cannot run and the error for a sim that has already run are also ss.<Name>; the rest are ss.errors.<Name>
 
 
-def note(msg, sim=None, verbose=None):
+def note(msg, sim=None, verbose=None, approx=False):
     """
     Say something that was assumed or approximated, in one line
 
     The note is kept in `sim.notes` (if a sim is supplied), whatever the verbosity,
-    and is printed if `verbose` (by default the sim's) is 1 or more.
+    and is printed if `verbose` (by default the sim's) is 1 or more. A note on how a
+    solver approximates the model (`approx=True`) follows `ss.options.approximations`:
+    with "note" (the default) it is like any other; with "allow", it is kept but not
+    printed; with "error", it is an `ss.CapabilityError`.
 
     Args:
         msg (str): what was assumed or approximated
         sim (Sim): the sim to keep the note in
         verbose (int): whether to print it
+        approx (bool): whether it says how a solver approximates the model
 
     Example:
         ```python
         ss.note("unit='day' (from start and stop dates)", sim=sim)
+        ss.note('the dwell time of "infection" runs as 3 stages; run with solver="abm" for the exact model', sim=sim, approx=True)
         ```
     """
+    if approx and ss.options.approximations == 'error':
+        raise CapabilityError(f'{msg} (ss.options.approximations="error" does not allow this approximation)')
+    elif approx and ss.options.approximations == 'allow':
+        verbose = 0
     if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
         sim = None
     if sim is not None:
@@ -40,9 +50,8 @@ def note(msg, sim=None, verbose=None):
         sim.notes.append(msg)
         if verbose == 0: # Kept, but not said
             return
-        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init()), once, though the notes may be kept again as the sim is laid out again
-            if msg not in sim._held:
-                sim._held.append(msg)
+        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init())
+            sim._held.append(msg)
             return
         verbose = sc.ifelse(verbose, sim.pars.verbose)
     verbose = sc.ifelse(verbose, ss.options.verbose)

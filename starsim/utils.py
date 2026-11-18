@@ -21,25 +21,6 @@ import starsim as ss
 
 # %% Helper functions
 
-class method_wrapper:
-    """
-    A method that Starsim wraps in a subclass (e.g. `init()`, see `outermost`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
-
-    A class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. for `ss.parallel()`), doesn't
-    pickle the globals of the module that wrapped it, which may not pickle at all ("cannot pickle '_thread._local' object").
-    """
-    def __init__(self, func):
-        self.func = func
-        functools.update_wrapper(self, func) # Its name, docstring, and signature, as the method's
-        return
-
-    def __get__(self, obj, cls=None):
-        return self if obj is None else types.MethodType(self, obj)
-
-    def __call__(self, obj, *args, **kwargs):
-        raise NotImplementedError
-
-
 class skipkey(str):
     """
     The name of a key for `sc.search()` to skip, which is equal only to a string of that name
@@ -76,6 +57,7 @@ class ndict(sc.obj):
 
     Args:
         type (type): the type each item must be (a module of any type is also accepted)
+        kind (str): what the items are, for messages, e.g. "diseases" (default "items")
         args (list): the items to add, each a named item, or a list or dict of them
         kwargs (dict): more items to add, by key
 
@@ -88,10 +70,10 @@ class ndict(sc.obj):
     """
     __slots__ = ('_type', '_kind') # Since otherwise treated as keys
 
-    def __init__(self, *args, type=None, **kwargs):
+    def __init__(self, *args, type=None, kind=None, **kwargs):
         super().__init__()
         self.setattribute('_type', type)
-        self.setattribute('_kind', None) # What the items are, for messages, e.g. "diseases"
+        self.setattribute('_kind', kind) # What the items are, for messages, e.g. "diseases"
         self.extend(*args, **kwargs)
         return
 
@@ -99,12 +81,12 @@ class ndict(sc.obj):
         """ Only for a key that is not here: a module by its default name, e.g. `sim.diseases.sir` (see `ss.utils.find_module()`) """
         if attr.startswith('_'):
             raise AttributeError(attr)
-        return find_module(self.values(), attr, kind=getattr(self, '_kind', None) or 'items', error=AttributeError, own=False)
+        return find_module(self.values(), attr, kind=self._kind or 'items', error=AttributeError, own=False)
 
     def __missing__(self, key):
         """ As `__getattr__()`, for `ndict[key]`; an index or slice as for any `sc.obj` """
         if isinstance(key, str):
-            return find_module(self.values(), key, kind=getattr(self, '_kind', None) or 'items', error=sc.KeyNotFoundError, own=False)
+            return find_module(self.values(), key, kind=self._kind or 'items', error=sc.KeyNotFoundError, own=False)
         return super().__missing__(key)
 
     def __call__(self):
@@ -217,8 +199,7 @@ class ndict(sc.obj):
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__(type=self._type)
-        new.setattribute('_kind', getattr(self, '_kind', None))
+        new = self.__class__(type=self._type, kind=self._kind)
         new.update(self)
         return new
 
@@ -250,8 +231,10 @@ def find_module(mods, name, kind='modules', error=None, own=True):
     if own and (found := next((mod for mod in mods if getattr(mod, 'name', None) == name), None)) is not None:
         return found
     found = [mod for mod in mods if getattr(mod, 'default_name', None) == name]
-    if len(found) == 1 or error is None:
-        return found[0] if len(found) == 1 else None
+    if len(found) == 1:
+        return found[0]
+    if error is None:
+        return None
     origins = lambda mods: ', '.join(f'`{mod.name}` ({mod.name_origin()})' if hasattr(mod, 'name_origin') else f'`{getattr(mod, "name", mod)}`' for mod in mods)
     if found:
         errormsg = f'"{name}" is the default name of {len(found)} {kind}, {origins(found)}, so it does not say which: use one of their names'
@@ -275,7 +258,7 @@ def own_name(mods, name):
     return find_module(mods, head, error=sc.KeyNotFoundError).name + dot + rest
 
 
-def nlist_to_dict(nlist, die=True):
+def nlist_to_dict(nlist):
     """ Convert a list of named items (e.g. modules, states) to a dictionary; not for the user """
     out = sc.obj()
     collisions = []
@@ -287,9 +270,7 @@ def nlist_to_dict(nlist, die=True):
             out[key] = obj
     if collisions:
         errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use the list version instead. Collisions:\n{collisions}'
-        if die:
-            raise ValueError(errormsg)
-        ss.warn(errormsg)
+        raise ValueError(errormsg)
     return out
 
 
@@ -537,7 +518,7 @@ Either rename the column, or map it explicitly with e.g. columns=dict({key}='<co
     raise ValueError(errormsg)
 
 
-def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
+def standardize_data(data, metadata, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
     Standardize formats of input data
 
@@ -601,15 +582,16 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
                 errormsg = f'Column "{metadata["data_cols"]["sex"]}" has the values {sc.strjoin(unknown)}, but accepts only {sc.strjoin(keys)}. Change them, or map them with e.g. columns=dict(sex_keys=dict(F="f", M="m")).'
                 raise ValueError(errormsg)
             index['sex'] = [keys[x] for x in index['sex']]
-        assert set(index['sex']) == {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and "f" to specify the sex.'
+        if set(index['sex']) != {'f', 'm'}:
+            errormsg = f'Column "{metadata["data_cols"]["sex"]}" should have both "f" and "m" for the sex, not {sc.strjoin(sorted(set(index["sex"])))}; map its values with e.g. columns=dict(sex_keys=dict(F="f", M="m")).'
+            raise ValueError(errormsg)
 
     # Create the series
     output = pd.Series(data=values, index=pd.MultiIndex.from_arrays(index.values(), names=index.keys()))
 
-    # Add an entry for negative ages
-    new_entries = output.index.set_codes([0] * len(output), level=1).set_levels([-np.inf], level=1).unique()
-    new = pd.Series(data=out_of_range, index=new_entries)
-    output = pd.concat([output, new])
+    # Add an entry for negative ages: each row's other keys, at age -inf
+    keys = output.index.to_frame(index=False).assign(age=-np.inf).drop_duplicates()
+    output = pd.concat([output, pd.Series(out_of_range, index=pd.MultiIndex.from_frame(keys))])
 
     # Truncate years
     output = output.loc[output.index.get_level_values('year')>min_year]
@@ -630,68 +612,34 @@ def same_value(a, b):
         return False
 
 
-def given_modules(*inputs):
-    """ The modules among a sim's inputs, alone or in lists or dicts (e.g. `diseases=[sir, sis]`) """
-    mods = []
-    for inp in inputs:
-        for val in (inp or {}).values():
-            vals = val.values() if isinstance(val, dict) else sc.tolist(val) if isinstance(val, (list, tuple, ss.Module)) else []
-            mods += [v for v in vals if isinstance(v, ss.Module)]
-    return mods
+class outermost:
+    """
+    The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies
 
+    A class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. for `ss.parallel()`), doesn't
+    pickle the globals of the module that wrapped it, which may not pickle at all ("cannot pickle '_thread._local' object").
+    """
+    def __init__(self, func):
+        self.func = func
+        functools.update_wrapper(self, func) # Its name, docstring, and signature, as the method's
+        return
 
-def make_disease(arg, names):
-    """ Transitions given to the sim (alone or in a list, among modules) as one disease, named from its states (e.g. "sir"), whose results are also at the top of the sim's (`sim.results.I`) """
-    items = sc.tolist(arg) if isinstance(arg, (list, tuple)) or ss.transitions.is_declaration(arg) else None
-    if items is None:
-        return arg
-    flat = [obj for item in items for obj in (item if isinstance(item, (list, tuple)) else [item])]
-    transitions = [obj for obj in flat if ss.transitions.is_declaration(obj)]
-    if not transitions:
-        return arg
-    disease = ss.Disease(*transitions, _names=names)
-    disease.setattribute('_implicit', True)
-    return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
+    def __get__(self, obj, cls=None):
+        return self if obj is None else types.MethodType(self, obj)
 
-
-def copy_given(*inputs, copy_inputs=True):
-    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given; with `copy_inputs=False`, the rest is copied, but not the modules """
-    if not copy_inputs: # The sim's own, as given
-        given = given_modules(*inputs)
-        for mod in given:
-            if mod.__dict__.get('sim') is not None or getattr(mod, '_given', False):
-                errormsg = f'"{mod.name}" was already given to a sim, so it can\'t be given to another with copy_inputs=False, which runs the modules themselves: make it again, or give a copy (e.g. mod.copy())'
-                raise ValueError(errormsg)
-        memo = {id(mod):mod for mod in given} # Shared, so what refers to a module refers to the module itself
-        return sc.mergedicts(*[sc.dcp(inp, memo=memo) for inp in inputs])
-    for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
-        mod.setattribute('_given', True)
-    out = sc.mergedicts(*inputs, _copy=True)
-    for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
-        mod.setattribute('_given', False)
-        if isinstance(getattr(mod, 'results', None), ss.Results):
-            mod.results.setattribute('_given_to', None)
-    for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
-        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
-            mod.results.setattribute('_given_to', mod.name)
-    return out
-
-
-class outermost(method_wrapper):
-    """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
     def __call__(self, sim, *args, **kwargs):
-        if sim.initialized or sim.__dict__.get('_in_init'):
+        if sim.initialized or sim._in_init:
             return self.func(sim, *args, **kwargs)
-        if '_before_init' not in sim.__dict__: # Not again after an init() that failed
+        if sim._before_init is None and sim._no_new is None: # Not again after an init() that failed
             try:
                 sim._before_init = sc.dcp(sim)
             except Exception as E: # Something in the sim cannot be copied: it still runs, but new() says why it cannot copy it
-                sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
+                sim._no_new = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
         sim._in_init = True
         try:
             return self.func(sim, *args, **kwargs)
         finally:
-            sim.__dict__.pop('_in_init', None)
+            sim._in_init = False
 
 
 def num_str(x):
@@ -702,7 +650,7 @@ def num_str(x):
 
 def time_str(x, sim=None, plural=False):
     """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath, or with no sim) """
-    if isinstance(x, (ss.date, pd.Timestamp)):
+    if isinstance(x, (ss.date, pd.Timestamp, np.datetime64)):
         return str(ss.date(x)).partition(' ')[0]
     unitless = sim is not None and sim.t.unitless
     if isinstance(x, ss.Duration) and not unitless:
@@ -758,10 +706,7 @@ class Shrunk:
         attr (str): the name of its attribute that was shrunken
     """
     def __init__(self, obj=None, attr=None):
-        try:
-            self.obj_type = type(getattr(obj, attr))
-        except Exception: # E.g. no object, or no such attribute
-            self.obj_type = None
+        self.obj_type = type(getattr(obj, attr)) if obj is not None and attr is not None and hasattr(obj, attr) else None
         self.attr = attr
         return
 
@@ -842,7 +787,7 @@ plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolo
 plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
-plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
+plotting_kw.legend = ['loc', 'bbox_to_anchor', 'reverse', 'frameon'] # Not ncols, which is the figure's (give legend_kw=dict(ncols=...) for the legend's)
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
 plotting_kw.return_fig = ['do_show', 'is_jupyter', 'filename']
 
@@ -874,7 +819,7 @@ def plot_args(kwargs=None, **defaults):
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
         ```
     """
-    _None = '<None>'
+    unset = object() # None is a value that can be given
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
     kw = sc.obj() # Output arguments
     for subtype,args in plotting_kw.items():
@@ -884,8 +829,8 @@ def plot_args(kwargs=None, **defaults):
         if isinstance(args, list): # Ensure everything's a dict, although only kw.data is
             args = {k:k for k in args}
         for inkey,outkey in args.items():
-            val = kwargs.pop(inkey, _None) # Handle None as a valid argument
-            if val is not _None:
+            val = kwargs.pop(inkey, unset)
+            if val is not unset:
                 kw[subtype][outkey] = val
 
         # Handle dicts of kwargs, e.g. "fig_kw"
@@ -912,7 +857,7 @@ def show(**kwargs):
     return plt.show(**kwargs)
 
 
-def return_fig(fig, given=False, **kwargs):
+def return_fig(fig, given=False, do_show=None, is_jupyter=None, filename=None):
     """
     Do postprocessing on the figure: save it, show it, and return it; not for the user, but its arguments can be given to any plot of results
 
@@ -925,9 +870,9 @@ def return_fig(fig, given=False, **kwargs):
 
     Returns the figure, unless it is shown in Jupyter; so in Jupyter, `fig = sim.plot(do_show=False)` gives the figure, without showing it.
     """
-    do_show = kwargs.pop('do_show', False if given else None)
-    is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
-    filename = kwargs.pop('filename', None)
+    if do_show is None and given:
+        do_show = False
+    is_jupyter = sc.ifelse(is_jupyter, ss.options.is_jupyter)
     if filename is not None:
         sc.savefig(filename, fig=fig, die=False, verbose=False) # With metadata where the format allows it (e.g. not a JPG)
     if is_jupyter:
@@ -951,4 +896,3 @@ def return_table(df, **kwargs):
     if not (ss.options.is_jupyter or hasattr(sys, 'ps1')): # sys.ps1 is the prompt of an interactive session (Python or IPython)
         print(df.to_string(**kwargs))
     return df
-

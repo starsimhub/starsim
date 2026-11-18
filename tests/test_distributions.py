@@ -5,6 +5,7 @@ Test the distributions (distributions.py and internals/dists.py), and the random
 # %% Imports and settings
 from unittest import mock
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
@@ -482,6 +483,34 @@ def test_names_keep_crn():
     return
 
 
+def test_dist_checks():
+    """ Functions as a mean, called only when drawing; the errors of set(), choice(dtype=), and drawing for UIDs outside a sim """
+    calls = []
+    def mean(uids):
+        calls.append(len(uids))
+        return np.full(len(uids), 3.0)
+    uids = ss.uids([1, 2, 3])
+    for dist in [ss.lognormal(mean=mean, std=1), ss.nbinom(n=2, mean=mean), ss.gamma(mean=mean, std=1)]:
+        dist.mock()
+        assert not calls # Not called with no agents at initialization
+        assert len(dist.rvs(uids)) == 3 and calls == [3]
+        calls.clear()
+    beta = ss.beta_dist(mean=lambda uids: np.full(len(uids), 0.3), std=0.1).mock()
+    assert np.all((beta.rvs(uids) > 0) & (beta.rvs(uids) < 1))
+    with pytest.raises(ValueError): # Three values for two parameters
+        ss.normal(1, 2).set(1, 2, 3)
+    with pytest.raises(TypeError): # Not a parameter of ss.choice()
+        ss.choice(3, dtype=np.int32)
+    choice = ss.choice(5, replace=False).mock()
+    assert len(set(choice.rvs(uids))) == 3
+    choice.set(replace=True) # Now drawn by slot, through the inverse CDF
+    choice.rvs(uids)
+    assert not choice.native and choice._use_ppf is not False
+    with pytest.raises(ValueError, match='partially initialized'):
+        ss.normal(strict=False).rvs(uids)
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_dist()
@@ -503,4 +532,5 @@ if __name__ == '__main__':
     test_crn_one_agent()
     test_crn_code_moves()
     test_names_keep_crn()
+    test_dist_checks()
     T.toc()

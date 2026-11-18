@@ -170,6 +170,40 @@ def test_boolstate_result():
     return sim
 
 
+def test_derived_arrays():
+    """ Arrays made from others (comparisons, astype) take the NaN and default of their own type; in-place ops work on shared arrays; time in state as the engine's clock """
+    times = []
+    def time_in(sim): # During the run, when some have just been infected
+        times.append(sim.diseases.sir.I.time_in.value)
+    sim = ss.Sim(ss.SIR(), networks='random', n_agents=500, demographics=True, solver='abm', unit='day', dur=30, analyzers=time_in, verbose=0).run()
+    ppl = sim.people
+    age = ppl.age
+    inactive = np.setdiff1d(np.arange(len(age.raw)), ppl.auids)
+    assert len(inactive)
+    older = age._boolmath('>', age.values + 1) # Values for the active agents only: False elsewhere, not left as they were in memory
+    assert not older.raw[inactive].any()
+    b = age > 3
+    assert b.nan is False and b.default is None
+    b.set_nan(ss.uids([0]))
+    assert b.raw[0] == False
+    with np.errstate(invalid='ignore'): # The NaN of the room for births
+        assert age.astype(ss.IntArr).nan == ss.dtypes.int_nan
+    with pytest.raises(TypeError): # Needs its categories
+        age.astype(ss.CatArr)
+    f = ss.BoolArr('f', shared=True, mock=5) # No memory of its own until written
+    f |= ss.uids([1])
+    f &= (f == True)
+    f ^= ss.uids([2])
+    assert f.uids.tolist() == [1, 2]
+    with pytest.raises(TypeError):
+        ~ss.uids([1])
+    t = np.concatenate(times) # As the engine's clock, those infected in this step have spent none of it there (not -1 steps)
+    assert np.isfinite(t).any() and np.nanmin(t) == 0
+    with pytest.raises(TypeError): # Not an AttributeError, which would be hidden
+        ppl.alive.time_in
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_arrs()
@@ -178,4 +212,5 @@ if __name__ == '__main__':
     test_uids()
     test_catarr()
     test_boolstate_result()
+    test_derived_arrays()
     T.toc()

@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
 from .costs import get_result, years, in_years
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, so that importing the library stays fast
 
 __all__ = ['DALYs', 'ICER']
 
@@ -53,7 +53,7 @@ class DALYs(ss.Analyzer):
 
     def init_results(self):
         super().init_results()
-        if self.life_lost is None and not isinstance(self.sim.solver, ss.solvers.abm):
+        if self.life_lost is None and not self.sim.solver.agents:
             errormsg = f'ssl.DALYs() has no ages at death to work from with the "{self.sim.solver}" solver: give the years of life lost for each death, with life_lost='
             raise ValueError(errormsg)
         self.define_results(*[ss.Result(name, kind='flow') for name in ['yld', 'yll', 'dalys']])

@@ -9,6 +9,7 @@ backend computes a run) is set in one place, e.g.:
 Used with: agents and compartments; declared and coded modules
 """
 import os
+import sys
 import tempfile
 import numpy as np
 import numba as nb
@@ -19,6 +20,8 @@ import starsim as ss # Only used to set references
 
 backends = ['auto', 'rust', 'numba', 'python', 'jax'] # The values of ss.options.backend: how the solvers' numbers are computed
 approximations = ['note', 'allow', 'error'] # The values of ss.options.approximations: what a sim does with each approximation a solver makes
+warning_options = ['warn', 'print', 'error', 'errors', 'ignore'] # The values of ss.options.warnings: what ss.warn() does ('errors' is the same as 'error')
+choices = dict(backend=backends, approximations=approximations, warnings=warning_options, precision=[32, 64]) # The values that these options can take
 thread_limit = None # The fewest threads asked for in the environment when Starsim was imported (STARSIM_BLAS_THREADS, SCIRIS_NUM_THREADS, or OMP_NUM_THREADS), before it set its own (see ss.gradients.jax()); None if none was
 
 
@@ -108,59 +111,30 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         """ The description and the default of each option, the default read from its environment variable if set; to reset the options, use `ss.options.set('defaults')` """
         optdesc = sc.obj()
         options = sc.obj()
+        def add(key, default, desc, kind=None):
+            """ An option, its description, and its default, read from its environment variable, STARSIM_<KEY>, if that is set """
+            optdesc[key] = desc
+            options[key] = sc.parse_env(f'STARSIM_{key.upper()}', default, kind or type(default))
+            return
 
-        optdesc.verbose = "How much a sim prints by default: 0 for nothing (e.g. in a batch of runs or a fit), 1 for the solver chosen, notes, and progress (default), 2 for everything, such as each step (for debugging). A sim's own verbose= overrides it."
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
-
-        optdesc.warnings = 'What to do with a warning: "warn" (default) to show it as a Python warning, "print" to print it as plain text, "error" to raise it as an error (useful in tests, or to find where a warning comes from), or "ignore" to drop it.'
-        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
-
-        optdesc.max_steps = 'Warn that a sim may be slow if it has more timesteps than this (0 to never warn); the default is more than a century at a daily step.'
-        options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # Enough for the textbooks' models, some of which run a century at a daily step
-        optdesc.max_years = 'Warn that a run is probably a mistake if it lasts longer than this many years (0 to never warn); a run this long is almost always a stop meant as a year, or a time in the wrong unit.'
-        options.max_years = sc.parse_env('STARSIM_MAX_YEARS', 1000, int)
-
-        optdesc.jupyter = 'Whether to use the settings for Jupyter notebooks (sharper "retina" figures): -1 to detect a notebook (default), 0 for never, 1 for always.'
-        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
-
-        optdesc.style = 'The plotting style: "starsim" (default), "fancy", "simple", or any of Matplotlib\'s styles. To change it for one plot only, use ss.style() in a with block.'
-        options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
-
-        optdesc.show = 'Whether plots are shown as soon as they are made (with plt.show()); set False to make figures without showing them, e.g. in a script that saves them to files.'
-        options.show = sc.parse_env('STARSIM_SHOW', True, bool)
-
-        optdesc.reticulate = 'Whether a NumPy integer array indexes a state by UIDs, as needed for a module written in R (through reticulate), which cannot keep ss.uids; leave False in Python.'
-        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
-
-        optdesc.precision = 'The precision of the numbers kept for each agent: 32 (default) for float32, which takes half the memory, or 64 for float64, for when small differences matter (e.g. comparing against another model to many decimal places).'
-        options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
-
-        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, use: 0 (default) for as many as Numba has (by default, one per core) for the agents, and one for the particles (whose steps are too short for threads to pay off); or 1 for no extra threads, e.g. on a shared machine. Each worker of ss.parallel() and of a calibration uses one, since the workers already share the cores.'
-        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
-
-        optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy: 1 (default), since more threads rarely speed up a sim but do slow down many sims run in parallel; or 0 to leave BLAS as it is. For the threads of Starsim itself, see "threads"; see also the "Deployment" page of the user guide.'
-        options.blas_threads = sc.parse_env('STARSIM_BLAS_THREADS', int(os.getenv('SCIRIS_NUM_THREADS') or 1), int) # 1 by default, set before Sciris is imported (see starsim/__init__.py)
-
-        optdesc.backend = 'The backend: how the solvers\' numbers are computed (all give the same results, to rounding for JAX):\n\n- "auto" (default): Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md); otherwise Numba, running compartmental sims in plain Python until Numba has compiled (Numba compiles first if a run, or the runs of a session, would take longer in plain Python than compiling takes, about two minutes, once per install; a note says which)\n- "rust": Rust, compiled ahead of time, so a first run takes no compiling\n- "numba": always compile with Numba first (see ss.compile())\n- "python": the compartmental solvers in plain Python (the passes over agents are still Numba), e.g. for debugging\n- "jax": a whole run of the ODE in JAX, and many ODE runs with different values in one call (ss.parallel(sim, pars=...)); everything else as "auto". Worth it only for long runs over many groups, since JAX takes about half a second to start and compiles each model\n\nGradients and the fits that use them take JAX whatever this is, and ss.jit always uses Numba.'
-        options.backend = sc.parse_env('STARSIM_BACKEND', 'auto', str)
-
-        optdesc.jax_platform = 'Where JAX runs when Starsim uses it (sim.gradient(), fits, and ODE runs with backend="jax"): "cpu" (default), "auto" for JAX\'s own choice (a GPU if it finds one), or another platform, e.g. "cuda". The CPU is the default since Starsim\'s runs in JAX are long loops of small steps, which a GPU runs several times slower. It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has already started on other platforms, it is restarted on these the next time Starsim uses it (and "auto" goes back to the platforms it had before).'
-        options.jax_platform = sc.parse_env('STARSIM_JAX_PLATFORM', 'cpu', str)
-
-        optdesc.uncompiled_warning = 'Whether to say on import that Starsim has not been compiled yet (see ss.compile()); True by default. Since it is read on import, it only has an effect as the environment variable STARSIM_UNCOMPILED_WARNING.'
-        options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
-
-        optdesc.crn = 'Whether to use common random numbers (default True): each agent gets the same random numbers in every scenario, so the difference between two scenarios is due to what changed rather than to chance. Set False for slightly faster draws (one plain random number per agent or edge), which are statistically valid but differ between scenarios.'
-        options.crn = sc.parse_env('STARSIM_CRN', True, bool)
-
-        optdesc.approximations = 'What a sim does when a solver approximates part of the model (e.g. a dwell time run as stages): "note" (default) says so in one line (kept in sim.notes, and printed unless verbose=0); "allow" keeps the note without printing it; and "error" raises an error, for when the results must be exact. For one sim: with ss.options.context(approximations="error"): sim.run()'
-        options.approximations = sc.parse_env('STARSIM_APPROXIMATIONS', 'note', str)
-
-        optdesc.require_compiled = 'Whether to raise an error if a compartmental sim cannot be run whole, in one compiled call, and would instead run step by step in plain Python (which can be 100 times slower); False by default. Useful for keeping a fit or a large batch of runs fast'
-        options.require_compiled = sc.parse_env('STARSIM_REQUIRE_COMPILED', False, bool)
-
-        optdesc.max_joint = 'The most compartments that diseases tracked jointly in a compartmental run may use (their joint states times the groups of the other dimensions; see ss.solvers.JointStates). Above it, solver="auto" runs as agents instead, and a compartmental solver that was asked for raises an error before anything is made, since so many compartments would take too much memory. 0 for no limit.'
-        options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
+        add('verbose', 1, "How much a sim prints by default: 0 for nothing (e.g. in a batch of runs or a fit), 1 for the solver chosen, notes, and progress (default), 2 for everything, such as each step (for debugging). A sim's own verbose= overrides it.")
+        add('warnings', 'warn', 'What to do with a warning: "warn" (default) to show it as a Python warning, "print" to print it as plain text, "error" to raise it as an error (useful in tests, or to find where a warning comes from), or "ignore" to drop it.')
+        add('max_steps', 50_000, 'Warn that a sim may be slow if it has more timesteps than this (0 to never warn); the default is more than a century at a daily step.') # Enough for the textbooks' models, some of which run a century at a daily step
+        add('max_years', 1000, 'Warn that a run is probably a mistake if it lasts longer than this many years (0 to never warn); a run this long is almost always a stop meant as a year, or a time in the wrong unit.')
+        add('jupyter', -1, 'Whether to use the settings for Jupyter notebooks (sharper "retina" figures): -1 to detect a notebook (default), 0 for never, 1 for always.')
+        add('style', 'starsim', 'The plotting style: "starsim" (default), "fancy", "simple", or any of Matplotlib\'s styles. To change it for one plot only, use ss.style() in a with block.')
+        add('show', True, 'Whether plots are shown as soon as they are made (with plt.show()); set False to make figures without showing them, e.g. in a script that saves them to files.')
+        add('reticulate', False, 'Whether a NumPy integer array indexes a state by UIDs, as needed for a module written in R (through reticulate), which cannot keep ss.uids; leave False in Python.')
+        add('precision', 32, 'The precision of the numbers kept for each agent: 32 (default) for float32, which takes half the memory, or 64 for float64, for when small differences matter (e.g. comparing against another model to many decimal places).')
+        add('threads', 0, 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, use: 0 (default) for as many as Numba has (by default, one per core) for the agents, and one for the particles (whose steps are too short for threads to pay off); or 1 for no extra threads, e.g. on a shared machine. Each worker of ss.parallel() and of a calibration uses one, since the workers already share the cores.')
+        add('blas_threads', int(os.getenv('SCIRIS_NUM_THREADS') or 1), 'The number of threads for BLAS, the linear algebra in NumPy and SciPy: 1 (default), since more threads rarely speed up a sim but do slow down many sims run in parallel; or 0 to leave BLAS as it is. For the threads of Starsim itself, see "threads"; see also the "Deployment" page of the user guide.') # 1 by default, set before Sciris is imported (see starsim/__init__.py)
+        add('backend', 'auto', 'The backend: how the solvers\' numbers are computed (all give the same results, to rounding for JAX):\n\n- "auto" (default): Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md); otherwise Numba, running compartmental sims in plain Python until Numba has compiled (Numba compiles first if a run, or the runs of a session, would take longer in plain Python than compiling takes, about two minutes, once per install; a note says which)\n- "rust": Rust, compiled ahead of time, so a first run takes no compiling\n- "numba": always compile with Numba first (see ss.compile())\n- "python": the compartmental solvers in plain Python (the passes over agents are still Numba), e.g. for debugging\n- "jax": a whole run of the ODE in JAX, and many ODE runs with different values in one call (ss.parallel(sim, pars=...)); everything else as "auto". Worth it only for long runs over many groups, since JAX takes about half a second to start and compiles each model\n\nGradients and the fits that use them take JAX whatever this is, and ss.jit always uses Numba.')
+        add('jax_platform', 'cpu', 'Where JAX runs when Starsim uses it (sim.gradient(), fits, and ODE runs with backend="jax"): "cpu" (default), "auto" for JAX\'s own choice (a GPU if it finds one), or another platform, e.g. "cuda". The CPU is the default since Starsim\'s runs in JAX are long loops of small steps, which a GPU runs several times slower. It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has already started on other platforms, it is restarted on these the next time Starsim uses it (and "auto" goes back to the platforms it had before).')
+        add('uncompiled_warning', True, 'Whether to say on import that Starsim has not been compiled yet (see ss.compile()); True by default. Since it is read on import, it only has an effect as the environment variable STARSIM_UNCOMPILED_WARNING.')
+        add('crn', True, 'Whether to use common random numbers (default True): each agent gets the same random numbers in every scenario, so the difference between two scenarios is due to what changed rather than to chance. Set False for slightly faster draws (one plain random number per agent or edge), which are statistically valid but differ between scenarios.')
+        add('approximations', 'note', 'What a sim does when a solver approximates part of the model (e.g. a dwell time run as stages), which it says with ss.note(..., approx=True): "note" (default) says so in one line (kept in sim.notes, and printed unless verbose=0); "allow" keeps the note without printing it; and "error" raises an ss.CapabilityError with the note\'s text, for when the results must be exact. For one sim: with ss.options.context(approximations="error"): sim.run()')
+        add('require_compiled', False, 'Whether to raise an error if a compartmental sim cannot be run whole, in one compiled call, and would instead run step by step in plain Python (which can be 100 times slower); False by default. Useful for keeping a fit or a large batch of runs fast')
+        add('max_joint', 10_000, 'The most compartments that diseases tracked jointly in a compartmental run may use (their joint states times the groups of the other dimensions; see ss.solvers.JointStates). Above it, solver="auto" runs as agents instead, and a compartmental solver that was asked for raises an error before anything is made, since so many compartments would take too much memory. 0 for no limit.') # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
         return optdesc, options
 
@@ -242,7 +216,7 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         if len(args):
             try:
                 optdict = sc.obj({k:optdict[k] for k in args})
-            except Exception as e:
+            except KeyError as e:
                 errormsg = f'Cannot provide help on invalid setting(s) "{sc.strjoin(args)}"; valid keys are:\n{sc.newlinejoin(sorted(orig_keys))}'
                 raise sc.KeyNotFoundError(errormsg) from e
 
@@ -263,7 +237,7 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
     ss.options[key] -- get or set key
     ss.options.set() -- set option(s)
     ss.options.get_default() -- get default setting(s)
-    ss.options.set_style() -- change the style for plotting (can also use ss.style() in a context block)
+    ss.options.set(style=...) -- change the style for plotting (or ss.style() in a with block, for one plot)
 """)
 
         return optdict if output else None
@@ -287,25 +261,11 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         elif key is not None:
             kwargs = sc.mergedicts(kwargs, {key: value})
 
-        for key, value in kwargs.items():
-            if key not in self:
-                keys = '\n'.join(self.orig_options.keys())
-                errormsg = f'Option "{key}" not recognized; options are "defaults" or:\n{keys}\n\nSee help(ss.options.set) for more information.'
-                raise sc.KeyNotFoundError(errormsg)
-            if value in [None, 'default']:
-                value = self.orig_options[key]
-            if key == 'backend': # Checked here rather than at the first run, and swapped before the option is set, so it is not set if the Rust kernels have not been built
-                if value not in backends:
-                    errormsg = f'ss.options.backend must be "auto", "rust", "numba", "python", or "jax", not {value!r}'
-                    raise ValueError(errormsg)
+        values = {key:self.check(key, value) for key,value in kwargs.items()} # Every value checked before any is set
+        for key, value in values.items():
+            if key == 'backend': # Swapped before the option is set, so it is not set if the Rust kernels have not been built
                 import starsim.solvers.backends.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
                 rust.auto() if value in ['auto', 'jax'] else rust.use(value == 'rust') # With 'jax', what JAX does not run is run as under 'auto'
-            elif key == 'approximations' and value not in approximations:
-                errormsg = f'ss.options.approximations must be one of {sc.strjoin([repr(a) for a in approximations])}, not {value!r}'
-                raise ValueError(errormsg)
-            elif key == 'jax_platform' and not (isinstance(value, str) and value):
-                errormsg = f'ss.options.jax_platform must be the name of a JAX platform, e.g. "cpu", or "auto", not {value!r}'
-                raise ValueError(errormsg)
             super().__setitem__(key, value) # Not self[key], which calls this
 
             # The options that take effect when set
@@ -313,6 +273,27 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
             if setter is not None:
                 setter()
         return
+
+    def check(self, key, value):
+        """ The value an option would be set to (its default, for None or 'default'), raising an error if it is not an option or not a value it takes
+
+        Args:
+            key (str): the name of the option
+            value (varies): its value
+        """
+        if key not in self:
+            keys = '\n'.join(self.orig_options.keys())
+            errormsg = f'Option "{key}" not recognized; options are "defaults" or:\n{keys}\n\nSee help(ss.options.set) for more information.'
+            raise sc.KeyNotFoundError(errormsg)
+        if value is None or (isinstance(value, str) and value == 'default'):
+            return self.orig_options[key]
+        if key in choices and value not in choices[key]:
+            errormsg = f'ss.options.{key} must be one of {sc.strjoin(map(repr, choices[key]))}, not {value!r}'
+            raise ValueError(errormsg)
+        if key == 'jax_platform' and not (isinstance(value, str) and value):
+            errormsg = f'ss.options.jax_platform must be the name of a JAX platform, e.g. "cpu", or "auto", not {value!r}'
+            raise ValueError(errormsg)
+        return value
 
     def context(self, key=None, value=None, **kwargs):
         """
@@ -379,13 +360,10 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         Args:
             refresh (bool): whether to pass the new data types on to the modules that keep their own copies
         """
-        if self.precision == 32:
+        if self.precision == 32: # Else 64, the only other value it takes (see check())
             dtypes.update(rand_int=np.int32, rand_uint=np.uint32, float=np.float32, nbfloat=nb.float32)
-        elif self.precision == 64:
-            dtypes.update(rand_int=np.int64, rand_uint=np.uint64, float=np.float64, nbfloat=nb.float64)
         else:
-            errormsg = f'Precision {self.precision} not recognized; must be 32 or 64'
-            raise ValueError(errormsg)
+            dtypes.update(rand_int=np.int64, rand_uint=np.uint64, float=np.float64, nbfloat=nb.float64)
         # The integers and the results stay 64-bit at either precision, since 32-bit integers broke the indexing of arrays
         if refresh:
             self.refresh_references()
@@ -393,11 +371,11 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
 
     def refresh_references(self):
         """ Pass the data types on to the modules that keep their own copies, for speed (e.g. `ss.arrays.ss_int`) """
-        for file in ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks']:
-            ss_file = getattr(ss, file)
+        for name in ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks', 'library.networks.clusters']:
+            module = sys.modules.get(f'starsim.{name}') or sys.modules.get(f'starsim.internals.{name}') # The library, if it has been imported: otherwise it reads them when it is
             for key, value in dtypes.items():
-                if hasattr(ss_file, f'ss_{key}'):
-                    setattr(ss_file, f'ss_{key}', value)
+                if module is not None and hasattr(module, f'ss_{key}'):
+                    setattr(module, f'ss_{key}', value)
         return
 
     def set_style(self):
@@ -436,7 +414,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
         rc_starsim['font.family'] = with_fallback(name)
         if verbose: print(f'Default Starsim font reset to "{name}"')
-    except Exception as E:
+    except ValueError as E: # Not found
         if verbose: print(f'Could not find font {name}: {str(E)}')
     return
 
@@ -472,11 +450,11 @@ options.set_blas_threads()
 marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'
 first = not marker.exists()
 try:
-    if first:
-        marker.touch()
     load_fonts(rebuild=first)
-    if first and options.verbose:
-        print('\nNote: rebuilding the font cache only happens once on first import.')
+    if first:
+        marker.touch() # Only once the rebuild has worked, so a rebuild that failed is tried again
+        if options.verbose:
+            print('\nNote: rebuilding the font cache only happens once on first import.')
 except Exception: # Not writable, or something else went wrong: plot without them
     pass
 

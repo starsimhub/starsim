@@ -26,6 +26,9 @@ def delivery_dims(mod):
     return list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment'))
 
 
+female_labels = ['female', 'females', 'f', 'women', 'woman'] # The labels of the level for women of a dimension called sex (see Strat, and ss.by.position_plan())
+
+
 def level_dtype(n):
     """ The integers that levels or groups are kept as, n of them: 16-bit if they fit, to save memory """
     return np.int16 if n < 2**15 else np.int32
@@ -50,6 +53,16 @@ class Strat:
     """
     strains = None # For a strain dimension: the ss.Strains it is made from
 
+    # Set from outside, for some stratifications only (None otherwise)
+    dim = None # Its position among the dimensions of the sim's groups: set by Groups.init()
+    owner = None # The name of the module whose stratification it is, if part of the scenario (an intervention's) or of a transfer's stages, not of the model
+    stages_of = None # For the Erlang stages of a transfer: (module name, transfer name); see transfer_stages()
+    dwell = None # For the stages of a transfer: the dwell time they match (see transfer_stages())
+    sim_coords = None # The level of each group in each dimension, so a result can look up which group is which: set by Groups.init()
+    fractions_from = None # 'people' if its split is taken from the people (a named population, or the ages given): set by Groups.init()
+    base = None # For a strain dimension with sets of strains: the levels of a single strain (see init_carriage())
+    adds = None # For a strain dimension with sets of strains: the level reached by adding a strain to each level (see init_carriage())
+
     def __init__(self, name, levels, fractions=None, adjust=None, kind=None, states=None, who=None, mobility=None):
         self.name = name
         self.geo = levels if isinstance(levels, geography) else None
@@ -59,7 +72,7 @@ class Strat:
         if who is not None and self.kind in ['space', 'strain']:
             errormsg = f'who= is for a property of people such as age or risk, but "{name}" is of kind "{self.kind}"; a {"place" if self.kind == "space" else "strain"} is one that everyone (or every infection) has'
             raise ValueError(errormsg)
-        self.who_given = None if who is None or isinstance(who, dict) else repr(who) # As given, for what the sim says
+        self.who_given = None if who is None else ', '.join(f'{k}={sc.strjoin(sc.tolist(v))}' for k,v in who.items()) if isinstance(who, dict) else repr(who) # As given, for what the sim says
         self.who = who_dims(who, name) if who is not None else None
         if self.geo is not None:
             levels = self.geo.names
@@ -96,7 +109,7 @@ class Strat:
         self.n = len(self.labels)
         self.female = None # For a dimension called sex, which is people.female: the position of the level for women
         if name == 'sex' and kind is None: # kind= says it is something else, e.g. a place
-            women = [i for i,label in enumerate(self.labels) if str(label).lower() in ['female', 'females', 'f', 'women', 'woman']]
+            women = [i for i,label in enumerate(self.labels) if str(label).lower() in female_labels]
             if self.n != 2 or len(women) != 1:
                 errormsg = f'A dimension called "sex" is people.female, so it has two levels, one of them "female" (e.g. sex=["female", "male"]), not {sc.strjoin(self.labels)}; give another name for any other property'
                 raise ValueError(errormsg)
@@ -176,7 +189,7 @@ class Strat:
 
     def draw(self, sim, uids, rvs):
         """ A level for each of some agents, from uniform random numbers: in proportion to the split, or to its row for each agent's levels of the other dimensions """
-        if getattr(self, 'cond', None) is None:
+        if self.cond is None:
             return np.minimum(np.searchsorted(np.cumsum(self.fractions), rvs, side='right'), self.n - 1)
         coords = sim.groups.group_coords[sim.groups.group_raw()[uids]]
         cdf = np.cumsum(np.stack([self.fracs(coords, np.full(len(uids), level)) for level in range(self.n)], axis=1), axis=1)
@@ -192,7 +205,7 @@ class Strat:
         """
         d = self.dim
         levels = coords[:, d] if levels is None else levels
-        if getattr(self, 'cond', None) is None:
+        if self.cond is None:
             return self.fractions[levels]
         ds, grid = self.cond
         return grid[tuple(levels if dd == d else coords[:, dd] for dd in ds)]
@@ -429,7 +442,7 @@ class levels(sc.prettyobj):
         ```
     """
     def __init__(self, levels, states=None, who=None, kind=None, mobility=None, fractions=None, rel_sus=None, rel_trans=None):
-        if isinstance(levels, globals()['levels']):
+        if isinstance(levels, type(self)):
             errormsg = 'ss.levels() takes the levels themselves (a list, a dict of fractions, or a geography), not another ss.levels()'
             raise TypeError(errormsg)
         if fractions is not None and not isinstance(fractions, by):
@@ -456,15 +469,15 @@ class levels(sc.prettyobj):
 
 def who_dims(who, name=None):
     """
-    The groups a dimension applies to (`ss.levels(who=)`), as a dict of each dimension it reads and what of it: a list of
-    comparisons `(op, value)` on its levels, for a condition (see `who_levels()`), or the positions or labels of its levels, for a dict
+    The groups a dimension applies to (`ss.levels(who=)`), as a dict of each dimension it reads and a list of comparisons
+    `(op, value)` on its levels, all of which hold (see `who_levels()`); a dict of positions or labels is `('isin', levels)`
 
     Args:
         who (Cond/dict): a condition on other dimensions, joined with `&` (e.g. `ss.person.female & (ss.person.age >= 15)`), or a dict
         name (str): the dimension it is for, for messages
     """
     if isinstance(who, dict): # Positions or labels by dimension, as made inside Starsim (e.g. for the stages of a transfer)
-        return dict(who)
+        return {dim:[('isin', tuple(sc.tolist(spec)))] for dim,spec in who.items()}
     Cond = ss.conditions.Cond
     out = {}
     example = 'e.g. ss.person.female, ss.person.age >= 15, ss.person.risk == "high", or ss.person.region.isin(["north", "east"]), joined with &'
@@ -509,11 +522,9 @@ def who_levels(strat, spec, owner):
 
     Args:
         strat (`Strat`): the dimension the condition reads
-        spec (list): what `who_dims()` gives for it: comparisons `(op, value)`, all of which hold; or the positions or labels of its levels
+        spec (list): what `who_dims()` gives for it: comparisons `(op, value)`, all of which hold
         owner (str): the dimension with the `who=`, for messages
     """
-    if not (isinstance(spec, list) and all(isinstance(c, tuple) and len(c) == 2 and (c[0] in ss.conditions.comparisons or c[0] == 'isin') for c in spec)):
-        return [strat.index(level) for level in sc.tolist(spec)]
     mask = np.ones(strat.n, dtype=bool)
     for op,value in spec:
         if op == 'isin':
@@ -662,12 +673,48 @@ class Groups(sc.prettyobj):
         self.joint_strats = [] # The dimensions for diseases whose states are tracked jointly: see ss.solvers.init_joint_states()
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         self.version = 0 # How many times the groups were worked out, so a layout knows whether it holds for them (see ss.solvers.Compartmental.current())
+        self.kept = set() # The properties the people came with, which are kept and binned rather than drawn: set by ss.Sim.init_people()
+        self.vals_set = False # Whether the agents' levels have been assigned (see init_vals()), after which agents added are placed as they are made
+        self._group_cache = None # As agents: (ti, the group of every agent, the level of every agent in each dimension), as group_raw() last worked them out
+        self._group_dirty = None # The agents whose levels changed since (see groups_changed()): None for none known, False for everyone, or a list of arrays of UIDs
+        self._level_cache = None # By the name of each dimension: (the values the levels were worked out from, the levels); and under '', the groups
         return
+
+    def rng(self, strat):
+        """ The distribution that draws the levels of a stratification for agents (made in init()) """
+        return getattr(self.sim, f'rng_strat_{strat.name}') # Kept on the sim, where the search for distributions finds it, which sets its seed
 
     def init(self):
         """ Collect the stratifications of the sim and its modules, and work out the groups they give """
         sim = self.sim
         self.version += 1
+        strats = self.collect_strats()
+        self.first_level_if_moved(strats)
+        for strat in self.joint_strats:
+            if strat.name in strats:
+                raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
+            strats[strat.name] = strat
+        self.strats = list(strats.values())
+        self.note_strats()
+        self.split_from_people()
+        self.make_grid()
+        split, births = self.make_splits()
+        self.resolve_conditional()
+        self.init_ragged()
+        self.group_split = self.fold(split)
+        self.birth_split = self.fold(births)
+        for strat in self.strats:
+            strat.sim_coords = self.group_levels # So a result can look up which group is which
+        for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
+            if strat.kind != 'age':
+                setattr(sim, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
+        if 'aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
+            sim.pars.aging = sim._has_demography()
+        return
+
+    def collect_strats(self):
+        """ For init(): the stratifications of the sim, its declared modules, and its interventions (and, in a compartmental run, the stages of transfers), by name """
+        sim = self.sim
         strats = sc.obj()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         if sim.pars.stratify:
@@ -708,13 +755,18 @@ class Groups(sc.prettyobj):
                 for dim in delivery_dims(mod):
                     if dim not in strats:
                         raise sc.KeyNotFoundError(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
-        if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)): # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
+        if sim.solver is not None and not sim.solver.agents: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
             for mod in sim.declared:
                 for tf in mod.graph.transfers.values():
                     strat = transfer_stages(sim, mod, tf, strats[tf.dim])
                     if strat is not None:
                         strats[strat.name] = strat
-        moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()] # A dimension that people are moved along, with no split of its own, starts with everyone at its first level
+        return strats
+
+    def first_level_if_moved(self, strats):
+        """ For init(): a dimension that people are moved along, with no split of its own, starts with everyone at its first level """
+        sim = self.sim
+        moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()]
         moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in list(getattr(tr, 'move', None) or {}) + list(getattr(tr, 'increment', None) or {})]
         moved += [dim for mod in sim.pars.interventions.values() for dim in delivery_dims(mod)]
         for name in moved:
@@ -722,18 +774,23 @@ class Groups(sc.prettyobj):
             if strat is not None and strat.guessed.get('fractions') == 'equal across levels':
                 strat.fractions = strat.first()
                 strat.guessed['fractions'] = f'everyone at {strat.labels[0]}, the first level, since people are moved between its levels'
-        for strat in self.joint_strats:
-            if strat.name in strats:
-                raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
-            strats[strat.name] = strat
-        self.strats = list(strats.values())
+        return
+
+    def note_strats(self):
+        """ For init(): give a contact matrix given by position alone its dimension, and say when a dimension named like places is not places """
+        sim = self.sim
         for net in sim.pars.networks.values(): # A contact matrix given by position alone is over the stratification with as many levels
             if getattr(net, 'bare', None) is not None:
-                ss.networks.bare_contacts(net, [strat for strat in self.strats if strat not in self.joint_strats and getattr(strat, 'stages_of', None) is None])
+                ss.networks.bare_contacts(net, [strat for strat in self.strats if strat not in self.joint_strats and strat.stages_of is None])
         mixed = {dim for net in sim.pars.networks.values() for dim in (getattr(net, 'dims', None) or (getattr(net, 'full', None) or {}).get('dims') or [])} # Dimensions with contacts of their own (a matrix over several together keeps them in net.full)
         for strat in self.strats: # A name like patch= does not make places: say so, since people at its levels mix as one population (unless contacts say otherwise)
-            if getattr(strat, 'like_places', False) and strat.name not in mixed:
+            if strat.like_places and strat.name not in mixed:
                 ss.note(f'"{strat.name}" is given only names, so its levels are groups whose people mix as one population, not places; to make them places, give kind="space" or a geography, e.g. stratify({strat.name}=ss.geo.geography(names=[...], populations=[...]))', sim=sim)
+        return
+
+    def split_from_people(self):
+        """ For init(): age groups with no split of their own take that of a named population (or of the people given to a compartmental run), and places with populations give the population size """
+        sim = self.sim
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
@@ -746,49 +803,25 @@ class Groups(sc.prettyobj):
         if len(pops) == 1 and 'total_pop' not in sim.given and sim.pop_from is None: # Places with populations, and no other population size: their total
             sim.pars.total_pop = float(pops[0].geo.populations.sum())
             sim.pop_from = f'the places of "{pops[0].name}"'
+        return
+
+    def make_grid(self):
+        """ For init(): the groups, as a grid over the levels of every dimension """
         self.group_shape = tuple(strat.n for strat in self.strats)
         self.group_mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are, in groups
         self.n_groups = int(np.prod(self.group_shape)) if self.strats else 1
         self.group_coords = np.indices(self.group_shape).reshape(len(self.strats), -1).T if self.strats else np.zeros((1, 0), dtype=int) # The level of each group in each dimension
-        split = np.ones(self.n_groups)
-        births = np.ones(self.n_groups)
         for d,strat in enumerate(self.strats):
             strat.dim = d
-        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the fraction entering each level: see below
-        if len(joints) > 1:
-            errormsg = 'Only one ss.levels(fractions=) can cover several dimensions at once'
-            raise ValueError(errormsg)
-        self.joint = None # For a split over several dimensions at once: their positions, and the fraction of people at each combination of their levels
-        for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. fractions=ss.by(sex=dict(female=[...], male=[...]))
-            others = sc.strjoin(strat.joint.dims)
-            errormsg = (f'The split of "{strat.name}" is given by {others} only; a split over several dimensions is over all of them, including "{strat.name}" itself: '
-                        f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
-                        f'and is the fraction of people at each combination (e.g. the fraction in each level of "{strat.name}" within each row, times the fraction of the row)')
-            raise ValueError(errormsg)
-        if joints:
-            ds, grid = joints[0].joint.grid(sim)
-            ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
-            within = [] # A split over age and other dimensions whose rows each sum to 1 is the fraction at each level of the others within each age group, so people keep their ages (otherwise it is the fraction at each combination, and sets the ages)
-            if ages:
-                a = ages[0]
-                totals = grid.sum(axis=tuple(j for j in range(len(ds)) if j != a), keepdims=True)
-                if np.allclose(totals, 1):
-                    within = ages
-                    grid = grid*self.strats[ds[a]].fractions.reshape([-1 if j == a else 1 for j in range(len(ds))])
-            grid = grid/grid.sum()
-            for i,d in enumerate(ds): # Each dimension's own split is the total over the others
-                if i not in within:
-                    strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
-                    if strat.joint is None and strat.fractions_given and 'fractions' not in strat.guessed and not np.allclose(strat.fractions, total, atol=1e-6): # The given split would otherwise be replaced
-                        others = [self.strats[dd].name for dd in ds if dd != d]
-                        raise ValueError(f'"{strat.name}" is given the split {np.round(strat.fractions, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
-                                                       f'a split over several dimensions is the fraction at each combination of their levels. For rows that are the fractions of {sc.strjoin(others)} given "{strat.name}", '
-                                                       f'multiply them by the fraction at each level of "{strat.name}" ({np.round(strat.fractions, 4).tolist()}) first, or leave out one of the two splits.')
-                    strat.fractions = total
-                    self.strats[d].guessed.pop('fractions', None)
-                    if within:
-                        self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
-            self.joint = (ds, grid)
+        return
+
+    def make_splits(self):
+        """ For init(): the fraction of people in each group, and of newborns (before folding: see `fold()`) """
+        split = np.ones(self.n_groups)
+        births = np.ones(self.n_groups)
+        ages = self.resolve_joint()
+        if self.joint is not None:
+            ds, grid = self.joint
             split *= grid[tuple(self.group_coords[:, d] for d in ds)]
             born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its fraction of the others (or everyone's, if it has nobody)
             born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
@@ -801,7 +834,53 @@ class Groups(sc.prettyobj):
                 births *= self.group_coords[:, d] == 0 # People are born into the youngest group
             elif self.joint is None or d not in self.joint[0]:
                 births *= frac
-        for d,strat in enumerate(self.strats): # A split of a dimension of some states only, given the levels of others (e.g. clinical severity by age): normalized over this dimension
+        return split, births
+
+    def resolve_joint(self):
+        """ For init(): a split over several dimensions at once (`ss.levels(fractions=ss.by(...))`), as `self.joint`, with each dimension's own split the total over the others; returns the positions of age among its dimensions """
+        sim = self.sim
+        joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the fraction entering each level: see below
+        if len(joints) > 1:
+            errormsg = 'Only one ss.levels(fractions=) can cover several dimensions at once'
+            raise ValueError(errormsg)
+        self.joint = None # For a split over several dimensions at once: their positions, and the fraction of people at each combination of their levels
+        for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. fractions=ss.by(sex=dict(female=[...], male=[...]))
+            others = sc.strjoin(strat.joint.dims)
+            errormsg = (f'The split of "{strat.name}" is given by {others} only; a split over several dimensions is over all of them, including "{strat.name}" itself: '
+                        f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
+                        f'and is the fraction of people at each combination (e.g. the fraction in each level of "{strat.name}" within each row, times the fraction of the row)')
+            raise ValueError(errormsg)
+        if not joints:
+            return []
+        ds, grid = joints[0].joint.grid(sim)
+        ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
+        within = [] # A split over age and other dimensions whose rows each sum to 1 is the fraction at each level of the others within each age group, so people keep their ages (otherwise it is the fraction at each combination, and sets the ages)
+        if ages:
+            a = ages[0]
+            totals = grid.sum(axis=tuple(j for j in range(len(ds)) if j != a), keepdims=True)
+            if np.allclose(totals, 1):
+                within = ages
+                grid = grid*self.strats[ds[a]].fractions.reshape([-1 if j == a else 1 for j in range(len(ds))])
+        grid = grid/grid.sum()
+        for i,d in enumerate(ds): # Each dimension's own split is the total over the others
+            if i not in within:
+                strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
+                if strat.joint is None and strat.fractions_given and 'fractions' not in strat.guessed and not np.allclose(strat.fractions, total, atol=1e-6): # The given split would otherwise be replaced
+                    others = [self.strats[dd].name for dd in ds if dd != d]
+                    raise ValueError(f'"{strat.name}" is given the split {np.round(strat.fractions, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
+                                                   f'a split over several dimensions is the fraction at each combination of their levels. For rows that are the fractions of {sc.strjoin(others)} given "{strat.name}", '
+                                                   f'multiply them by the fraction at each level of "{strat.name}" ({np.round(strat.fractions, 4).tolist()}) first, or leave out one of the two splits.')
+                strat.fractions = total
+                self.strats[d].guessed.pop('fractions', None)
+                if within:
+                    self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
+        self.joint = (ds, grid)
+        return ages
+
+    def resolve_conditional(self):
+        """ For init(): a split of a dimension of some states only, given the levels of others (e.g. clinical severity by age), normalized over this dimension """
+        sim = self.sim
+        for d,strat in enumerate(self.strats):
             if strat.joint is not None and strat.states is not None:
                 ds, grid = strat.joint.grid(sim)
                 if d not in ds:
@@ -815,16 +894,6 @@ class Groups(sc.prettyobj):
                 split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.fracs(self.group_coords), minlength=strat.n)
                 strat.fractions = split_all/split_all.sum()
                 strat.guessed.pop('fractions', None)
-        self.init_ragged()
-        self.group_split = self.fold(split)
-        self.birth_split = self.fold(births)
-        for strat in self.strats:
-            strat.sim_coords = self.group_levels # So a result can look up which group is which
-        for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
-            if strat.kind != 'age':
-                setattr(sim, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
-        if 'aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
-            sim.pars.aging = sim._has_demography()
         return
 
     def check_used(self):
@@ -878,7 +947,7 @@ class Groups(sc.prettyobj):
         """
         coords = self.group_coords.copy()
         inside = np.ones(coords.shape, dtype=bool) # Whether each group (rows) has a level of each dimension (columns)
-        pending = [d for d,strat in enumerate(self.strats) if getattr(strat, 'who', None)]
+        pending = [d for d,strat in enumerate(self.strats) if strat.who]
         names = [strat.name for strat in self.strats]
         sexes = [strat.name for strat in self.strats if strat.female is not None] # people.female is the level of women of a dimension called sex
         for d in pending:
@@ -1002,7 +1071,7 @@ class Groups(sc.prettyobj):
         self._group_cache = None
         for engine in self.agent_engines(): # See ss.solvers.Agents.regroup()
             engine.regroup(uids)
-        dirty = getattr(self, '_group_dirty', None)
+        dirty = self._group_dirty
         if uids is None or dirty is False:
             self._group_dirty = False # Everyone
         else:
@@ -1017,44 +1086,25 @@ class Groups(sc.prettyobj):
         a dimension binned from a property that changes on its own, such as age, is checked on every step.
         """
         sim = self.sim
-        cache = getattr(self, '_group_cache', None)
+        cache = self._group_cache
         n = sim.people.uid.len_tot
         if cache is not None and cache[0] == sim.ti and len(cache[1]) == n: # The usual case, first, since this is called at every change of a state that is counted
             return cache[1]
         binned = any(strat.edges is not None for strat in self.strats)
         if cache is not None and not binned and len(cache[1]) == n:
             return cache[1]
-        dirty = getattr(self, '_group_dirty', None)
+        dirty = self._group_dirty
         self._group_dirty = None
         if len(self.strats) == 1 and not binned and self.group_fold is None and sim.people[self.strats[0].attr].raw.dtype.kind in 'iu': # One dimension, whose property is the level (see Strat.people_arr()): it is the group too, so nothing is kept
             raw = sim.people[self.strats[0].attr].raw
             self._group_cache = (sim.ti, raw, [raw])
             return raw
         shared = len(self.strats) == 1 # With one dimension, the groups are its levels: one array is kept for both
-        kept = getattr(self, '_level_cache', None)
+        kept = self._level_cache
         if isinstance(dirty, list) and not binned and kept is not None and '' in kept and len(kept['']) == n: # Only some agents have changed, and we know which: work out their groups alone
-            uids = np.unique(np.concatenate(dirty))
-            levels = []
-            out = kept[''] # Changed in place: the groups are only ever used straight away, so nothing holds the old ones
-            for strat,mult in zip(self.strats, self.group_mults):
-                raw = sim.people[strat.attr].raw
-                old_raw, old_level = kept[strat.name]
-                if len(old_raw) != n: # The arrays have grown since: work everything out
-                    self._group_dirty = False
-                    return self.group_raw()
-                if len(uids):
-                    before = old_level[uids]
-                    after = strat.level_of(raw[uids])
-                    old_level[uids] = after
-                    old_raw[uids] = raw[uids]
-                    if not shared:
-                        out[uids] += (after.astype(out.dtype) - before)*int(mult) # In the groups' integers, which may be wider than the levels'
-                levels.append(kept[strat.name][1])
-            kept[''] = out
-            self._group_cache = (sim.ti, self.folded(out), levels)
-            return self._group_cache[1]
+            return self.regroup_known(np.unique(np.concatenate(dirty)), shared)
         people = sim.people
-        kept = getattr(self, '_level_cache', None) # The values each level was worked out from: most properties change rarely, and checking is much cheaper than working the levels out again
+        kept = self._level_cache # The values each level was worked out from: most properties change rarely, and checking is much cheaper than working the levels out again
         if kept is None:
             kept = self._level_cache = dict()
         levels = []
@@ -1118,6 +1168,33 @@ class Groups(sc.prettyobj):
         elif rebuild and cache is not None: # Worked out again from scratch: whatever keeps counts by group counts again
             for engine in self.agent_engines():
                 engine.regroup()
+        return self._group_cache[1]
+
+    def regroup_known(self, uids, shared):
+        """
+        For group_raw(): the groups, once only some agents' levels have changed and we know which (see `groups_changed()`): theirs
+        alone are worked out again. The agent engines were told already (by `groups_changed()`), so they are not told here.
+        """
+        sim = self.sim
+        n = sim.people.uid.len_tot
+        kept = self._level_cache
+        levels = []
+        out = kept[''] # Changed in place: the groups are only ever used straight away, so nothing holds the old ones
+        for strat,mult in zip(self.strats, self.group_mults):
+            raw = sim.people[strat.attr].raw
+            old_raw, old_level = kept[strat.name]
+            if len(old_raw) != n: # The arrays have grown since: work everything out
+                self._group_dirty = False
+                return self.group_raw()
+            if len(uids):
+                before = old_level[uids]
+                after = strat.level_of(raw[uids])
+                old_level[uids] = after
+                old_raw[uids] = raw[uids]
+                if not shared:
+                    out[uids] += (after.astype(out.dtype) - before)*int(mult) # In the groups' integers, which may be wider than the levels'
+            levels.append(old_level)
+        self._group_cache = (sim.ti, self.folded(out), levels)
         return self._group_cache[1]
 
     def agent_engines(self):
@@ -1184,14 +1261,13 @@ class Groups(sc.prettyobj):
         people = sim.people
         uids = people.auids
         joint = self.joint[0] if self.joint is not None else []
-        own = getattr(self, 'kept', set()) # Properties the people came with, which are kept and binned (see ss.Sim.init_people())
         for d,strat in enumerate(self.strats):
-            if strat.name in own:
+            if strat.name in self.kept: # Properties the people came with, which are kept and binned (see ss.Sim.init_people())
                 continue
             if strat.female is not None and d not in joint and strat.cond is None: # A sex dimension is people.female, whose fraction is the split: see init_people()
                 self.set_sex(uids)
             elif strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
-                order = np.argsort(getattr(sim, f'rng_strat_{strat.name}').rvs(uids), kind='stable')
+                order = np.argsort(self.rng(strat).rvs(uids), kind='stable')
                 counts = ss.solvers.Compartmental.round_preserving(strat.fractions*len(uids)).astype(int)
                 levels = np.repeat(np.arange(strat.n, dtype=level_dtype(strat.n)), counts) # As they are kept, to save memory
                 people[strat.attr][uids[order]] = strat.value(levels)
@@ -1200,7 +1276,7 @@ class Groups(sc.prettyobj):
         for strat in self.strats: # A split given the levels of other dimensions, once those are known
             if strat.cond is not None:
                 self.groups_changed()
-                people[strat.attr][uids] = strat.value(strat.draw(sim, uids, getattr(sim, f'rng_strat_{strat.name}').rvs(uids)))
+                people[strat.attr][uids] = strat.value(strat.draw(sim, uids, self.rng(strat).rvs(uids)))
         if joint or any(strat.cond is not None for strat in self.strats): # A sex drawn with other dimensions sets people.female
             self.set_sex(uids, from_level=True)
         self.groups_changed()
@@ -1214,22 +1290,46 @@ class Groups(sc.prettyobj):
         ds, grid = self.joint
         ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
         others = [i for i in range(len(ds)) if i not in ages]
-        grid = np.moveaxis(grid, ages + others, list(range(len(ds)))).reshape(len(ages) and self.strats[ds[ages[0]]].n or 1, -1) # Rows: the age group (one row if no age); columns: the other levels together
-        row = np.clip(np.digitize(people.age[uids], self.strats[ds[ages[0]]].edges) - 1, 0, grid.shape[0] - 1) if ages else np.zeros(len(uids), dtype=int)
+        age = self.strats[ds[ages[0]]] if ages else None
+        grid = np.moveaxis(grid, ages + others, list(range(len(ds)))).reshape(age.n if age else 1, -1) # Rows: the age group (one row if no age); columns: the other levels together
+        row = age.level_of(people.age[uids]) if age else np.zeros(len(uids), dtype=int)
         cdf = np.cumsum(grid, axis=1)
         cdf = cdf/np.maximum(cdf[:, -1:], 1e-300)
-        rvs = getattr(sim, f'rng_strat_{self.strats[ds[others[0]]].name}').rvs(uids)
+        rvs = self.rng(self.strats[ds[others[0]]]).rvs(uids)
         cell = np.minimum((cdf[row] <= rvs[:, None]).sum(axis=1), grid.shape[1] - 1)
         for i,level in zip(others, np.unravel_index(cell, [self.strats[ds[i]].n for i in others])):
             people[self.strats[ds[i]].attr][uids] = self.strats[ds[i]].value(level)
+        return
+
+    def added(self, uids, placed=False, age_given=False):
+        """
+        In an agent-based run: what agents made by `people.grow()` need: their sex dimension, their levels (unless `placed`), and their traits
+
+        Args:
+            uids (uids): the new agents
+            placed (bool): whether they were placed already (e.g. by a declared module: see `ss.solvers.Agents.add_people()`), which gives them their levels and traits
+            age_given (bool): whether they were made with their ages; if not, the code that made them sets their properties afterwards, so their traits are drawn at the next step, from what it set (rather than, say, a fetus's trait by age from a default adult age)
+        """
+        sim = self.sim
+        self.set_sex(uids) # A dimension called sex is people.female
+        if placed:
+            return
+        if self.vals_set and self.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
+            self.place_new(uids)
+        if not age_given:
+            sim.people.untraited.append((int(uids[0]), int(uids[-1]) + 1))
+        else: # Their traits (ss.attr(dist)), as states get their defaults
+            for mod in sim.declared:
+                if getattr(mod.engine, '_started', False):
+                    mod.engine.draw_traits(uids)
         return
 
     def place_new(self, uids):
         """
         In an agent-based run: the levels of agents added by a module written as code (e.g. `ss.Births`), drawn from each dimension's split, as the declared births draw them (see `ss.solvers.Agents.add_people()`)
 
-        A newborn with a parent (`people.parent`) is in the parent's place (a dimension of kind "space"), and a split over age and
-        other dimensions is drawn from the newborn's age group.
+        A newborn with a parent (`people.parent`) is in the parent's place (a dimension of kind "space"), and the others' places are
+        drawn; a split over age and other dimensions is drawn from the newborn's age group.
         """
         sim = self.sim
         people = sim.people
@@ -1241,11 +1341,13 @@ class Groups(sc.prettyobj):
         for d,strat in enumerate(self.strats):
             if strat.kind in ['age', 'strain', 'disease'] or strat.female is not None or d in joint: # Ages are their own, a sex dimension is people.female (see set_sex()), newborns have no strain, and a joint split is drawn above
                 continue
-            if strat.kind == 'space' and has_parent.all() and strat.cond is None: # Born where the parent is
-                people[strat.attr][uids] = people[strat.attr].raw[parent.astype(int)]
-                continue
-            rvs = getattr(sim, f'rng_strat_{strat.name}').rvs(uids)
-            people[strat.attr][uids] = strat.value(strat.draw(sim, uids, rvs))
+            drawn = uids
+            if strat.kind == 'space' and strat.cond is None: # Born where the parent is; any without a parent are drawn
+                people[strat.attr][uids[has_parent]] = people[strat.attr].raw[parent[has_parent].astype(int)]
+                drawn = uids[~has_parent]
+                if not len(drawn):
+                    continue
+            people[strat.attr][drawn] = strat.value(strat.draw(sim, drawn, self.rng(strat).rvs(drawn)))
         self.groups_changed(uids)
         return
 

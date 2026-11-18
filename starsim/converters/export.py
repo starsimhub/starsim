@@ -124,7 +124,7 @@ def contact_rate(sim, engine, saturated=True):
     these are written, unless `saturated=False`.
     """
     total = 0.0
-    for term in sim.mixing.terms:
+    for term in sim.contact_rates.terms:
         if term.kind == 'homogeneous':
             sat = 1.0
             if saturated and term.get('edges') is not None and hasattr(engine, 'saturation'):
@@ -145,7 +145,7 @@ def route_beta(sim, betas, unit):
     """ A beta for each route as one beta: their mean weighted by contacts, so that with the total contacts it gives the same transmission """
     key = ss.networks.standardize_netkey
     betas = {key(k):float(ss.solvers.convert(v, unit)) for k,v in betas.items()}
-    terms = [(term.contacts, betas.get(key(term.name), 0.0)) for term in sim.mixing.terms if term.kind == 'homogeneous']
+    terms = [(term.contacts, betas.get(key(term.name), 0.0)) for term in sim.contact_rates.terms if term.kind == 'homogeneous']
     return np.average([b for c,b in terms], weights=[c for c,b in terms])
 
 

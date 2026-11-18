@@ -18,7 +18,7 @@ same parameters these agree with `ss.SIR` and `ss.SEIR` run as agents at any ste
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, so that importing the library stays fast
 
 __all__ = ['AgentSIR', 'AgentSEIR', 'AgentSIS']
 

@@ -6,13 +6,19 @@ It exists since a condition in one disease on a state of another (e.g. coinfecti
 Used with: compartments; declared modules
 """
 import numpy as np
-import numba as nb
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
 from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts, given_start
 
 __all__ = ['JointStates', 'Joint']
+
+TABLES = ['fixed', 'mult', 'consts', 'rel_trans'] # The program's tables over the steps (see ss.solvers.Compartmental.tables()), as ss.gradients.table_fields
+
+
+def gather(x, idx, xp=np):
+    """ The entries of x (along its last axis) at idx, and 0 where idx is -1 (in NumPy, or JAX's NumPy) """
+    return xp.where(idx >= 0, x[..., np.maximum(idx, 0)], 0.0)
 
 
 class Joint:
@@ -87,6 +93,7 @@ class JointStates:
         self.names = names
         self.reasons = reasons or []
         self.engines = []
+        self.private = dict() # The dimensions of some states of one disease only, and its engine: see private_dims()
         self.layout = None # Where each engine's compartments and flows are in the program: see init_layout()
         self.program = None # The program of the diseases together: see build()
         self.built = None # What it was built from
@@ -103,8 +110,8 @@ class JointStates:
         """ The disease whose engine moves people in ways that belong to the sim (aging, relocating, a movement register): the first, or the first of those with the most of the states that a movement register names """
         if self._lead is None:
             self._lead = self.names[0]
-            if self.sim.mixing.register is not None:
-                ev = self.sim.mixing.events()
+            if self.sim.contact_rates.register is not None:
+                ev = self.sim.contact_rates.events()
                 named = {name for key in ev.sets for states in key if states is not None for name in states}
                 counts = [len(named & set(self.sim._declared_module(name).graph.states)) for name in self.names]
                 self._lead = self.names[int(np.argmax(counts))]
@@ -158,6 +165,7 @@ class JointStates:
         """ Start the diseases independent of each other: the fraction of people in each compartment of one is the same in every compartment of the others """
         sim = self.sim
         self.engines = [sim._declared_module(name).engine for name in self.names]
+        self.private = self.private_dims()
         self.check()
         if self.layout is None:
             self.init_layout()
@@ -179,7 +187,7 @@ class JointStates:
             view = Joint(self, L.idx)
             view[rows] = engine.y[rows]
             engine.y = view
-        if sim.mixing.register is not None: # The events dated at the start, for everyone
+        if sim.contact_rates.register is not None: # The events dated at the start, for everyone
             lead = sim._declared_module(self.lead).engine
             self.register = self.join_register(lead.init_register())
             self.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
@@ -190,13 +198,22 @@ class JointStates:
         return
 
     def check(self):
+        """ The diseases step together, so they have to have the same timestep """
+        sim = self.sim
+        steps = {(e.mod.t.npts, e.dt) for e in self.engines}
+        if len(steps) > 1:
+            raise ss.CapabilityError(f'{sc.strjoin(self.names)} have timesteps of their own, so their states cannot be tracked jointly with solver="{sim.solver}", since they step together.\n'
+                                     f'     Give them the same timestep, or run with solver="abm".')
+        return
+
+    def private_dims(self):
         """
-        Each dimension other than the diseases' own has to apply to every state of people in the joint states, or to
-        some states of one disease only (e.g. a strain), but not to its first state, where people born to the others start;
-        and the diseases step together, so they have to have the same timestep
+        The dimensions of some states of one disease only (e.g. a strain), and its engine: each dimension other than the diseases' own has to
+        apply to every state of people in the joint states, or to some states of one disease only, but not to its first state, where people
+        born to the others start
         """
         sim = self.sim
-        self.private = dict() # The dimensions of some states of one disease only, and its engine
+        private = dict()
         for d,strat in enumerate(sim.groups.strats):
             if strat.kind == 'disease':
                 continue
@@ -210,12 +227,8 @@ class JointStates:
                 raise ss.CapabilityError(f'"{strat.name}" applies to some states of {sc.strjoin(self.names)} ({sc.strjoin(some)}) but not to others, so their states cannot be tracked jointly with solver="{sim.solver}" yet. '
                                          f'A dimension of some states of one disease only works if it is not its first state.\n'
                                          f'     Run with solver="abm".')
-            self.private[d] = owners[0]
-        steps = {(e.mod.t.npts, e.dt) for e in self.engines}
-        if len(steps) > 1:
-            raise ss.CapabilityError(f'{sc.strjoin(self.names)} have timesteps of their own, so their states cannot be tracked jointly with solver="{sim.solver}", since they step together.\n'
-                                     f'     Give them the same timestep, or run with solver="abm".')
-        return
+            private[d] = owners[0]
+        return private
 
     def init_layout(self):
         """
@@ -580,8 +593,8 @@ class JointStates:
                 ent_comps.append(L.rowmap[reg.ent_comps[i], o])
                 ent_w.append(reg.ent_w[i, L.cols[o]])
             ent_starts.append(len(ent_comps))
-        d = self.sim.mixing.space
-        pg_starts, pg_groups = by_level(np.asarray(self.sim.mixing.places)[L.cols[0]], self.sim.groups.strats[d].n)
+        d = self.sim.contact_rates.space
+        pg_starts, pg_groups = by_level(np.asarray(self.sim.contact_rates.places)[L.cols[0]], self.sim.groups.strats[d].n)
         step = int(np.prod([self.sim.groups.strats[dd].n for dd in self.rest if dd > d])) # How far apart adjacent places are in the program's groups
         return reg._replace(sel_starts=ints(sel_starts), sel_comps=ints(sel_comps), sel_to=ints(sel_to), ent_starts=ints(ent_starts), ent_comps=ints(ent_comps),
                             ent_w=np.array(ent_w, dtype=float).reshape(len(ent_comps), R), pg_starts=ints(pg_starts), pg_groups=ints(pg_groups), step=step)
@@ -612,7 +625,7 @@ class JointStates:
         cat = lambda parts, axis=0: xp.concatenate(parts, axis=axis)
         out = {}
         for key in keys:
-            if key in ['fixed', 'mult', 'consts', 'rel_trans']: # Tables, with a row for each step (or one for all of them)
+            if key in TABLES: # Tables, with a row for each step (or one for all of them)
                 vals = [xp.broadcast_to(X[key], X[key].shape[:2] + (engine.n_groups,)) for X,engine in zip(Xs, self.engines)] # By group, if kept once for all of them (see ss.gradients.capture())
                 T = max(len(v) for v in vals)
                 parts = [v[:, I[:, None], C] for v,(I,C) in zip(vals, self.pieces[dict(fixed='flows', mult='flows').get(key, key)])]
@@ -642,22 +655,24 @@ class JointStates:
             elif key.startswith('sh_'): # No deliveries: see no_shifts()
                 R = self.n_cols
                 out[key] = xp.zeros(dict(sh_due=(0, Xs[0]['sh_due'].shape[1]), sh_sel=(0, self.n_rows, R), sh_cov=(0, self.n_rows, R), sh_to=(0, R, R), sh_rest=(0, R, R), sh_land=(0, self.n_rows, R), sh_moves=(0,))[key])
+            else:
+                errormsg = f'numbers() does not know how to join "{key}" of the diseases\' programs'
+                raise KeyError(errormsg)
         return out
 
     def split(self, k, y, stocks, flows, xp=np):
         """ Engine k's compartments at the end, at each time point, and its flows over each step, from the program's (as `ss.solvers.numba.compartmental.run()` returns them) """
         L = self.layout[k]
-        idx, fidx = np.maximum(L.idx, 0), np.maximum(L.fidx, 0)
-        yk = xp.where(L.idx >= 0, y.reshape(-1)[idx], 0.0)
-        sk = xp.where(L.idx >= 0, stocks.reshape(stocks.shape[0], -1)[:, idx], 0.0)
-        fk = xp.where(L.fidx >= 0, flows.reshape(flows.shape[0], -1)[:, fidx], 0.0)
+        yk = gather(y.reshape(-1), L.idx, xp)
+        sk = gather(stocks.reshape(stocks.shape[0], -1), L.idx, xp)
+        fk = gather(flows.reshape(flows.shape[0], -1), L.fidx, xp)
         return yk, sk, fk
 
     def engine_stocks(self, k, stocks, by_group=True):
         """ Engine k's number in each state from the number in each of the program's compartments: arrays whose last two dimensions are compartments by groups (or by one, the total) to states by the engine's groups (or one) """
         L = self.layout[k]
         if by_group:
-            per_comp = np.where(L.idx >= 0, stocks.reshape(stocks.shape[:-2] + (-1,))[..., np.maximum(L.idx, 0)], 0.0)
+            per_comp = gather(stocks.reshape(stocks.shape[:-2] + (-1,)), L.idx)
             return np.einsum('...cg,sc->...sg', per_comp, L.comp_member)
         return np.einsum('...rg,sr->...sg', stocks, L.member)
 
@@ -665,7 +680,7 @@ class JointStates:
         """ Engine k's flow along each transition and mover from the program's, as `engine_stocks()` does """
         L = self.layout[k]
         if by_group:
-            return np.where(L.fidx >= 0, flows.reshape(flows.shape[:-2] + (-1,))[..., np.maximum(L.fidx, 0)], 0.0)
+            return gather(flows.reshape(flows.shape[:-2] + (-1,)), L.fidx)
         return np.einsum('...fg,ef->...eg', flows, L.fmember)
 
     #%% Running it
@@ -675,16 +690,16 @@ class JointStates:
         setups = [engine.run_args(tables=tables) for engine in self.engines]
         progs = [args[1] for args,_ in setups]
         self.build(progs)
-        Xs = [{key:getattr(prog, key) for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']} | dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], tabs or [])) for prog,(_,tabs) in zip(progs, setups)]
+        Xs = [{key:getattr(prog, key) for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']} | dict(zip(TABLES, tabs or [])) for prog,(_,tabs) in zip(progs, setups)]
         J = self.numbers(Xs)
         program = self.program._replace(**{key:J[key] for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']})
         args = [self.y.copy(), program] + setups[0][0][2:]
-        return args, ([np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']] if tables else None)
+        return args, ([np.ascontiguousarray(J[key]) for key in TABLES] if tables else None)
 
     def tables(self, start=0, stop=None):
         """ The program's tables for some steps (see `ss.solvers.Compartmental.tables()`) """
-        J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines])
-        return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
+        J = self.numbers([dict(zip(TABLES, engine.tables(start, stop))) for engine in self.engines])
+        return [np.ascontiguousarray(J[key]) for key in TABLES]
 
     def kernels(self, runs=1):
         """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.compartmental.choose_kernels()` """
@@ -725,12 +740,12 @@ class JointStates:
         J = self.numbers(Xs)
         p.contacts[:] = J['contacts']
         p.mov_rate[:] = J['mov_rate']
-        p.fixed[:], p.mult[:], p.consts[:], p.rel_trans[:] = [J[key][0] for key in ['fixed', 'mult', 'consts', 'rel_trans']]
+        p.fixed[:], p.mult[:], p.consts[:], p.rel_trans[:] = [J[key][0] for key in TABLES]
         return no_tables, row
 
     def flows_of(self, flows):
         """ Each engine's flows over a step, by its groups, from the program's """
-        return [np.where(L.fidx >= 0, flows.ravel()[np.maximum(L.fidx, 0)], 0.0) for L in self.layout]
+        return [gather(flows.ravel(), L.fidx) for L in self.layout]
 
     def check_short(self, short):
         """ Warn if events of a movement register asked for more people than there were: by the disease that moves people for the sim (see `lead`) """

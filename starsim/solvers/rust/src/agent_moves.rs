@@ -3,6 +3,20 @@
 
 use crate::draws::{crn_uniform, exp, key, log, log1p, max, ndtri};
 
+// The codes the caller passes, as `agent_moves.py` names them
+const SCHEDULED: i64 = 0; // A transition's kind: a scheduled exit (then TRIGGERED = 1, CONTACT = 2)
+const RATED: i64 = 3; // A competing rate
+const TAKE: i64 = 0; // What to do with an agent given: take the transition given now (then LOOK = 1)
+const MOVED: i64 = 2; // Take the moves a time after the transition it was moved by (by code)
+const AT_START: i64 = 0; // When in the step the call is: at its start
+const INFECTIONS: i64 = 1; // For the infections (then LATER = 2)
+
+/// The pass of the cascade in which transition `t` is taken, for an agent in pass `p` that came by the transition at place `q` in the sweep (`agent_moves.pass_of()`)
+#[inline(always)]
+fn pass_of(g: &Graph, t: usize, p: i64, q: i64) -> i64 {
+    if g.pos[t] > q { p } else { p + 1 }
+}
+
 /// Columns of one type, one for each state (or trigger): the module's arrays, read and written in place (they outlive the call)
 pub struct Cols<T> {
     p: Vec<*mut T>,
@@ -123,8 +137,6 @@ pub struct Graph<'a> {
     pub trig_cond: &'a [i64],
     pub lazy: &'a [bool],
     pub trig_dist: &'a [i64],
-    pub trig_fixed: &'a [bool],
-    pub trig_mean: &'a [f64],
     pub comp_state: &'a [bool],
     pub has_late: &'a [bool],
     pub halved: &'a [bool],
@@ -201,11 +213,7 @@ fn schedule(a: usize, s: usize, entered: f64, tag: i64, ps: i64, st: &State, g: 
 #[inline(always)]
 #[allow(clippy::too_many_arguments)]
 fn delay(gi: usize, a: usize, tag: i64, ps: i64, g: &Graph, v: &Values, cr: &Crn, phase: &[f32], dt: f64, ti_delay: f64) -> f32 {
-    let dur = if g.trig_fixed[gi] {
-        v.draw(g.trig_dist[gi] as usize, a, tag, ps, cr)
-    } else {
-        -g.trig_mean[if g.trig_mean.len() > 1 { a } else { 0 }]*log1p(-cr.rand(cr.dstream[g.trig_dist[gi] as usize] as usize, tag, ps, a))
-    };
+    let dur = v.draw(g.trig_dist[gi] as usize, a, tag, ps, cr);
     (ti_delay + (dur/dt + phase[a] as f64).floor()) as f32
 }
 
@@ -296,19 +304,19 @@ pub fn step_moves(agents: &[i64], arr_tr: &[i64], arr_src: &[i64], arr_kind: &[i
         let mut p = arr_p[idx];
         let mut q = arr_q[idx];
         let ak = arr_kind[idx];
-        if ak == 0 {
+        if ak == TAKE {
             let src = arr_src[idx] as usize;
             if st.s.get(src, a) {
                 t_in = arr_tr[idx];
                 s = src as i64;
             }
-        } else if ak == 2 && s >= 0 {
+        } else if ak == MOVED && s >= 0 {
             let te_ = arr_tr[idx] as usize;
             for j in (g.ae_ptr[te_] as usize)..(g.ae_ptr[te_ + 1] as usize) {
                 let gi = g.ae_trig[j] as usize;
                 let tg = g.tr_trig[gi];
                 if g.src(tg as usize, s as usize) && st.tt.get(gi, a).is_nan() {
-                    let pg = if g.pos[tg as usize] > q { p } else { p + 1 };
+                    let pg = pass_of(g, tg as usize, p, q);
                     let d = delay(gi, a, tg, pg, g, v, cr, phase, dt, ti_delay);
                     st.tt.set(gi, a, d);
                 }
@@ -351,15 +359,15 @@ pub fn step_moves(agents: &[i64], arr_tr: &[i64], arr_src: &[i64], arr_kind: &[i
                     let wx = st.xw.get(su, a);
                     if te <= ti_due && wx >= 0 {
                         tt = g.ex_tr[g.ex_ptr[su] as usize + wx as usize];
-                        pb = if g.pos[tt as usize] > q { p } else { p + 1 };
+                        pb = pass_of(g, tt as usize, p, q);
                     }
                 }
                 let ng = if tt < 0 || q >= 0 { ntrig } else { 0 }; // A scheduled exit due before any move in the cascade is taken first
                 for gi in 0..ng {
                     let tg = g.tr_trig[gi];
                     if g.src(tg as usize, su) && (st.tt.get(gi, a) as f64) <= ti_delay {
-                        let pg = if g.pos[tg as usize] > q { p } else { p + 1 };
-                        if tt < 0 || (g.kind[tt as usize] != 3 && (pg < pb || (pg == pb && g.pos[tg as usize] < g.pos[tt as usize]))) {
+                        let pg = pass_of(g, tg as usize, p, q);
+                        if tt < 0 || (g.kind[tt as usize] != RATED && (pg < pb || (pg == pb && g.pos[tg as usize] < g.pos[tt as usize]))) {
                             tt = tg;
                             pb = pg;
                             trig = gi as i64;
@@ -414,7 +422,7 @@ pub fn step_moves(agents: &[i64], arr_tr: &[i64], arr_src: &[i64], arr_kind: &[i
                     }
                 }
                 if chosen < 0 { // Stays
-                    if g.kind[t] == 0 {
+                    if g.kind[t] == SCHEDULED {
                         st.xt.set(frm, a, f32::INFINITY);
                         st.xw.set(frm, a, -2);
                     }
@@ -474,7 +482,7 @@ pub fn step_moves(agents: &[i64], arr_tr: &[i64], arr_src: &[i64], arr_kind: &[i
                 }
             }
             if g.comp_state[du] && g.has_late[du] {
-                let val = if mode == 0 { 0.5 } else if mode == 1 { if g.halved[du] { -0.5 } else { 0.0 } } else if ti_enter == ti_delay { 1.0 } else { 0.0 };
+                let val = if mode == AT_START { 0.5 } else if mode == INFECTIONS { if g.halved[du] { -0.5 } else { 0.0 } } else if ti_enter == ti_delay { 1.0 } else { 0.0 };
                 st.late.set(du, a, val);
             }
             if g.sched[du] {
@@ -485,7 +493,7 @@ pub fn step_moves(agents: &[i64], arr_tr: &[i64], arr_src: &[i64], arr_kind: &[i
                 let gi = g.ae_trig[j] as usize;
                 let tg = g.tr_trig[gi];
                 if g.src(tg as usize, du) && st.tt.get(gi, a).is_nan() {
-                    let pg = if g.pos[tg as usize] > q { p } else { p + 1 };
+                    let pg = pass_of(g, tg as usize, p, q);
                     let dl = delay(gi, a, tg, pg, g, v, cr, phase, dt, ti_delay);
                     st.tt.set(gi, a, dl);
                 }
@@ -543,7 +551,7 @@ pub mod bind {
                         s, sti, ssh, kept, left, has_left, xt, xw, sched,
                         ex_ptr, ex_tr, nbr, br_col, loops,
                         pos, kind, split, dst_ptr, dst_state, dst_col, dw, adj, aft, has_dw, src_mask, ae_ptr, ae_trig,
-                        tr_trig, tt, trig_where, wh, trig_dist, trig_fixed, trig_mean,
+                        tr_trig, tt, trig_where, wh, trig_dist,
                         fam, pcol, pa, ps, e, phase, dt, w, weighted,
                         slots, ind0, rs, ush, usc, z32, dstream, bstream, tstream, back, againx, again,
                         ev_a, ev_t, ev_s, ev_d, ev_p, n_ev, flow, flowdst, dlive, max_hops,
@@ -555,7 +563,7 @@ pub mod bind {
                        ex_ptr: &Arr<'py>, ex_tr: &Arr<'py>, nbr: &Arr<'py>, br_col: &Arr<'py>, loops: &Arr<'py>,
                        pos: &Arr<'py>, kind: &Arr<'py>, split: &Arr<'py>, dst_ptr: &Arr<'py>, dst_state: &Arr<'py>, dst_col: &Arr<'py>, dw: &Arr<'py>, adj: &Arr<'py>, aft: &Arr<'py>,
                        has_dw: &Arr<'py>, src_mask: &Arr<'py>, ae_ptr: &Arr<'py>, ae_trig: &Arr<'py>,
-                       tr_trig: &Arr<'py>, tt: &Bound<'py, PyTuple>, trig_where: &Arr<'py>, wh: &Bound<'py, PyTuple>, trig_dist: &Arr<'py>, trig_fixed: &Arr<'py>, trig_mean: &Arr<'py>,
+                       tr_trig: &Arr<'py>, tt: &Bound<'py, PyTuple>, trig_where: &Arr<'py>, wh: &Bound<'py, PyTuple>, trig_dist: &Arr<'py>,
                        fam: &Arr<'py>, pcol: &Arr<'py>, pa: &Arr<'py>, ps: &Arr<'py>, e: &Arr<'py>, phase: &Arr<'py>, dt: f64, w: &Arr<'py>, weighted: bool,
                        slots: &Arr<'py>, ind0: i64, rs: &Arr<'py>, ush: &Arr<'py>, usc: &Arr<'py>, z32: &Arr<'py>, dstream: &Arr<'py>, bstream: &Arr<'py>, tstream: &Arr<'py>,
                        back: &Arr<'py>, againx: &Arr<'py>, again: &Arr<'py>,
@@ -574,7 +582,7 @@ pub mod bind {
             sched: sl(sched)?, ex_ptr: sl(ex_ptr)?, ex_tr: sl(ex_tr)?, nbr: sl(nbr)?, br_col: sl(br_col)?, loops: sl(loops)?,
             pos: sl(pos)?, kind: sl(kind)?, split: sl(split)?, dst_ptr: sl(dst_ptr)?, dst_state: sl(dst_state)?, dst_col: sl(dst_col)?,
             dw: sl(dw)?, adj: sl(adj)?, aft: sl(aft)?, has_dw: sl(has_dw)?, src_mask: flat(src_mask)?, ns,
-            ae_ptr: sl(ae_ptr)?, ae_trig: sl(ae_trig)?, tr_trig: sl(tr_trig)?, trig_where: sl(trig_where)?, trig_cond: sl(trig_cond)?, lazy: sl(lazy)?, trig_dist: sl(trig_dist)?, trig_fixed: sl(trig_fixed)?, trig_mean: sl(trig_mean)?,
+            ae_ptr: sl(ae_ptr)?, ae_trig: sl(ae_trig)?, tr_trig: sl(tr_trig)?, trig_where: sl(trig_where)?, trig_cond: sl(trig_cond)?, lazy: sl(lazy)?, trig_dist: sl(trig_dist)?,
             comp_state: sl(comp_state)?, has_late: sl(has_late)?, halved: sl(halved)?, back: sl(back)?, againx: flat(againx)?,
         };
         let (pa, pa_cols) = table(pa)?;

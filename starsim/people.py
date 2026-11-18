@@ -108,6 +108,15 @@ class People:
         ```
     """
     _taken = None # See taken_names()
+
+    # Caches and the state of a step, made when first needed
+    _phase = None # Each agent's phase and how many agents it was worked out for: see phase()
+    _phase_shift = None # The shift of every agent's phase, from the sim's seed: see phase_shift()
+    _auids_room = None # The array the active agents are the first part of, with room for births: see add_active()
+    _auids_view = None # The active agents, as the view of _auids_room last made (if auids is still it, the room can be used)
+    _resolved_ti = None # The step whose deaths step_die() has resolved: see request_death()
+    _dying = None # The agents who died or left in this step: see dying()
+    _death_mods = None # The modules told of deaths, once the sim is initialized: see death_modules()
     auids  = MadeOnUse() # The four fundamental arrays, made on first use: see make_uids()
     uid    = MadeOnUse()
     slot   = MadeOnUse()
@@ -198,7 +207,7 @@ class People:
         if uids is not None:
             return of(uids if slots is None else slots[uids])
         n, used = self.uid.len_tot, self.uid.len_used
-        phase, done = getattr(self, '_phase', (None, 0))
+        phase, done = self._phase or (None, 0)
         if phase is None or len(phase) != n: # The arrays have grown: keep the phases worked out so far
             old, phase = phase, np.zeros(n, dtype=np.float32)
             if old is not None:
@@ -210,7 +219,7 @@ class People:
 
     def phase_shift(self):
         """ The shift of every agent's phase (see `phase()`), from the sim's seed """
-        if getattr(self, '_phase_shift', None) is None:
+        if self._phase_shift is None:
             seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
             self._phase_shift = np.random.default_rng(seed).random()
         return self._phase_shift
@@ -263,10 +272,13 @@ class People:
             yield self.get_person(uid)
 
     def __contains__(self, key):
-        """ Whether people have a property by this name, e.g. `'patch' in sim.people` (which would otherwise go through every person) """
+        """ Whether people have a property by this name (e.g. `'patch' in sim.people`), or whether an agent, by UID (e.g. `5 in sim.people`), is among the active agents """
         if isinstance(key, str):
             return key in self.keys()
-        return any(person is key for person in self)
+        elif isinstance(key, (int, np.integer)) and not isinstance(key, (bool, np.bool_)):
+            return bool(np.any(self.auids == key))
+        errormsg = f'"in" checks for a property by name (e.g. "age" in people) or an agent by UID (e.g. 5 in people), not {type(key).__name__}'
+        raise TypeError(errormsg)
 
     def __setstate__(self, state):
         """
@@ -315,7 +327,7 @@ class People:
     def grouped(self):
         """ Whether these are the groups of a compartmental run (one row per group), not agents """
         sim = getattr(self, 'sim', None)
-        return sim is not None and getattr(sim, 'solver', None) is not None and not isinstance(sim.solver, ss.solvers.abm) and bool(getattr(sim, 'declared', None))
+        return sim is not None and getattr(sim, 'solver', None) is not None and not sim.solver.agents and bool(getattr(sim, 'declared', None))
 
     def brief(self, output=False):
         """ Print a one-line summary of the people
@@ -584,16 +596,8 @@ class People:
             self.age[new_uids] = age
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
-        if isinstance(getattr(sim, 'solver', None), ss.solvers.abm): # A dimension called sex is people.female
-            sim.groups.set_sex(new_uids)
-            if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
-                sim.groups.place_new(new_uids)
-            if not placed and age is None: # Made by code that sets their age (and the rest) itself afterwards, so their traits are drawn at the next step, from what it set (rather than, say, a fetus's trait by age from a default adult age)
-                self.untraited.append((start_uid, stop_uid))
-            elif not placed: # Their traits (ss.attr(dist)), as states get their defaults; people placed by a declared module get them there (see ss.solvers.Agents.add_people())
-                for mod in sim.declared:
-                    if getattr(mod.engine, '_started', False):
-                        mod.engine.draw_traits(new_uids)
+        if isinstance(getattr(sim, 'solver', None), ss.solvers.abm):
+            sim.groups.added(new_uids, placed=placed, age_given=age is not None)
         return new_uids
 
     def add_active(self, new_uids):
@@ -601,7 +605,7 @@ class People:
         auids = self.auids
         n = len(auids)
         k = len(new_uids)
-        room = getattr(self, '_auids_room', None)
+        room = self._auids_room
         if room is not None and auids is self._auids_view and n + k <= len(room): # The active agents are still the first part of the array with room
             room[n:n+k] = new_uids
         else:
@@ -624,7 +628,7 @@ class People:
     def update_post(self):
         """ Updates at the end of each step: agents get older (see `finish_step()`) """
         sim = self.sim
-        if sim.pars.aging and isinstance(sim.solver, ss.solvers.abm): # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
+        if sim.pars.aging and sim.solver.agents: # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
@@ -657,9 +661,9 @@ class People:
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
-            if getattr(self, '_knock_on', None) is not None: # During step_die(), from a module's on_death(), so it happens in this step
+            if self._knock_on is not None: # During step_die(), from a module's on_death(), so it happens in this step
                 self._knock_on.append(ss.uids(uids))
-            elif getattr(self, '_resolved_ti', None) == self.sim.ti and name not in self._warned_late: # E.g. in finish_step()
+            elif self._resolved_ti == self.sim.ti and name not in self._warned_late: # E.g. in finish_step()
                 self._warned_late.add(name)
                 ss.warn(f"A death (cause: {name}) was requested after this step's deaths were resolved (by people.step_die(), which comes after every module's step()), so it happens at the next step; request it in step() for it to happen in this one")
             if name not in self.causes:
@@ -769,7 +773,7 @@ class People:
 
     def death_modules(self):
         """ The modules whose `on_death()` is called at a death (see `ss.Module.on_death()`): the diseases, then any other declared module, then any other module that defines it """
-        mods = getattr(self, '_death_mods', None)
+        mods = self._death_mods
         if mods is None:
             sim = self.sim
             mods = [disease for disease in sim.diseases() if isinstance(disease, ss.Disease)]
@@ -810,7 +814,7 @@ class People:
         age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
         dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
         expected = len(auids) - len(dying)
-        if not len(dying) and auids is getattr(self, '_auids_view', None): # Nobody leaves (as in most steps): the agents kept, in order, are written over themselves, so no copy is made
+        if not len(dying) and auids is self._auids_view: # Nobody leaves (as in most steps): the agents kept, in order, are written over themselves, so no copy is made
             room = self._auids_room
         else:
             room = np.empty(expected + max(1000, expected//10), dtype=ss.dtypes.uid) # With room for births: see add_active()
@@ -851,8 +855,7 @@ class People:
 
     def dying(self):
         """ The agents who died or left in this step (see `step_die()`), who are active until the end of it """
-        dying = getattr(self, '_dying', None)
-        return dying if dying is not None else ss.uids()
+        return self._dying if self._dying is not None else ss.uids()
 
     def record_states(self):
         """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
@@ -863,9 +866,7 @@ class People:
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
             w = self.scale.raw[self.auids]
             counts = [float(w[state.raw[self.auids]].sum()) for state in states]
-            for state in states: # Agents of different weights make fractions of people
-                if res[state.name].values.dtype.kind in 'iu':
-                    res[state.name]._init_values(dtype=float, force=True)
+            self._float_results([state.name for state in states])
         elif all(state.raw.ndim == 1 for state in states):
             counts = ss.solvers.numba.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
             counts = counts[:-1] if counts[-1] == len(self.auids) else [state.count() for state in states]
@@ -873,7 +874,7 @@ class People:
         if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.unborn)
             if counts is None:
                 counts = [state.count() for state in states]
-            w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
+            w = self._weights(unborn)
             counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)]
         for i,state in enumerate(states):
             res[state.name][ti] = counts[i] if counts is not None else state.count()
@@ -887,18 +888,28 @@ class People:
         dying = self.dying() # Those who died or left in the step, who are all the active agents not alive
         if self.scale.weighted:
             gone = [float(self.scale.raw[dying[arr.raw[dying] <= ti]].sum()) for arr in [self.ti_dead, self.ti_removed]]
-            for key in ['birth', 'death', 'emigration']:
-                if res[key].values.dtype.kind in 'iu':
-                    res[key]._init_values(dtype=float, force=True)
+            self._float_results(['birth', 'death', 'emigration'])
         else:
             gone = [np.count_nonzero(arr.raw[dying] <= ti) for arr in [self.ti_dead, self.ti_removed]]
         unborn = self.unborn_uids()
         if len(unborn):
-            w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
+            w = self._weights(unborn)
             out = ~self.alive.raw[unborn]
             gone = [gone[0] - w[out & (self.ti_dead.raw[unborn] <= ti)].sum(), gone[1] - w[out & (self.ti_removed.raw[unborn] <= ti)].sum()]
         res.death[ti], res.emigration[ti] = gone
         res.birth[ti] = self._births
+        return
+
+    def _weights(self, uids):
+        """ The weight of each of some agents (see `AgentScale`): ones if they all weigh the same """
+        return self.scale.raw[uids] if self.scale.weighted else np.ones(len(uids))
+
+    def _float_results(self, keys):
+        """ Make results that count agents hold floats, since agents of different weights make fractions of people """
+        res = self.sim.results
+        for key in keys:
+            if res[key].values.dtype.kind in 'iu':
+                res[key]._init_values(dtype=float, force=True)
         return
 
     def unborn_uids(self):
@@ -912,7 +923,7 @@ class People:
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
         fused = type(self).update_post is People.update_post
-        aging = fused and bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm))
+        aging = fused and bool(sim.pars.aging and sim.solver.agents)
         if aging or len(self.dying()): # Otherwise nobody left (in a run, only step_die() changes who is alive) and nobody ages, so the active agents stay as they are
             self.remove_dead(aging=aging)
         else:

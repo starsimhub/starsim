@@ -52,7 +52,7 @@ def same(a, b):
     """ Whether two time arguments are the same, for update() """
     try:
         return a is b or (type(a) == type(b) and bool(a == b))
-    except Exception:
+    except (ValueError, TypeError): # e.g. arrays, whose truth is ambiguous
         return False
 
 
@@ -61,6 +61,67 @@ def how_bare(t):
     if t.calendar is not None:
         return f'a bare number is a calendar year, since the sim has a calendar (it starts at {t.start}); for a time after the start, give a duration, e.g. ss.{t.unit.__name__}(30), which is that long after it'
     return f'a bare number is a time in the sim\'s unit ({t.unit.__name__}) from 0, since the sim has no calendar (it starts at {t.start}), as is a duration, e.g. ss.{t.unit.__name__}(30)'
+
+
+def own_unit_and_calendar(start, stop, dur, dt, sim=None, given_unit=None):
+    """
+    The unit (a duration class, e.g. `ss.days`) and the calendar ('dates', 'years', or None) of the sim's own timeline (or of
+    one standing alone), from its start, stop, length, and step as given (see `Timeline.reconcile_own()`)
+
+    The unit is the model's, if known (`sim.unit_base`); otherwise that of a start, stop, or length given as a duration, else
+    years with a calendar, or with none, the step's unit. A model in years with no start has a calendar of years (it starts
+    in 2000), and a date as the start or the stop makes the times dates.
+    """
+    calendar = calendar_of(start, stop, given_unit)
+    unit_base = getattr(sim, 'unit_base', None)
+    if unit_base is not None: # The model's unit (see ss.solvers.build.init_unit())
+        unit = ss.time.get_dur_class(unit_base)
+    else:
+        is_dur = lambda v: isinstance(v, ss.Duration) and not isinstance(v, ss.dates.datedur)
+        unit = next((type(v) for v in [start, stop, dur] if is_dur(v)), ss.years if calendar or not is_dur(dt) else type(dt))
+    if calendar is None and start is None and (stop is None or (isinstance(stop, ss.Duration) and ss.time.assume_cal_year(stop))) and unit is ss.years: # A model in years with no start starts in the year 2000 (and a stop of ss.years(2030) is that year)
+        calendar = 'years'
+    if isinstance(stop, (str, ss.date)) or isinstance(start, (str, ss.date)): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
+        if calendar is None:
+            errormsg = f'stop={stop!r} is a date, but the sim has no calendar (it starts at {start!r}, a time in {unit.__name__} from 0); give a start date, or the length of the run, e.g. dur=ss.{unit.__name__}(100)'
+            raise ValueError(errormsg)
+        calendar = 'dates'
+    return unit, calendar
+
+
+def own_time(val, key, start, calendar, unit):
+    """
+    The sim's own start or stop, as given, as a time on its calendar (see `Timeline.reconcile_own()`): a date, a year, or a time in its unit from 0
+
+    A start given as a duration is a time from 0 (it has no calendar), as is a stop with no calendar; with a calendar, a stop given as a
+    duration is an error (its length is `dur=`), unless it is a calendar year (`ss.years(2030)`).
+
+    Args:
+        val (str/float/`ss.date`/`ss.Duration`): the start or stop
+        key (str): 'start' or 'stop'
+        start (`ss.date`/`ss.Duration`): the start, if read already, for the message
+        calendar (str): the calendar
+        unit (type): the class of the sim's unit
+    """
+    if isinstance(val, ss.Duration):
+        if key == 'start':
+            return val
+        elif calendar is None:
+            return unit(val.to_dur() if isinstance(val, ss.dates.datedur) else val)
+        elif ss.time.assume_cal_year(val): # A calendar year, as the times of a sim of calendar years are
+            return ss.years(val.years) if calendar == 'years' else ss.date(val.years)
+        example = f'ss.{val!r}'
+        date = (start if isinstance(start, ss.date) else ss.date(start.years)) + val if isinstance(start, (ss.date, ss.Duration)) else None
+        errormsg = f'stop= {example} is a duration, but the sim has a calendar{f" (it starts at {start})" if date else ""}, and its stop is a time: for the length of the run, give dur={example}; or give a date{f" (e.g. stop={str(date)!r})" if date else ""}'
+        raise ValueError(errormsg)
+    elif calendar == 'dates':
+        return ss.date(val) # A year (e.g. 2000), or a date
+    elif calendar == 'years':
+        return ss.years(val)
+    elif sc.isnumber(val):
+        return unit(val)
+    errormsg = f'Failed to parse {key} = {val!r}: expecting a date, a number, or a duration, not {type(val).__name__}'
+    raise TypeError(errormsg)
 
 
 class Timeline:
@@ -162,10 +223,7 @@ class Timeline:
     @property
     def npts(self):
         """ The number of time points (inclusive of both endpoints, so one more than the number of steps) """
-        try:
-            return self.tvec.shape[0]
-        except Exception:
-            return 0
+        return 0 if self.tvec is None else len(self.tvec)
 
     @property
     def datevec(self):
@@ -174,7 +232,7 @@ class Timeline:
             errormsg = 'The sim has no unit of time (nothing in the model has one), so its times are steps, which have no dates. Give it a unit (e.g. unit="day") or dates (start="2020-01-01").'
             raise ValueError(errormsg)
         if self._datevec is None and self.tvec is not None:
-            if isinstance(self.start, ss.date): # Date-based: tvec already holds dates
+            if self.is_absolute: # Date-based: tvec already holds dates
                 self._datevec = ss.DateArray(self.tvec)
             else: # Duration-based: reconstruct dates from the canonical year vector
                 self._datevec = ss.date.from_array(self.yearvec, allow_zero=True)
@@ -182,9 +240,9 @@ class Timeline:
 
     @property
     def timevec(self):
-        """ Human-friendly (plotting-friendly) representation of tvec (derived lazily) """
+        """ Human-friendly (plotting-friendly) representation of tvec (derived lazily): dates if the timeline has a calendar, else numbers in its unit """
         if self._timevec is None and self.tvec is not None:
-            self._timevec = self.tvec.to_human() # Dates if possible, else floats
+            self._timevec = self.tvec.to_float() if self.calendar is None else self.tvec.to_human() # By the calendar, not by whether the times could be dates (a sim from 10 with no calendar is not in the year 10)
         return self._timevec
 
     @property
@@ -192,10 +250,8 @@ class Timeline:
         """ Time since the start of the sim, as numbers in the unit of the sim's step, `dt` (e.g. weeks for `dt=ss.weeks(1)`, whatever the sim's unit); derived lazily """
         if self._relvec is None and self.yearvec is not None:
             start = self._rel_start # The sim start date, or start year if the sim is duration-based
-            if start is None: # Standalone timeline: measure relative to our own start
-                start = self.tvec[0] if isinstance(self.start, ss.date) else self.yearvec[0]
-            dur_class = self._rel_dur_class or self.default_type
-            if isinstance(self.start, ss.date) and isinstance(start, ss.date): # Date-based: use the exact number of days since the sim start date
+            dur_class = self._rel_dur_class
+            if self.is_absolute and isinstance(start, ss.date): # Date-based: use the exact number of days since the sim start date
                 dur_vec = ss.days(self.tvec.days_since(start))
             else: # Otherwise, use years
                 year0 = start.years if isinstance(start, ss.date) else start
@@ -203,13 +259,6 @@ class Timeline:
             dur_vec = dur_class(dur_vec) # Convert to the intended class
             self._relvec = np.round(dur_vec.to_array(), decimals=6) # Only keep the numeric array, rounded since yearvec is only precise to 9 decimals, e.g. 2.000000004 months
         return self._relvec
-
-    def to_dict(self):
-        """ Return a dictionary of all time vectors """
-        out = sc.obj()
-        for key in self._time_vecs:
-            out[key] = getattr(self, key)
-        return out
 
     @property
     def dt_year(self):
@@ -239,14 +288,9 @@ class Timeline:
     __hash__ = object.__hash__ # Defining __eq__ removes the default hash, so restore it
 
     @property
-    def ready(self):
-        """ Check if all parameters are in place to be initialized """
-        return not any([getattr(self, k) is None for k in self.time_args])
-
-    @property
     def is_absolute(self):
         """ Whether the times are dates (the start is a date rather than a duration) """
-        return isinstance(self.start, ss.date)
+        return self.calendar == 'dates'
 
     def now(self, key=None):
         """
@@ -284,10 +328,16 @@ class Timeline:
         ti = self.ti # A negative ti is a step before the start: see ss.solvers.Agents.backfill()
         if 0 <= ti < len(vec): # Normal use case, we're in the middle of a sim
             now = vec[ti]
-        else: # Special case, we are before or after the sim period
+        else: # Special case, we are before or after the sim period: whole steps from the start, as the key reads them
             now = self.tvec[0] + self.dt*ti
-            if key == 'yearvec':
+            if key == 'tivec':
+                now = ti
+            elif key == 'yearvec':
                 now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
+            elif key == 'datevec' or (key == 'timevec' and self.calendar is not None):
+                now = now if isinstance(now, ss.date) else ss.date(now.years)
+            elif key in ['relvec', 'timevec'] and len(vec) > 1: # Numbers, at the same spacing
+                now = vec[0] + ti*(vec[1] - vec[0])
 
         if to_str:
             now = str(now)
@@ -368,26 +418,19 @@ class Timeline:
         errormsg = f'{name} {val} ({type(val).__name__}) is not a time: give a date, a year, or (with no calendar) a duration from 0'
         raise TypeError(errormsg)
 
-    def dur_time(self, val, name='time', own_stop=False):
+    def dur_time(self, val, name='time'):
         """
         A duration given as a time (see `to_time()`): with a calendar, that long after the sim's start (or a calendar year,
         e.g. `ss.years(2005)`); with none, a point on the timeline's own axis from 0
 
         Args:
             val (`ss.Duration`): the duration
-            name (str): what the time is, for the error message (e.g. 'until=')
-            own_stop (bool): whether it is the sim's own stop, which with a calendar is an error (its length is `dur=`)
+            name (str): what the time is, for messages (e.g. 'until=')
         """
         if ss.time.assume_cal_year(val) and self.calendar is not None: # A calendar year, as the times of a sim of calendar years are (e.g. sim.t.tvec[5])
             return ss.years(val.years) if self.calendar == 'years' else ss.date(val.years)
         if self.calendar is not None:
-            start = sc.ifelse(getattr(self, 'origin', None), self.start)
-            example = f'ss.{val!r}'
-            if own_stop:
-                date = (start if isinstance(start, ss.date) else ss.date(start.years)) + val if isinstance(start, (ss.date, ss.Duration)) else None
-                errormsg = f'{name} {example} is a duration, but the sim has a calendar{f" (it starts at {start})" if date else ""}, and its stop is a time: for the length of the run, give dur={example}; or give a date{f" (e.g. stop={str(date)!r})" if date else ""}'
-                raise ValueError(errormsg)
-            return start + val # That long after the start, following the calendar for whole months and years
+            return sc.ifelse(self.origin, self.start) + val # That long after the start, following the calendar for whole months and years
         if isinstance(val, ss.dates.datedur):
             val = val.to_dur()
         return self.unit(val) if self.unit is not None else val
@@ -439,49 +482,25 @@ class Timeline:
         if isinstance(dur, (str, ss.date)) or (dur is not None and not sc.isnumber(dur) and not isinstance(dur, ss.Duration)):
             errormsg = f'dur={dur!r} is the length of the run: give a duration (e.g. dur=ss.years(10)) or a bare number in the sim\'s unit, not a {type(dur).__name__}; for when it ends, give stop='
             raise TypeError(errormsg)
-        unit_base = getattr(sim, 'unit_base', None)
         given_unit = getattr(getattr(sim, 'pars', None), 'unit', None) # unit= as given, which decides how a bare stop with no start is read
         not_years = start is None and calendar_of(None, ss.time.cal_year_threshold, given_unit) is None # A bare stop with no start, and a unit other than years: never a year (unit='day', stop=1095)
         for key, val in dict(start=start, stop=stop).items():
             if not (key == 'stop' and not_years):
                 ss.time.warn_ambiguous(val, key)
-        if unit_base is not None: # The model's unit (see ss.solvers.build.init_unit())
-            unit = ss.time.get_dur_class(unit_base)
-        else: # On its own: the unit of a start or stop that is a duration; else years with a calendar, or with none, the step's unit
-            calendar = calendar_of(start, stop, given_unit)
-            is_dur = lambda v: isinstance(v, ss.Duration) and not isinstance(v, ss.dates.datedur)
-            unit = next((type(v) for v in [start, stop, dur] if is_dur(v)), ss.years if calendar or not is_dur(dt) else type(dt))
-        self.unit = unit
+        unit, calendar = own_unit_and_calendar(start, stop, dur, dt, sim, given_unit)
         dt = unit(dt) if sc.isnumber(dt) else sc.ifelse(dt, unit(1))
-        default = unit(50 if getattr(sim, 'unitless', False) else default_length.get(unit.__name__, 50)) # 50 steps for a sim whose time is counted in steps
-        calendar = calendar_of(start, stop, given_unit)
-        if calendar is None and start is None and (stop is None or (isinstance(stop, ss.Duration) and ss.time.assume_cal_year(stop))) and unit is ss.years: # A model in years with no start starts in the year 2000 (and a stop of ss.years(2030) is that year)
-            calendar = 'years'
-        self.calendar = calendar
 
-        if isinstance(stop, (str, ss.date)) or isinstance(start, (str, ss.date)): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
-            if calendar is None:
-                errormsg = f'stop={stop!r} is a date, but the sim has no calendar (it starts at {start!r}, a time in {unit.__name__} from 0); give a start date, or the length of the run, e.g. dur=ss.{unit.__name__}(100)'
-                raise ValueError(errormsg)
-            calendar = 'dates'
-        bare_unit = ss.years if calendar == 'years' else unit # A bare length is read as a bare stop would be: in years in a sim of calendar years (start=2000, dur=10), else in the sim's unit
-        length = default if stop is None and dur is None else bare_unit(dur) if sc.isnumber(dur) else dur
-        self.calendar, self.unit, self.start, self.origin, self.dt = calendar, unit, start, start, dt # For dur_time()
-
-        def parse_stop(stop): # A time on the calendar (or from 0), as the start is
-            if isinstance(stop, ss.Duration): # A time from 0, as a start given as a duration is (with a calendar, an error unless a calendar year)
-                return self.dur_time(stop, name='stop=', own_stop=True)
-            elif calendar == 'dates':
-                return ss.date(stop)
-            elif calendar == 'years':
-                return ss.years(stop)
-            elif sc.isnumber(stop):
-                return unit(stop)
-            errormsg = f'Failed to parse stop = {stop!r}: expecting a date, a number, or a duration, not {type(stop).__name__}'
-            raise TypeError(errormsg)
+        # The length: as given (a bare length is read as a bare stop would be: in years in a sim of calendar years, start=2000, dur=10, else in the sim's unit), or the default if there is no stop either
+        if stop is None and dur is None:
+            length = unit(50 if getattr(sim, 'unitless', False) else default_length.get(unit.__name__, 50)) # 50 steps for a sim whose time is counted in steps
+        elif sc.isnumber(dur):
+            length = (ss.years if calendar == 'years' else unit)(dur)
+        else:
+            length = dur
 
         # The start: as given; or, given the stop and the length, the stop minus it (e.g. stop=2035, dur=10 starts in 2025); or the default
-        end = parse_stop(stop) if stop is not None and dur is not None else None # Both given: the start is the stop minus the length, and one given must agree
+        read = lambda val, key, start: own_time(val, key, start, calendar, unit)
+        end = read(stop, 'stop', start) if stop is not None and dur is not None else None # Both given: the start is the stop minus the length, and one given must agree
         if start is None and end is not None:
             start = end - length
         elif start is None and calendar is not None:
@@ -490,16 +509,7 @@ class Timeline:
                 ss.note(f'the sim starts in {default_start}, the default start, since only its stop ({stop}) was given; give start= for another', sim=sim)
         elif start is None:
             start = 0
-        if calendar == 'dates':
-            start = ss.date(start) # A year (e.g. 2000), or a date
-        elif calendar == 'years':
-            start = ss.years(start)
-        elif sc.isnumber(start):
-            start = unit(start)
-        elif not isinstance(start, ss.Duration):
-            errormsg = f'Failed to parse start = {start!r}: expecting a date, a number, or a duration, not {type(start).__name__}'
-            raise TypeError(errormsg)
-        self.start = self.origin = start
+        start = read(start, 'start', None)
 
         # The stop: a time on the calendar (or from 0), as the start is; or the start plus the length
         if length is not None:
@@ -508,10 +518,12 @@ class Timeline:
                 errormsg = f'start={start}, stop={end}, and dur={dur!r} disagree: the start plus the length is {stop}; give two of them (any two define the third)'
                 raise ValueError(errormsg)
         else:
-            stop = parse_stop(stop)
+            stop = read(stop, 'stop', start)
 
+        self.calendar, self.unit, self.dt = calendar, unit, dt
+        self.start = self.origin = start
+        self.stop = stop
         self.default_type = ss.years if calendar == 'years' else unit if calendar is None else type(dt) # The class of the durations of the time vector
-        self.start, self.stop, self.dt = start, stop, dt
         self.dur = length if length is not None else stop - start # The length as given, e.g. ss.months(24), else from the start to the stop
         return
 
@@ -554,51 +566,33 @@ class Timeline:
         self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.solvers.build.init_unit()
 
         # If the sim's timeline is initialized and the same as this one, copy it
-        tvkeys = ['start', 'stop', 'dt']
-        if sim is not None and sim.t.initialized:
-            if all(type(getattr(self, key)) == type(getattr(sim.t, key)) and getattr(self, key) == getattr(sim.t, key) for key in tvkeys):
-                self._copy_from(sim.t)
-                self.initialized = True
-                return self
+        if sim is not None and sim.t.initialized and all(same(getattr(self, key), getattr(sim.t, key)) for key in ['start', 'stop', 'dt']):
+            self._copy_from(sim.t)
+            self.initialized = True
+            return self
 
         # Build tvec (ss.date/ss.Duration) and yearvec (float years), from whichever the start is, since calendar dates don't convert consistently to fractional years
-        if isinstance(self.dt, ss.dates.datedur):
-            if isinstance(self.start, ss.Duration): # e.g. ss.Sim(start=ss.years(2000), dt=ss.months(1))
-                self.tvec = ss.Duration.arange(self.start, self.stop, self.dt)
-            else: # e.g. ss.Sim(start=ss.date(2000), dt=ss.months(1))
-                self.tvec = ss.date.arange(self.start, self.stop, self.dt)
+        if isinstance(self.start, ss.date): # e.g. ss.Sim(start='2000-01-01'): tvec is the calendar-accurate date sequence (datevec returns this lazily)
+            self.tvec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
+            self.yearvec = self.tvec.years
+        elif isinstance(self.start, ss.Duration) and isinstance(self.dt, ss.dates.datedur): # A calendar step on durations (only if a datedur is given directly)
+            self.tvec = ss.Duration.arange(self.start, self.stop, self.dt)
             self.yearvec = np.array([x.years for x in self.tvec])
-
-        else: # e.g. self.dt = ss.years, ss.days
-            if isinstance(self.start, ss.Duration): # Use durations
-                start = self.start
-                stop = self.stop
-                dt = self.dt
-                decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
-                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start)/dt + 1e-6)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004); the 1e-6 (of a step) avoids rounding errors
-                if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
-                    self.tvec = self.default_type(np.round(steps(start.value, stop.value, dt.value), decimals=decimals))
-                    self.yearvec = np.round(self.tvec.years, decimals=decimals)
-                else: # They don't match: convert to years, then create the tvec
-                    self.yearvec = np.round(steps(self.start.years, self.stop.years, self.dt.years), decimals=decimals)
-                    self.tvec = self.default_type(ss.years(self.yearvec))
-            elif isinstance(self.start, ss.date): # e.g. ss.Sim(ss.date(2000))
-                # Date-based: tvec is the calendar-accurate date sequence (datevec returns this lazily)
-                self.tvec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
-                self.yearvec = self.tvec.years
-            else:
-                errormsg = f'Unexpected start {self.start}: expecting ss.Duration or ss.date'
-                raise TypeError(errormsg)
+        elif isinstance(self.start, ss.Duration): # Durations, e.g. self.dt = ss.years, ss.days
+            self.tvec, self.yearvec = self._duration_steps()
+        else:
+            errormsg = f'Unexpected start {self.start}: expecting ss.Duration or ss.date'
+            raise TypeError(errormsg)
 
         # Finalize the eager vectors: tvec (as a DateArray) and the time-index vector
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray
         self.tivec = np.arange(self.npts) # Simple time indices
-        n_steps = self.npts
+        npts = self.npts
 
         # Warn if the number of steps is very large
         max_steps = sc.ifelse(max_steps, ss.options.max_steps)
-        if max_steps and n_steps > max_steps:
-            warnmsg = f'start={self.start!r}, stop={self.stop!r}, and dt={self.dt!r} give {n_steps:n} timesteps, more than {max_steps:n}, which is valid but can be slow. '
+        if max_steps and npts > max_steps:
+            warnmsg = f'start={self.start!r}, stop={self.stop!r}, and dt={self.dt!r} give {npts:n} timesteps, more than {max_steps:n}, which is valid but can be slow. '
             warnmsg += 'Use a larger dt if a step that small is not needed, or set ss.options.max_steps = 0 to turn off this warning.'
             ss.warn(warnmsg)
         max_years = ss.options.max_years
@@ -613,13 +607,23 @@ class Timeline:
         # Check that the vectors built are the same length (the others are made from yearvec)
         for k in ['tvec', 'tivec', 'yearvec']:
             v = getattr(self, k)
-            if len(v) != n_steps:
-                errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={n_steps}'
+            if len(v) != npts:
+                errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={npts}'
                 raise ValueError(errormsg)
 
         # We're done, phew
         self.initialized = True
         return self
+
+    def _duration_steps(self, decimals=9):
+        """ The time vector and the year vector of a timeline of durations, from whole steps, so the times do not drift (e.g. 91.50000004); rounded to `decimals`, to avoid floating-point discrepancies between modules with different units (e.g. ss.years vs ss.months) """
+        start, stop, dt = self.start, self.stop, self.dt
+        steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start)/dt + 1e-6)) + 1) # The 1e-6 (of a step) avoids rounding errors
+        if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
+            tvec = self.default_type(np.round(steps(start.value, stop.value, dt.value), decimals=decimals))
+            return tvec, np.round(tvec.years, decimals=decimals)
+        yearvec = np.round(steps(start.years, stop.years, dt.years), decimals=decimals) # They don't match: convert to years, then create the tvec
+        return self.default_type(ss.years(yearvec)), yearvec
 
     def _copy_from(self, source):
         """ Copy the time vectors from a matching (sim) timeline: as shallow copies, and those made when read only if they have been """
@@ -633,14 +637,10 @@ class Timeline:
         return
 
     def _set_relvec_start(self, sim):
-        """ Set the start (the first date, or year if duration-based) and the duration class that relvec reads, from the sim's timeline (which may be this one), so it can be made later without the sim """
-        try:
-            ref_t = sim.t
-            start = ref_t.tvec[0] if isinstance(ref_t.start, ss.date) else ref_t.yearvec[0]
-            rel_dt = ref_t.dt
-        except Exception:
-            start = None # Standalone timeline: the relvec property will fall back to its own start
-            rel_dt = self.dt
+        """ Set the start (the first date, or year if duration-based) and the duration class that relvec reads, from the sim's timeline (which may be this one; or its own, standing alone), so it can be made later without the sim """
+        ref_t = sim.t if sim is not None and isinstance(sim.t, Timeline) and sim.t.tvec is not None else self # The sim's is built before its modules' (this one is built already)
+        start = ref_t.tvec[0] if ref_t.is_absolute else ref_t.yearvec[0]
+        rel_dt = ref_t.dt
 
         # Get the class for dt, which we use as the unit for the relative durations
         if isinstance(rel_dt, ss.Duration):
@@ -703,9 +703,7 @@ class schedule:
                     ...
         ```
     """
-    def __init__(self, *args, at=None, every=None, start=None, stop=None, **kwargs):
-        for key in kwargs:
-            raise TypeError(f'ss.schedule() got an unexpected keyword argument {key!r}')
+    def __init__(self, *args, at=None, every=None, start=None, stop=None):
         if len(args) > 1 or (args and at is not None):
             raise TypeError(f'ss.schedule() takes one argument by position (the times, or a function of the date), not {len(args) + (at is not None)}; give how often as every=, and the window as start= and stop=')
         if args:
@@ -803,55 +801,53 @@ class schedule:
         self.t = t
         self.sim = getattr(obj, 'sim', None) # For a condition joined to it (see due())
         absolute = t.is_absolute
-        tvec = t.tvec
         if absolute: # Dates, compared as datetime64 (in nanoseconds), so a time on a time point is in the step that starts there
-            points = np.array([d.to_numpy() for d in tvec], dtype='datetime64[ns]')
+            points = np.array([d.to_numpy() for d in t.tvec], dtype='datetime64[ns]')
             to_time = lambda x: t.to_time(x, name='the time').to_numpy() # A bare number is a year, and a duration that long after the sim's start
         else: # Durations, as years
             points = np.asarray(t.yearvec, dtype=float)
             to_time = lambda x: t.to_time(x, name='the time').years # A bare number is a year with a calendar, else a time in the sim's unit; a duration is that long after the sim's start with a calendar, else a time from 0
-        counts = np.zeros(len(points), dtype=int)
         first = points[0] if self.start is None else to_time(self.start)
         last = points[-1] if self.stop is None else to_time(self.stop)
         self.window = (points >= first) & (points <= last) # The steps within its start and stop, which bound a function of the date, and a condition joined with |, too
-        if self.when is not None:
-            for k in range(len(points)): # Step k starts at time point k
-                counts[k] = bool(of_date(self.when, t, tvec[k])) and self.window[k]
+        if self.when is not None: # A function of the date, at the start of each step (step k starts at time point k)
+            self.counts = np.array([bool(of_date(self.when, t, t.tvec[k])) and self.window[k] for k in range(len(points))], dtype=int)
+        elif self.at is None and self.every is None: # A window: every step that starts within it
+            self.counts = self.window.astype(int)
         else:
-            if self.at is None and self.every is None: # A window: every step that starts within it
-                self.counts = self.window.astype(int)
-                return self
-            if self.at is not None:
-                times = np.array([to_time(x) for x in self.at], dtype=points.dtype)
-            else:
-                every = self.every
-                if sc.isnumber(every): # A bare number is in the sim's unit, as for the when= of an ss.Event
-                    if t.unit is None:
-                        raise ValueError(f'every={every} of {self} is a bare number, but the timeline has no unit to read it in; give a duration, e.g. every=ss.days({every})')
-                    every = t.unit(every)
-                calendar = absolute and every.base in ['months', 'years'] and every.value == round(every.value)
-                if calendar: # Each time from the first, so e.g. the 31st of each month is the last day of shorter ones, not drifting
-                    first_ts = pd.Timestamp(first)
-                    times, i = [], 0
-                    while (time := (first_ts + pd.DateOffset(**{every.base:int(i*round(every.value))})).to_datetime64()) <= last:
-                        times.append(time)
-                        i += 1
-                    times = np.array(times, dtype=points.dtype)
-                else:
-                    width = np.timedelta64(int(round(every.days*86400e9)), 'ns') if absolute else every.years
-                    if width <= width*0:
-                        raise ValueError(f'A schedule needs a positive interval, not {every}')
-                    n = int((last - first)//width) + 1 if last >= first else 0
-                    times = first + np.arange(n)*width
-            times = times[(times >= first) & (times <= last)]
-            if not absolute:
-                times = times + 1e-9 # Years to 9 decimals (see Timeline.yearvec), so one on a time point is in the step that starts there
-            end = points[-1] + (points[-1] - points[-2] if len(points) > 1 else 0*(points[-1] - points[0])) # The end of the last step, which starts at the last time point
-            k = np.searchsorted(points, times[times < end] if len(points) > 1 else times, side='right') - 1 # The step whose start is the last time point at or before it
-            k = k[k >= 0] # Within the timeline
-            counts += np.bincount(k, minlength=len(points))
-        self.counts = counts
+            times = np.array([to_time(x) for x in self.at], dtype=points.dtype) if self.at is not None else self._every_times(first, last, absolute, points.dtype)
+            self.counts = self._bin(times[(times >= first) & (times <= last)], points, absolute)
         return self
+
+    def _every_times(self, first, last, absolute, dtype):
+        """ The times of `every=`, from the first to the last """
+        every = self.every
+        if sc.isnumber(every): # A bare number is in the sim's unit, as for the when= of an ss.Event
+            if self.t.unit is None:
+                raise ValueError(f'every={every} of {self} is a bare number, but the timeline has no unit to read it in; give a duration, e.g. every=ss.days({every})')
+            every = self.t.unit(every)
+        if not every.value > 0:
+            raise ValueError(f'A schedule needs a positive interval, not {every}')
+        if absolute and every.base in ['months', 'years'] and every.value == round(every.value): # Each time from the first, so e.g. the 31st of each month is the last day of shorter ones, not drifting
+            first_ts = pd.Timestamp(first)
+            times, i = [], 0
+            while (time := (first_ts + pd.DateOffset(**{every.base:int(i*round(every.value))})).to_datetime64()) <= last:
+                times.append(time)
+                i += 1
+            return np.array(times, dtype=dtype)
+        width = np.timedelta64(int(round(every.days*86400e9)), 'ns') if absolute else every.years
+        n = int((last - first)//width) + 1 if last >= first else 0
+        return first + np.arange(n)*width
+
+    @staticmethod
+    def _bin(times, points, absolute):
+        """ The number of times in each step: the step whose start is the last time point at or before each, before the end of the last step """
+        if not absolute:
+            times = times + 1e-9 # Years to 9 decimals (see Timeline.yearvec), so one on a time point is in the step that starts there
+        if len(points) > 1:
+            times = times[times < points[-1] + (points[-1] - points[-2])] # Before the end of the last step, which starts at the last time point
+        k = np.searchsorted(points, times, side='right') - 1
+        return np.bincount(k[k >= 0], minlength=len(points)) # Within the timeline
 
     def due(self, ti=None):
         """ The number of times due in this step (or step `ti`), usually 0 or 1 """

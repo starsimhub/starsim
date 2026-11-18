@@ -9,6 +9,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .engine import Bunch, times
+from .agents_moving import add_events
 
 __all__ = ['Stepping']
 
@@ -28,14 +29,9 @@ class Stepping:
         Everything that is not contact-mediated, at the start of the step: who leaves each state now (by a scheduled exit that is due,
         or by its competing rates), then the same-step cascade (see `finish_moves()`), births, and transfers; and the counts
         """
-        mod = self.mod
         ti = self.ti
         dt = self.dt
-        self._moved = []
-        self.new_round()
-        self.start_phase(0)
-        self.place_newcomers()
-        self.renew_events()
+        self.begin_state_step()
         self.step_lifetables()
         quick = set() if self.unscheduled is None or self.late else {name for name in self.listed if name not in self.unscheduled and self.exits_of[name] and not self.competing[name] and not self.rescaled_of(name)} # States with only scheduled exits, all scheduled already: who leaves them is found in one pass over the agents, with no need to list who is in them (see leave())
         members = self.start_counts([name for name in self.listed if name not in quick])
@@ -51,7 +47,7 @@ class Stepping:
                 self.leave(self.graph.states[name], members[name], missed[name])
         self._drawn_ti = ti
         self._members = None
-        self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
+        self._row = np.zeros(self.n_slots, dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
         self.finish_moves(ti)
         self._row = None
         self.step_per(ti)
@@ -85,7 +81,7 @@ class Stepping:
         elif self.live is not None and check_counts:
             self.check_counts()
         if self.live is None:
-            listed = self.listed if sim.mixing.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
+            listed = self.listed if sim.contact_rates.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
             members = self.census(listed) # Who is where before anyone moves, in one pass over the agents
         else: # Counted already: only those asked for are listed
             members = {name:ss.uids(ss.solvers.numba.passes.flatnonzero(mod[name].raw)) for name in listed}
@@ -165,7 +161,7 @@ class Stepping:
         return
 
     def draw_competing(self, state, uids, dt, key=None):
-        """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent): moves those who leave, and returns which they are """
+        """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent), from the stream `key` (by default the state's `exit_<state>`): moves those who leave, and returns which they are """
         return self.draw_competing_in([(state, uids)], dt, key)[0]
 
     def draw_competing_in(self, parts, dt, key=None):
@@ -187,7 +183,7 @@ class Stepping:
                 continue
             each = [self.stayed(tr, st, u) for st,u in parts]
             stays.append(each[0] if all(np.ndim(x) == 0 and x == each[0] for x in each) else np.concatenate([np.broadcast_to(x, len(u)) for x,(st,u) in zip(each, parts)]))
-        same = key is None and len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
+        same = len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
         if same: # As numbers rather than arrays, since this is most calls, and each is small
             hazards = [(max(float(rate), 0.0)*float(stay) if stay > 0 else 0.0) for (tr,rate),stay in zip(rates, stays)] # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
             total = sum(hazards)
@@ -224,7 +220,8 @@ class Stepping:
             m = len(u)
             part = slice(start, start + m)
             start += m
-            crn = self.crn_key(f'exit_{state.name}', u) if key is None and m else None
+            stream = f'exit_{state.name}' if key is None else key # The stream drawn from (the entry draws have their own)
+            crn = self.crn_key(stream, u) if m else None
             if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
                 if same:
                     pos, which = ss.solvers.numba.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
@@ -241,7 +238,7 @@ class Stepping:
             else:
                 part_edges = edges
             pe = p_exit if np.ndim(p_exit) == 0 else p_exit[part]
-            rvs = self.draw(f'exit_{state.name}' if key is None else key, u) # Drawn on entry as well, so perhaps more than once a step
+            rvs = self.draw(stream, u) # Drawn on entry as well, so perhaps more than once a step
             leaving = rvs < pe
             for i,tr in enumerate(competing):
                 self.move(tr, state, u[leaving & (rvs >= part_edges[i]) & (rvs < part_edges[i+1])])
@@ -345,7 +342,7 @@ class Stepping:
 
     def uncount_deaths(self):
         """ Take out of this step's death flows anyone who died of something else, when another module requested their death in the same step too (see `People.request_death()`) """
-        died, self._died = getattr(self, '_died', []), []
+        died, self._died = self._died, []
         people = self.sim.people
         for tr,srcs,uidlist in died:
             cause = self.cause_of(tr)
@@ -357,7 +354,7 @@ class Stepping:
                     for key in dict.fromkeys([tr.name, tr._deaths]): # A split with a state counts its deaths in its flow to ss.dead too
                         self.flowcounts[key] -= self.n_of(other)
                         if key in self.flow_groups:
-                            self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
+                            self.add_flow_groups(key, self.groups(other, src), other, sign=-1)
         return
 
     def record_events(self):
@@ -368,7 +365,7 @@ class Stepping:
         """ People who died this step (of anything, in any module) leave every state, and are taken out of the counts recorded for it """
         if not len(uids):
             return
-        if getattr(self, 'derived_res', None):
+        if self.derived_res:
             self.derived_stocks(uids=uids)
         if self.live_total is not None: # Counted as alive no longer
             counted = uids[uids < self.n_counted]
@@ -385,7 +382,7 @@ class Stepping:
     def step_births(self, dt):
         """ Inflows of people (`ss.birth`): a number of new agents in each place, and at each level the inflow is given at, drawn from the expected number """
         sim = self.sim
-        d = sim.mixing.space
+        d = sim.contact_rates.space
         for tr in self.graph.inflows:
             if not tr.people or getattr(tr, 'birth_on', None) is not None: # Driven by a flow: see step_per()
                 continue
@@ -420,7 +417,7 @@ class Stepping:
                     inds = new[self.mod[dst.name].raw[new]]
                     if len(inds):
                         self.record(tr, inds, -1, self.state_index[dst.name])
-                self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
+                add_events(self.events, tr.name, new)
             if sim.groups.n_groups > 1:
                 self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
         return
@@ -435,7 +432,7 @@ class Stepping:
         if not len(women):
             return
         u = self.draw(f'mother_{tr.name}', new)
-        d = sim.mixing.space
+        d = sim.contact_rates.space
         if d is None:
             ppl.parent[new] = women[np.minimum((u*len(women)).astype(int), len(women) - 1)]
             return
@@ -521,10 +518,10 @@ class Stepping:
                         new = strat.shifted(tf.increment)[level[now]]
                         self.new_round() # They can have been drawn for already in this one
                         self.schedule_transfer(name, moving[strat.shifted(tf.increment)[new] != new], dt, self.ti)
-        rates = sim.mixing.migration
+        rates = sim.contact_rates.migration
         if rates is not None and mod is sim.declared[0]: # People relocating between places; they are the same people for every module, so it is done once
             uids = sim.people.auids
-            arr = sim.people[sim.groups.strats[sim.mixing.space].attr]
+            arr = sim.people[sim.groups.strats[sim.contact_rates.space].attr]
             places = self.place_raw()[uids]
             p = -np.expm1(-rates.sum(axis=1)*dt)[places]
             rvs = self.draw('migrate', uids)
@@ -654,17 +651,47 @@ class Stepping:
     def step(self):
         """ Contact-mediated transitions """
         mod = self.mod
+        self.begin_contact_step()
+        for tr,src,uids in self.new_infections():
+            self.move(tr, src, uids)
+        self._infecting = True # See enter()
+        try:
+            self.finish_moves(mod.ti + 1) # Infections are dated at the step's end, the next time point
+        finally:
+            self._infecting = False
+        self.step_per(mod.ti + 1)
+        self.end_contact_step()
+        return
+
+    #%% The parts of a step that the engines share (see Compiled and Events)
+
+    def begin_state_step(self):
+        """ The start of the step's first part (see `step_state()`): its first round of draws, and the people made, or moved by code, since the last step """
+        self._moved = []
+        self.new_round()
+        self.start_phase(0)
+        self.place_newcomers()
+        self.renew_events()
+        return
+
+    def begin_contact_step(self):
+        """ The start of the step's contact-mediated part (see `step()`): its round of draws; the transmissions' events renewed, those infected by code (disease.infect()) since the last step's being news now, with the infections of this step """
         self._moved = []
         self.new_round()
         self.start_phase(2)
         self.cache.clear() # The interventions have run since the step started
         for tr in self.graph.transmissions:
             self.events.pop(tr.name, None)
-            forced = self.forced.pop(tr.name, None) # Infected by code (disease.infect()) since the last step's: news now, with the infections of this step
+            forced = self.forced.pop(tr.name, None)
             if forced is not None:
                 self.events[tr.name] = forced
                 self._news = True
-        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])] # With protection due to a state or memory: people who have had one strain can be infected by another
+        return
+
+    def new_infections(self):
+        """ The step's new infections, as (transmission, source state, uids) for each transmission and state it infects people from (see `transmit_sources()`): by the disease's own transmit(), or the engine's; who infected whom is kept for sources(), and logged """
+        mod = self.mod
+        pairs = [(tr, src) for tr in self.graph.transmissions for src in self.transmit_sources(tr)]
         custom = self.custom_transmissions(pairs) if mod.custom_transmit else None # By the disease's own transmit()
         together = self.transmit_together(pairs) if len(pairs) > 1 and custom is None else None
         self._step_pairs = [] # Who infected whom by each of them, for sources()
@@ -676,16 +703,15 @@ class Stepping:
             self._step_pairs += self._pairs
             if mod.infection_log is not None:
                 self.log_infections(uids)
-            self.move(tr, src, uids)
-        self._infecting = True # See enter()
-        try:
-            self.finish_moves(mod.ti + 1) # Infections are dated at the step's end, the next time point
-        finally:
-            self._infecting = False
-        self.step_per(mod.ti + 1)
+            yield tr, src, uids
+        return
+
+    def end_contact_step(self):
+        """ The end of the step's contact-mediated part: derived attributes and results, the movement register's events at the step's end, and the counts """
+        mod = self.mod
         self.write_derived(self.sim.people.auids)
         self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.current_value('rel_sus')) are worked out again
-        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
+        if self.sim.contact_rates.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti + 1)
         self.count_stocks() # Deaths later in the step are taken out of them: see die()
         return
@@ -717,7 +743,7 @@ class Stepping:
         """
         sim = self.sim
         people = sim.people
-        mixing = sim.mixing
+        mixing = sim.contact_rates
         ev = mixing.events()
         a, b = np.searchsorted(ev.ti, [ti, ti + 1])
         if a == b:
@@ -734,7 +760,7 @@ class Stepping:
         removed = np.zeros(people.uid.len_tot, dtype=bool)
         masks = dict() # Who is in each set of states
         scale = self.scale
-        carry = getattr(self, '_carry', 0.0) # The fraction of an agent left over from rounding
+        carry = self._carry # The fraction of an agent left over from rounding
         short = 0.0
         enter = [] # The places and states of the people to add, and how many
         for e in range(a, b):
@@ -794,7 +820,7 @@ class Stepping:
             return ss.uids()
         new = people.grow(total, placed=True)
         dsts = np.concatenate([np.full(k, dst) for dst,states,k in enter])
-        d = sim.mixing.space
+        d = sim.contact_rates.space
         for i,strat in enumerate(sim.groups.strats): # The place given, and the other levels as people are born into them
             if i == d:
                 people[strat.attr][new] = strat.value(dsts)
@@ -830,7 +856,7 @@ class Stepping:
         return new
 
     def transmit_sources(self, tr):
-        """ The states a transmission infects people from: its sources, and with strains, the states whose people can be infected by another (see step()) """
+        """ The states a transmission infects people from: its sources, and with strains, the states whose people can be infected by another, with protection due to a state or memory (see step()) """
         return tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])
 
     def transmitted(self, tr):
@@ -861,7 +887,7 @@ class Stepping:
         if isinstance(out, ss.BoolArr):
             return out.uids
         arr = np.asarray(out)
-        if arr.dtype == bool and arr.ndim == 1 and len(arr) == len(self.mod.rel_sus.raw):
+        if arr.dtype == bool and arr.ndim == 1 and len(arr) == self.n_slots:
             return ss.uids(np.flatnonzero(arr))
         if arr.size and not np.issubdtype(arr.dtype, np.integer):
             raise TypeError(f'transmit() of "{self.mod.name}" gives who is infected by "{tr.name}" as agents: their UIDs (ss.uids), not {arr.dtype} values {arr[:5]}')

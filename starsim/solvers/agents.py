@@ -1,19 +1,21 @@
 """
 Not for the user: the agent engine: a declared model run as agents (`abm`)
 
-It also holds the transmission that diseases written as code use, so that both give the same numbers.
+Its parts are in `agents_expressions.py` (expressions), `agents_moving.py` (moves), `agents_stepping.py` (the step), `agents_branching.py`
+(branching processes), and `agents_transmission.py` (transmission, and `Transmission`, which diseases written as code use too).
 
 Used with: agents; declared and coded modules
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .engine import CountState, Effects, Engine, times
+from .engine import CountState, Engine, times
 from .compartmental import Compartmental
 from .agents_expressions import Expressions
-from .agents_moving import Moving, ROUNDS, ROUND_MAX, step_key
+from .agents_moving import Moving
 from .agents_stepping import Stepping
 from .agents_branching import Branching
+from .agents_transmission import Transmission, Transmitting
 
 __all__ = ['agent_solver', 'Transmission', 'Agents']
 
@@ -22,7 +24,7 @@ def suggested_step(module):
     val = getattr(module, 'suggested_solver', None)
     if val is None or isinstance(val, ss.solvers.abm):
         return getattr(val, 'step', None)
-    steps = ss.solvers.abm.options['step'][1]
+    steps = [s for s in ss.solvers.abm.options['step'][1] if s is not None]
     step = val.removeprefix('abm-') if isinstance(val, str) else None # 'wholestep', or as it was once spelled, 'abm-wholestep'
     if step not in steps:
         errormsg = f'"{module.name}" has suggested_solver={val!r}, but it must be ss.solvers.abm(step=...) or one of its steps, {sc.strjoin(steps)}'
@@ -46,266 +48,15 @@ def agent_solver(module, sim, why=False):
     own = getattr(module, 'solver', None)
     ran = sim.solver if isinstance(sim.solver, ss.solvers.abm) else ss.solvers.abm()
     suggested = suggested_step(module)
-    if own is not None:
+    if own is not None and own.step is not None:
         step, source = own.step, 'own'
-    elif ran.named:
+    elif ran.step is not None:
         step, source = ran.step, 'sim'
     elif suggested is not None:
         step, source = suggested, 'suggested'
     else:
-        step, source = ran.step, 'default'
+        step, source = 'midstep', 'default'
     return (step, source) if why else step
-
-
-class Transmission(Effects):
-    """
-    Transmission as agents, the same for a declared disease (`Agents`, for its transmissions) and one written as code (`ss.Disease.transmit(rel_trans=..., rel_sus=...)`,
-    through its engine, `ss.solvers.Undeclared`): who can transmit and be infected, with the modifiers and products on `rel_trans` and `rel_sus`
-    applied (`current_value()`); who is infected over a network (`over_network()`); and who infected whom (`first_infections()`)
-
-    Where the two differ, the caller says how:
-
-    - **Hazard or probability.** `over_network()` takes the chance of an edge in the step, and scales its hazard by every other factor (the edge's
-      weight and acts, `rel_trans`, `rel_sus`, and the modifiers). A declared disease gives 1 − exp(−β·dt) from its rate, or, on a network with acts,
-      works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in the step, converting a rate the
-      same way (`ss.Rate.to_prob()`).
-    - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
-      several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, every strain is passed on
-      in one pass, and someone reached by several is infected by one of them drawn at random, whose strain they take (`pick_sources()`), and
-      then only if they are not protected against it (`unprotected()`): declared or written as code, by the same code.
-    - **Random numbers.** Each edge's is drawn by its source and target from the disease's `trans_rng`, so the same disease, by the same name,
-      gives the same edges the same numbers, declared or written as code; and so are the draws of who infects whom, and of protection, which
-      are keyed by the step alone (`step_draw()`).
-    """
-    def current_value(self, kind, *factors):
-        """ `rel_sus` or `rel_trans` (`kind`) of every agent (by UID), times the factors (e.g. whether each is susceptible), with the modifiers and products active on it applied; may be the array itself, so it is not to be changed """
-        return times(self.mod[kind].raw, *factors, self.mult_raw(kind))
-
-    def route_mult(self, name, route):
-        """ The multiplier on a transmission over a route, as a function of the edges and of the people who would be infected (see `ss.connectors.route_mult()`); `name` is that of a declared disease's transmission, or `rel_sus` for a disease written as code """
-        mods = self.sim.modifiers
-        if mods.get((route.name, 'par', 'n_contacts')) or mods.get((self.mod.name, 'route', f'{name}@{route.name}')):
-            return lambda inds, trg: ss.connectors.route_mult(self, name, route, inds, trg)
-        return lambda inds, trg: 1.0
-
-    def over_network(self, i, route, rel_trans, rel_sus, betas, name):
-        """
-        Who is infected over a network in the step: an edge from `u` to `v` transmits with probability 1 − exp(−H), where H is the hazard of
-        the network's chance `net_beta(beta)` (with the edge's weight, and acts if it has them), times `rel_trans[u]`, `rel_sus[v]`, and the
-        modifiers on the route for `v`: every factor scales the hazard, so a contact infects at most once in the step, wherever an effect is
-        put (see `ss.Network.transmit()`), as for a declared disease on a network with acts (see `transmit_acts()`)
-
-        Args:
-            i (int): the index of the route in `sim.networks`, recorded for who infected whom
-            route (`ss.Network`): the network
-            rel_trans (array): the effective transmissibility of each agent, by UID (0 if not infectious)
-            rel_sus (array): the effective susceptibility of each agent, by UID (0 if not susceptible)
-            betas (list): the probability of transmission over an edge in the step, p1 to p2 and p2 to p1: each a number (0 for none, so no random
-                numbers are drawn), a rate (`ss.Rate.to_prob()`), or an array of one for each of the network's directions by sides (see `ss.peract`)
-            name (str): what the modifiers on the route are under (see `route_mult()`)
-
-        Returns:
-            A list of (sources, targets, i), for each direction that transmits
-        """
-        mult = self.route_mult(name, route)
-        def edge_hazard(d, inds, src, trg): # For the edges that might transmit
-            beta = betas[d]
-            if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
-                beta = beta[route.edge_directions(src, trg)]
-            elif not beta: # No random numbers are drawn
-                return None
-            if isinstance(beta, ss.Rate): # A disease written as code can give its beta as a rate
-                beta = beta.to_prob(self.mod.t.dt)
-            hazard = route.net_hazard(disease_beta=beta, inds=inds, disease=self.mod)
-            m = mult(inds, trg)
-            if np.ndim(m) == 0 and m == 1: # The usual case, no modifiers on the route
-                return hazard
-            with np.errstate(invalid='ignore'): # An infinite hazard times a modifier of 0 is none (NaN never transmits)
-                return hazard*m
-        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_hazard, self.mod.trans_rng)]
-
-    @staticmethod
-    def first_infections(pairs):
-        """
-        Each agent infected, once, with who infected them and over which route: the first of `pairs` to reach them. Each pair is the sources, the
-        targets, and the index of the route (one, or one for each), and any more values (e.g. a strain); returns the targets (sorted), and for
-        each, the source (`ss.dtypes.int_nan` where not known), the route, and the more values, of the first pair to reach them
-        """
-        if not pairs:
-            return ss.uids(), ss.uids(), np.empty(0, dtype=ss.dtypes.int)
-        trgs, first = ss.uids.concatenate([pair[1] for pair in pairs]).unique(return_index=True)
-        srcs = ss.uids.concatenate([pair[0] for pair in pairs])[first]
-        rest = [np.concatenate([np.broadcast_to(np.asarray(pair[c], dtype=ss.dtypes.int), len(pair[1])) for pair in pairs])[first] for c in range(2, len(pairs[0]))]
-        return trgs, srcs, *rest
-
-    def step_draw(self, key, uids):
-        """ Uniforms for some agents from one of the transmission's distributions (`self.dists[key]`), keyed by the step alone, so the same agents get the same numbers, declared or written as code; without common random numbers, its next draws """
-        dist = self.dists[key]
-        if not len(uids):
-            return np.empty(0)
-        elif not ss.options.crn:
-            return dist.rvs(uids)
-        slots = self.sim.people.slot_raw()
-        return ss.dists.hash_uniforms(dist.seed, ROUNDS + step_key(self.mod)*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype, even=dist.even)
-
-    def pick_sources(self, pairs, name):
-        """
-        With strains, each agent reached in the step, once, with who infected them and the rest of that pair's values: one of those who reached
-        them, each as likely (the first to happen is as likely to be any of them), drawn from `pick_<name>`. Each pair is the sources, the
-        targets, the index of the route (one, or one for each), and any more values (e.g. a strain), as for `first_infections()`
-        """
-        trgs = ss.uids.concatenate([pair[1] for pair in pairs])
-        cols = [ss.uids.concatenate([pair[0] for pair in pairs])] + [np.concatenate([np.broadcast_to(np.asarray(pair[c], dtype=ss.dtypes.int), len(pair[1])) for pair in pairs]) for c in range(2, len(pairs[0]))]
-        order = np.argsort(trgs, kind='stable')
-        trgs, first, counts = np.unique(trgs[order], return_index=True, return_counts=True)
-        if np.any(counts > 1): # Reached by several in the step
-            first = first + np.minimum((self.step_draw(f'pick_{name}', ss.uids(trgs))*counts).astype(int), counts - 1)
-        return ss.uids(trgs), *[col[order][first] for col in cols]
-
-    def unprotected(self, name, uids, kept):
-        """ Which of some agents reached by a strain are infected by it: each with the chance `kept`, the fraction of the force of infection of the strain that reaches them (1 − their protection against it), drawn from `protect_<name>` """
-        return self.step_draw(f'protect_{name}', uids) < kept
-
-
-    # Transmission written as code: what ss.Disease.transmit() and the methods it calls do, so that each can be overridden on its own
-
-    def over_routes(self, rel_trans, rel_sus, betamap):
-        """ The infections over each of the sim's routes in turn (`code_route()`), each a tuple of targets, sources, and network IDs: see `ss.Disease.transmit()` """
-        return [self.code_route(i, route, betamap[ss.networks.standardize_netkey(nkey)], rel_trans, rel_sus) for i,(nkey,route) in enumerate(self.sim.networks.items())]
-
-    def strain_cases(self, rel_trans, rel_sus, betamap):
-        """
-        The infections of a disease written as code with strains (`ss.AgentDisease(strains=...)`), as for a declared disease's: every strain in
-        one pass, at the infectiousness of the strain each carries (`rel_trans` of `ss.Strains`); each new case is infected by one of those who
-        reached them, at random (`pick_sources()`), whose strain they take, unless protected against it (`dis.strain_sus()`, `unprotected()`)
-
-        Returns:
-            The new cases, and for each the source, the route, and the index of the strain
-        """
-        dis = self.mod
-        strains = dis.strains
-        held = dis.strain.raw
-        rel = strains.values['rel_trans'] if 'rel_trans' in strains.values else np.ones(len(strains))
-        trans = np.asarray(rel_trans.raw if isinstance(rel_trans, ss.Arr) else rel_trans)*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0) # Nobody without a strain transmits
-        out = []
-        for i,(nkey,route) in enumerate(self.sim.networks.items()):
-            betas = betamap[ss.networks.standardize_netkey(nkey)]
-            if isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
-                trgs, srcs, nets = self.code_route(i, route, betas, trans, rel_sus)
-                out.append((srcs, trgs, nets, held[srcs]))
-            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
-                for k in range(len(strains)):
-                    trgs, srcs, nets = self.code_route(i, route, betas, trans*(held == k), rel_sus)
-                    out.append((srcs, trgs, nets, k))
-        out = [pair for pair in out if len(pair[1])]
-        if not out:
-            return ss.uids(), ss.uids(), np.empty(0, dtype=ss.dtypes.int), np.empty(0, dtype=ss.dtypes.int)
-        new, sources, routes, strain = self.pick_sources(out, 'infection')
-        kept = np.ones(len(new))
-        for k in np.unique(strain):
-            kept[strain == k] = np.broadcast_to(dis.strain_sus(k), trans.shape)[new[strain == k]]
-        ok = self.unprotected('infection', new, kept)
-        return new[ok], sources[ok], routes[ok], strain[ok]
-
-    def code_route(self, i, route, betas, rel_trans, rel_sus):
-        """
-        The transmission of a disease written as code along a single network (or other route): see `ss.Disease.transmit()`
-
-        On a network, each edge transmits with probability 1 − (1 − `net_beta()`)^(`rel_trans·rel_sus`·modifiers), the modifiers being those
-        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., network=)`) (see `ss.Network.transmit()`), as for a declared disease
-        run as agents, by the same code (`over_network()`), with beta as the probability in the step. The modifiers of `rel_trans` and `rel_sus` (including products) are
-        applied here.
-        """
-        dis = self.mod
-        raw = lambda x: x.raw if isinstance(x, ss.Arr) else np.asarray(x) # An array of the disease's, or of values by UID
-        rel_trans = times(raw(rel_trans), self.mult_raw('rel_trans'))
-        rel_sus = times(raw(rel_sus), self.mult_raw('rel_sus'))
-
-        # Main use case: networks
-        if isinstance(route, ss.Network):
-            pairs = self.over_network(i, route, rel_trans, rel_sus, betas, 'rel_sus')
-
-        # Handle everything else: mixing pools, environmental transmission, etc.
-        elif isinstance(route, ss.networks.Route):
-            beta = betas[0].to_prob(dis.t.dt) if isinstance(betas[0], ss.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
-            rel_sus = times(rel_sus, self.route_mult('rel_sus', route)(None, slice(None)))
-            as_arr = self.sim.people.age.asnew # Values by UID, as an array of the people
-            target_uids = route.compute_transmission(as_arr(rel_sus, copy=False), as_arr(rel_trans, copy=False), beta, disease=dis)
-            pairs = [(np.full(len(target_uids), dtype=ss.dtypes.int, fill_value=ss.dtypes.int_nan), target_uids, i)]
-        else:
-            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.networks.Route and define a compute_transmission() method'
-            raise TypeError(errormsg)
-
-        new_cases = ss.uids.concatenate([pair[1] for pair in pairs])
-        sources = ss.uids.concatenate([pair[0] for pair in pairs])
-        networks = np.full(len(new_cases), dtype=ss.dtypes.int, fill_value=i)
-        return new_cases, sources, networks
-
-    def code_betas(self, beta=None):
-        """ The beta of a disease written as code (`beta`, by default its parameter `beta`) for each of the sim's networks (by name), as a pair (p1 to p2, p2 to p1), checked against them (see `ss.Disease.transmit()`) """
-        dis = self.mod
-        sim = self.sim
-        β = dis.pars.beta if beta is None else beta
-        unit = getattr(sim, 'unit', None) # None if time is counted in steps, when a bare number is a probability per step
-
-        def scalar_beta(β):
-            return isinstance(β, ss.Rate) or sc.isnumber(β)
-
-        nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
-        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act)
-            has_acts = getattr(nets.get(ss.networks.standardize_netkey(k)), 'has_acts', False)
-            return ss.per(β, unit) if sc.isnumber(β) and β and unit and not has_acts else β
-
-        def both_ways(k, β): # A single beta applies in both directions, except on a maternal network: from mother to child only
-            net = nets.get(ss.networks.standardize_netkey(k))
-            return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
-
-        def as_pair(β, nkey):
-            """ A probability per act is one value for both [p1 to p2, p2 to p1]; with directions, an array of a value for each of the network's (see `code_route()`) """
-            if not isinstance(β, ss.peract):
-                return β
-            net = nets.get(nkey)
-            vals = β.resolve(net) if net is not None else β.values
-            if len(vals) == 1:
-                return vals*2
-            return [np.asarray(vals, dtype=float)]*2
-
-        # If beta is a scalar, apply this bi-directionally to all networks
-        if scalar_beta(β) or isinstance(β, ss.peract):
-            betamap = {ss.networks.standardize_netkey(k):both_ways(k, in_unit(k, β)) if scalar_beta(β) else as_pair(β, ss.networks.standardize_netkey(k)) for k in sim.networks.keys()}
-
-        # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
-        elif isinstance(β, dict):
-            betamap = dict()
-            if 'default' in β:
-                unknown = [k for k in β if k != 'default' and ss.networks.standardize_netkey(k) not in nets]
-                if unknown:
-                    ss.note(f'the beta of "{dis.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
-                β = {k:ss.networks.route_beta(β, k) for k in sim.networks.keys()}
-            for k,thisbeta in β.items():
-                nkey = ss.networks.standardize_netkey(k)
-                if scalar_beta(thisbeta):
-                    betamap[nkey] = both_ways(nkey, in_unit(k, thisbeta))
-                elif isinstance(thisbeta, ss.peract):
-                    betamap[nkey] = as_pair(thisbeta, nkey)
-                else:
-                    betamap[nkey] = [in_unit(k, b) for b in thisbeta]
-
-        else:
-            errormsg = f'Invalid type {type(β)} for beta'
-            raise TypeError(errormsg)
-
-        # Check that it matches the network
-        netkeys = [ss.networks.standardize_netkey(k) for k in list(sim.networks.keys())]
-        if set(betamap.keys()) != set(netkeys):
-            missing = sorted(set(netkeys) - set(betamap.keys()))
-            extra = sorted(set(betamap.keys()) - set(netkeys))
-            errormsg = f'Network keys ({netkeys}) and beta keys ({list(betamap.keys())}) do not match for disease "{dis.name}"'
-            if missing: errormsg += f'; missing beta for network(s) {missing}'
-            if extra:   errormsg += f'; no network(s) found matching {extra}'
-            raise ValueError(errormsg)
-
-        return betamap
 
 
 class RateNoise(sc.prettyobj):
@@ -352,7 +103,7 @@ class RateNoise(sc.prettyobj):
         return f'{self.name:<16s} multiply=gamma white noise, sigma={self.tr.noise}'
 
 
-class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
+class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Transmission):
     """
     Runs a graph as agents
 
@@ -370,6 +121,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         """ Create the per-agent states and the distributions """
         mod = self.mod
         graph = self.graph
+        self.init_bookkeeping()
         self.init_dims()
         self.wholestep = agent_solver(mod, self.sim) == 'wholestep' # Each rate acts only over whole steps, on those in the state at the start of the step (see draw_competing())
         for obj in list(graph.states.values()) + list(graph.attrs.values()): # Remove the declarations, which are replaced by their run-time form
@@ -377,55 +129,17 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 delattr(mod, obj.name)
         for key in ['rel_sus', 'rel_trans']:
             mod.__dict__.pop(key, None)
-        self.events = dict() # The agents who went through each transition this step
-        self.also = type(mod).also_happened is not ss.Disease.also_happened # Whether the module says whom else an event happens to: see record()
-        self.live = None # The number of agents in each state by group, kept up to date from the census: see census() and wrote()
-        self.unscheduled = None # The states that people have been put in other than by the engine's moves (by code, or at the start) since the last step, so that may have people with no exit scheduled; None for any state
-        self.live_total = None # The number alive in each group, likewise
-        self.n_counted = 0 # The agents (by UID) that the number alive has been kept for: see alive_counts()
-        self.start = None # The number in each state by group at the start of the step
-        self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
-        self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
-        self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
-        self._kept_exits = {} # For each split with ss.stay triggered by when=, the exits of those it moved, for those who stay (see stay())
-        self._step_pairs = [] # Who infected whom over the networks in this step's transmissions: see sources()
-        self.held = None # As a branching process: the number in each state of the uninfected, by group, which are counts rather than agents (see init_branching())
-        self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
-        self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
-        self.n_batches = 0 # The number of each batch, in the order recorded, so what is new since a number is found at the end: see unseen()
-        self.last_batch = dict() # The number of the last batch of each transition, so a trigger on it can tell at once that nothing has happened since it looked: see new_events()
-        self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
-        self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
-        self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
-        self.triggers = [tr for tr in graph.transitions.values() if tr._trigger is not None and not tr._trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
-        self.trigger_mods = set().union(*[ss.conditions.module_refs(tr._trigger.x) for tr in self.triggers]) # The modules whose changes they react to
-        self._seen = dict() # The events each trigger on an event has seen already
-        self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
-        self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
-        self.lifelong_used = dict() # For each, the number of agents (by UID) made when it was worked out: the arrays have room for agents not yet made, whose values (e.g. their sex) are not known until they are
-        self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
-        self._subscribers = None
-        self._started = False
-        self._backfill = None # While people are back-dated: see backfill()
-        self.round = (None, 0, None) # The step and the round of moves within it that the engine's draws are keyed by, and the transition it is for: see new_round()
-        self._round_seeds = {} # The seeds of the rounds named by a transition: see round_seed()
-        self._source = None # The module whose rounds these are, if not this one, and the rounds of the others: see new_round()
-        self._rounds = {}
-        self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
-        self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
-        self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
-        self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
-        self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
-        self._fired_seen = {} # For each trigger on a delivery's or product's event, who it has seen it for: see unseen_fired()
-        self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
-        self._infecting = False # While the infections of the step, and the moves at once after them, are made: see enter()
-        self.halved = set() # The sources of infection that people can enter by an infection, who have half a step of their rates at the first draw: see enter()
-        self._junctions = None # The states passed through at once: see junctions
-        self._leaving = None # The people leaving a state and the states they leave, while clocks (see clock_values()) are read for them
-        self._uids = None # The agents being evaluated: see eval_for()
-        self._for_uids = False
-        self._memo = None # Values of parts of expressions kept while several are evaluated for the same agents: see compile()
-        self.compiled = dict() # Each expression evaluated, as a function: see eval()
+        hazards = self.define_arrays()
+        self.define_dists(hazards)
+        return
+
+    def define_arrays(self):
+        """
+        The arrays of each agent the engine keeps on the module: each state, and the times that something reads (of entering a state, of
+        leaving one, of a scheduled exit, of a delay after an event), the attributes, and the states that are counts; returns the rates out of each state
+        """
+        mod = self.mod
+        graph = self.graph
         arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them; the modifiers on them are applied by current_value()
                 ss.FloatArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.exits_of = {state.name: graph.exits[state.name].branches + sc.tolist(graph.exits[state.name].remainder) + graph.exits[state.name].timed for state in graph.people_states} # The exits scheduled when people enter each state: its branches, and its timed exits (the earliest is taken), by index
@@ -492,7 +206,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     self.sets[key] = f'ti_{"_or_".join(key)}'
                     arrs.append(ss.TimeArr(self.sets[key], label=f'Time of entering {" | ".join(key)} from outside it'))
         self.sets_of = {name:[(arr, [self.state_index[k] for k in key]) for key,arr in self.sets.items() if name in key] for name in people} # For each state, the sets with a clock it is in, and their states
-        strains = next((strat.strains for strat in graph.strats if strat.strains is not None), None)
         self.spread = dict() # A parameter that is a distribution across people: each agent's own value, drawn when they are made
         for p in graph.spread_pars():
             self.spread[id(p)] = f'par_{p.name}'
@@ -517,7 +230,13 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             self.counts[state.name] = np.zeros(self.sim.groups.n_groups) # One number per group; all but the first are zero unless the state has dimensions of its own
             mod.setattribute(state.name, CountState(self, state))
 
-        # Distributions: each is called at most once per step
+        return hazards
+
+    def define_dists(self, hazards):
+        """ The engine's distributions, each called at most once a step: for the start, each state's branches and exits, each transition's destinations, the delays and transfers, the people added, and the attributes """
+        mod = self.mod
+        graph = self.graph
+        strains = next((strat.strains for strat in graph.strats if strat.strains is not None), None)
         self.dists = sc.obj()
         self.by_groups = dict() # Whether the rate of each transmission is the same for everyone in a group: see same_in_group()
         add = self.add_dist
@@ -570,10 +289,10 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             add(f'transfer_{name}', self.tf_dists.get(name, ss.random()))
             if tf.p is not None:
                 add(f'transfer_to_{name}', ss.random()) # Which level they move to
-        if self.sim.mixing.migration is not None:
+        if self.sim.contact_rates.migration is not None:
             add('migrate', ss.random())
         adders = [f'born_{tr.name}' for tr in graph.inflows if tr.people] + ['added'] # What adds people: births, code (ss.move() from outside the model), and a movement register
-        if self.sim.mixing.register is not None:
+        if self.sim.contact_rates.register is not None:
             add('register', ss.random()) # The order in which people in a place are chosen
             adders.append('register')
         for key in adders: # For the people added: their state, and their level of each dimension other than place and age
@@ -609,6 +328,73 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.expon(mean=1.0) if dw.k == 1 else ss.gamma(shape=dw.k, scale=1/dw.k)) # A unit-mean exponential (or Erlang), scaled by the mean when used
         return
 
+    def init_bookkeeping(self):
+        """ The engine's attributes as a run starts, including those that its parts (the mixins) read and that are set later (in define(), or by the engine as it runs), each with its value until then """
+        mod = self.mod
+        graph = self.graph
+        self.events = dict() # The agents who went through each transition this step
+        self.also = type(mod).also_happened is not ss.Disease.also_happened # Whether the module says whom else an event happens to: see record()
+        self.live = None # The number of agents in each state by group, kept up to date from the census: see census() and wrote()
+        self.unscheduled = None # The states that people have been put in other than by the engine's moves (by code, or at the start) since the last step, so that may have people with no exit scheduled; None for any state
+        self.live_total = None # The number alive in each group, likewise
+        self.n_counted = 0 # The agents (by UID) that the number alive has been kept for: see alive_counts()
+        self.start = None # The number in each state by group at the start of the step
+        self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
+        self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
+        self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
+        self._kept_exits = {} # For each split with ss.stay triggered by when=, the exits of those it moved, for those who stay (see stay())
+        self._step_pairs = [] # Who infected whom over the networks in this step's transmissions: see sources()
+        self.held = None # As a branching process: the number in each state of the uninfected, by group, which are counts rather than agents (see init_branching())
+        self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
+        self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
+        self.n_batches = 0 # The number of each batch, in the order recorded, so what is new since a number is found at the end: see unseen()
+        self.last_batch = dict() # The number of the last batch of each transition, so a trigger on it can tell at once that nothing has happened since it looked: see new_events()
+        self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
+        self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
+        self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
+        self.triggers = [tr for tr in graph.transitions.values() if tr._trigger is not None and not tr._trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.solvers.deliveries.trigger_moves())
+        self.trigger_mods = set().union(*[ss.conditions.module_refs(tr._trigger.x) for tr in self.triggers]) # The modules whose changes they react to
+        self._seen = dict() # The events each trigger on an event has seen already
+        self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
+        self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
+        self.lifelong_used = dict() # For each, the number of agents (by UID) made when it was worked out: the arrays have room for agents not yet made, whose values (e.g. their sex) are not known until they are
+        self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
+        self._subscribers = None
+        self._started = False
+        self._backfill = None # While people are back-dated: see backfill()
+        self.round = (None, 0, None) # The step and the round of moves within it that the engine's draws are keyed by, and the transition it is for: see new_round()
+        self._round_seeds = {} # The seeds of the rounds named by a transition: see round_seed()
+        self._source = None # The module whose rounds these are, if not this one, and the rounds of the others: see new_round()
+        self._rounds = {}
+        self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
+        self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
+        self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
+        self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
+        self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
+        self._fired_seen = {} # For each trigger on a delivery's or product's event, who it has seen it for: see unseen_fired()
+        self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
+        self._infecting = False # While the infections of the step, and the moves at once after them, are made: see enter()
+        self.halved = set() # The sources of infection that people can enter by an infection, who have half a step of their rates at the first draw: see enter()
+        self._junctions = None # The states passed through at once: see junctions
+        self._leaving = None # The people leaving a state and the states they leave, while clocks (see clock_values()) are read for them
+        self._uids = None # The agents being evaluated: see eval_for()
+        self._for_uids = False
+        self._memo = None # Values of parts of expressions kept while several are evaluated for the same agents: see compile()
+        self.compiled = dict() # Each expression evaluated, as a function: see eval()
+        self.attrs = dict() # The attributes (see define())
+        self.traits = [] # Those drawn once for each person
+        self.on_event = [] # Those set at events
+        self.derived = dict() # Those worked out from others
+        self.derived_res = None # The stratification of each result kept by one (see Engine.init_derived_results())
+        self.rel_adjust = None # Multipliers by level on infectiousness and susceptibility (see Engine.init_adjust())
+        self._fixed = dict() # Whether the fractions of each branch and split depend only on fixed values: see branch_fixed() and dest_fixed()
+        self._sweep = None # The order of the same-step cascade, once worked out: see sweep()
+        self._changing_dims = None # The dimensions whose level people can change, once known: see changing_dims
+        self._attrs_on = dict() # The attributes set at each kind of event: see attrs_on()
+        self._new_strains = None # While transmitting with strains, the strain each new case was infected with: see set_strain()
+        self._carry = 0.0 # The fraction of an agent left over from rounding the people a register adds: see step_register()
+        return
+
     def init_pre(self):
         for tr in self.graph.transmissions: # Not yet built for agents either, so not silently ignored
             if getattr(tr, 'min_stay', None) is not None:
@@ -624,6 +410,15 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             if isinstance(arr, ss.TimeArr):
                 arr.t = self.mod.t
         return
+
+    def par_mods(self, p):
+        """ The modifiers on a parameter of the model (none for a literal value, or one with no name) """
+        return self.sim.modifiers.get((self.mod.name, 'par', p.name), []) if p.name and not p.literal else []
+
+    @property
+    def n_slots(self):
+        """ The length of the arrays of people (the agents made, and room for more), by UID """
+        return len(self.mod.rel_sus.raw)
 
     def groups(self, uids, state=None):
         """ The group of each agent; given a state, the group they are counted in while in it (which leaves out the dimensions the state does not have) """
@@ -673,7 +468,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if key not in self.cache:
             out = 1.0
             for d,vals in self.rel_adjust[kind]:
-                inside = np.zeros(len(self.mod.rel_trans.raw), dtype=bool)
+                inside = np.zeros(self.n_slots, dtype=bool)
                 for s in self.graph.people_states:
                     if self.applies[s.name][d]:
                         inside |= self.mod[s.name].raw
@@ -683,7 +478,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def mult_raw_extra(self, kind):
         """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the multipliers by level of the stratifications (a strain's) """
-        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind))
+        return bool(self.rel_adjust and self.rel_adjust.get(kind))
 
     def lifelong_mods(self, mods):
         """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `who=ss.person.female`), so each person's multiplier stays the same for the whole run """
@@ -702,7 +497,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def move_levels_of(self, tr, dst, uids):
         """ The change of level of a transition with `move=` or `increment=`, for the agents it takes to a state """
-        for d,level in (self.moves(tr) or ()):
+        for d,level in self.moves(tr):
             strat = self.sim.groups.strats[d]
             arr = self.sim.people[strat.attr]
             if isinstance(level, tuple) and level[0] == 'matrix': # A level drawn from each one's row, for those going where it applies (see ss.strains.prepare())
@@ -725,17 +520,38 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return len(moved)
         self.flowcounts[tr.name] += self.n_of(moved)
         if self.sim.groups.n_groups > 1 and len(moved):
-            self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
+            self.add_flow_groups(tr.name, self.groups(moved, dst), moved)
         key = f'{tr.name}.{dst.name}'
         if key in self.flowcounts: # One destination of a transition with several
             self.flowcounts[key] += self.n_of(moved)
             if self.sim.groups.n_groups > 1 and len(moved):
-                self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(self.groups(moved, dst), weights=self.weights(moved), minlength=self.sim.groups.n_groups)
+                self.add_flow_groups(key, self.groups(moved, dst), moved)
         self.forced[tr.name] = ss.uids.concatenate([self.forced[tr.name], moved]) if tr.name in self.forced else moved
         if self._started and (self.triggers or self.subscribers) and len(moved): # Onward at once, if a trigger holds for them now
             self._moved = []
             self.finish_moves(self.ti)
         return len(moved)
+
+    def trigger(self, tr, cond, sel):
+        """
+        A transition triggered by the outcome of a delivery (see `ss.solvers.deliveries.trigger_moves()`): those it was delivered to (`sel`, as uids or a mask) who are in
+        the transition's source, and for whom `cond` holds (if any), move, each to a destination drawn in its fractions (or with its probability)
+        """
+        srcs = [s for s in tr.source if s.people]
+        uids = sel if isinstance(sel, ss.uids) else ss.uids(np.flatnonzero(sel))
+        if len(uids):
+            uids = uids[self.in_states_for([s.name for s in srcs], uids)]
+        if cond is not None and len(uids):
+            uids = uids[np.asarray(self.selector.select(cond), dtype=bool)[uids]]
+        if not len(uids):
+            return
+        ps = [np.broadcast_to(p, len(uids)) for p in (self.branch_probs_for(tr, uids) if tr._split else [self.eval_for(tr.p[0], uids) if tr.p else 1.0])]
+        self.new_round() # A way in from code: see new_round()
+        rvs = self.draw(f'trig_{tr.name}', uids)
+        edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
+        for k,dst in enumerate(tr.dest):
+            self.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)
+        return
 
     def move_states(self, uids, srcs, dst, tr=None, ti=None):
         """ Move the agents who are in some states to a state: along a transition (see `force()`), or along none, as a one-off move, dated at the step's start (or at `ti`); returns those moved """
@@ -819,7 +635,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def add_from_outside(self, dst, k, newborn):
         """ Make `k` agents in a state (`ss.move()` from outside the model), and in each other disease's first state: in places drawn by the place's split, and at the other levels as people born (`newborn`) or arriving are """
         sim = self.sim
-        d = sim.mixing.space
+        d = sim.contact_rates.space
         counts = [k] if d is None else self.rng.multinomial(k, sim.groups.strats[d].fractions)
         enter = [(place, ((self.mod.name, dst.name),), int(c)) for place,c in enumerate(counts) if c]
         return self.add_people(enter, self.ti, 'added', newborn=newborn)
@@ -893,7 +709,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 # A fraction for each agent: from their own properties (ss.by), or a function of the sim (and the agents)
                 p = seed.lookup(self.sim, self.convert)[first] if isinstance(seed, ss.by) else ss.utils.call_fn(seed, self=mod, sim=self.sim, uids=first) # Of any of self, sim, and uids
                 p = np.asarray(p.raw if isinstance(p, ss.Arr) else p, dtype=float)
-                p = p[first] if np.ndim(p) and len(p) == len(self.mod.rel_sus.raw) and len(p) != len(first) else p # One value per agent, by UID
+                p = p[first] if np.ndim(p) and len(p) == self.n_slots and len(p) != len(first) else p # One value per agent, by UID
                 chosen = first[self.draw('seed_who', first) < p]
                 self.seed(chosen, log=False)
             if len(unborn):
@@ -909,7 +725,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     start = f'starts with one agent in {name} ({self.scale:n} {"person" if self.scale == 1 else "people"})' if now else f'starts with nobody in {name}'
                     ss.note(f'"{mod.name}" {start}: its initial number is {want:.2g} agents at {self.scale:n} people per agent, which rounds to 0. For the number given, give more agents (n_agents=), or rescale=True', sim=self.sim)
         self.draw_traits(self.sim.people.auids)
-        if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the start, once every module has its people
+        if self.sim.contact_rates.register is not None and mod is self.sim.declared[-1]: # The events dated at the start, once every module has its people
             self.step_register(0)
             self.sim.people.step_die() # Whoever left is gone before the start is counted
             self.sim.people.remove_dead()
@@ -938,7 +754,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return init_prev
         elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
             return init_prev
-        elif sc.isnumber(init_prev) and init_prev > 0 and len(self.seed_transmissions()) > 1: # Through several transmissions, each to those it can infect (see seed()): agent by agent
+        elif sc.isnumber(init_prev) and init_prev > 0 and len(trs) > 1: # Through several transmissions, each to those it can infect (see seed()): agent by agent
             frac = init_prev/self.total_pop if self.graph.seed_n else init_prev
             return lambda sim: frac
         return None
@@ -1016,8 +832,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             self.set_strain(uids, np.full(len(uids), strains.level_of([strains.names.index(getattr(strain, 'name', strain))])))
         which = np.zeros(len(uids), dtype=int)
         if len(tr.dest) > 1: # Where a new infection goes, in its fractions
-            self._uids = uids
-            ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+            with self.evaluating(uids=uids):
+                ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
             which = np.minimum((np.cumsum(ps, axis=0) <= self.draw('seed_where', uids)[None, :]).sum(axis=0), len(tr.dest) - 1)
         for i,dst in enumerate(tr.dest):
             self.force(uids[which == i], tr, dst, ti=mod.ti + 1) # Between steps (e.g. after sim.run(until=...)), counted in the next step, as the engine clears its flows at the end of each
@@ -1063,8 +879,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if len(trs) == 1 and len(trs[0].dest) == 1:
             dsts = [(trs[0].dest[0], uids)]
         else: # Each seed to a destination of a transmission that can infect them, in the fractions of its destinations
-            self._uids = uids
-            ps = [np.broadcast_to(w*p, len(uids)) for tr,w in zip(trs, self.seed_reach(trs, uids)) for p in (self.branch_probs_for(tr, uids) if len(tr.dest) > 1 else [1.0])]
+            with self.evaluating(uids=uids):
+                ps = [np.broadcast_to(w*p, len(uids)) for tr,w in zip(trs, self.seed_reach(trs, uids)) for p in (self.branch_probs_for(tr, uids) if len(tr.dest) > 1 else [1.0])]
             edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
             rvs = self.draw('seed_where', uids)
             dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(dst for tr in trs for dst in tr.dest)]
@@ -1255,7 +1071,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         sim = self.sim
         if sim.groups.group_fold is not None:
             return None
-        return np.bincount(sim.groups.group_coords[:, sim.mixing.space], weights=vals, minlength=sim.groups.strats[sim.mixing.space].n)
+        return np.bincount(sim.groups.group_coords[:, sim.contact_rates.space], weights=vals, minlength=sim.groups.strats[sim.contact_rates.space].n)
 
     def count_stocks(self):
         """ As for the other engines (see `Engine.count_stocks()`), with the number in each state of people as it has been kept since the last census (see `census()`) """
@@ -1270,16 +1086,18 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 self.stocks[state.name] = float(counts[state.name].sum())
             else:
                 self.stocks[state.name] = self.stock(state)
-        if getattr(self, 'derived_res', None) and self._started: # Once the people placed at the start have their attributes: see settle_start()
+        if self.derived_res and self._started: # Once the people placed at the start have their attributes: see settle_start()
             self.derived_stocks()
         return
 
     def count(self, states, total=True):
         out = 0.0
         weighted = self.sim.people.scale.weighted # Agents of different weights are each counted by their weight, so a rate means the same whatever the weights
-        counts = self.start if self._members is not None else self.live # At the start of the step, while its rates are worked out (see step_state()), or now
+        at_start = self._members is not None # At the start of the step, while its rates are worked out (see step_state()), or now
         if weighted:
-            counts = self.start_weighted if self._members is not None else None
+            counts = self.start_weighted if at_start else None
+        else:
+            counts = self.start if at_start else self.live
         for state in states:
             if self.held is not None and state.name in self.held: # The uninfected of a branching process
                 out += self.held[state.name].sum() if total else self.held[state.name]
@@ -1303,12 +1121,12 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return
 
     def n_people(self, total=True):
-        return self.count(self.graph.people_states)
+        return self.count(self.graph.people_states, total=total)
 
     def exposure(self, state):
         """ Under homogeneous mixing: the infectiousness-weighted fraction of people in the state """
         mod = self.mod
-        mixing = self.sim.mixing
+        mixing = self.sim.contact_rates
         people = self.sim.people
         if (self._strain is None or not self.applies[state.name][self.strain]) and not people.scale.weighted and state.rel_trans == 1 and np.ndim(mult := self.mult_raw('rel_trans', None)) == 0 and mult == 1: # The usual case: in one pass over the agents
             places = None if mixing.space is None else self.place_raw()
@@ -1340,7 +1158,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def place_exposure(self, num, places, n_places):
         """ The exposure in each place, from the infectiousness there (`num`), as `exposure()` gives it: for each group, or for the agents the rate is being worked out for """
-        mixing = self.sim.mixing
+        mixing = self.sim.contact_rates
         people = self.sim.people
         weighted = people.scale.weighted
         if 'place_sizes' not in self.cache:
@@ -1351,11 +1169,11 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def place_raw(self):
         """ The place of each agent, as an array indexed by UID """
-        return self.sim.groups.level_raw(self.sim.mixing.space)
+        return self.sim.groups.level_raw(self.sim.contact_rates.space)
 
     def local_count(self, states):
         """ In a model with places: the number in the same place as each agent, or, when the counts are being advanced, as each group """
-        mixing = self.sim.mixing
+        mixing = self.sim.contact_rates
         if mixing.space is None:
             return self.count(states)
         n_places = self.sim.groups.strats[mixing.space].n
@@ -1376,8 +1194,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return out[mixing.places] if self._by_group else self.for_uids(out[places]) # For each group, or for the agents the rate is being worked out for, so it combines with a value by person (e.g. ss.by(patch=...))
 
     def count_matrices(self):
-        """ The contact matrices that act on a count, as agents use them: over the model's own groups (see `ss.solvers.Mixing.init_pools()`) """
-        mixing = self.sim.mixing
+        """ The contact matrices that act on a count, as agents use them: over the model's own groups (see `ss.solvers.ContactRates.init_pools()`) """
+        mixing = self.sim.contact_rates
         nets = [net for net in self.sim.networks.values() if isinstance(net, ss.networks.MixingPools)]
         other = next((net for net in nets if net.name not in mixing.pool_terms), None)
         if other is not None:
@@ -1386,7 +1204,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return mixing.count_terms([mixing.pool_terms[net.name] for net in nets])
 
     def met_count(self, states, expr):
-        """ The number of people in some states met through the contact matrices: from the agents in each group (counted by their weight, and in a weighted count by theirs in it), as for a compartmental run (see `ss.solvers.Mixing.exposure()`) """
+        """ The number of people in some states met through the contact matrices: from the agents in each group (counted by their weight, and in a weighted count by theirs in it), as for a compartmental run (see `ss.solvers.ContactRates.exposure()`) """
         sim = self.sim
         people = sim.people
         ng = sim.groups.n_groups
@@ -1397,13 +1215,13 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             uids = members[state.name] if members is not None and state.name in members else self.members(state) # At the start of the step, while its rates are worked out, or now
             num = num + np.bincount(groups[uids], weights=self.count_weights(expr, state, uids), minlength=ng)*self.scale
         n = np.bincount(groups[people.auids], weights=people.scale.raw[people.auids] if people.scale.weighted else None, minlength=ng)*self.scale
-        out = sum(sim.mixing.term_exposure(term, num, n, counts=True) for term in self.count_matrices())
+        out = sum(sim.contact_rates.term_exposure(term, num, n, counts=True) for term in self.count_matrices())
         return out if self._by_group else self.for_uids(out[groups]) # For each group, or for the agents the rate is being worked out for
 
     def count_weighted(self, states, expr):
         """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_infectious`): each agent in the states counted by its weight (and infectiousness), in the same place, as `local_count()` gives it """
         sim = self.sim
-        mixing = sim.mixing
+        mixing = sim.contact_rates
         places = self.place_raw() if mixing.space is not None else None
         n_places = sim.groups.strats[mixing.space].n if places is not None else 1
         members = self._members
@@ -1436,7 +1254,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         """ The fraction holding a product (`itn.held_frac`): the fraction of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
         sim = self.sim
         people = sim.people
-        mixing = sim.mixing
+        mixing = sim.contact_rates
         product = self.product_of(expr)
         alive = np.asarray(people.alive.raw, dtype=bool)
         held = (np.asarray(people[product.dim].raw) > 0) & alive
@@ -1559,7 +1377,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return False
         E = ss.expressions
         for f in E.factors(tr.rate)[0]:
-            if isinstance(f, E.par) and not (f.name and not f.literal and self.sim.modifiers.get((self.mod.name, 'par', f.name))):
+            if isinstance(f, E.par) and not self.par_mods(f):
                 v = f.value
                 v = getattr(v, 'value', v) # A rate of 0 (e.g. ss.peryear(0))
                 if sc.isnumber(v) and v == 0:
@@ -1578,7 +1396,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 continue
             elif isinstance(part, E.par):
                 v = part.value
-                if part.name and not part.literal and self.sim.modifiers.get((self.mod.name, 'par', part.name)):
+                if self.par_mods(part):
                     return False
                 if isinstance(v, ss.by):
                     if not self.is_lifelong(v):
@@ -1619,7 +1437,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             if part is None or isinstance(part, (int, float, np.number, E.BinOp, E.Prop)):
                 continue
             if isinstance(part, E.par):
-                if part.name and not part.literal and self.sim.modifiers.get((self.mod.name, 'par', part.name)):
+                if self.par_mods(part):
                     return False
                 if not plain(part.value):
                     return False
@@ -1705,7 +1523,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def for_uids(self, val):
         """ Within `eval_for()`, a value for each agent in the population (e.g. a parameter modified for some people) is taken for the agents being evaluated, so it combines with the rest of the expression """
-        if not getattr(self, '_for_uids', False) or np.ndim(val) == 0 or len(val) == len(self._uids):
+        if not self._for_uids or np.ndim(val) == 0 or len(val) == len(self._uids):
             return val
         return np.asarray(val)[self._uids]
 

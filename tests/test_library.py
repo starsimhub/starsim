@@ -55,7 +55,7 @@ def test_networks():
     # Contacts across real places with a geography: as ssl.GeoNet makes them, a random network in a model stratified by place, with most contacts at home
     sis = ss.SIS().stratify(patch=ss.levels(ss.geo.geography('Kenya'), mobility=ss.geo.gravity(away=0.1)))
     sim = ss.Sim(n_agents=n, diseases=sis, networks=ss.RandomNet(n_contacts=6), dur=ss.years(2), verbose=0).run()
-    net, place = sim.networks[0], sim.groups.level_raw(sim.mixing.space)
+    net, place = sim.networks[0], sim.groups.level_raw(sim.contact_rates.space)
     assert (place[net.p1] == place[net.p2]).mean() > 0.5 # Mostly within a place
     geo = sims['geo'].networks[0]
     assert (geo.place.raw[geo.p1] == geo.place.raw[geo.p2]).mean() > 0.5 # Mostly within a place, as local=0.9 says

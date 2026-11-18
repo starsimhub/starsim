@@ -1,7 +1,7 @@
 """
-Not for the user: who meets whom in a compartmental run: the contact rates between groups that the networks become
+Not for the user: the contact rates between groups that the networks become (`sim.contact_rates`)
 
-It exists so that the networks of a model, usually written as code, can run without agents. A run as agents uses it too, for the contact matrices of mixing pools and the movement between places.
+It exists so that the networks of a model, usually written as code, can run without agents: who meets whom in a compartmental run. A run as agents uses it too, for the contact matrices of mixing pools and the movement between places.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -9,12 +9,12 @@ import numpy as np
 import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
-from .engine import Telling, convert
+from .engine import convert
 
-__all__ = ['Mixing']
+__all__ = ['ContactRates']
 
 
-class Mixing(Telling):
+class ContactRates:
     """
     Who meets whom in a compartmental run
 
@@ -52,7 +52,7 @@ class Mixing(Telling):
             strat = sim.groups.strats[self.space]
             self.places = sim.groups.group_coords[:, self.space] # The place of each group
             if strat.mobility is not None and strat.mobility.guessed:
-                self.tell(ss.note, f'the movement between the levels of "{strat.name}": {strat.mobility.guessed}', sim=sim)
+                ss.note(f'the movement between the levels of "{strat.name}": {strat.mobility.guessed}', sim=sim)
         self.init_movement()
         return
 
@@ -111,7 +111,7 @@ class Mixing(Telling):
     def carries(beta, unit):
         """ Whether a beta for a network can be above 0: a probability per act if any direction's can, and anything that is not a number (e.g. an expression) """
         if isinstance(beta, ss.peract):
-            return any(Mixing.carries(val, unit) for val in beta.values)
+            return any(ContactRates.carries(val, unit) for val in beta.values)
         val = convert(beta, unit)
         if not sc.isnumber(val) and not isinstance(val, np.ndarray):
             return True
@@ -146,7 +146,7 @@ class Mixing(Telling):
         dt = net.dt if net.dt is not None else sim.t.dt
         return float(convert(dt, sim.unit_base))
 
-    def init(self, approximations='note', solver=None):
+    def init(self, solver=None):
         """ Turn the sim's networks into contact rates between groups, for the sim's solver (or the one given: the ODE, when the mixing is laid out to choose the solver, see `ss.solvers.choose.lay_out()`) """
         sim = self.sim
         self.solver = solver or sim.solver
@@ -154,50 +154,86 @@ class Mixing(Telling):
         nets = list(sim.pars.networks.values())
         if not nets:
             return
-        self.terms = []
+        coefs = [getattr(coef, 'raw', coef) for mod in sim.declared for tr in mod.graph.transmissions for coef in (tr.terms or {}).values()]
+        named = all(isinstance(coef, dict) for coef in coefs) # Every transmission names its routes
+        used = []
         for net in nets:
-            named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes
-            key = ss.networks.standardize_netkey(net.name)
-            betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.networks.standardize_netkey(k) == key] if named else None
+            betas = [beta for coef in coefs if (beta := ss.networks.route_beta(coef, net.name)) is not None] if named else None
             if betas and not any(self.carries(val, sim.unit_base) for val in betas): # Named by transmissions, but none over it
-                self.tell(ss.note, f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
-                continue
-            if isinstance(net, ss.networks.MixingPools) and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None):
-                self.terms.append(self.dim_matrices(net))
-            elif isinstance(net, ss.networks.MixingPools):
-                self.terms.append(self.age_matrix(net))
-            elif isinstance(net, ss.MixingPool): # A pool of some people (source= or target=) is refused by its capability record: see ss.solvers.init_capabilities()
-                self.terms.append(sc.obj(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base), name=net.name))
-            elif isinstance(net, ss.DegreeNet): # Lasting partnerships (ss.DegreeNet, ss.SexualNet): the partner-change model
-                terms = self.partnerships(net)
-                what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim._unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
-                if approximations == 'error':
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and ss.options.approximations="error": {what}. Run with solver="abm".')
-                self.tell(ss.note, what, sim=sim, verbose=0 if approximations == 'allow' else None)
-                self.terms.extend(terms)
-            elif isinstance(net, ss.Network):
-                kind = type(net).__name__
-                if net.pars.get('who') is not None: # Homogeneous mixing is among everyone: contacts among some people only would need a group of its own
-                    raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {kind} with who= has contacts among some people only, which homogeneous mixing between compartments does not follow. Run with solver="abm", or leave who= out.')
-                contacts, source = net.mean_contacts(sim)
-                if contacts is None:
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
-                lasts = net.pars.get('dynamic', True) # Edges that change, each of which transmits at most once in a step (see edge_dur())
-                what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim._unit_name} ({source}){", each transmitting at most once in a step" if lasts else ""}'
-                if approximations == 'error':
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and ss.options.approximations="error": {what}. Run with solver="abm".')
-                else:
-                    self.tell(ss.note, what, sim=sim, verbose=0 if approximations == 'allow' else None)
-                self.terms.append(sc.obj(kind='homogeneous', contacts=contacts, name=net.name, edges=net if lasts else None))
+                ss.note(f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
+            else:
+                used.append(net)
+        self.add_age_groups(used)
+        self.terms = [term for net in used for term in self.net_terms(net)]
         self.note_regrouped()
         if not self.terms: # Every network skipped (each carries no contacts here): none, under a network's name, so a beta by route finds it
             self.terms = [sc.obj(kind='homogeneous', contacts=0.0, name=nets[-1].name)]
-        if self.space is not None and any(term.kind == 'matrix' for term in self.terms):
-            self.init_space() # A contact matrix can add an age stratification, which changes the groups
-            for term in self.terms:
+        self.place_terms(self.terms)
+        return
+
+    def net_terms(self, net):
+        """ The terms of the mixing that one network becomes (one, or one for each side of a partnership) """
+        sim = self.sim
+        if isinstance(net, (ss.networks.MixingPools, ss.MixingPool)): # A pool of some people (source= or target=) is refused by its capability record: see ss.solvers.init_capabilities()
+            return [self.pool_term(net)]
+        elif isinstance(net, ss.DegreeNet): # Lasting partnerships (ss.DegreeNet, ss.SexualNet): the partner-change model
+            terms = self.partnerships(net)
+            what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim._unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
+            ss.note(f'{what}; solver="abm" runs it as agents', sim=sim, approx=True)
+            return terms
+        elif isinstance(net, ss.Network):
+            kind = type(net).__name__
+            if net.pars.get('who') is not None: # Homogeneous mixing is among everyone: contacts among some people only would need a group of its own
+                raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {kind} with who= has contacts among some people only, which homogeneous mixing between compartments does not follow. Run with solver="abm", or leave who= out.')
+            contacts, source = net.mean_contacts(sim)
+            if contacts is None:
+                raise ss.CapabilityError(f'cannot run with solver="{self.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
+            lasts = net.pars.get('dynamic', True) # Edges that change, each of which transmits at most once in a step (see edge_dur())
+            what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim._unit_name} ({source}){", each transmitting at most once in a step" if lasts else ""}'
+            ss.note(f'{what}; solver="abm" runs it as agents', sim=sim, approx=True)
+            return [sc.obj(kind='homogeneous', contacts=contacts, name=net.name, edges=net if lasts else None)]
+        return []
+
+    def pool_term(self, net):
+        """ The term of a mixing pool (of everyone), or of mixing pools between groups: a matrix over the model's dimensions (`ss.contacts()`), or by age """
+        if isinstance(net, ss.MixingPool):
+            return sc.obj(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, self.sim.unit_base), name=net.name)
+        elif net.dims or net.full is not None:
+            return self.dim_matrices(net)
+        return self.age_matrix(net)
+
+    def place_terms(self, terms):
+        """ In a model with places, make each contact matrix act within each place (see `within_places()`) """
+        if self.space is not None:
+            for term in terms:
                 if term.kind == 'matrix':
                     self.within_places(term)
-        self.laid_out = (sim.groups, sim.groups.version)
+        return
+
+    def add_age_groups(self, nets):
+        """
+        In a model with no age groups, give it those of the first contact matrix by age with its own age groups (`ss.contacts(matrix, ages=...)`, or mixing pools by age), before any term of the mixing is made from its groups (see `regroup_ages()`)
+
+        Args:
+            nets (list): the networks the terms will be made from
+        """
+        sim = self.sim
+        if any(strat.kind == 'age' for strat in sim.groups.strats):
+            return
+        for net in nets:
+            if not isinstance(net, ss.networks.MixingPools):
+                continue
+            elif net.dims or net.full is not None:
+                edges = net.age_edges # A matrix by age with its own age groups, in a product with others (None if it has none)
+            else:
+                bands = [ss.networks.age_band(g) for g in net.pars.source.values()]
+                edges = None if any(band is None for band in bands) else sorted(band[0] for band in bands) # Mixing pools on anything but age are refused by age_matrix()
+            if edges is not None:
+                sim.pars.stratify = dict(sim.pars.stratify or {}, age=[float(e) for e in edges])
+                sim.groups.init()
+                ss.note(f'stratified by the age groups of "{net.name}" ({sc.strjoin(sim.groups.strats[-1].labels)}), since no age groups were given', sim=sim)
+                self.init_space() # The groups changed
+                return
         return
 
     def partnerships(self, net):
@@ -259,13 +295,11 @@ class Mixing(Telling):
         n = np.bincount(cells[inside], weights=sim.groups.group_split[inside], minlength=size) # The fraction of the population in each cell
         cell_side = np.repeat(np.arange(n_sides), n_lev)
         cell_lev = np.tile(np.arange(n_lev), n_sides)
-        mean = lambda v: float(sc.dcp(v).init(force=True).rvs(100_000).mean()) if isinstance(v, ss.Dist) and not any(k in v.pars for k in ['value', 'mean']) else self.mean(v, unit)
+        mean = lambda v: self.mean(v, unit)
         if sexual: # Among people who take part, after their debut (on ss.SexualNet): one partner each, or the target
             part = p.participation.pars.get('p', 1.0) if isinstance(p.get('participation'), ss.bernoulli) else 1.0
             debut = self.mean(p.debut, ss.years) if 'debut' in p else 0 # An age, in years
-            ages, counts = ss.data.age_pyramid(sim)
-            ends = np.append(ages, ages[-1] + 5)
-            older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
+            older = 1 - ss.data.younger_than(*ss.data.age_pyramid(sim))(debut)
             per = [1.0] if p.get('n_contacts') is None else [mean(p.n_contacts[g]) for g in net.groups] if isinstance(p.n_contacts, dict) else [mean(p.n_contacts)] # One target, or one for each side
             k = float(part)*older*np.array(per)[cell_side if len(per) > 1 else np.zeros(size, dtype=int)]
         elif by is not None:
@@ -354,8 +388,8 @@ class Mixing(Telling):
 
     def regroup_ages(self, net, bands, target_bands, contacts):
         """
-        A contact matrix over age bands of its own, as one over the model's age groups, weighted by population (adding the
-        matrix's own groups as the model's if it has none); returns the index of the age dimension and the matrix
+        A contact matrix over age bands of its own, as one over the model's age groups, weighted by population (see
+        `add_age_groups()` for a model with none); returns the index of the age dimension and the matrix
 
         Args:
             net (ss.networks.MixingPools): the contacts, for messages
@@ -365,12 +399,7 @@ class Mixing(Telling):
         """
         sim = self.sim
         top = np.inf
-        if not any(strat.kind == 'age' for strat in sim.groups.strats): # Use the matrix's own age groups
-            edges = sorted(bands[:, 0])
-            sim.pars.stratify = dict(sim.pars.stratify or {}, age=edges)
-            sim.groups.init()
-            self.tell(ss.note, f'stratified by the age groups of "{net.name}" ({sc.strjoin(sim.groups.strats[-1].labels)}), since no age groups were given', sim=sim)
-        d = [strat.kind for strat in sim.groups.strats].index('age')
+        d = [strat.kind for strat in sim.groups.strats].index('age') # The model has age groups: its own, or those of the first matrix by age (see add_age_groups())
         self.check_ragged(d, net)
         strat = sim.groups.strats[d]
         levels = np.column_stack([strat.edges, np.append(strat.edges[1:], top)])
@@ -408,7 +437,7 @@ class Mixing(Telling):
         strat = next((s for s in self.sim.groups.strats if s.kind == 'age'), None)
         for (how,n),names in self.regrouped.items():
             which = f'contact matrix "{names[0]}"' if len(names) == 1 else 'contact matrices ' + sc.strjoin(f'"{name}"' for name in names)
-            self.tell(ss.note, f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', sim=self.sim)
+            ss.note(f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', sim=self.sim)
         self.regrouped = {}
         return
 
@@ -416,12 +445,9 @@ class Mixing(Telling):
         """ The fraction of people younger than each age: from a named population (or, for a guessed age split, the world's), or from the age split, with ages uniform within each 5-year group or age group """
         pyramid = ss.data.age_pyramid(self.sim, strat)
         if pyramid is not None:
-            ages, counts = pyramid
-            ends = np.append(ages, ages[-1] + 5)
-            below = np.append(0, np.cumsum(counts))/np.sum(counts)
-        else:
-            ends = np.append(strat.edges, max(100, strat.edges[-1] + 10)) # As in ss.dimensions.Strat: the last group ends at 100
-            below = np.append(0, np.cumsum(strat.fractions))
+            return ss.data.younger_than(*pyramid)
+        ends = np.append(strat.edges, max(100, strat.edges[-1] + 10)) # As in ss.dimensions.Strat: the last group ends at 100
+        below = np.append(0, np.cumsum(strat.fractions))
         return lambda x: np.interp(x, ends, below)
 
     def check_ragged(self, d, net):
@@ -460,10 +486,10 @@ class Mixing(Telling):
         if np.max(gap[scale > 1e-12*flows.max()], initial=0) > 0.05:
             i, j = np.unravel_index(np.argmax(np.where(scale > 1e-12*flows.max(), gap, 0)), gap.shape)
             if counts:
-                self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" acts on counts (e.g. beta*I.n), so is for pairs of people, but is not symmetric: {mat[i, j]:.3g} for {strat.labels[i]} with {strat.labels[j]}, '
+                ss.note(f'the contact matrix of "{net.name}" for "{strat.name}" acts on counts (e.g. beta*I.n), so is for pairs of people, but is not symmetric: {mat[i, j]:.3g} for {strat.labels[i]} with {strat.labels[j]}, '
                         f'and {mat[j, i]:.3g} for {strat.labels[j]} with {strat.labels[i]}; it is used as given, with rows as the people infected', sim=self.sim)
             else:
-                self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
+                ss.note(f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
                         f'but {strat.labels[j]} have {mat[j, i]:.3g} each with {strat.labels[i]} ({flows[j, i]:.3g}); it is used as given, with rows as the contacts of a person in each level', sim=self.sim)
         return
 
@@ -584,19 +610,13 @@ class Mixing(Telling):
             pools = [net for net in nets if by_dims(net)]
         else:
             pools = [net for net in nets if isinstance(net, ss.networks.MixingPools) or (isinstance(net, ss.MixingPool) and net.pars.source is None and net.pars.target is None)]
-        for net in pools:
-            if isinstance(net, ss.MixingPool): # A pool of everyone: within each place
-                self.pool_terms[net.name] = sc.obj(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base), name=net.name)
-            else:
-                self.pool_terms[net.name] = self.dim_matrices(net) if (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None) else self.age_matrix(net)
+        self.add_age_groups(pools)
+        for net in pools: # A pool of everyone is within each place
+            self.pool_terms[net.name] = self.pool_term(net)
         for net in nets: # A matrix given with its own age groups and used by them (see ss.networks.MixingPools.band_exposure()): checked over them, as in a compartmental run
             if isinstance(net, ss.networks.MixingPools) and net.name not in self.pool_terms and getattr(net, 'ages', None) is not None:
                 strat = next((strat for strat in sim.groups.strats if strat.kind == 'age'), None)
                 self.check_bands(net, np.column_stack([net.edges, np.append(net.edges[1:], np.inf)]), np.asarray(net.pars.n_contacts, dtype=float), self.age_cdf(strat))
         self.note_regrouped()
-        if self.space is not None and any(term.kind == 'matrix' for term in self.pool_terms.values()):
-            self.init_space() # A contact matrix can add an age stratification, which changes the groups
-            for term in self.pool_terms.values():
-                if term.kind == 'matrix':
-                    self.within_places(term)
+        self.place_terms(self.pool_terms.values())
         return

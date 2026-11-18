@@ -99,6 +99,19 @@ def test_sis():
         rt, res = run.diseases.sir.Rt(), run.results.sir
         expected = 3*res.S/(res.S + res.I + res.R)*np.where((res.timevec >= 60) & (res.timevec < 80), 0.5, 1)
         assert np.allclose(rt, expected, rtol=1e-3), f'Expected R over time of R0 × S/N, halved by the modifier, as {solver}'
+
+    # An error while working out the next-generation matrix leaves the compartments as they were
+    eng = ss.Sim(ss.SIR(beta=0.1, init_prev=0.1), total_pop=1000, solver='binomial', verbose=0).init().diseases.sir.engine
+    before, calls, rates = eng.y.copy(), [0], eng.rates
+    def failing():
+        calls[0] += 1
+        if calls[0] == 4:
+            raise RuntimeError('Not a model error')
+        return rates()
+    eng.rates = failing
+    with pytest.raises(RuntimeError):
+        eng.next_generation()
+    assert np.array_equal(eng.y, before) and eng.held_n is None
     return run
 
 
@@ -498,6 +511,15 @@ def test_rel_dists():
     return
 
 
+@sc.timer()
+def test_coded_strains_checks():
+    sc.heading('A disease written as code with strains is checked as one without: no networks is an error, not silence')
+    for strains in [None, ss.Strains(['a', 'b'])]:
+        with pytest.raises(ValueError, match='no one'):
+            ss.Sim(diseases=ssl.AgentSIR(strains=strains, init_prev=0.05), n_agents=500, stop=3, verbose=0).run()
+    return
+
+
 if __name__ == '__main__':
     test_sir()
     test_seir()
@@ -516,3 +538,4 @@ if __name__ == '__main__':
     test_derived_results()
     test_declared_transmit()
     test_rel_dists()
+    test_coded_strains_checks()

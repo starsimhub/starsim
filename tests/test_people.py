@@ -63,8 +63,20 @@ def test_groups_are_not_agents():
     return sim
 
 
+def test_people_contains():
+    """ `in` the people: a property by name, or an agent by UID """
+    sim = ss.Sim(n_agents=small, verbose=0).init()
+    ppl = sim.people
+    assert 'age' in ppl and 'nothing' not in ppl
+    assert 5 in ppl and small + 5 not in ppl
+    with pytest.raises(TypeError):
+        ppl[5] in ppl
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_people()
     test_groups_are_not_agents()
+    test_people_contains()
     T.toc()

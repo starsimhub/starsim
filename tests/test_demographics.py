@@ -415,6 +415,23 @@ def test_path_triggers():
     return path
 
 
+def test_rate_tables():
+    sc.heading('Tables of rates by year: births and deaths hold each year until the next, fertility is interpolated to every year')
+    births = ss.Births(birth_rate=pd.DataFrame(dict(Year=[2000, 2010], CBR=[0.02, 0.04])))
+    rows, years, _ = births.birth_rows
+    assert rows[ss.demographics.period_year(years, 2005)] == 0.02 and rows[ss.demographics.period_year(years, 2010)] == 0.04 # Held, as ss.timeseries holds
+    preg = ss.Pregnancy(fertility_rate=pd.DataFrame(dict(Time=[2000, 2000, 2010, 2010], AgeGrp=[15, 20, 15, 20], ASFR=[0.1, 0.2, 0.3, 0.4])))
+    rows, years, _ = ss.demographics.rate_rows(preg.standardize_fertility_data())
+    assert np.allclose(rows[years[sc.findnearest(years, 2005.4)]][1:3], [0.2, 0.3]) # Interpolated (by age group from 15, after the one below it), and read at the nearest year
+
+    # A chance of maternal death at delivery set to a number after the module is made works as one given when it is made
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.2), burnin=False)
+    preg.pars.p_maternal_death = 0.5
+    sim = ss.Sim(demographics=preg, n_agents=2000, start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    assert sim.results.pregnancy.maternal_death.sum() > 0
+    return
+
+
 if __name__ == '__main__':
     for name,test in list(globals().items()):
         if name.startswith('test_'):

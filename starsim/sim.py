@@ -70,12 +70,26 @@ class Sim(ss.modules.Base):
         sim = ss.Sim(ss.SIR(), ss.RandomNet()) # Modules of several kinds, sorted by kind
         ```
     """
-    # The attributes a sim sets on itself (in __init__(), init(), or only for some sims, e.g. imported), and the keys that the search for distributions skips (see ss.Dists.init()):
-    # a module can't take one of these from its variable (see _name_modules()), since sim.<name> would not find it, and the sim would find the module where it looks for its own
+    # The attributes a sim sets on itself (in __init__(), init(), or only for some sims, e.g. imported): a module can't take one of these from its variable
+    # (see _name_modules()), since sim.<name> would not find it, and the sim would find the module where it looks for its own
     _attrs = {'capabilities', 'clipped', 'complete', 'created', 'data', 'declared', 'diagnostics', 'dists', 'elapsed', 'filename', 'gathered', 'given', 'given_pyramid',
-              'groups', 'imported', 'initialized', 'joint_states', 'laid', 'layouts', 'loop', 'metadata', 'mixed', 'mixing', 'modifiers', 'module', 'named_people',
+              'groups', 'imported', 'initialized', 'joint_states', 'laid', 'layouts', 'loop', 'metadata', 'mixed', 'contact_rates', 'modifiers', 'module', 'named_people',
               'named_unsized', 'notes', 'overlaps', 'pars', 'people_from', 'pop_from', 'progress', 'results', 'results_ready', 'rng_rescale', 'shrunken', 'sim',
               'solver_reason', 'stopped', 't', 'timer', 'unit_base', 'unit_source', 'unitless'}
+
+    # What one step of making or running a sim leaves for a later one; declared here, with their defaults, so that each is set in one place
+    _before_init = None # The copy of the sim made before it was initialized, which sim.new() and a rerun start from (see ss.utils.outermost)
+    _no_new = None # Why sim.new() can't copy the sim, if it can't (e.g. made with copy_inputs=False)
+    _in_init = False # Whether init() is running (see ss.utils.outermost)
+    _held = None # The notes said while initializing, held for the line that starts the run (a list, while init() runs)
+    _quiet = False # Whether init() leaves the start line unsaid (as for sim.describe()), for the run to say
+    _unsaid = None # The notes of an initialization by sim.describe(), said when the sim is run
+    _valued = False # Whether arithmetic on a parameter is on its value (see ss.expressions.has_values()): from when the values are set in init()
+    _data_source = None # The ss.SimData the data were loaded from, to drop the columns that match no result once the results exist (see _load_data())
+    _restarted = None # How sim.restart() left the sim for the next run: 'same' (the same values) or 'new' (new values), or None if it wasn't restarted
+    _kernels_known = False # Whether the sim has been restarted and run in one call to the kernels, so a number in place of a number can be restarted without asking again
+    _backend_known = None # The backend and whether JAX ran the last whole run, to reuse for a restart with the same values
+    _branching = None # What came of a run as a branching process (see the branching property)
 
     def __init_subclass__(cls, **kwargs):
         """ A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): the sim is copied before it runs (see `outermost()`) """
@@ -87,58 +101,22 @@ class Sim(ss.modules.Base):
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
                  data=None, pars=None, copy_inputs=True, **kwargs):
-        models, pars = self._take_modules(models, kwargs, pars)
-        self.pars = ss.SimPars() # Make default parameters
-        models = [arg for arg in models if arg is not None]
-        kinds = ss.modules.module_types() + ['custom']
-        if isinstance(pars, ss.SimPars): # The sim's settings as a whole, e.g. ss.Sim(pars=sim.pars), as if given in place of the model
-            models, pars = models + [pars], None
-        elif isinstance(pars, dict) and any(key in kinds for key in pars): # Modules in pars=, as if given in a dict in place of the model
-            models, pars = models + [{key:val for key,val in pars.items() if key in kinds}], {key:val for key,val in pars.items() if key not in kinds}
+        names = ss.utils.caller_names(1) # The variables of the code that made the sim, which name the modules (see _name_modules())
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
                      interventions=interventions, analyzers=analyzers, custom=custom, data=data)
-        for arg in models: # The model: modules or transitions, or lists of them; or the sim parameters, as a dict
-            if isinstance(arg, dict):
-                kwargs = sc.mergedicts({k:v for k,v in arg.items() if given.get(k) is None}, kwargs) # A keyword given outright wins over the same key in the dict
-            elif not all(isinstance(obj, ss.Module) or ss.transitions.is_declaration(obj) or callable(obj) for obj in (arg if isinstance(arg, (list, tuple)) else [arg])): # A module's class, or a function of the sim (which becomes a module's step()), is made a module as for any kind
-                errormsg = f'ss.Sim() takes the model (modules, their classes, functions of the sim, or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
-                raise TypeError(errormsg)
-        mods = dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=None) # modules: those of a whole ss.SimPars to sort by kind
-        mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()} # Modules given in a dict of parameters are named and ordered as if given by keyword
-        model = [key for key in kwargs if key not in self.pars and key not in ss.v3_deprecations.keys('Sim')] # A parameter of the model by keyword, e.g. ss.Sim(sir, beta=0.1), as in pars= (a setting of the sim of the same name wins)
-        if model:
-            pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in model})
-        names = ss.utils.caller_names(1)
-        models = ss.utils.make_disease(models, names)
-        mods['diseases'] = ss.utils.make_disease(mods['diseases'], names)
-        given_order = sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)])
-        for i,mod in enumerate(given_order): # Its place among the model's, for step_order='given' (see ss.SimPars.validate_modules())
-            if isinstance(mod, ss.Module):
-                mod._model_index = i
-        for mod in given_order: # The model's modules, sorted into their kinds now (after those given by keyword, as init() would), so that e.g. sim.pars.diseases has them before init() as after
-            key = ss.simpars.module_kind(mod)
-            if key == 'custom' or isinstance(mods[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.SimPars.validate_modules())
-                mods['modules'] = sc.mergelists(mods['modules'], mod)
-            else:
-                mods[key] = sc.mergelists(mods[key], mod)
+        inputs = ss.simpars.sort_inputs(models, kwargs, pars, given, names) # The modules by kind, the settings, and the values of the model's parameters
+        mods = inputs.mods
         self._name_modules(names, *mods.values())
         mods['interventions'] = self._order_steps(mods['interventions'])
-        self._par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a setting of the sim given as ss.par too (e.g. n_agents=ss.par(...), when it is fitted: pars=fit.pars)
-            pars = dict(pars)
-            kwargs |= {key:pars.pop(key) for key in list(pars) if isinstance(kwargs.get(key), ss.par)}
-            names = {name for mod in ss.utils.given_modules(dict(enumerate(models)), mods) for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())} # Those pars= can set (see ss.solvers.set_values())
-            settings = {key:pars.pop(key) for key in list(pars) if (key in self.pars or key in ss.v3_deprecations.keys('Sim')) and key not in names} # A setting of the sim by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
-            kwargs = sc.mergedicts({k:v for k,v in settings.items() if given.get(k) is None}, kwargs) # A keyword given outright wins
-            self._par_values = pars or None # A name that is neither raises a KeyError when the sim is initialized
-        pars = None
+        self._par_values = inputs.par_values # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
+        self.pars = ss.SimPars() # Make default parameters
         args = {key:val for key,val in dict(label=label, people=people, **mods).items() if val is not None} # Remove None inputs
-        input_pars = ss.utils.copy_given(pars, args, kwargs, copy_inputs=copy_inputs)
+        input_pars = ss.simpars.copy_given(args, inputs.settings, copy_inputs=copy_inputs)
         if copy_inputs: # Only the sim's copies keep their place, so the modules given can be given to another sim in another order
-            for mod in given_order:
+            for mod in inputs.given_order:
                 vars(mod).pop('_model_index', None) if isinstance(mod, ss.Module) else None
         else: # Nothing to start again from, since the modules given are the ones that run
-            self._before_init = 'This sim was made with copy_inputs=False, so it runs the modules it was given themselves, and can\'t be run again or copied with sim.new(): make it again instead (with new modules)'
+            self._no_new = 'This sim was made with copy_inputs=False, so it runs the modules it was given themselves, and can\'t be run again or copied with sim.new(): make it again instead (with new modules)'
         self.pars.update(input_pars)  # Update the parameters
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
         self.notes = [] # Notes on what was assumed or approximated when the sim was built
@@ -157,35 +135,14 @@ class Sim(ss.modules.Base):
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.elapsed = None # The time required to run
-        self.progress = None # How far a run has got, shown as it goes (see ss.display.Progress)
+        self.progress = None # How far a run has got, shown as it goes (see ss.progress.Progress)
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
         return
 
-    @staticmethod
-    def _take_modules(models, kwargs, pars):
-        """ Modules given with modules= (by keyword, or in a dict of settings other than a whole ss.SimPars) are part of the model, sorted by kind as arguments are (those of no standard kind are kept in sim.custom) """
-        models = list(models)
-        if kwargs.get('modules') is not None:
-            models.append(kwargs.pop('modules'))
-        kwargs.pop('modules', None)
-        for i,arg in enumerate(models):
-            if isinstance(arg, dict) and not isinstance(arg, ss.SimPars) and 'modules' in arg:
-                arg = dict(arg)
-                mods = arg.pop('modules')
-                models[i] = arg
-                if mods is not None:
-                    models.append(mods)
-        if isinstance(pars, dict) and not isinstance(pars, ss.SimPars) and 'modules' in pars:
-            pars = dict(pars)
-            mods = pars.pop('modules')
-            if mods is not None:
-                models.append(mods)
-        return models, pars
-
     def _settings(self):
-        """ The sim settings, not the modules or people (which would be found again by the search for distributions) """
-        skip = ss.modules.module_types() + ['custom', 'modules', 'people']
+        """ The sim settings, not the modules or people, for `init()` to find those set since the sim was made (which count as given) """
+        skip = ss.simpars.module_kinds() + ['modules', 'people']
         return {key:val for key,val in self.pars.items() if key not in skip}
 
     @staticmethod
@@ -234,20 +191,26 @@ class Sim(ss.modules.Base):
             return interventions
         return ss.solvers.deliveries.order_steps(sc.tolist(interventions))
 
+    @property
+    def _modules_moved(self):
+        """ Whether the modules have been moved from `sim.pars` to the sim (e.g. `sim.diseases`), early in `init()` (see `_move_modules()`) """
+        return 'custom' in self.__dict__ # The last of the kinds that _move_modules() sets
+
     def _named_modules(self):
         """ The modules that `sim.<name>` looks in: the sim's own once it has them (from early in `init()`, so e.g. one module's `init_post()` can read `sim.<name>` of another), else those it was given """
-        if 'custom' in self.__dict__: # Set by _move_modules(), the last of the module types
+        if self._modules_moved:
             return self.modules
-        return ss.utils.given_modules(self.__dict__.get('pars'))
+        return ss.simpars.given_modules(self.__dict__.get('pars'))
 
     def __getattr__(self, attr):
         """ A module by its name, or its default name if no module is called that (see `ss.utils.find_module()`), e.g. `sim.sir` for `sim.diseases.sir` """
         mods = []
-        if not attr.startswith('_') and 'pars' in self.__dict__ and attr not in ss.modules.module_types() + ['custom']: # Not the module types, which init() sets
+        kinds = ss.simpars.module_kinds()
+        if not attr.startswith('_') and 'pars' in self.__dict__ and attr not in kinds: # Not the module types, which init() sets
             mods = self._named_modules()
             if (mod := ss.utils.find_module(mods, attr)) is not None:
                 return mod
-        if not self.__dict__.get('initialized') and attr in ss.modules.module_types() + ['custom', 'people']: # Made by init(), from what was given
+        if not self.__dict__.get('initialized') and attr in kinds + ['people']: # Made by init(), from what was given
             given = f'; until then, what was given is sim.pars.{attr}' if attr != 'people' else ''
             raise AttributeError(f'sim.{attr} is made when the sim is initialized, by sim.init() (or sim.run()){given}')
         ss.v3_deprecations.check_attr(type(self), attr)
@@ -268,7 +231,7 @@ class Sim(ss.modules.Base):
         try:
             pars = self.pars
             n = int(sc.ifelse(pars.total_pop, pars.n_agents)) # The number of people modeled, not the default number of agents (or the number of groups of a compartmental run)
-            agents = int(pars.n_agents) if self.initialized and isinstance(self.solver, ss.solvers.abm) else n
+            agents = int(pars.n_agents) if self.initialized and self.solver.agents else n
             parts = [f'{self.label}; ' if self.label else '', f'n={n:n}', f' ({agents:n} agents)' if agents != n else '']
             t = self.t if self.initialized else pars
             parts.append(f'; {t.start}—{t.stop}')
@@ -308,15 +271,14 @@ class Sim(ss.modules.Base):
                                     self.products(), self.diseases(), self.custom(), self.analyzers()))
 
     @ss.utils.outermost
-    def init(self, force=False, **kwargs):
+    def init(self, **kwargs):
         """
-        Perform all initializations for the sim
+        Perform all initializations for the sim; a sim that is initialized already (e.g. by `sim.describe()`) is left as it is
 
         Args:
-            force (bool): whether to overwrite sim attributes even if they already exist
             kwargs (dict): passed to ss.People()
         """
-        if self.initialized and not force: # E.g. after sim.describe(), which initializes it
+        if self.initialized: # E.g. after sim.describe(), which initializes it
             return self
 
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
@@ -329,7 +291,7 @@ class Sim(ss.modules.Base):
                 self.given.append(key)
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.freeze(False) # And set (frozen again once it is initialized)
-        self.__dict__.pop('_valued', None) # Arithmetic on a parameter builds the model until it is built (see below)
+        self._valued = False # Arithmetic on a parameter builds the model until it is built (see below)
         self.pars.validate()
         ss.networks.resolve_routes(self) # A beta by route that names a network by its kind, e.g. dict(random=...) for one called after its variable
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
@@ -339,8 +301,8 @@ class Sim(ss.modules.Base):
             long = self.t.dt_year*(self.t.npts - 1) >= 1 # Only then does it matter much
             ss.note('people do not age between the age groups, since nobody is born or dies; pass aging=True to age them', sim=self, verbose=None if long else 0)
         self.init_people(**kwargs)
-        self._move_modules(force=force) # From sim.pars to the sim, e.g. sim.diseases
-        self._init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
+        self._move_modules() # From sim.pars to the sim, e.g. sim.diseases
+        self._load_data() # Before the modules, which read it (e.g. data by group keeps their results by group at every step)
         self._init_modules_pre()
         self.groups.check_used() # A stratification that nothing uses
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
@@ -355,7 +317,7 @@ class Sim(ss.modules.Base):
         self._init_modules_post() # Initialize the module values
         ss.solvers.settle_start(self) # The declared modules' people, once every module has its own
         self.init_results()
-        self._init_data()
+        self._check_data()
         self.loop.init()
         self.lock_pars() # Don't allow new parameters to be added by mistake
 
@@ -364,13 +326,14 @@ class Sim(ss.modules.Base):
 
         # It's initialized
         self.initialized = True
-        self.__dict__.pop('_valued', None)
+        self._valued = False
         self.pars.freeze() # Its settings are this run's: a change is made with sim.new()
         held, self._held = self._held, None
-        if self.verbose and self.__dict__.pop('_quiet', False): # Initialized by sim.describe(): said when it is run
+        quiet, self._quiet = self._quiet, False
+        if self.verbose and quiet: # Initialized by sim.describe(): said when it is run
             self._unsaid = held
         elif self.verbose:
-            print('\n'.join(ss.display.start_lines(self, held)))
+            print('\n'.join(ss.progress.start_lines(self, held)))
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
@@ -393,23 +356,22 @@ class Sim(ss.modules.Base):
             inplace (bool): if True, this sim becomes the new one, rather than a new one being returned
             kwargs (dict): sim arguments to change, e.g. `rand_seed=2`, `solver='abm'`, or `interventions=...` (or parameters of the model, e.g. `beta=0.1`, as in `pars=`); `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A subclass's own arguments (e.g. FPsim's `location=`) are not taken again: make the subclass again for those.
         """
-        base = self.__dict__.get('_before_init', None if self.initialized else self)
-        if not isinstance(base, Sim):
-            errormsg = base or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy (e.g. it was saved by an earlier version); make it again instead'
+        base = self._before_init if self.initialized else self
+        if base is None:
+            errormsg = self._no_new or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy; make it again instead'
             raise ValueError(errormsg)
         if 'modules' in kwargs:
             errormsg = 'sim.new() takes modules by kind (e.g. diseases=..., custom=...), not modules=; or make a new ss.Sim(), which sorts modules= by kind'
             raise TypeError(errormsg)
         data = kwargs.pop('data', self.data) # Not a sim parameter: taken from this sim, as it may be set once it is initialized
-        kinds = ss.modules.module_types() + ['custom']
+        kinds = ss.simpars.module_kinds()
         if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
             self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
             if kwargs.get('interventions') is not None:
                 kwargs['interventions'] = self._order_steps(kwargs['interventions'])
-        pars = dict(pars or {})
-        pars |= {key:kwargs.pop(key) for key in list(kwargs) if key not in base.pars and key not in ss.v3_deprecations.keys('Sim')} # A parameter of the model by keyword, as in ss.Sim()
+        pars = dict(ss.simpars.model_pars(kwargs, base.pars, pars) or {}) # A parameter of the model by keyword, as in ss.Sim()
         kwargs |= {key:pars.pop(key) for key in list(pars) if key in base.pars.bounded()} # A sim setting given as ss.par (e.g. n_agents=ss.par(5000, bounds=...)) is a value by name too, as when fitting it
-        kwargs = ss.utils.copy_given(kwargs) # And copied
+        kwargs = ss.simpars.copy_given(kwargs) # And copied
         sim = self if inplace else object.__new__(type(base))
         state = sc.dcp(vars(base), memo={id(base):sim}) # What refers to the sim (e.g. its loop) refers to the new one
         vars(sim).clear()
@@ -726,7 +688,7 @@ class Sim(ss.modules.Base):
 
         # Figure out the type of module, and make sure the name is unique
         key = key or ss.simpars.module_kind(module)
-        names = {mod.name:None for mod in self.modules}
+        names = {mod.name:ss.simpars.module_kind(mod) for mod in self.modules}
         ss.SimPars.validate_name(module, key, names)
         if module.has_product:
             same = [p for p in self.products() if p is module.product or p.name == module.product.name]
@@ -803,9 +765,9 @@ class Sim(ss.modules.Base):
         Returns:
             A list of `ss.Module` instances. The list will be empty if no modules were found
         """
-        if self.initialized or 'demographics' in self.__dict__: # Initialized, or initializing: the modules have been moved to the sim (see init_module_attrs())
+        if self._modules_moved: # Initialized, or initializing
             modules = self.modules
-        else:
+        else: # Every module in the settings, including those inside others (e.g. a delivery's product), unlike sim.<name>, which looks only at those given (see _named_modules())
             modules = sc.search(self.pars, type=ss.Module).values()
 
         if query is None:
@@ -839,13 +801,14 @@ class Sim(ss.modules.Base):
         """
         # Handle inputs
         people = self.pars.pop('people')
-        if (self.named_people is not None or self.given_pyramid is not None) and not isinstance(self.solver, ss.solvers.abm): # A compartmental run takes the size and age split of a population, not its agents
+        agents = self.solver.agents
+        if (self.named_people is not None or self.given_pyramid is not None) and not agents: # A compartmental run takes the size and age split of a population, not its agents
             people = None
-        n_agents = self.pars.n_agents if isinstance(self.solver, ss.solvers.abm) else self.groups.n_groups # A compartmental run has a row for each group of people, not agents
+        n_agents = self.pars.n_agents if agents else self.groups.n_groups # A compartmental run has a row for each group of people, not agents
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
-            if isinstance(self.solver, ss.solvers.abm) and self.groups.strats: # Properties that people are stratified by, other than age
+            if agents and self.groups.strats: # Properties that people are stratified by, other than age
                 extra = [strat.people_arr() for strat in self.groups.strats if strat.kind != 'age']
                 kwargs['extra_states'] = sc.mergelists(kwargs.get('extra_states'), extra)
                 for strat in self.groups.strats: # Ages follow the split of the age groups, so every solver starts from the same population
@@ -857,7 +820,7 @@ class Sim(ss.modules.Base):
             if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
                 kwargs['age_data'] = ss.data.to_age_data(*ss.data.age_pyramid(self))
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
-        elif isinstance(self.solver, ss.solvers.abm):
+        elif agents:
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.fractions_given:
@@ -890,21 +853,15 @@ class Sim(ss.modules.Base):
         self.pars['label'] = label
         return
 
-    def _move_modules(self, force=False):
+    def _move_modules(self):
         """ Move the modules from `sim.pars` to the sim (e.g. `sim.pars.diseases` to `sim.diseases`), leaving their parameters in `sim.pars` """
-        for attr in ss.modules.module_types() + ['custom']:
-            orig = self.__dict__.get(attr)
-            if not force and orig is not None:
-                warnmsg = f'Skipping key "{attr}" in parameters since already present in sim and force=False'
-                ss.warn(warnmsg)
-            else:
-                modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
-                setattr(self, attr, modules) # Add the modules ndict to the sim
-                if isinstance(modules, ss.ndict):
-                    modules.setattribute('_kind', 'modules of no standard kind' if attr == 'custom' else attr)
-                self.pars[attr] = sc.obj() # Recreate with just the module parameters
-                for key,module in modules.items():
-                    self.pars[attr][key] = module.pars
+        for attr in ss.simpars.module_kinds(): # 'custom' last (see _modules_moved)
+            modules = self.pars.pop(attr) # Remove module type (e.g. 'diseases') from the parameters
+            setattr(self, attr, modules) # Add the modules ndict to the sim
+            modules.setattribute('_kind', 'modules of no standard kind' if attr == 'custom' else attr)
+            self.pars[attr] = sc.obj() # Recreate with just the module parameters
+            for key,module in modules.items():
+                self.pars[attr][key] = module.pars
 
         for mod in self.modules: # Each module is also sim.<name> (see __getattr__()), unless the sim has an attribute of that name (module names are unique: see ss.SimPars.validate_name())
             if mod.name in dir(self):
@@ -978,7 +935,7 @@ class Sim(ss.modules.Base):
     def pop_scale(self):
         """ The number of people each agent stands for (with dynamic rescaling, at the end of the run): `total_pop/n_agents` as agents, and 1 in a compartmental run, which has no agents; set by `total_pop=` and `n_agents=` """
         pars = self.pars
-        if (self.solver is not None and not isinstance(self.solver, ss.solvers.abm)) or not pars.n_agents or pars.total_pop is None:
+        if (self.solver is not None and not self.solver.agents) or not pars.n_agents or pars.total_pop is None:
             return 1.0
         return pars.total_pop/pars.n_agents
 
@@ -1056,30 +1013,28 @@ class Sim(ss.modules.Base):
                     disease.make_naive(new_naive)
         return
 
-    def _init_data(self, data=None, check=True):
-        """ Initialize or add data to the sim; with check=False, only load and validate it, since the results it is checked against do not exist yet
-
-        Args:
-            data (dataframe/str): the data, or the name of a file holding it (default: `sim.data`)
-            check (bool): whether to check it against the results
-        """
-        data = data if data is not None else self.data
+    def _load_data(self):
+        """ Load the sim's data (from a file, or an `ss.SimData`) and validate it; it is checked against the results once they exist (see `_check_data()`) """
+        data = self.data
         if isinstance(data, (str, os.PathLike)):
             data = ss.SimData(data)
         if isinstance(data, ss.SimData):
-            self._simdata = data # To drop the columns that match no result, if asked, once the results exist
+            self._data_source = data # To drop the columns that match no result, if asked, once the results exist
             data = data.load()
         self.data = ss.results.validate_sim_data(data)
-        if not check:
+        return
+
+    def _check_data(self):
+        """ Check the data against the results, now that they exist: drop the columns that match none (if the `ss.SimData` says to), and widen data by group """
+        source, self._data_source = self._data_source, None
+        if self.data is None:
             return
-        source = self.__dict__.pop('_simdata', None)
-        if self.data is not None and source is not None and source.ignore_extra:
+        if source is not None and source.ignore_extra:
             self.data = source.drop_extra(self, self.data)
-        if self.data is not None:
-            ss.results.note_by_year(self, self.data)
-            self.data = ss.results.widen_data(self, self.data)
-            if getattr(self, 'declared', None):
-                ss.results.check_data(self, self.data)
+        ss.results.note_by_year(self, self.data)
+        self.data = ss.results.widen_data(self, self.data)
+        if self.declared:
+            ss.results.check_data(self, self.data)
         return
 
     def set_diagnostics(self, rvs=True, states=True, detailed=False):
@@ -1236,41 +1191,26 @@ class Sim(ss.modules.Base):
                 finally:
                     dict.__setitem__(self.pars, 'verbose', given) # The settings are frozen once the sim is initialized
                     self.verbose = given
-        orig_verbose = self.verbose # Restored at the end of the run, whether or not it reached the end
-        if verbose is not None:
-            self.verbose = verbose
-        unsaid = self.__dict__.pop('_unsaid', None) # The start line, if sim.describe() initialized the sim
-        if unsaid is not None and self.verbose:
-            print('\n'.join(ss.display.start_lines(self, unsaid)))
-        self.timer.start()
-        started = time.perf_counter()
-
-        # Check for AlreadyRun errors
         if self.complete:
-            self.verbose = orig_verbose
             errormsg = 'Simulation is already complete'
             raise ss.AlreadyRunError(errormsg)
-
-        self.stopped = None # The last time point with results, if a condition given as until= stopped the run
-        if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
-            self.progress = ss.display.Progress(self)
+        orig_verbose = self.verbose # Restored at the end of the run, whether or not it reached the end
         try:
+            if verbose is not None:
+                self.verbose = verbose
+            unsaid, self._unsaid = self._unsaid, None # The start line, if sim.describe() initialized the sim
+            if unsaid is not None and self.verbose:
+                print('\n'.join(ss.progress.start_lines(self, unsaid)))
+            self.timer.start()
+            started = time.perf_counter()
+            self.stopped = None # The last time point with results, if a condition given as until= stopped the run
+            if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
+                self.progress = ss.progress.Progress(self)
+
             # Main simulation loop
-            restarted = self.__dict__.pop('_restarted', None)
-            reason = self._compiled_reason() if until is None and not profile and restarted is None else None
-            whole = until is None and not profile and reason is None
-            if reason is not None and not isinstance(self.solver, ss.solvers.abm) and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
-                ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
-            if ss.options.require_compiled and not whole:
-                raise ss.CapabilityError(f'ss.options.require_compiled is True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
-            if whole: # JAX or the compiled backend: see ss.solvers.choose_backend()
-                known = self.__dict__.get('_backend_known')
-                if restarted == 'same' and known is not None and known[0] == ss.options.backend != 'jax': # A choice from the model and its values, which are as they were
-                    use_jax = known[1]
-                else:
-                    use_jax, _ = ss.solvers.choose_backend(self) # The reason is for when JAX was asked for and can't run it, which is a note
-                    self._backend_known = (ss.options.backend, use_jax)
-            if whole: # Nothing needs to happen between the steps, so each module takes all of them at once
+            whole = self._runs_whole(until, profile)
+            if whole: # Nothing needs to happen between the steps, so each module takes all of them at once, with JAX or the compiled backend
+                use_jax = self._use_jax()
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)
                 self.complete = True # Without making the loop's plan, which is not needed
@@ -1285,20 +1225,45 @@ class Sim(ss.modules.Base):
             self.elapsed = time.perf_counter() - started # As a number: sc.timer also formats a message
             if self.complete:
                 self.finalize()
-                if getattr(self, 'stopped', None) is not None:
+                if self.stopped is not None:
                     self._blank_after(self.stopped)
                 if self.pars.branching:
                     self._summarize_branching()
                 if not whole:
                     self._check_method_calls()
                 if self.progress is not None:
-                    self.progress.finish(ss.display.end_line(self))
+                    self.progress.finish(ss.progress.end_line(self))
         finally:
+            self._restarted = None # Only for the run that follows the restart
             self.dists.clear_run_caches()
             self.progress = None
             self.verbose = orig_verbose
-        
+
         return self # Allows e.g. ss.Sim().run().plot()
+
+    def _runs_whole(self, until=None, profile=False):
+        """ Whether the run takes all its steps at once, in one call to the kernels (or JAX) for each module; if not, a compartmental run says why, once """
+        if until is not None or profile:
+            whole, reason = False, None
+        elif self._restarted is not None: # The run of a sim that sim.restart() took back to its start, which it does only for a sim that runs whole
+            whole, reason = True, None
+        else:
+            reason = self._compiled_reason()
+            whole = reason is None
+        if reason is not None and not self.solver.agents and self.declared: # Say once why a compartmental run is taken a step at a time (describe() says it too)
+            ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
+        if ss.options.require_compiled and not whole:
+            raise ss.CapabilityError(f'ss.options.require_compiled is True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
+        return whole
+
+    def _use_jax(self):
+        """ Whether JAX runs the whole run (see `ss.solvers.choose_backend()`); the choice is kept for a restart with the same values, which would choose the same """
+        known = self._backend_known
+        if self._restarted == 'same' and known is not None and known[0] == ss.options.backend != 'jax': # A choice from the model and its values, which are as they were
+            return known[1]
+        use_jax, _ = ss.solvers.choose_backend(self) # The reason is for when JAX was asked for and can't run it, which is a note
+        self._backend_known = (ss.options.backend, use_jax)
+        return use_jax
 
     def _condition_holds(self, cond):
         """ Whether a condition given as `sim.run(until=)` holds now: an expression of the declared modules' states (`sir.I.n == 0`), or a function of the sim """
@@ -1324,7 +1289,7 @@ class Sim(ss.modules.Base):
 
         See `msim.branching` for the runs of a MultiSim together.
         """
-        return self.__dict__.get('_branching')
+        return self._branching
 
     def _summarize_branching(self):
         """ Work out `sim.branching` once the run is finished (see there) """
@@ -1348,7 +1313,7 @@ class Sim(ss.modules.Base):
             now = sum(float(res[name][last]) for name in active)
             b = sc.obj(size=start + new, outcome='stopped' if self.stopped is not None else 'extinct' if now < 0.5 else 'ongoing')
             engine = mod.engine
-            if isinstance(self.solver, ss.solvers.abm):
+            if self.solver.agents:
                 n = self.people.uid.len_used
                 infector = engine.infector[:n].copy()
                 b.length = int(engine.generation[:n].max()) if n else 0
@@ -1443,20 +1408,18 @@ class Sim(ss.modules.Base):
             self.init()
         self.loop.index = 0
         rebuild = lambda: self.new(pars=sc.mergedicts(self._par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
-        same = not pars
-        numbers = all(isinstance(val, (int, float, np.number)) for val in (pars or {}).values()) # A number in place of a number does not change how the sim runs
-        if not (numbers and self.__dict__.get('_kernels_known') or self._compiled_reason() is None) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        if not self._restartable(pars):
             return rebuild()
-        base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
+        base = self._before_init # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
             dict.__setitem__(self.pars, 'rand_seed', rand_seed) # The seed of this run, which is set while the sim is initialized (see ss.SimPars.freeze())
-            if isinstance(base, Sim):
+            if base is not None:
                 base.pars.rand_seed = rand_seed
         if pars:
             moving = [p for mod in self.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
             before = [float(p) for p in moving]
             self._par_values = sc.mergedicts(self._par_values, pars)
-            if isinstance(base, Sim):
+            if base is not None:
                 base._par_values = sc.mergedicts(base._par_values, pars)
             ss.solvers.set_par_values(self)
             varies = lambda raw: isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
@@ -1465,7 +1428,7 @@ class Sim(ss.modules.Base):
                 if built is not None and any(varies(p.raw) != any(p is q for q in built) for p in mod.graph.pars.values()):
                     return rebuild()
             if any(float(p) != val for p,val in zip(moving, before)): # The movement between places, worked out again with the new values
-                self.mixing.init_movement()
+                self.contact_rates.init_movement()
                 for mod in self.declared:
                     if not mod.engine.restart_movement():
                         return rebuild()
@@ -1482,8 +1445,23 @@ class Sim(ss.modules.Base):
         for joint in self.joint_states: # As in init()
             joint.init()
         self._kernels_known = True
-        self._restarted = 'same' if same else 'new' # For the run that follows, which need not check the same things again
+        self._restarted = 'new' if pars else 'same' # For the run that follows, which need not check the same things again
         return self
+
+    def _restartable(self, pars=None):
+        """
+        Whether `sim.restart(pars=pars)` can take the sim back to its start without building it again (which it does otherwise, as `sim.new()` would): only a sim that
+        runs whole, in one call to the kernels, with values that leave the compartments as they were laid out; a value that changes whether a parameter varies in time,
+        or the movement between places in a way the kernels can't take, is found only once it is set, so the sim may still be built again then
+
+        Args:
+            pars (dict): the values of the model's parameters by name
+        """
+        pars = pars or {}
+        numbers = all(isinstance(val, (int, float, np.number)) for val in pars.values())
+        compiled = (numbers and self._kernels_known) or self._compiled_reason() is None # A number in place of a number does not change how a sim that has been restarted runs
+        structural = any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in pars.items()) # A distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        return compiled and not structural
 
     def finalize(self):
         """ Compute final results """
@@ -1495,7 +1473,6 @@ class Sim(ss.modules.Base):
             mod.finalize()
         self._check_finite()
         ss.solvers.record_people(self)
-        res = self.results
         ss.solvers.hold_flows(self) # The sim's birth and death count them now
         self.drop_unused_flows()
         return
@@ -1535,7 +1512,8 @@ class Sim(ss.modules.Base):
             if isinstance(res, ss.Result):
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
                     res._apply_scale(stock_scale if res.kind == 'stock' else scale)
-                if np.all(res.values == res.values[0]): # Results were not modified during the sim
+                vals = np.asarray(res.values, dtype=float)
+                if np.allclose(vals, vals[0]): # Results that never change, e.g. the number alive in a closed population, are not plotted by default
                     self.results[reskey].auto_plot = False
         self.results_ready = True # Results are ready to use
         return
@@ -1845,7 +1823,6 @@ class Sim(ss.modules.Base):
         Args:
             key (str/list): the result to plot, e.g. `'sis.prevalence'` (by default, all); if a list, exactly those
             fig (Figure): an existing figure to plot into
-            style (str): the plotting style to use
             show_data (bool): plot the data, if the sim has any
             show_skipped (bool): also show the results that are left out by default (those that are zero throughout, and the sim's own that never change)
             annualize (bool): if True, resample results to annual values before plotting (each by its `summarize_by`; see `ss.Result.resample()`)
@@ -1872,10 +1849,6 @@ class Sim(ss.modules.Base):
         """
         self._check_results_ready('Please run the sim before plotting')
         data = ss.results.plot_data(self) if show_data else {} # The data, by the result that each column matches; a flow with data at a longer period (e.g. weekly) is shown as its totals over the data's periods, as the fit compares them
-        if key is None and not show_skipped: # The sim's own results that never change (e.g. the number alive and the deaths of a closed population) are left out
-            own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
-            flat = ss.results.match_result_keys(self.results, None)
-            key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
         marks = {None:ss.results.intervention_marks(self, fill=(show_interventions == 'fill'))} if show_interventions else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, marks=marks, **kwargs)
 

@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import shutil
+import warnings
 import runpy
 import subprocess
 from pathlib import Path
@@ -255,6 +256,19 @@ def test_cli_convert(tmp_path, monkeypatch):
     return
 
 
+def test_cli_init(monkeypatch):
+    """ `starsim init` takes --numba and --rust, as `starsim init compile` does """
+    import starsim_cli as cli
+    import starsim_cli.build as build
+    seen = []
+    monkeypatch.setattr(cli, 'init', lambda args: seen.append((args.numba, args.rust, args.check)))
+    monkeypatch.setattr(build, 'compile', lambda args, needed=False: seen.append((args.numba, args.rust, args.check)))
+    cli.main(['init', '--numba'])
+    cli.main(['init', 'compile', '--rust', '--check'])
+    assert seen == [(True, False, False), (False, True, True)]
+    return
+
+
 def test_cli_help(capsys):
     """ `starsim help <term>`: a name's docstring with a link """
     import starsim_cli as cli
@@ -286,6 +300,20 @@ def test_skills():
             assert (file.parent/link).exists(), f'Broken link to {link} in {file}'
     guide = (ai.ai_folder/'starsim'/'SKILL.md').read_text(encoding='utf-8')
     assert all(f'`{name}`' in guide for name in ai.skills())
+    return
+
+
+def test_options():
+    """ An option is checked before it is set, so a value it doesn't take leaves it as it was """
+    for key,value in dict(precision=16, warnings='eror', backend='fortran').items():
+        before = ss.options[key]
+        with pytest.raises(ValueError):
+            ss.options(**{key:value})
+        assert ss.options[key] == before
+    assert ss.dtypes.float == np.float32
+    with ss.options(precision=64):
+        assert ss.dtypes.float == np.float64 and ss.arrays.ss_float == np.float64
+    assert ss.dtypes.float == np.float32
     return
 
 
@@ -339,6 +367,12 @@ def test_debugtools():
     sim.run()
     assert len(sim.diagnostics.states[-1].alive) == len(sim.people)
 
+    # Summaries that are the same match, even with every value shown (once reported as different), and zeros show as equal
+    same = {'a':1.0, 'b':0.0}
+    assert ss.debugtools.diff_sims(same, dict(same), full=True) is False
+    assert list(ss.debugtools.diff_sims(same, dict(same), full=True, output=True).change) == ['≈', '≈']
+    assert ss.debugtools.diff_sims(same, dict(a=3.0, b=0.0)) is True
+
     arr = ss.FloatArr('my_arr', default=ss.lognormal(5, 2, mock=100), mock=100)
     assert len(arr) == 100 and np.isclose(arr.mean(), 5, atol=3*2/np.sqrt(100)) # 3 sigma of the sample mean
     return sim
@@ -371,6 +405,30 @@ def test_api_index():
     return index
 
 
+def test_module_regressions():
+    """ Fixed bugs in modules and parameters """
+    sc.heading('Testing fixed bugs in modules and parameters')
+    with pytest.raises(TypeError): # Only start=, stop=, and dt= are passed to the timeline, so these are unknown keywords, not errors (or silently used) there
+        ss.Intervention(init=True)
+    with pytest.raises(TypeError):
+        ss.Intervention(sim=ss.Sim())
+    with pytest.raises(TypeError, match='takes arrays'):
+        ss.Module().define_states(('a',))
+
+    # A value by label is in the order of the sim's levels, not of the dict
+    sim = ss.Sim(ss.SIS(), n_agents=100, stratify=dict(sex=['female', 'male']), verbose=0).init()
+    val = ss.by(sex=dict(male=1.0, female=2.0))
+    assert np.array_equal(ss.parameters.number_now(val, sim), val.per_group(sim)) and np.array_equal(val.per_group(sim), [2, 1])
+
+    # Updating a parameter that is an ss.by does not warn
+    pars = ss.Pars(beta=ss.by(age=[1, 2]))
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        pars.update(beta=ss.by(age=[3, 4]))
+        pars.update(beta=3)
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_deepcopy()
@@ -378,4 +436,5 @@ if __name__ == '__main__':
     test_class_body_parts()
     test_migrate()
     test_debugtools()
+    test_module_regressions()
     T.toc()

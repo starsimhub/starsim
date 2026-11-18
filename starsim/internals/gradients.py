@@ -31,7 +31,7 @@ table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the ste
 
 
 def static_fields(program):
-    """ The parts of the program that say how its flows are put together, rather than numbers """
+    """ The parts of the program that say how its flows are put together, rather than numbers: what decides whether a run can be reused (`Run.key()`) or taken with others (`check_same()`) """
     return [name for name in program._fields if name not in diff_fields + table_fields]
 
 
@@ -456,7 +456,7 @@ class Run(sc.prettyobj):
             else:
                 Xs = X
             if self.n_sub:
-                n = self.n_sub
+                n = need = self.n_sub
             else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.solvers.numba.compartmental.step())
                 rates0 = self.rates(y, vals(ti))
                 fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
@@ -479,8 +479,6 @@ class Run(sc.prettyobj):
                 h_fast = dt/n
                 if clamp:
                     n = jnp.minimum(n, n_max)
-            if self.n_sub:
-                need = n
             h = dt/n
 
             def derivs(ys, h=h):
@@ -688,7 +686,6 @@ class JointRun(sc.prettyobj):
     def __init__(self, joint, run):
         self.joint = joint
         self.run = run
-        self.runs = [run]
         self.npts = run.npts
         self.n_sub = run.n_sub
         self.compiled = dict()
@@ -701,6 +698,16 @@ class JointRun(sc.prettyobj):
     @n_max.setter
     def n_max(self, value):
         self.run.n_max = value
+        return
+
+    @property
+    def fixed(self):
+        """ Whether the run of the program takes a fixed number of substeps, for reverse mode (see `Run`) """
+        return self.run.fixed
+
+    @fixed.setter
+    def fixed(self, value):
+        self.run.fixed = value
         return
 
     def function(self, clamp=False):
@@ -719,7 +726,7 @@ class JointRun(sc.prettyobj):
 
 def capture(engine, compact=True):
     """
-    The numbers in an engine's run, as it is set up now (with its current parameter values): the program, how to run it, and the numbers
+    The numbers in an engine's run, as it is set up now (with its current parameter values), as an `sc.obj` with `program`, `how` (how to run it: dt, npts, solver, n_sub), and `X` (the numbers)
 
     Args:
         compact (bool): keep a table that is the same for every group once for all of them, rather than for each (as the kernels take it)
@@ -732,7 +739,7 @@ def capture(engine, compact=True):
     sh = engine.shifts # The deliveries, with where each group's people go as matrices
     onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
     X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest), sh_land=sh.land, sh_moves=(sh.land.sum(axis=(1, 2)) > 0).astype(float))
-    return program, (dt, npts, solver, n_sub), X
+    return sc.obj(program=program, how=(dt, npts, solver, n_sub), X=X)
 
 
 runs = {} # The runs made in this session, by what they depend on apart from the numbers in them (see `Run.key()`), so a new sim of the same model is not traced and compiled again
@@ -741,12 +748,12 @@ runs = {} # The runs made in this session, by what they depend on apart from the
 def runner(engine, program, how):
     """ The engine's `Run`, made again only if how its flows are put together has changed, and shared with any other engine whose flows are put together the same way """
     kept = engine.jax_run
-    if kept is not None and kept[1] is program and kept[2] == how: # The same program: nothing can have changed
-        return kept[3]
+    if kept is not None and kept.program is program and kept.how == how: # The same program: nothing can have changed
+        return kept.run
     key = Run.key(program, *how)
     if key not in runs:
-        runs[key] = Run(program, *how, n_max=kept[3].n_max if kept is not None else 4)
-    engine.jax_run = (key, program, how, runs[key])
+        runs[key] = Run(program, *how, n_max=kept.run.n_max if kept is not None else 4)
+    engine.jax_run = sc.obj(program=program, how=how, run=runs[key]) # The engine's run in JAX, and what it was made for
     return runs[key]
 
 
@@ -780,7 +787,7 @@ def of_unit(unit, values):
 
 
 def shifted(x, k, h):
-    """ A copy of the values x, with value k moved by h """
+    """ A copy of the values x, with value k moved by h: the points of a central difference (see `difference()`), and the corners of the bounds """
     x = x.copy()
     x[k] += h
     return x
@@ -789,8 +796,8 @@ def shifted(x, k, h):
 def run_joint(joint):
     """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.solvers.numba.compartmental.run()` does """
     captured = [capture(engine) for engine in joint.engines]
-    run = joint_runner(joint, [c[:2] for c in captured])
-    ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
+    run = joint_runner(joint, [(c.program, c.how) for c in captured])
+    ys, stocks, flows, n = call(run, 'run', tuple(c.X for c in captured))
     return [(np.asarray(ys[k]), np.asarray(stocks[k]), np.asarray(flows[k]), 0.0) for k in range(len(captured))]
 
 
@@ -811,14 +818,15 @@ def call(run, kind, *args):
 
 def run(engine):
     """ Take a whole run of an engine in JAX: returns what `ss.solvers.numba.compartmental.run()` does """
-    program, how, X = capture(engine)
-    y, stocks, flows, n = call(runner(engine, program, how), 'run', X)
+    c = capture(engine)
+    y, stocks, flows, n = call(runner(engine, c.program, c.how), 'run', c.X)
     return np.asarray(y), np.asarray(stocks), np.asarray(flows), 0.0
 
 
 #%% Many runs, and gradients
 
 def stack(Xs):
+    """ The numbers of several runs (each `capture()`'s `X`) as one batch, stacked along a new first axis, for `outputs()` to take them in one call """
     return {key:np.stack([X[key] for X in Xs]) for key in Xs[0]}
 
 
@@ -835,17 +843,17 @@ def check_same(programs):
 
 
 def outputs(sim, Xs, kind='run', dX=None):
-    """ Take the runs of each engine: Xs is, for each engine, its program, how to run it, and its numbers (a list of them, for kind='many') """
+    """ Take the runs of each engine: Xs is, for each engine, what `capture()` gives (a list of them, for kind='many') """
     out = [None]*len(sim.declared)
     for unit in units(sim):
         if kind == 'many':
-            programs = [[(program, how) for program,how,X in Xs[j]] for j in unit]
+            programs = [[(c.program, c.how) for c in Xs[j]] for j in unit]
             for progs in programs:
                 check_same(progs)
-            args = [tuple(stack([X for program,how,X in Xs[j]]) for j in unit)]
+            args = [tuple(stack([c.X for c in Xs[j]]) for j in unit)]
         else:
-            programs = [[Xs[j][:2]] for j in unit]
-            args = [tuple(Xs[j][2] for j in unit)] + ([tuple(stack(dX[j]) for j in unit)] if kind == 'jvp' else [])
+            programs = [[(Xs[j].program, Xs[j].how)] for j in unit]
+            args = [tuple(Xs[j].X for j in unit)] + ([tuple(stack(dX[j]) for j in unit)] if kind == 'jvp' else [])
         if len(unit) == 1:
             run = runner(sim.declared[unit[0]].engine, *programs[0][0])
             out[unit[0]] = [np.asarray(v) for v in call(run, kind, *[arg[0] for arg in args])]
@@ -897,7 +905,9 @@ def run_sets(sim, par_sets):
         stocks = np.einsum('rtcg,sc->rtsg', outs[j][1], member)
         flows = outs[j][2]
         npts = engine.mod.t.npts
-        if not (sim.groups.strats != [] and len(par_sets)*npts*(stocks.shape[2] + flows.shape[2])*engine.n_groups*8 <= engine.max_bytes): # As in run_many()
+        nbytes = len(par_sets)*npts*(stocks.shape[2] + flows.shape[2])*engine.n_groups*8
+        keep_groups = bool(sim.groups.strats) and nbytes <= engine.max_bytes # As in run_many()
+        if not keep_groups:
             stocks, flows = stocks.sum(axis=-1, keepdims=True), flows.sum(axis=-1, keepdims=True)
         runs = []
         for i,pars in enumerate(par_sets): # Results worked out from the values of the parameters in each run (an outcome can depend on them)
@@ -905,15 +915,24 @@ def run_sets(sim, par_sets):
             ss.solvers.set_par_values(sim)
             engine.cache.clear()
             runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
-        results[mod.name] = sc.obj({key:(sc.obj({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
-        results[mod.name].group_ti = None # The values by group, if kept, are at every time point
+        results[mod.name] = concat_runs(runs)
     sim._par_values = base
     ss.solvers.set_par_values(sim)
     return results
 
 
-def tangent(Xp, Xm, h):
-    return {key:(Xp[key] - Xm[key])/(2*h) for key in Xp}
+def concat_runs(runs):
+    """ The results of several runs (each what `engine.collect()` gives) joined along the runs; the values by group, if kept, are at every time point """
+    out = sc.obj()
+    for key in runs[0]:
+        if key == 'group_ti':
+            continue
+        elif key in ['groups', 'denoms']: # By result
+            out[key] = sc.obj({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]})
+        else:
+            out[key] = np.concatenate([run[key] for run in runs])
+    out.group_ti = None
+    return out
 
 
 def gradient(sim, set_pars, x0, read, rel_step=1e-5):
@@ -945,8 +964,8 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
             set_pars(shifted(x0, k, sign*h))
             sides.append([capture(mod.engine) for mod in mods])
         for j in range(len(mods)):
-            check_same([sides[0][j][:2], sides[1][j][:2], base[j][:2]])
-            dirs[j].append(tangent(sides[0][j][2], sides[1][j][2], h))
+            check_same([(c.program, c.how) for c in [sides[0][j], sides[1][j], base[j]]])
+            dirs[j].append(difference(sides[0][j].X, sides[1][j].X, h))
     set_pars(x0)
     outs = outputs(sim, base)
     slopes = outputs(sim, base, kind='jvp', dX=dirs)
@@ -967,7 +986,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
 
 
 def difference(a, b, h):
-    """ (a - b)/2h, for numbers, arrays, or dicts of them """
+    """ (a - b)/2h, for numbers, arrays, or dicts of them: the central difference that `gradient()` takes of the runs at x ± h """
     if isinstance(a, dict):
         return sc.obj({key:difference(a[key], b[key], h) for key in a})
     return (np.asarray(a, dtype=float) - np.asarray(b, dtype=float))/(2*h)
@@ -980,13 +999,8 @@ def find_pars(sim, names=None, several=False):
     Args:
         several (bool): whether a parameter may have several values (a value for each level, an array, or a time series), and a name may be of one of them ("beta[a]"); see `entries()`
     """
-    out = sc.obj()
     wanted = None if names is None else [base_name(name) if several else name for name in names]
-    for mod in sim.declared:
-        for name,p in mod.graph.pars.items():
-            if (wanted is None and p.bounds is not None) or (wanted is not None and (name in wanted or f'{mod.name}.{name}' in wanted)):
-                if not any(p is q for q in out.values()): # A parameter shared by several modules is counted once
-                    out[par_key(sim, mod, name)] = p
+    out = declared_pars(sim, lambda mod, name, p: (wanted is None and p.bounds is not None) or (wanted is not None and (name in wanted or f'{mod.name}.{name}' in wanted)))
     missing = [name for name in sc.tolist(wanted) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if wanted is not None else [] # By name, or 'module.name'
     if missing or not out:
         options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars]
@@ -999,6 +1013,16 @@ def find_pars(sim, names=None, several=False):
             what = 'a number, a value for each level (ss.by), an array, or a time series' if several else 'a single number'
             errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
             raise ValueError(errormsg)
+    return out
+
+
+def declared_pars(sim, keep):
+    """ The parameters of the declared modules that `keep(mod, name, par)` selects, by name (see `par_key()`); a parameter shared by several modules is taken once """
+    out = sc.obj()
+    for mod in sim.declared:
+        for name,p in mod.graph.pars.items():
+            if keep(mod, name, p) and not any(p is q for q in out.values()):
+                out[par_key(sim, mod, name)] = p
     return out
 
 
@@ -1028,7 +1052,7 @@ def entries(sim, names=None):
         found = sc.obj({key:p for key,p in found.items() if named(key)})
     raws = [ss.fitting.entry(name, p, levels, elements) for name,p in found.items()]
     x0, types = ss.fitting.start_values(raws)
-    bounds = np.array([elements[name][2:4] if name in elements else [ss.fitting.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
+    bounds = np.array([[elements[name].low, elements[name].high] if name in elements else [ss.fitting.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
     keys = list(found.keys())
     pars = sim._par_values
 
@@ -1271,10 +1295,10 @@ class Density(sc.prettyobj):
         """
         self.raws = [p.raw for p in self.fitted]
         self.levels, self.series_of, self.arrays = {}, {}, set()
-        for p,ext in zip(self.fitted, self.external):
-            if ext or not several(p) or id(p) in self.levels or id(p) in self.series_of or id(p) in self.arrays:
+        for name,p,ext in zip(self.names, self.fitted, self.external):
+            if ext or not several(p) or id(p) in self.levels or id(p) in self.series_of or id(p) in self.arrays: # Each parameter once, by its first entry
                 continue
-            key = next(name for name,q in zip(self.names, self.fitted) if q is p).rpartition('[')[0]
+            key = name.rpartition('[')[0]
             raw = p.raw
             if isinstance(raw, ss.by):
                 labels, values = ss.fitting.vector_labels(self.sim, raw, key), sc.tolist(raw.values)
@@ -1340,19 +1364,19 @@ class Density(sc.prettyobj):
                         same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
                     if not same:
                         raise Unsupported(f'how {p.raw} varies in time')
-        self.programs = [c[0] for c in captured]
-        self.hows = [c[1] for c in captured]
-        self.X0 = [c[2] for c in captured]
+        self.programs = [c.program for c in captured]
+        self.hows = [c.how for c in captured]
+        self.X0 = [c.X for c in captured]
         keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
-        same_layout = lambda captured: all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys))
+        same_layout = lambda captured: all(Run.key(c.program, *c.how) == key for c,key in zip(captured, keys))
         corners = [] # The numbers at the corners of the bounds, where the run is laid out as at the start
         for x in self.corners():
             captured = self.capture(x)
             if same_layout(captured):
-                corners.append((x, [c[2] for c in captured]))
+                corners.append((x, [c.X for c in captured]))
         middle = np.mean(self.limits(), axis=0) # And at the middle of the bounds, where with many parameters all of them have moved (see corners())
         captured = self.capture(middle)
-        checked = corners + [(middle, [c[2] for c in captured])] if same_layout(captured) else corners
+        checked = corners + [(middle, [c.X for c in captured])] if same_layout(captured) else corners
 
         # The run of each set of engines that are run together, with room to spare for the substeps
         self.runs = []
@@ -1388,7 +1412,7 @@ class Density(sc.prettyobj):
                 captured = self.capture(shifted(self.x0, i, sign*h[i]))
                 if not same_layout(captured):
                     raise Unsupported(f'the fitted parameter "{self.names[i]}" changes how the model is laid out')
-                sides.append([c[2] for c in captured])
+                sides.append([c.X for c in captured])
             for j,X0 in enumerate(self.X0):
                 for key in X0:
                     slope = (sides[0][j][key] - sides[1][j][key])/(2*h[i])
@@ -1553,29 +1577,11 @@ class Density(sc.prettyobj):
     def reverse(self):
         """ Make the runs differentiable in reverse mode (each step takes its most substeps), for `jax.grad`; forward mode, as NUTS uses, is faster without """
         for run in self.runs:
-            for one in getattr(run, 'runs', [run]):
-                one.fixed = True
+            run.fixed = True
         return self
 
-    def states(self, x):
-        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.state' """
-        Xs = self.numbers(x)
-        out = {}
-        for unit,run in zip(self.units, self.runs):
-            stocks = run.function(clamp=True)(of_unit(unit, Xs))[1]
-            for k,j in enumerate(unit):
-                st = stocks if len(unit) == 1 else stocks[k]
-                total = st.sum(axis=-1) # Over the groups
-                for i,name in enumerate(self.engines[j].graph.states):
-                    out[f'{self.mods[j].name}.{name}'] = total @ self.member[j][i]
-        return out
-
-    def __call__(self, x):
-        """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
-        return self.evaluate(x)[0]
-
-    def evaluate(self, x):
-        """ The log of the posterior density at some parameter values, and the most substeps a step of any run needed (more than it took, if clamped by `n_max`) """
+    def run_units(self, x):
+        """ The runs at some parameter values: the stocks and the flows of each engine, and the most substeps a step of any run needed (more than it took, if clamped by `n_max`) """
         Xs = self.numbers(x)
         stocks = [None]*len(self.engines)
         flows = [None]*len(self.engines)
@@ -1585,6 +1591,25 @@ class Density(sc.prettyobj):
             for k,j in enumerate(unit):
                 stocks[j], flows[j] = (unit_stocks, unit_flows) if len(unit) == 1 else (unit_stocks[k], unit_flows[k])
             need = jax().numpy.maximum(need, n)
+        return stocks, flows, need
+
+    def states(self, x):
+        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.state' """
+        stocks = self.run_units(x)[0]
+        out = {}
+        for j in [j for unit in self.units for j in unit]: # In the order the units run
+            total = stocks[j].sum(axis=-1) # Over the groups
+            for i,name in enumerate(self.engines[j].graph.states):
+                out[f'{self.mods[j].name}.{name}'] = total @ self.member[j][i]
+        return out
+
+    def __call__(self, x):
+        """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
+        return self.evaluate(x)[0]
+
+    def evaluate(self, x):
+        """ The log of the posterior density at some parameter values, and the most substeps a step of any run needed (more than it took, if clamped by `n_max`) """
+        stocks, flows, need = self.run_units(x)
         results = self.results(x, stocks, flows)
         total = 0.0
         for s in self.series:

@@ -59,7 +59,8 @@ class Particles(sc.prettyobj):
         self.ys = np.ascontiguousarray(np.repeat(y0[None], n, axis=0))
         self.rngs = kernel_list([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each run (of each place among the runs, which a run drawn again takes over)
         self.n_threads = min(ss.options.threads or 1, n) # Unless asked for, one: each step of a run is short, so threads' start and wait outweigh the work (test_pmcmc on 160 cores: 15 s with one, 55 s with 8, 68 s with 160)
-        if self.n_threads > 1: # A copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
+        self.progs = None # With threads, a copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
+        if self.n_threads > 1:
             self.progs = kernel_list([ss.solvers.numba.compartmental.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
         self.done = 0
         return

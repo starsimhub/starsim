@@ -65,7 +65,7 @@ fields = [
     'n_places',
     # Exposure to each infectious state
     'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.JointStates)
-    'exp_n',      # Whether it is to the number in the state, not its fraction: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
+    'exp_n',      # Whether it is to the number in the state, not its fraction: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.ContactRates.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
     'sizes',      # The number of cells in each term
@@ -223,6 +223,9 @@ golden = draws.GOLDEN # The step between the counters of a random stream: see un
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups
 no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program is set already: see one_step()
+Workspace = collections.namedtuple('Workspace', ['rates', 'exposures', 'stack', 'groups', 'cells', 'dy', 'df', 'yt', 'chain', 'credits', 'rows']) # The arrays the kernels work in: see workspace()
+RK4, EULER, BINOMIAL, TAU, GILLESPIE, WHOLE = range(6) # The solvers' codes (see solvers and solver_code()): the ODE's two integrators, then the stochastic solvers, which move whole people (solver >= BINOMIAL); WHOLE is the chain binomial in whole steps
+IDLE = 5 # The row of a workspace's cells that holds, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places())
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
 
 
@@ -243,7 +246,7 @@ def workspace(y, p):
     chain     = np.empty((p.src_chain.max() if len(p.src_chain) else 0) + 2) # Where people at a stage of a dwell time end up: see chain_probs()
     credits   = np.empty((2, (np.diff(p.crd_starts).max() if len(p.crd_starts) > 1 else 0) + 1, ng)) # For credit(): the count of each credit of a flow not yet shared among those nested in it, and their weight left
     rows      = np.empty((11, ng))              # For binomials() and poissons(): the uniforms, the chances or means, and scratch for the draws
-    return rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows
+    return Workspace(rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows)
 
 
 #%% Rates: working out the rates of the flows, and exposure through the mixing terms
@@ -652,7 +655,7 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
     rates are held for the step, as for any other flow.
     """
     ng = y.shape[1]
-    rates, groups, probs = w[0], w[3], w[8]
+    rates, groups, probs = w.rates, w.groups, w.chain
     total, left, n, ends = groups[3], groups[4], groups[5], groups[6]
     a, b = p.src_starts[s], p.src_starts[s+1]
     d = p.src_chain[s]
@@ -695,13 +698,13 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
             left[g] -= n[g]
         if p.named[f]:
             land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w.rows)
+        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, w.rows)
     f = p.src_last[s] # The last stage
     if p.named[f]:
         land(rng, ends, p.record[f], p.maps, flows[p.index[f]])
-    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w.rows)
+    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, w.rows)
     return
 
 
@@ -716,7 +719,7 @@ def draw(rng, y, p, w, dt, flows, tau, whole):
     infection is the rate times dt, unless `whole` (the chain binomial in whole steps, as discrete-time models are written).
     """
     ng = y.shape[1]
-    rates, groups, new, rows = w[0], w[3], w[7], w[10]
+    rates, groups, new, rows = w.rates, w.groups, w.yt, w.rows
     total, left, n, prob = groups[3], groups[4], groups[5], rows[1]
     new[:] = y
     for s in range(len(p.src_starts) - 1):
@@ -779,8 +782,8 @@ def draw(rng, y, p, w, dt, flows, tau, whole):
                 for g in range(ng):
                     new[p.tgt_comp[t], g] += n[g]
             else:
-                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w.rows)
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, w.rows)
     move(rng, new, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows) # Movement between groups, from where the flows left people
     y[:] = new
     return
@@ -926,7 +929,7 @@ def uniform(z):
 @jit
 def place_events(y, p, w, active, first, last, dt, flows, seed):
     """ The events over a time dt of the places to step from first to last-1 (in `active`), each drawn from its own random numbers: see `gillespie_places()` """
-    rates, idle = w[0], w[4][5]
+    rates, idle = w.rates, w.cells[IDLE]
     nf = len(p.src)
     src, det, inflow, pl_groups = p.src, p.det, p.inflow, p.pl_groups
     stack = np.empty((p.depth, 1)) # Scratch of its own
@@ -1105,7 +1108,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
     empty compartment has no events, and the flows are taken in the same order, with the same arithmetic
     and random numbers, so the events are the same as `place_events()` gives.
     """
-    idle = w[4][5]
+    idle = w.cells[IDLE]
     nc = y.shape[0]
     nf = len(p.src)
     src, inflow, pl_groups, starts, ops, args = p.src, p.inflow, p.pl_groups, p.starts, p.ops, p.args
@@ -1307,7 +1310,7 @@ def gillespie_places(rng, y, p, w, dt, flows, fresh):
     Each place draws from its own random numbers in each step, seeded by one number from the
     engine's generator.
     """
-    idle = w[4][5]
+    idle = w.cells[IDLE]
     active = np.empty(len(p.pl_starts) - 1, dtype=np.int64) # The places to step
     for k in range(len(p.ops)):
         if p.ops[k] == TOTAL: # A count in every place, which any place can change: every place is stepped
@@ -1330,7 +1333,7 @@ def touch(r, ti, places, w):
     """ For the exact solver by place: the places that the events of a movement register dated in a step change, which are stepped again (see `gillespie_places()`) """
     if ti >= len(r.starts) - 1:
         return
-    idle = w[4][5]
+    idle = w.cells[IDLE]
     for e in range(r.starts[ti], r.starts[ti+1]):
         for place in (r.src[e], r.dst[e]):
             if place >= 0:
@@ -1342,7 +1345,7 @@ def touch(r, ti, places, w):
 @jit
 def wake(w):
     """ For the exact solver by place: every place is stepped again, after something that could change any of them (see `gillespie_places()`) """
-    w[4][5, :] = 0
+    w.cells[IDLE, :] = 0
     return
 
 
@@ -1356,7 +1359,7 @@ def settle_places(y, p, w, dt, flows):
     """
     expo = np.zeros(max(len(p.exp_set), 1))
     for i in range(len(p.pl_starts) - 1):
-        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo, True)
+        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w.rates, w.stack, expo, True)
     settle(y, p, w, dt, flows)
     return
 
@@ -1373,7 +1376,7 @@ def settle(y, p, w, dt, flows):
     a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
     and mosquitoes that live 10 days would die out at a 30-day step.
     """
-    rates = w[0]
+    rates = w.rates
     fastest = 0.0
     for f in range(len(p.src)):
         if p.det[f] and p.src[f] >= 0:
@@ -1414,7 +1417,7 @@ def settle_step(y, p, w, dt, flows):
     nc, ng = y.shape
     nf = len(p.src)
     nflows = flows.shape[0]
-    rates, k, kf, yt = w[0], w[5], w[6], w[7]
+    rates, k, kf, yt = w.rates, w.dy, w.df, w.yt
     comps = np.zeros(nc, dtype=np.bool_)
     rows = np.zeros(nflows, dtype=np.bool_)
     for f in range(nf):
@@ -1488,7 +1491,7 @@ def event(rng, y, p, w, dt, flows):
     dt if the next event comes after it.
     """
     nf, ng = len(p.src), y.shape[1]
-    rates, groups = w[0], w[3]
+    rates, groups = w.rates, w.groups
     n = groups[5]
     total = 0.0
     for f in range(nf):
@@ -1522,8 +1525,8 @@ def event(rng, y, p, w, dt, flows):
         y[p.src[which], where] -= 1
     if p.named[which]:
         land(rng, n, p.record[which], p.maps, flows[p.index[which]])
-    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w.rows)
+    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, w.rows)
     return wait
 
 
@@ -1558,7 +1561,7 @@ def convey(rng, y, p, w, flows, release):
     """
     ng = y.shape[1]
     nf = len(p.src)
-    groups, idle = w[3], w[4][5]
+    groups, idle = w.groups, w.cells[IDLE]
     n = groups[5]
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
@@ -1574,8 +1577,8 @@ def convey(rng, y, p, w, flows, release):
                     idle[p.places[g]] = 0
             if p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10]) # Not the last target, which is the slot they leave
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w.rows) # Not the last target, which is the slot they leave
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, w.rows)
         else:
             for g in range(ng):
                 for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, in the ODE, whose remainder there leaves with the next)
@@ -1597,7 +1600,7 @@ def certain(rng, y, p, w, rates, flows, move, solver):
     so people who arrive in the compartment over it leave at the start of the next (for agents, within the step).
     """
     ng = y.shape[1]
-    groups, rows = w[3], w[10]
+    groups, rows = w.groups, w.rows
     left, n, prob, k = np.empty(ng), np.empty(ng), np.empty(ng), np.zeros(ng)
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
@@ -1621,7 +1624,7 @@ def certain(rng, y, p, w, rates, flows, move, solver):
                         some = True
                 if not some:
                     continue
-                if solver >= 2 and not p.det[f]:
+                if solver >= BINOMIAL and not p.det[f]:
                     binomials(rng, left, prob, n, rows)
                 else:
                     for g in range(ng):
@@ -1629,11 +1632,11 @@ def certain(rng, y, p, w, rates, flows, move, solver):
                 for g in range(ng):
                     left[g] -= n[g]
                     y[src, g] -= n[g]
-                if solver >= 2 and not p.det[f]: # Whole people, as draw() puts them
+                if solver >= BINOMIAL and not p.det[f]: # Whole people, as draw() puts them
                     if p.named[f]:
                         land(rng, n, p.record[f], p.maps, flows[p.index[f]])
                     split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, rows)
-                    credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, rows)
+                    credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w.credits, flows, rows)
                     continue
                 for g in range(ng): # Expected numbers, as the ODE puts them
                     if n[g] != 0:
@@ -1660,8 +1663,8 @@ def step_start(y, p, dt, solver):
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
         if p.ops[a] == CONVEY:
-            pending = solver >= 2
-            if solver < 2: # For the ODE, they leave at a constant rate over the step, as the inflow of the conveyor's flow
+            pending = solver >= BINOMIAL
+            if solver < BINOMIAL: # For the ODE, they leave at a constant rate over the step, as the inflow of the conveyor's flow
                 for g in range(ng):
                     p.inflow[p.args[a], g] = y[p.args[b-1], g]/dt
     return pending
@@ -1820,11 +1823,11 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     nc, ng = y.shape
     nf = len(p.src)
     nflows = p.n_trans + p.n_movers
-    stages = 4 if solver == 0 else 1
+    stages = 4 if solver == RK4 else 1
     h = dt
-    timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
-    by_place = solver == 4 and p.local # The exact solver by place, where each place works out its own rates (see gillespie_places())
-    auto = solver < 2 and n_sub <= 0 # The ODE, with as many substeps as the step needs
+    timed = solver == TAU or solver == GILLESPIE # Tau-leaping and the exact solver take steps of their own length
+    by_place = solver == GILLESPIE and p.local # The exact solver by place, where each place works out its own rates (see gillespie_places())
+    auto = solver < BINOMIAL and n_sub <= 0 # The ODE, with as many substeps as the step needs
     dp = False # Whether the step is taken by Dormand-Prince (see FAST)
     first = 0 # The stage a substep starts at (Dormand-Prince's first stage is the last one's of the substep before)
     least = 0.0 # A number of people too small to count: 1e-9 of everyone
@@ -1860,7 +1863,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 for g in range(ng):
                     local_n[g] = num[p.places[g]]
 
-                for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term: see ss.solvers.Mixing.exposure()
+                for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term: see ss.solvers.ContactRates.exposure()
                     s = p.exp_set[e]
                     if s < 0: # The sum of the -s exposures before it, in order
                         for g in range(ng):
@@ -1959,10 +1962,10 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
                         elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub), and for each leap under tau-leaping, once its length is known (below)
-                            if solver == 2 or solver == 5:
+                            if solver == BINOMIAL or solver == WHOLE:
                                 for g in range(ng):
                                     stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
-                            elif solver == 3:
+                            elif solver == TAU:
                                 noisy = True
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
@@ -1982,7 +1985,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
             if sure:
                 certain(rng, y, p, w, rates, flows, stage == 0, solver)
 
-            if solver == 3: # Tau-leaping: the fastest rate at which any compartment is being left, by all its flows
+            if solver == TAU: # Tau-leaping: the fastest rate at which any compartment is being left, by all its flows
                 fastest = 0.0
                 for s in range(len(p.src_starts) - 1):
                     if p.src[p.src_flows[p.src_starts[s]]] >= 0:
@@ -1998,25 +2001,25 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                         for g in range(ng):
                             fastest = max(fastest, rates[f, g])
             if sub == 0 and stage == 0:
-                if solver < 2 and n_sub <= 0: # Enough substeps that no compartment turns over by more than a quarter in one
+                if solver < BINOMIAL and n_sub <= 0: # Enough substeps that no compartment turns over by more than a quarter in one
                     for e in range(len(p.mov_rate)):
                         fastest = max(fastest, p.mov_rate[e])
                     n_sub = int(np.ceil(fastest*dt/0.25))
                 n_sub = max(n_sub, 1)
                 h = dt/n_sub
-                if extra and solver < 2:
+                if extra and solver < BINOMIAL:
                     release_rates(y, p, rates, dt)
-            if solver >= 2: # The stochastic solvers take it from here
+            if solver >= BINOMIAL: # The stochastic solvers take it from here
                 end = dt
-                if pending and solver == 4: # The people due to leave a conveyor leave at the middle of the step
+                if pending and solver == GILLESPIE: # The people due to leave a conveyor leave at the middle of the step
                     end = min(end, dt/2)
                 if by_place: # The exact solver, place by place: the whole step (or piece) at once
                     gillespie_places(rng, y, p, w, end - elapsed, flows, varying or p.has_det) # Rates that may have changed since the last step, in every place
                     h = end - elapsed
-                elif solver == 4: # The exact solver: up to the next event
+                elif solver == GILLESPIE: # The exact solver: up to the next event
                     h = event(rng, y, p, w, end - elapsed, flows)
                 else:
-                    if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
+                    if solver == TAU: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
                         if noisy: # The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
                             for f in range(nf):
@@ -2024,11 +2027,11 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                                     if p.ops[k] == NOISE:
                                         for g in range(ng):
                                             rates[f, g] *= noise(rng, p.consts[p.args[k], g], h)
-                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
+                    draw(rng, y, p, w, h, flows, solver == TAU, solver == WHOLE)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)
                 elapsed += h
-                if pending and elapsed >= dt/2 + (-1e-12 if solver == 4 else 1e-12): # At it for the exact solver; otherwise after the first draws that pass it (see convey())
+                if pending and elapsed >= dt/2 + (-1e-12 if solver == GILLESPIE else 1e-12): # At it for the exact solver; otherwise after the first draws that pass it (see convey())
                     convey(rng, y, p, w, flows, True)
                     pending = False
                 continue
@@ -2052,7 +2055,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             df[stage, p.n_trans + m, g] += ys[c, g]*r
                             if stage == 0 and sub == 0 and len(moved_in):
                                 moved_in[c, j] += ys[c, g]*r
-            if solver == 1: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do (yt is free, so holds the scale)
+            if solver == EULER: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do (yt is free, so holds the scale)
                 for c in range(nc):
                     for g in range(ng):
                         yt[c, g] = 0
@@ -2068,7 +2071,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 if s >= 0:
                     for g in range(ng):
                         vals[g] = rates[f, g]*ys[s, g]
-                    if solver == 1:
+                    if solver == EULER:
                         for g in range(ng):
                             vals[g] *= yt[s, g]
                     for g in range(ng):
@@ -2126,7 +2129,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 if more > n_sub:
                     n_sub = more
                     h = dt/n_sub
-                if solver == 0 and not sure and max(fastest, growing)*dt/n_sub > FAST: # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length, whose first stage is this one
+                if solver == RK4 and not sure and max(fastest, growing)*dt/n_sub > FAST: # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length, whose first stage is this one
                     dp = True
                     stages = 7
                     first = 1
@@ -2144,7 +2147,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
 
         if dp and stage == 0: # Only the first stage was taken, before Dormand-Prince was chosen: its substeps start now
             continue
-        if solver >= 2:
+        if solver >= BINOMIAL:
             pass
         elif stages == 1:
             for c in range(nc):
@@ -2166,7 +2169,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
         sub += 1
         if (timed and elapsed >= dt - 1e-12) or (dp and elapsed >= dt*(1 - 1e-12)) or (not timed and not dp and sub >= n_sub):
             break
-    if solver == 4: # The exact solver moves people between groups once, over the whole step
+    if solver == GILLESPIE: # The exact solver moves people between groups once, over the whole step
         move(rng, y, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows)
         for e in range(len(p.mov_rate)): # The places they move between are stepped again
             if p.mov_rate[e] != 0:
@@ -2335,7 +2338,7 @@ def enter_state(rng, y, w, arrived, whole):
 
 #%% Run: the entry points, which the engines call: a whole run, many runs, the particles of a filter, or one step
 
-solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, whole=5) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
+solvers = dict(rk4=RK4, euler=EULER, binomial=BINOMIAL, tau=TAU, gillespie=GILLESPIE, whole=WHOLE) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
 
 def solver_code(sim):
     """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`ss.solvers.binomial(substeps=1)`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
@@ -2386,7 +2389,7 @@ def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh,
     of people that events of the register could not find. `advance()` takes the same steps in a loop of its own, since
     going through this costs a small particle filter about 15% (with step() compiled into it either way).
     """
-    whole = solver >= 2
+    whole = solver >= BINOMIAL
     if len(sh.to):
         apply_shifts(rng, y, sh, ti, whole, tally)
         if sh.due[:, ti].any():
@@ -2397,9 +2400,9 @@ def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh,
     short = 0.0
     if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
         short = apply_events(rng, y, reg, ti+1, whole)
-        if solver == 4 and p.local:
+        if solver == GILLESPIE and p.local:
             touch(reg, ti+1, p.places, w)
-    if solver == 4 and p.local and p.has_det:
+    if solver == GILLESPIE and p.local and p.has_det:
         settle_places(y, p, w, dt, flows)
     return short
 
@@ -2549,17 +2552,17 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 for g in range(ng):
                     stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
             if len(sh.to): # As time_point() does, written out here: see its docstring
-                apply_shifts(rng, y, sh, ti, solver >= 2, tally)
+                apply_shifts(rng, y, sh, ti, solver >= BINOMIAL, tally)
                 if sh.due[:, ti].any():
                     wake(w)
             set_step(parts, ti - row0, tables)
             set_movers(p)
             step(rng, y, p, w, dt, n_sub, solver, now, varies(tables)) # Compiled into advance(): see into_many()
             if len(reg.src):
-                apply_events(rng, y, reg, ti+1, solver >= 2)
-                if solver == 4 and p.local:
+                apply_events(rng, y, reg, ti+1, solver >= BINOMIAL)
+                if solver == GILLESPIE and p.local:
                     touch(reg, ti+1, p.places, w)
-            if solver == 4 and p.local and p.has_det:
+            if solver == GILLESPIE and p.local and p.has_det:
                 settle_places(y, p, w, dt, now)
             for f in range(nflows):
                 for g in range(flows.shape[3]):

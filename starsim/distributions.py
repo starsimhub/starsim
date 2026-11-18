@@ -38,6 +38,11 @@ def combine_rands(a, b):
     return c / np.iinfo(np.uint64).max
 
 
+def has_function(pars):
+    """ Whether any parameter is a function (of the agents), not yet called (a type, e.g. a dtype, is not one) """
+    return any(callable(v) and not isinstance(v, type) for v in pars.values())
+
+
 def candidates(dist, uids):
     """ The UIDs to choose among, for `filter()`: by default, all active agents """
     if uids is None:
@@ -64,7 +69,6 @@ class random(Dist):
         dtype (type): the data type of the values (default: `ss.dtypes.float`)
         kwargs (dict): passed to `ss.Dist`
     """
-    valid_pars = ['dtype']
     scaling = None # Always (0,1), can't be scaled
     def __init__(self, dtype=None, **kwargs):
         super().__init__(distname='random', dtype=ss.dtypes.float if dtype is None else dtype, **kwargs)
@@ -85,7 +89,6 @@ class uniform(Dist):
         low (float): the lower bound of the distribution (default 0.0)
         high (float): the upper bound of the distribution (default 1.0)
     """
-    valid_pars = ['low', 'high']
     scaling = ['predraw', 'postdraw']
     unit_pars = ('low', 'high')
 
@@ -230,14 +233,6 @@ class lognormal(Dist):
             log_mean = log_mean + shift
         return pars | dict(log_mean=log_mean)
 
-    def convert_timepars(self):
-        if not self.log_form:
-            return super().convert_timepars()
-        for key, v in self._pars.items():
-            if ss.dists.timepar_of(v) is not None:
-                errormsg = f'The log moments of ss.lognormal() ({key}={v}) are of the logarithm, so cannot have units; give mean= and std= with units instead, or a unit with unit='
-                raise NotImplementedError(errormsg)
-
     @staticmethod
     def log_moments(mean, std):
         """ The mean and standard deviation of the logarithm of a lognormal with this mean and standard deviation """
@@ -252,9 +247,8 @@ class lognormal(Dist):
 
     def sync_pars(self):
         """ Convert to the moments of the logarithm, then translate to SciPy """
-        p = self._pars
-        if self.log_form or any(callable(v) and not isinstance(v, type) for v in p.values()): # Since can't work with functions (process_pars() has called them already, when drawing)
-            self.call_pars()
+        if has_function(self._pars): # Only before a draw (e.g. at initialization), which calls them for the agents drawn for first
+            return {}
         log_mean, log_std = self.log_pars()
         spars = dict(s=log_std, scale=np.exp(log_mean), loc=0)
         self.update_dist_pars(spars)
@@ -382,6 +376,11 @@ class beta_dist(Dist):
                 errormsg = f'ss.beta_dist() is given by a and b, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, b=b, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std)
+            if callable(mean) or callable(std): # Functions of the agents: converted at each draw, once they are called (see sync_pars())
+                self.force = force
+                super().__init__(distname='beta', dist='beta', mean=mean, std=std, **kwargs)
+                self.given = ('beta_dist', given)
+                return
             mean, std = ss.dists.to_array(mean), ss.dists.to_array(std)
             a, b = self.shape_pars(mean, std**2, force=force)
         a = sc.ifelse(a, 1.0)
@@ -414,6 +413,15 @@ class beta_dist(Dist):
         a = ((1 - mean)/var - 1/mean) * mean**2
         b = a * (1 / mean - 1)
         return a, b
+
+    def sync_pars(self):
+        """ Convert the mean and standard deviation (if given as functions) to the shape parameters, then translate to SciPy """
+        p = self._pars
+        if 'mean' in p:
+            if has_function(p): # Only before a draw (e.g. at initialization), which calls them for the agents drawn for first
+                return {}
+            p.a, p.b = self.shape_pars(np.asarray(p.pop('mean'), dtype=float), np.asarray(p.pop('std'), dtype=float)**2, force=self.force)
+        return super().sync_pars()
 
 
 class nbinom(Dist):
@@ -452,8 +460,8 @@ class nbinom(Dist):
         """ Convert the mean (if given) to p, then translate to SciPy """
         p = self._pars
         if 'mean' in p: # Converted on each draw, since the mean may be a function, an array, or a parameter being fitted
-            if any(callable(v) and not isinstance(v, type) for v in p.values()): # Functions can't be converted, so call them first, as for ss.lognormal()
-                self.call_pars()
+            if has_function(p): # Only before a draw (e.g. at initialization), which calls them for the agents drawn for first
+                return {}
             mean = p.pop('mean')
             p.p = p.n/(p.n + mean)
         return super().sync_pars()
@@ -500,9 +508,8 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default: the largest integer of `ss.dtypes.rand_int`, 2,147,483,647 by default)
         dtype (type): the data type of the values
     """
-    scaling = 'predraw'
-    unit_pars = ('low', 'high')
-    valid_pars = ['low', 'high', 'dtype']
+    scaling = None # Its bounds are whole numbers, which can't be scaled
+    unitless_pars = ('low', 'high')
 
     def __init__(self, *args, low=None, high=None, dtype=None, **kwargs):
         if len(args) == 1: # One argument, the upper bound
@@ -517,11 +524,6 @@ class randint(Dist):
         high = sc.ifelse(high, np.iinfo(ss.dtypes.rand_int).max)
         super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs) # NumPy's Generator calls it integers()
         return
-
-    def convert_timepars(self):
-        """ The bounds of a random integer can't have units """
-        if any(ss.dists.timepar_of(v) is not None for v in self._pars.values()):
-            raise NotImplementedError('randint parameters must be nondimensional')
 
     @property
     def hash_dtype(self):
@@ -608,17 +610,34 @@ class gamma(Dist):
                 errormsg = f'ss.gamma() is given by shape and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(shape=shape, scale=scale, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std) | (dict(loc=loc) if loc else {})
-            mean, std = ss.dists.to_array(mean), ss.dists.to_array(std)
-            span = mean - loc if loc else mean # The mean of the unshifted distribution, as SciPy's mean is loc + shape×scale
-            shape = (span/std)**2 # A mean of shape×scale and a variance of shape×scale²
-            shape = float(shape) if np.ndim(shape) == 0 else shape
-            scale = span/shape
+            if callable(mean) or callable(std): # Functions of the agents: converted at each draw, once they are called (see sync_pars())
+                super().__init__(distname='gamma', dist='gamma', mean=mean, std=std, loc=loc, **kwargs)
+                self.given = ('gamma', given)
+                return
+            shape, scale = self.shape_scale(ss.dists.to_array(mean), ss.dists.to_array(std), loc)
         shape = sc.ifelse(shape, 1.0)
         scale = sc.ifelse(scale, 1.0)
         super().__init__(distname='gamma', dist='gamma', shape=shape, scale=scale, loc=loc, **kwargs)
         if mean is not None:
             self.given = ('gamma', given)
         return
+
+    @staticmethod
+    def shape_scale(mean, std, loc=0):
+        """ The shape and scale of a gamma distribution with this mean (of the whole distribution, shift included) and standard deviation """
+        span = mean if sc.isnumber(loc) and loc == 0 else mean - loc # The mean of the unshifted distribution, as SciPy's mean is loc + shape×scale
+        shape = (span/std)**2 # A mean of shape×scale and a variance of shape×scale²
+        shape = float(shape) if np.ndim(shape) == 0 else shape
+        return shape, span/shape
+
+    def sync_pars(self):
+        """ Convert the mean and standard deviation (if given as functions) to the shape and scale, then translate to SciPy """
+        p = self._pars
+        if 'mean' in p:
+            if has_function(p): # Only before a draw (e.g. at initialization), which calls them for the agents drawn for first
+                return {}
+            p.shape, p.scale = self.shape_scale(p.pop('mean'), p.pop('std'), p.loc)
+        return super().sync_pars()
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
@@ -658,7 +677,6 @@ class constant(Dist):
     Args:
         value (float): the value to return
     """
-    valid_pars = ['value']
     scaling = ['predraw', 'postdraw']
 
     def __init__(self, value=0.0, **kwargs):
@@ -695,7 +713,6 @@ class bernoulli(Dist):
     Args:
         p (float): the probability of returning True (default 0.5)
     """
-    valid_pars = ['p']
     prob_pars = ('p',)
     scaling = 'predraw'
 
@@ -765,7 +782,6 @@ class choose_n(Dist):
         chooser = ss.choose_n(5, weights=lambda self, sim, uids: sim.people.age[uids])
         ```
     """
-    valid_pars = ['n', 'weights']
     scaling = None
     unitless_pars = ('n', 'weights')
 
@@ -871,7 +887,6 @@ class choice(Dist):
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
     """
-    valid_pars = ['a', 'p', 'replace', 'dtype']
     scaling = 'postdraw' # A choice is one of its values, so values with a unit (unit=, or typed values) are the numbers times the unit
     unitless_pars = ('p',)
 
@@ -884,15 +899,17 @@ class choice(Dist):
             a = np.concatenate([np.atleast_1d(np.asarray((v if type(v) is unit else unit(v)).value, dtype=float)) for v in items])
             kwargs['unit'] = unit
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
-        if not replace: # A joint draw over all the agents, which can't be one draw per slot through the inverse CDF: drawn natively, one value per agent (see process_size())
-            self._use_ppf = False
-        # With replacement, each slot's uniform goes through the inverse CDF (ppf()), as for ss.bernoulli: the same numbers in every scenario, and only one per agent
         return
+
+    @property
+    def native(self):
+        """ Without replacement, a joint draw over all the agents, which can't be one draw per slot through the inverse CDF: drawn natively, one value per agent (see process_size()); with replacement, each slot's uniform goes through the inverse CDF (ppf()), as for ss.bernoulli: the same numbers in every scenario, and only one per agent """
+        return not self.pars.replace
 
     def process_size(self, n=1):
         """ For replace=False, draw one value per UID; not for the user """
         size, slots = super().process_size(n)
-        if not self.pars.replace and slots is not None: # Drawing by slot would need slots.max()+1 distinct items, an error once that is more than len(a); like crn=False, valid, but not the same in every scenario, which is inherent to drawing without replacement
+        if self.native and slots is not None: # Drawing by slot would need slots.max()+1 distinct items, an error once that is more than len(a); like crn=False, valid, but not the same in every scenario, which is inherent to drawing without replacement
             self._slots = None
             size = self._size = len(self._uids)
             slots = None
@@ -958,7 +975,7 @@ class histogram(Dist):
         h2.plot_hist(bins=100)
         ```
     """
-    valid_pars = ['values', 'bins', 'density', 'data', 'group']
+    valid_pars = ['group'] # For by_group(), beyond those of the signature
     scaling = 'postdraw' # Its draws are within its bins, so bins with a unit (unit=) are the numbers times the unit
 
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
