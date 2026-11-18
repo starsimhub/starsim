@@ -35,7 +35,7 @@ class Pars(sc.obj):
         pars (dict): initial parameters to populate the object with
         kwargs: additional key-value pairs merged with pars
     """
-    __slots__ = ('_locked', '_bare', '_bounded', '_added', '_module')
+    __slots__ = ('_locked', '_bare', '_bounded', '_added', '_module', '_changed')
 
     def __new__(cls, *args, **kwargs):
         """
@@ -47,6 +47,7 @@ class Pars(sc.obj):
         self.setattribute('_bounded', None) # For a module written as code, the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
         self.setattribute('_added', None)   # Keys added by setting them (pars.x = v) rather than defined (define_pars(), or update(create=True)); see check_added()
         self.setattribute('_module', None)  # The module whose parameters these are, once it is in a sim: see bind()
+        self.setattribute('_changed', None) # The keys whose values were changed from the module's defaults; see changed()
         return self
 
     def __init__(self, pars=None, **kwargs):
@@ -70,6 +71,19 @@ class Pars(sc.obj):
         for key,val in self.items():
             bind(val, module, key)
         return self
+
+    def changed(self):
+        """ The keys whose values were changed from the module's defaults by `update_pars()` (given the same value, a key is unchanged), in order """
+        return [key for key in self if key in (self._changed or set())]
+
+    def note_changed(self, new):
+        """ Note the keys of `new` whose values differ from the current ones, before they are updated; compared by repr, so a distribution with the same parameters is the same """
+        def differs(key):
+            try:    return repr(self[key]) != repr(new[key])
+            except Exception: return True
+        changed = {key for key in new if key in self and differs(key)}
+        self.setattribute('_changed', (self._changed or set()) | changed)
+        return
 
     def bounded(self):
         """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`, or `cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))` as "cin_fn.k"), by name; their values are used as any other's """

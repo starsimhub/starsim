@@ -425,9 +425,14 @@ class Module(Base):
             raise RuntimeError(errormsg)
         return
 
+    _brief_max = 10 # The most parameters, or states, that brief() lists by name; with more, it shows how many (and for parameters, those changed from the defaults)
+
     def brief(self, output=False, extra=''):
         """
         Show a brief representation of the module, with any extra text after its name (e.g. a network's number of edges); used by __repr__
+
+        With more than 10 parameters or states, it shows how many, and which parameters were changed from the defaults (`disp()` shows them all), e.g.
+        `StructuredSexual(n_edges=0; 38 pars, changed: debut_f, prop_f0; 22 states)`
 
         Args:
             output (bool): whether to return the text rather than print it
@@ -438,12 +443,17 @@ class Module(Base):
         class_name = self.__class__.__name__ # e.g. 'SIR'
         graph = getattr(self, 'graph', None)
         states = graph.states if isinstance(graph, ss.graph.Graph) else self.state_dict # Its declared states (S, I, R), or the arrays of one written as code
+        if len(self.pars) <= self._brief_max: # A few, so list them all
+            pars = f'pars={sc.strjoin(self.pars.keys())}'
+        else: # Many, so count them and list those changed from the defaults (the full list is in disp())
+            changed = self.pars.changed()
+            pars = f'{len(self.pars)} pars' + (f', changed: {sc.strjoin(changed)}' if changed else '')
         parts = [
             name if name != class_name.lower() else '',
             f'"{label}"' if (label.lower() != name and label != class_name) else '',
             extra,
-            f'pars={sc.strjoin(self.pars.keys())}' if len(self.pars) else '',
-            f'states={sc.strjoin(states.keys())}' if len(states) else '',
+            pars if len(self.pars) else '',
+            (f'states={sc.strjoin(states.keys())}' if len(states) <= self._brief_max else f'{len(states)} states') if len(states) else '',
         ]
         out = f'{class_name}({"; ".join(part for part in parts if part)})'
         return out if output else print(out)
@@ -726,6 +736,7 @@ class Module(Base):
         for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
                 matches[key] = pars.pop(key)
+        self.pars.note_changed(matches) # For the repr: see brief()
         self.pars.update(matches)
 
         # Update module attributes
