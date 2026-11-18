@@ -29,6 +29,24 @@ def labeled(sims):
     return out
 
 
+def as_sims(*args):
+    """ The sims given to a MultiSim (or `ss.parallel()`) as one list: sims, lists of them, dicts of them by label, and MultiSims (their sims) """
+    sims = []
+    for arg in args:
+        if isinstance(arg, ss.Sim):
+            sims.append(arg)
+        elif isinstance(arg, MultiSim):
+            sims.extend(arg.sims)
+        elif isinstance(arg, dict):
+            sims.extend(labeled(arg))
+        elif isinstance(arg, (list, tuple)):
+            sims.extend(as_sims(*arg))
+        else:
+            errormsg = f'A MultiSim is made of sims, lists of them, dicts of them by label, or MultiSims, not {type(arg)}'
+            raise TypeError(errormsg)
+    return sims
+
+
 def check_run_options(kwargs, options=run_options, call=(None, 'parallel')):
     """ A clear error for a keyword that is not an option for running many sims: one of Starsim 3's, a sim given by keyword, or an unknown one; `call` is the (class, method) it was given to, as `ss.v3_deprecations.check()` takes them """
     for key,val in kwargs.items():
@@ -103,30 +121,7 @@ class MultiSim:
     def __init__(self, sims=None, *more, label=None, n_runs=None, pars=None, priors=False, inplace=True, **kwargs):
 
         # The sims: one, a list of them (or of MultiSims), a dict of them by label, or another MultiSim; or several, as ss.parallel() takes them, e.g. ss.MultiSim(s1, s2)
-        if more:
-            sims = [sim for arg in (sims, *more) for sim in (labeled(arg) if isinstance(arg, dict) else sc.tolist(arg))]
-        if isinstance(sims, MultiSim):
-            sims = list(sims.sims)
-        elif isinstance(sims, dict):
-            sims = labeled(sims)
-        elif isinstance(sims, ss.Sim):
-            sims = [sims]
-        elif isinstance(sims, (list, tuple)):
-            merged_sims = []
-            for entry in sims:
-                if isinstance(entry, ss.Sim):
-                    merged_sims.append(entry)
-                elif isinstance(entry, ss.MultiSim):
-                    merged_sims.extend(entry.sims)
-                elif isinstance(entry, (list, tuple)): # A list of sims within the list (not of MultiSims)
-                    merged_sims.extend(entry)
-                else:
-                    errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.MultiSim'
-                    raise TypeError(errormsg)
-            sims = merged_sims
-        else:
-            errormsg = f'A MultiSim is made of a sim, a list of sims, or a dict of them by label, not {type(sims)}'
-            raise TypeError(errormsg)
+        sims = as_sims(*([] if sims is None else [sims]), *more)
         if not sims:
             errormsg = 'You must supply at least one sim to create a MultiSim'
             raise ValueError(errormsg)
@@ -360,7 +355,7 @@ class MultiSim:
                     return self
             sims, self.runs = self._make_runs(base, n_runs, pars, draws, **opts)
 
-        progress = ss.display.RunsProgress(sims) if verbose and not kwargs['verbose'] else None # The runs' own progress, if they say nothing
+        progress = ss.progress.RunsProgress(sims) if verbose and not kwargs['verbose'] else None # The runs' own progress, if they say nothing
         run_sims = run_each(sims, progress=progress, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
         if inplace:
             for old,new in zip(sims, run_sims):
@@ -379,7 +374,7 @@ class MultiSim:
             scenarios = list(dict.fromkeys(self.runs['scenario'])) if self.runs is not None else []
             n = len(self.runs) if self.runs is not None else len(self.sims)
             which = f' of {len(scenarios)} scenarios ({sc.strjoin(scenarios)})' if len(scenarios) > 1 else f' of "{scenarios[0]}"' if scenarios and scenarios[0] else ''
-            text = f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {ss.display.seconds_str(self.timer.elapsed)} s'
+            text = f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {ss.progress.seconds_str(self.timer.elapsed)} s'
             if progress is not None:
                 progress.finish(text)
             else:
@@ -738,7 +733,11 @@ class MultiSim:
         if len(args) == 1 and isinstance(args[0], list):
             args = args[0] # A single list of MultiSims has been provided
         msim = sc.dcp(args[0])
-        msim.sims = [sim for ms in args for sim in sc.dcp(ms.sims)]
+        parts = [sc.dcp(ms.sims) for ms in args]
+        if any(isinstance(part, RestartedSims) for part in parts): # Sims made only when asked for stay so, rather than being made now
+            msim.sims = RestartedSims([run for part in parts for run in (part.runs if isinstance(part, RestartedSims) else part)])
+        else:
+            msim.sims = [sim for part in parts for sim in part]
         msim.results = MultiResults.concat([ms.results for ms in args])
         msim.runs = pd.concat([ms.runs for ms in args], ignore_index=True)
         starts = np.cumsum([0] + [len(ms) for ms in args])
@@ -791,7 +790,7 @@ class MultiSim:
             msim.results = self.results.take(indlist)
             msim.runs = self.runs.iloc[indlist].reset_index(drop=True)
             if len(self.sims) == len(self): # One sim per run
-                msim.sims = sc.dcp([self.sims[i] for i in indlist])
+                msim.sims = msim.sims.take(indlist) if isinstance(msim.sims, RestartedSims) else [msim.sims[i] for i in indlist] # Of sims made only when asked for, those of these runs, still made only when asked for
             if hasattr(msim, 'chunks'):
                 del msim.chunks
             out.append(msim)
@@ -894,7 +893,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         run_args (dict): arguments passed to `sim.run()`
         verbose (int): detail to print
         copy_sim (bool): whether to run a copy of the sim (as pickling gives when running in parallel)
-        track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.display.RunsProgress`)
+        track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.progress.RunsProgress`)
         globaldict (dict): a dict shared with the other runs (given by `sc.parallelize()`, or by `run_each()` when run in a loop)
         show (func): what shows the progress, when run in this process
         options (dict): the options of Starsim to run with (`ss.options`), e.g. those set in the process that started this worker
@@ -904,7 +903,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
     if not sim.label:
         sim.label = f'Sim {ind}'
     if track:
-        sim.progress = ss.display.Frac(sim, globaldict, ind, show)
+        sim.progress = ss.progress.Frac(sim, globaldict, ind, show)
     with ss.options.context(**(options or {})):
         sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if track:
@@ -920,7 +919,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
     """
     Run each of a list of sims: in parallel, with a worker process per CPU (or `workers` of them), or with `workers=1`, one after another in this process
 
-    With `progress` (an `ss.display.RunsProgress`), each run puts how far it has got in a dict shared with
+    With `progress` (an `ss.progress.RunsProgress`), each run puts how far it has got in a dict shared with
     this process (Sciris' `globaldict`), from which the progress is drawn ten times a second.
 
     Args:
@@ -930,7 +929,7 @@ def run_each(sims, workers=None, par_args=None, shrink=None, verbose=None, run_a
         shrink (bool): whether to shrink each sim after it runs
         verbose (float): how much to print
         run_args (dict): passed to `sim.run()`
-        progress (`ss.display.RunsProgress`): the progress to draw
+        progress (`ss.progress.RunsProgress`): the progress to draw
 
     Returns the list of run sims (copies, as they are pickled to run in parallel).
     """
@@ -1100,10 +1099,7 @@ class MultiResults(ss.Results):
                 arr['by_edge'] = stacked([r.by_edge for r in found])
             return arr
 
-        first = sims[0]
-        if not same_times(sims): # Results at different times cannot be stacked as runs of one thing
-            steps = sc.strjoin(f'"{sim.label}": {len(sim.t.tvec)} steps of {sim.t.dt}' for sim in sims)
-            raise ValueError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
+        first = sims[0] # Sims at different times are DifferentTimes instead (see MultiSim.collect())
         entries = {}
         for sim in sims: # Every result of any run, e.g. of an intervention only one scenario has
             entries |= {(None, key):res for key,res in sim.results.items() if isinstance(res, ss.Result) and (None, key) not in entries}
@@ -1243,19 +1239,18 @@ class RestartedSims(ByScenario, cabc.Sequence):
 
     The runs are kept as results, so the sim of a run is made again only when it is
     asked for: a copy of its scenario's sim, restarted with the run's seed and values
-    and run. `runners` are the sims (one per scenario) that were restarted.
+    and run. Each run keeps what makes it, so some of the runs (`take()`), or the
+    runs of several MultiSims (`ss.MultiSim.merge()`), are still made only when asked for.
+
+    Args:
+        runs (list): for each run, its sim, or how to make it: (the sim restarted for it, its values, its seed); or None if it cannot be made (runs continued from starts given to `restart_runs()`)
     """
-    def __init__(self, runners, sets, n_runs, seeds, given=False):
-        self.runners = runners
-        self.sets = sets # The values of each set, for each runner
-        self.n_runs = n_runs
-        self.seeds = seeds # The seed of each run
-        self.given = given # Whether the runs continued from starts given (see restart_runs()), which a sim cannot
-        self.made = {}
+    def __init__(self, runs):
+        self.runs = runs
         return
 
     def __len__(self):
-        return len(self.runners)*len(self.sets[0])*self.n_runs
+        return len(self.runs)
 
     def __getitem__(self, ind):
         if isinstance(ind, str):
@@ -1263,18 +1258,17 @@ class RestartedSims(ByScenario, cabc.Sequence):
         if isinstance(ind, slice):
             return [self[i] for i in range(*ind.indices(len(self)))]
         ind = range(len(self))[ind] # Raises an IndexError if out of range, and handles negative indices
-        if ind not in self.made and self.given:
+        run = self.runs[ind]
+        if run is None:
             errormsg = 'These runs continued from runs drawn with a posterior (see fit.project()), which a sim cannot start from, so only their results are kept: see msim.results'
             raise ValueError(errormsg)
-        if ind not in self.made:
-            r = ind // (len(self.sets[0])*self.n_runs)
-            runner = self.runners[r]
-            p = self.sets[r][(ind // self.n_runs) % len(self.sets[r])]
+        if isinstance(run, tuple):
+            runner, p, seed = run
             sim = sc.dcp(runner)
             if getattr(self, 'scenarios', None): # Labeled by its scenario, e.g. with the values swept
                 sim.label = self.scenarios[ind] or sim.label
-            self.made[ind] = sim.restart(pars=p, rand_seed=self.seeds[ind]).run()
-        return self.made[ind]
+            self.runs[ind] = sim.restart(pars=p, rand_seed=seed).run()
+        return self.runs[ind]
 
     def __add__(self, other):
         return list(self) + list(other)
@@ -1285,9 +1279,28 @@ class RestartedSims(ByScenario, cabc.Sequence):
     def __repr__(self):
         return f'<{len(self)} sims, one per run, made when asked for>'
 
+    @property
+    def made(self):
+        """ The sims that have been made, by position """
+        return {i:run for i,run in enumerate(self.runs) if isinstance(run, ss.Sim)}
+
+    @property
+    def runners(self):
+        """ The sims (one per scenario) restarted for the runs not yet made, and the sims of the others, e.g. for their solver (see `MultiSim._identical_runs()`) """
+        sims = [run[0] if isinstance(run, tuple) else run for run in self.runs if run is not None]
+        return list({id(sim):sim for sim in sims}.values())
+
+    def take(self, inds):
+        """ The sims of some of the runs, by position, still made only when asked for (see `MultiSim.split()`)
+
+        Args:
+            inds (list): the positions of the runs
+        """
+        return RestartedSims([self.runs[i] for i in inds])
+
 
 def base_values(sim, keys):
-    """ The values of the parameters named in `keys` that the sim was built with, or None if one can't be found this way (e.g. a value for one level) """
+    """ The values of the parameters named in `keys` that the sim was built with, which each set of values of `restart_runs()` starts from; or None if one can't be found this way (e.g. a value for one level) """
     if not keys:
         return {}
     try:
@@ -1314,7 +1327,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fitting.Fit.project()`);
     a module without one starts at the start. The sims of the runs are then not available, only their results.
     """
-    has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.utils.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
+    has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.simpars.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
     if not all(has_graph(sim) for sim in sims):
         return None
     sets = par_sets(pars)
@@ -1323,6 +1336,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
         if runner._compiled_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
+            return None
+        if not all(runner._restartable(p) for p in sets if p is not None): # E.g. a distribution among the values, which needs the sim built again
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built
@@ -1350,6 +1365,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
             for j,p in enumerate(sets[r]): # All the runs of each module with each set of values are one call to the kernels
                 if p is not None:
                     sim.restart(pars=p)
+                    if not sim.initialized: # Built again (see Sim.restart()), e.g. for a value that varies in time where the one before did not: each run is a sim of its own
+                        return None
                 run_seeds = np.array(seeds[first + j*n_runs:first + (j+1)*n_runs])
                 for mod in sim.declared:
                     joint = mod.engine.joint
@@ -1400,7 +1417,9 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
                 continue
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')
-    return RestartedSims(runners, sets, n_runs, seeds, given=starts is not None), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
+    makers = [(sim, p) for sim,ps in zip(runners, sets) for p in ps for i in range(n_runs)] # The sim and values of each run, in order
+    makers = [None if starts is not None else (sim, p, seed) for (sim,p),seed in zip(makers, seeds)] # A sim cannot start from the starts given
+    return RestartedSims(makers), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
@@ -1442,7 +1461,4 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
         ```
     """
     check_run_options(kwargs, run_options + ['label', 'inplace'])
-    sims = []
-    for arg in args: # A dict is sims by their labels, e.g. {'No intervention': s1, 'Vaccine': s2}
-        sims += labeled(arg) if isinstance(arg, dict) else sc.tolist(arg)
-    return MultiSim(sims, n_runs=n_runs, pars=pars, priors=priors, **kwargs).run()
+    return MultiSim(*args, n_runs=n_runs, pars=pars, priors=priors, **kwargs).run() # A dict is sims by their labels, e.g. {'No intervention': s1, 'Vaccine': s2}

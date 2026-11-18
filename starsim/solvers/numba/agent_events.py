@@ -13,6 +13,11 @@ Used with: agents; declared modules
 """
 import numpy as np
 import numba as nb
+from . import draws
+from .draws import mix, mid_uniform
+from ..backends import compiling
+
+compiling.depends(__file__, draws.__file__) # The draws are inlined, so the cached kernels are stale when draws.py changes
 
 __all__ = ['step_events']
 
@@ -68,12 +73,9 @@ def rand(key, a, ctr):
     Agent `a`'s next uniform in (0, 1) of the step: a hash (SplitMix64's) of the step's key, the agent, and its count of draws, so each
     agent's numbers depend only on its own draws, not on the order of everyone's events (and are the same in any language)
     """
-    z = key + np.uint64(a)*np.uint64(0x9E3779B97F4A7C15) + np.uint64(ctr[a])*np.uint64(0xD1B54A32D192ED03)
+    z = key + np.uint64(a)*draws.GOLDEN + np.uint64(ctr[a])*np.uint64(0xD1B54A32D192ED03)
     ctr[a] += 1
-    z = (z ^ (z >> np.uint64(30)))*np.uint64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> np.uint64(27)))*np.uint64(0x94D049BB133111EB)
-    z = z ^ (z >> np.uint64(31))
-    return (float(z >> np.uint64(11)) + 0.5)/9007199254740992.0 # The top 53 bits, never 0 or 1
+    return mid_uniform(mix(z))
 
 
 @jit

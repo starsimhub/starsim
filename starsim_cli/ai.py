@@ -235,12 +235,20 @@ def install_project(args):
     return
 
 
+def global_skill(target):
+    """ The short skill for all projects of an agent (its folder, in the home folder), its text (or None if it is not there), and whether starsim installed it """
+    dest = Path.home() / target.folder / skill_name
+    file = dest / 'SKILL.md'
+    text = file.read_text(encoding='utf-8') if file.exists() else None
+    return dest, text, text is not None and marker in text
+
+
 def install_global(args):
     """ Install a short skill for all projects, which loads the guide from the installed package when used """
     use = {}
     for key,target in chosen(args).items():
-        file = Path.home() / target.folder / skill_name / 'SKILL.md'
-        if file.exists() and marker not in file.read_text(encoding='utf-8') and not args.force:
+        dest, text, ours = global_skill(target)
+        if text is not None and not ours and not args.force:
             print(f'Skipping ~/{target.folder}/{skill_name}: a skill named "{skill_name}" that starsim did not install is there (--force replaces it)')
         else:
             use[key] = target
@@ -262,17 +270,27 @@ def install(args):
 
 def uninstall(args):
     """ Remove the links in this project, or with --global, the short skill for all projects """
+    return uninstall_global(args) if args.all else uninstall_project(args)
+
+
+def uninstall_project(args):
+    """ Remove the links to the skills in this project """
     root = project_root()
+    if root is None:
+        return
     for target in chosen(args, every=True).values():
-        if not args.all:
-            for dest in sorted((root/target.folder).glob('*')) if root else []:
-                if is_link(dest):
-                    dest.unlink()
-                    print(f'Removed {dest.relative_to(root).as_posix()}')
-            continue
-        dest = Path.home() / target.folder / skill_name
-        file = dest / 'SKILL.md'
-        if file.exists() and marker in file.read_text(encoding='utf-8'):
+        for dest in sorted((root/target.folder).glob('*')):
+            if is_link(dest):
+                dest.unlink()
+                print(f'Removed {dest.relative_to(root).as_posix()}')
+    return
+
+
+def uninstall_global(args):
+    """ Remove the short skill for all projects, where starsim installed it """
+    for target in chosen(args, every=True).values():
+        dest, text, ours = global_skill(target)
+        if ours:
             shutil.rmtree(dest)
             print(f'Removed ~/{target.folder}/{skill_name}')
     return
@@ -295,9 +313,9 @@ def status(args=None):
         if links:
             broken = sum(not dest.exists() for dest in links)
             states.append(f'{len(links)} linked in this project' + (f', {broken} broken (run "starsim ai install" to repair)' if broken else ''))
-        file = Path.home() / target.folder / skill_name / 'SKILL.md'
-        if file.exists():
-            if marker not in (text := file.read_text(encoding='utf-8')):
+        dest, text, ours = global_skill(target)
+        if text is not None:
+            if not ours:
                 states.append(f'~/{target.folder}/{skill_name} is a skill of the same name, not installed by starsim')
             else:
                 states.append(f'installed for all projects' + ('' if text == current else ', out of date (run "starsim ai install --global" to update)'))
@@ -372,7 +390,19 @@ def ask(args):
     text = (f'{question}\n\n(This is a question about Starsim {version()}, the disease modeling framework installed here. '
             f'Use Starsim\'s skills (if they aren\'t loaded, run "starsim ai show"), and look up names and topics with '
             f'"starsim help <term>". Answer with working code where it helps; don\'t change any files unless asked to.)')
-    command = [text if word == '{}' else word for word in agents[name]['interactive' if args.interactive else 'ask']]
     if args.interactive:
         print(f'Starting {name} ...')
-    sys.exit(subprocess.run(command, stdin=None if args.interactive else subprocess.DEVNULL).returncode) # Nothing more to read, so an agent waits for no input
+    run_agent(name, 'interactive' if args.interactive else 'ask', text, stdin=None if args.interactive else subprocess.DEVNULL) # Nothing more to read, so an agent waits for no input
+
+
+def run_agent(name, mode, text, **kwargs):
+    """ Run an agent with a prompt, in one of its modes (see `agents`), and exit with what it exits with
+
+    Args:
+        name (str): the agent, e.g. 'claude'
+        mode (str): 'interactive', 'ask', or 'headless'
+        text (str): the prompt
+        kwargs (dict): passed to `subprocess.run()`
+    """
+    command = [text if word == '{}' else word for word in agents[name][mode]]
+    sys.exit(subprocess.run(command, **kwargs).returncode)

@@ -10,15 +10,208 @@ import sciris as sc
 import starsim as ss
 
 
-
 def module_kind(mod, default='custom'):
     """ The kind of a module, e.g. 'diseases' (see `ss.modules.module_map()`), or `default` for one of no standard kind """
     return next((key for key,cls in ss.modules.module_map().items() if isinstance(mod, cls)), default)
 
 
+def module_kinds():
+    """ The kinds of module a sim keeps, e.g. 'diseases' (see `ss.modules.module_types()`), and 'custom', for those of no standard kind (`sim.custom`) """
+    return ss.modules.module_types() + ['custom']
+
+
 def flatten(items):
     """ Items given alone or in a list, with one level of lists inside it flattened, e.g. [sir, [vx1, vx2]] → [sir, vx1, vx2] """
     return [item for entry in sc.tolist(items) for item in (entry if isinstance(entry, list) else [entry])]
+
+
+#%% Sorting what a sim is given
+
+def sort_inputs(models, kwargs, pars, given, names):
+    """
+    Sort what `ss.Sim()` is given into the modules by kind, the settings of the sim, and the values of the model's parameters; not for the user
+
+    The model (modules, transitions, or dicts of settings, given as arguments), `modules=`, `pars=`, and the other keywords can each
+    hold any of the three. Each step below takes one of them out:
+
+    1. `take_modules()`: the modules given with `modules=`, or in `pars=`, are part of the model
+    2. `settings_in_models()`: a dict in the model holds settings of the sim (the keywords given win)
+    3. the modules given in a dict of settings (e.g. `diseases=`) are as if given by keyword
+    4. `model_pars()`: a keyword that is not a setting of the sim is a value of a parameter of the model, as in `pars=`
+    5. `sort_by_kind()`: the model's modules (transitions made a disease) are sorted into their kinds
+    6. `settings_in_pars()`: a name in `pars=` that is a setting of the sim, and not a parameter of the model, is a setting
+
+    Args:
+        models (list): the arguments, the model
+        kwargs (dict): the keywords that `ss.Sim()` does not name, e.g. `n_agents=`, or `beta=` for a parameter of the model
+        pars (dict/SimPars): `pars=`
+        given (dict): the arguments that `ss.Sim()` names (e.g. `label=`, `diseases=`), with None for those not given
+        names (dict): the names of the variables of the code that made the sim (see `ss.utils.caller_names()`)
+
+    Returns:
+        An `sc.obj` with `mods` (the modules by kind; `modules` for those sorted when the sim is initialized), `settings` (the sim's settings by name), `par_values` (the values of the model's parameters by name, or None), and `given_order` (the model's modules in the order given)
+    """
+    kwargs = dict(kwargs)
+    models, pars = take_modules(models, kwargs, pars)
+    kwargs = settings_in_models(models, kwargs, given)
+    kinds = ['demographics', 'connectors', 'networks', 'diseases', 'interventions', 'analyzers', 'custom'] # In the order of ss.Sim()'s arguments, the order they are named and copied in
+    mods = {key:(kwargs.pop(key) if given[key] is None and key in kwargs else given[key]) for key in kinds} # Modules given in a dict of settings are named and ordered as if given by keyword
+    mods['modules'] = None # Those of a whole ss.SimPars, or of a kind given by name (see sort_by_kind()), to sort when the sim is initialized
+    pars = model_pars(kwargs, ss.SimPars.names(), pars)
+    models = make_disease(models, names)
+    mods['diseases'] = make_disease(mods['diseases'], names)
+    given_order = sort_by_kind(models, mods)
+    settings, par_values = settings_in_pars(pars, kwargs, given, given_modules(dict(enumerate(models)), mods))
+    return sc.obj(mods=mods, settings=settings, par_values=par_values, given_order=given_order)
+
+
+def take_modules(models, kwargs, pars):
+    """
+    The model, with the modules given with `modules=` (by keyword, or in a dict of settings other than a whole `ss.SimPars`) as part of it, sorted by kind as
+    arguments are (those of no standard kind are kept in `sim.custom`); and a whole `ss.SimPars` given as `pars=`, or the modules by kind in `pars=`, as if
+    given in place of the model. Takes `modules=` out of `kwargs`, and returns the model and what is left of `pars`.
+    """
+    models = list(models)
+    mods = kwargs.pop('modules', None)
+    if mods is not None:
+        models.append(mods)
+    for i,arg in enumerate(models):
+        if isinstance(arg, dict) and not isinstance(arg, ss.SimPars) and 'modules' in arg:
+            arg = dict(arg)
+            mods = arg.pop('modules')
+            models[i] = arg
+            if mods is not None:
+                models.append(mods)
+    if isinstance(pars, dict) and not isinstance(pars, ss.SimPars) and 'modules' in pars:
+        pars = dict(pars)
+        mods = pars.pop('modules')
+        if mods is not None:
+            models.append(mods)
+    models = [arg for arg in models if arg is not None]
+    kinds = module_kinds()
+    if isinstance(pars, ss.SimPars): # The sim's settings as a whole, e.g. ss.Sim(pars=sim.pars), as if given in place of the model
+        models, pars = models + [pars], None
+    elif isinstance(pars, dict) and any(key in kinds for key in pars): # Modules in pars=, as if given in a dict in place of the model
+        models, pars = models + [{key:val for key,val in pars.items() if key in kinds}], {key:val for key,val in pars.items() if key not in kinds}
+    return models, pars
+
+
+def settings_in_models(models, kwargs, given):
+    """ The keywords, with the settings in the dicts of the model (e.g. `ss.Sim(dict(n_agents=1000))`) added, those given outright winning; what is not a dict must be the model """
+    for arg in models:
+        if isinstance(arg, dict):
+            kwargs = sc.mergedicts({k:v for k,v in arg.items() if given.get(k) is None}, kwargs) # A keyword given outright wins over the same key in the dict
+        elif not all(isinstance(obj, ss.Module) or ss.transitions.is_declaration(obj) or callable(obj) for obj in (arg if isinstance(arg, (list, tuple)) else [arg])): # A module's class, or a function of the sim (which becomes a module's step()), is made a module as for any kind
+            errormsg = f'ss.Sim() takes the model (modules, their classes, functions of the sim, or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
+            raise TypeError(errormsg)
+    return kwargs
+
+
+def model_pars(kwargs, settings, pars=None):
+    """
+    The values of the model's parameters, `pars` with those given by keyword (e.g. `ss.Sim(sir, beta=0.1)`, as in `pars=`) added, which are taken out of `kwargs`; a name that is a setting of the sim is a setting (the setting wins)
+
+    Args:
+        kwargs (dict): the keywords, which keep the settings
+        settings (set): the names of the settings of the sim
+        pars (dict): the values given as `pars=`
+    """
+    model = [key for key in kwargs if key not in settings and key not in ss.v3_deprecations.keys('Sim')]
+    if model:
+        pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in model})
+    return pars
+
+
+def sort_by_kind(models, mods):
+    """
+    Sort the model's modules into their kinds in `mods` (in place), after those given by keyword, as `init()` would, so that e.g. `sim.pars.diseases` has them before
+    `init()` as after; and number each by its place in the model, for `step_order='given'` (see `SimPars.validate_modules()`). Returns the modules in the order given.
+    """
+    given_order = sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)])
+    for i,mod in enumerate(given_order):
+        if isinstance(mod, ss.Module):
+            mod._model_index = i
+    for mod in given_order:
+        key = module_kind(mod)
+        if key == 'custom' or isinstance(mods[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see validate_modules())
+            mods['modules'] = sc.mergelists(mods['modules'], mod)
+        else:
+            mods[key] = sc.mergelists(mods[key], mod)
+    return given_order
+
+
+def settings_in_pars(pars, kwargs, given, mods):
+    """
+    The settings of the sim, and the values of the model's parameters by name, from `pars=` and the other keywords
+
+    `pars=` can hold settings of the sim too (as in Starsim 3), e.g. `pars=dict(n_agents=1000, beta=0.1)`: a name is a setting if no parameter of the model has it
+    (so `pars=fit.pars` works with a parameter called `dur`, and `pars=dict(dur=10)` with a network that has one); a keyword given outright wins over it.
+    A setting given as `ss.par` (e.g. `n_agents=ss.par(...)`, when it is fitted) takes its value from `pars=` too (`pars=fit.pars`).
+
+    Args:
+        pars (dict): `pars=`, with the values given by keyword (see `model_pars()`)
+        kwargs (dict): the other keywords, the settings
+        given (dict): the arguments that `ss.Sim()` names, with None for those not given
+        mods (list): the modules of the model, whose parameters `pars=` can set
+
+    Returns:
+        The settings by name, and the values of the model's parameters by name (or None); a name that is neither raises a `KeyError` when the sim is initialized
+    """
+    if not (isinstance(pars, dict) and len(pars)):
+        return kwargs, None
+    pars = dict(pars)
+    kwargs = kwargs | {key:pars.pop(key) for key in list(pars) if isinstance(kwargs.get(key), ss.par)}
+    names = {name for mod in mods for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())} # Those pars= can set (see ss.solvers.set_values())
+    settings = {key:pars.pop(key) for key in list(pars) if (key in ss.SimPars.names() or key in ss.v3_deprecations.keys('Sim')) and key not in names}
+    kwargs = sc.mergedicts({k:v for k,v in settings.items() if given.get(k) is None}, kwargs) # A keyword given outright wins
+    return kwargs, pars or None
+
+
+def given_modules(*inputs):
+    """ The modules among a sim's inputs, alone or in lists or dicts (e.g. `diseases=[sir, sis]`) """
+    mods = []
+    for inp in inputs:
+        for val in (inp or {}).values():
+            vals = val.values() if isinstance(val, dict) else sc.tolist(val) if isinstance(val, (list, tuple, ss.Module)) else []
+            mods += [v for v in vals if isinstance(v, ss.Module)]
+    return mods
+
+
+def make_disease(arg, names):
+    """ Transitions given to the sim (alone or in a list, among modules) as one disease, named from its states (e.g. "sir"), whose results are also at the top of the sim's (`sim.results.I`) """
+    items = sc.tolist(arg) if isinstance(arg, (list, tuple)) or ss.transitions.is_declaration(arg) else None
+    if items is None:
+        return arg
+    flat = [obj for item in items for obj in (item if isinstance(item, (list, tuple)) else [item])]
+    transitions = [obj for obj in flat if ss.transitions.is_declaration(obj)]
+    if not transitions:
+        return arg
+    disease = ss.Disease(*transitions, _names=names)
+    disease.setattribute('_implicit', True)
+    return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
+
+
+def copy_given(*inputs, copy_inputs=True):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given; with `copy_inputs=False`, the rest is copied, but not the modules """
+    given = given_modules(*inputs)
+    if not copy_inputs: # The sim's own, as given
+        for mod in given:
+            if mod.__dict__.get('sim') is not None or getattr(mod, '_given', False):
+                errormsg = f'"{mod.name}" was already given to a sim, so it can\'t be given to another with copy_inputs=False, which runs the modules themselves: make it again, or give a copy (e.g. mod.copy())'
+                raise ValueError(errormsg)
+        memo = {id(mod):mod for mod in given} # Shared, so what refers to a module refers to the module itself
+        return sc.mergedicts(*[sc.dcp(inp, memo=memo) for inp in inputs])
+    for mod in given: # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+        mod.setattribute('_given', True)
+    out = sc.mergedicts(*inputs, _copy=True)
+    for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
+        mod.setattribute('_given', False)
+        if isinstance(getattr(mod, 'results', None), ss.Results):
+            mod.results.setattribute('_given_to', None)
+    for mod in given: # The modules given hold no results (the sim runs its copies), so reading one says where they are
+        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+            mod.results.setattribute('_given_to', mod.name)
+    return out
 
 
 class SimPars(ss.Pars):
@@ -91,7 +284,7 @@ class SimPars(ss.Pars):
         """ A module's parameters (added by name once it is initialized) by its default name, e.g. `sim.pars.sir` for an `ss.SIR` called `measles` (see `ss.utils.find_module()`) """
         if not isinstance(key, str) or key.startswith('_'):
             raise KeyError(key)
-        mods = ss.utils.given_modules(self) + [val._module for val in self.values() if isinstance(val, ss.Pars) and isinstance(val._module, ss.Module)] # Before init(), the modules given; after, those whose parameters are here
+        mods = given_modules(self) + [val._module for val in self.values() if isinstance(val, ss.Pars) and isinstance(val._module, ss.Module)] # Before init(), the modules given; after, those whose parameters are here
         mod = ss.utils.find_module(mods, key, own=False)
         if mod is not None and dict.__contains__(self, mod.name):
             return dict.__getitem__(self, mod.name)
@@ -288,70 +481,74 @@ class SimPars(ss.Pars):
         Returns a flat list of (source_key, ss.Module) tuples, where the source is the kind it was given as (e.g. 'diseases', or 'modules')
         """
         out = []
-        modmap = ss.modules.module_map() # The base class of each kind, e.g. ss.Disease
-        modmap['modules'] = ss.Module # Modules of any kind, to sort by kind (those given to the sim as arguments)
-        modmap['custom'] = ss.Module # Modules of no standard kind, kept where they are given (custom=)
-        supported_modules = ss.modules.find_modules() # Each individual module class option, e.g. ss.SIR
-        supported_modules['modules'] = sc.obj({k:v for vv in supported_modules.values() for k,v in vv.items()})
-        supported_modules['custom'] = supported_modules['modules']
-
-        for modkey, ssmoddict in supported_modules.items():
-
-            moddictkeys = ssmoddict.keys()
-            moddictvals = ssmoddict.values()
-            expected_cls = modmap[modkey]
-
-            given = self[modkey]
-            if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
-                given = given[0]
-            if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
-                modlist = []
-                for name,mod in given.items():
-                    if mod._name_source != 'given': # The key names it, as name= would
-                        mod._set_name(name)
-                    modlist.append(mod)
-            elif isinstance(self[modkey], list):
-                modlist = self[modkey]
-            elif isinstance(self[modkey], ss.ndict): # Modules by name, checked below for their kind
-                modlist = list(self[modkey].values())
-            else: # One module, e.g. a dict of its parameters
-                modlist = sc.tolist(self[modkey])
-
-            modlist = [m for item in modlist for m in (item.values() if isinstance(item, ss.ndict) else [item])] # A set of modules given as one (e.g. the serotypes of ssl.Dengue), among others
-            for i,mod in enumerate(modlist):
-
-                if isinstance(mod, str): # By name, e.g. 'sir', as a dict with only its type
-                    mod = dict(type=mod)
-
-                if isinstance(mod, type) and issubclass(mod, ss.Module): # A class, e.g. ss.SIR
-                    mod = mod()
-
-                if isinstance(mod, dict): # A dict of its type and parameters
-                    if 'type' not in mod:
-                        errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
-                        raise ValueError(errormsg)
-                    modtype = mod.pop('type')
-                    if isinstance(modtype, str): # E.g. dict(type='sir', dur_inf=6), in lowercase as in the map
-                        modtype = modtype.lower()
-                        if modtype not in moddictkeys:
-                            errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {moddictkeys}'
-                            raise TypeError(errormsg)
-                        modcls = ssmoddict[modtype]
-                    elif modtype in moddictvals: # A class, e.g. dict(type=ss.SIR, dur_inf=6)
-                        modcls = modtype
-                    else:
-                        errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
-                        raise TypeError(errormsg)
-                    mod = modcls(**mod)
-
-                if not isinstance(mod, ss.Module) and callable(mod): # A function, as the step() of a module of this kind
-                    mod = expected_cls.from_func(mod)
-
-                structural = modkey in ['networks', 'diseases'] # The sim relies on what these are; a module in any other slot only needs to step, e.g. ss.modify() in interventions=
-                if isinstance(expected_cls, type) and not isinstance(mod, expected_cls if structural else (expected_cls, ss.Module)):
-                    errormsg = f'Was expecting {modkey} entry {i} to be {expected_cls.__name__}, but was {type(mod).__name__} instead'
-                    raise TypeError(errormsg)
-
-                out.append((modkey, mod))
-
+        classes = ss.modules.find_modules() # Each module class to choose from by name, by kind, e.g. ss.SIR in diseases
+        classes['modules'] = classes['custom'] = sc.obj({k:v for vv in classes.values() for k,v in vv.items()}) # Modules of any kind, to sort by kind (those given to the sim as arguments), or of no standard kind, kept where they are given (custom=)
+        for modkey in classes.keys():
+            for i,mod in enumerate(self.given_list(modkey)):
+                out.append((modkey, as_module(mod, modkey, classes[modkey], i)))
         return out
+
+    def given_list(self, modkey):
+        """ The modules given of one kind, as a list: from a list, a dict of them by name (e.g. `networks=dict(main=..., casual=...)`), an `ss.ndict`, or one alone """
+        given = self[modkey]
+        if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
+            given = given[0]
+        if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name
+            modlist = []
+            for name,mod in given.items():
+                if mod._name_source != 'given': # The key names it, as name= would
+                    mod._set_name(name)
+                modlist.append(mod)
+        elif isinstance(self[modkey], list):
+            modlist = self[modkey]
+        elif isinstance(self[modkey], ss.ndict): # Modules by name, checked below for their kind
+            modlist = list(self[modkey].values())
+        else: # One module, e.g. a dict of its parameters
+            modlist = sc.tolist(self[modkey])
+        return [m for item in modlist for m in (item.values() if isinstance(item, ss.ndict) else [item])] # A set of modules given as one (e.g. the serotypes of ssl.Dengue), among others
+
+
+def as_module(mod, modkey, classes, i=0):
+    """
+    A module, from one given to the sim in any form: by name ('sir'), as a dict of its type and parameters (`dict(type='sir', dur_inf=6)`), as a class, or as a function (which becomes its `step()`)
+
+    Args:
+        mod (str/dict/type/func/Module): the module, as given
+        modkey (str): the kind it was given as, e.g. 'diseases' (or 'modules' or 'custom', for any kind)
+        classes (dict): the classes it can be by name, e.g. {'sir': ss.SIR}
+        i (int): its place among those of its kind, for the error if it is not one
+    """
+    expected_cls = ss.modules.module_map().get(modkey, ss.Module) # The base class of the kind, e.g. ss.Disease
+
+    if isinstance(mod, str): # By name, e.g. 'sir', as a dict with only its type
+        mod = dict(type=mod)
+
+    if isinstance(mod, type) and issubclass(mod, ss.Module): # A class, e.g. ss.SIR
+        mod = mod()
+
+    if isinstance(mod, dict): # A dict of its type and parameters
+        if 'type' not in mod:
+            errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
+            raise ValueError(errormsg)
+        modtype = mod.pop('type')
+        if isinstance(modtype, str): # E.g. dict(type='sir', dur_inf=6), in lowercase as in the map
+            modtype = modtype.lower()
+            if modtype not in classes.keys():
+                errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {classes.keys()}'
+                raise TypeError(errormsg)
+            modcls = classes[modtype]
+        elif modtype in classes.values(): # A class, e.g. dict(type=ss.SIR, dur_inf=6)
+            modcls = modtype
+        else:
+            errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {classes.values()}'
+            raise TypeError(errormsg)
+        mod = modcls(**mod)
+
+    if not isinstance(mod, ss.Module) and callable(mod): # A function, as the step() of a module of this kind
+        mod = expected_cls.from_func(mod)
+
+    structural = modkey in ['networks', 'diseases'] # The sim relies on what these are; a module in any other slot only needs to step, e.g. ss.modify() in interventions=
+    if not isinstance(mod, expected_cls if structural else (expected_cls, ss.Module)):
+        errormsg = f'Was expecting {modkey} entry {i} to be {expected_cls.__name__}, but was {type(mod).__name__} instead'
+        raise TypeError(errormsg)
+    return mod

@@ -24,9 +24,10 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'age_labels', 'age_edges', 'starsim_data']
+__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'younger_than', 'age_labels', 'age_edges', 'starsim_data']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
+studies = ['prem', 'prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] # The studies of the contact matrices (see contacts())
 
 
 # The default ages of the people of a declared model, as a guess: the world's population in 2024 by 5-year age group
@@ -67,10 +68,10 @@ def age_pyramid(sim, strat=None):
         sim (Sim): the sim
         strat (Strat): the age stratification, if any
     """
-    named = getattr(sim, 'named_people', None)
+    named = sim.named_people # Both set when the sim is initialized (see ss.solvers.build.init_named_people())
     if named is not None:
         return named.ages, named.counts
-    if getattr(sim, 'given_pyramid', None) is not None:
+    if sim.given_pyramid is not None:
         return sim.given_pyramid
     if strat is None or strat.guessed.get('fractions') == world.guess:
         return world.ages, world.counts
@@ -113,10 +114,27 @@ def age_split(edges, ages, counts):
         ages (array): the lower edge of each 5-year group of the counts
         counts (array): the number of people in each
     """
+    out = np.diff(younger_than(ages, counts)(np.append(edges, np.inf)))
+    return out/out.sum() # Of the people the groups hold (none younger than the first)
+
+
+def younger_than(ages, counts):
+    """
+    The fraction of people younger than an age, as a function of the age, from counts by 5-year age group, with ages uniform within each group (the last taken to end 5 years on)
+
+    Args:
+        ages (array): the lower edge of each 5-year group
+        counts (array): the number of people in each
+
+    Example:
+        ```python
+        frac = ss.data.younger_than(ss.data.world.ages, ss.data.world.counts)
+        frac(15) # The fraction of the world's people under 15
+        ```
+    """
     ends = np.append(ages, ages[-1] + 5)
-    below = np.interp(np.append(edges, np.inf), ends, np.append(0, np.cumsum(counts))) # People younger than each edge
-    out = np.diff(below)
-    return out/out.sum()
+    cum = np.append(0, np.cumsum(counts))
+    return lambda x: np.interp(x, ends, cum/cum[-1])
 
 
 def starsim_data():
@@ -130,9 +148,9 @@ def starsim_data():
 
 
 def unknown(place, E, what='place'):
-    """ Raise a `KeyError` for a place that starsim_data cannot resolve, with its suggestions """
+    """ The `KeyError` to raise for a place that starsim_data cannot resolve, with its suggestions, e.g. `raise unknown(place, E) from E` """
     msg = str(E).strip('"\'')
-    raise sc.KeyNotFoundError(f'the {what} "{place}" was not found in starsim_data: {msg}.')
+    return sc.KeyNotFoundError(f'the {what} "{place}" was not found in starsim_data: {msg}.')
 
 
 def subnational(ssd, place):
@@ -140,7 +158,7 @@ def subnational(ssd, place):
     try:
         return ssd.locations.SEP in ssd.resolve(place)
     except KeyError as E:
-        unknown(place, E)
+        raise unknown(place, E) from E
 
 
 def fetch(ssd, place, which, **kwargs):
@@ -178,9 +196,9 @@ def nodes(ssd, place, level, year):
         else: # Another year, or a finer level: fetched (this needs starsim_data's geospatial extra)
             df = ssd.fetch_nodes(place, level=level, year=year)
     except KeyError as E:
-        unknown(place, E)
+        raise unknown(place, E) from E
     if not len(df):
-        unknown(place, f'it has no administrative units at level {level}')
+        raise unknown(place, f'it has no administrative units at level {level}')
     return df
 
 
@@ -207,7 +225,7 @@ def geography(place, level=1, year=None, places=None):
         keep = df.name.isin(wanted) | df.dot_name.isin(wanted) | df.pcode.isin(wanted)
         missing = wanted - set(df.name) - set(df.dot_name) - set(df.pcode)
         if missing:
-            unknown(sc.strjoin(sorted(missing)), f'not among the {len(df)} units of {sc.strjoin(sc.tolist(place))} at level {level}', what='unit')
+            raise unknown(sc.strjoin(sorted(missing)), f'not among the {len(df)} units of {sc.strjoin(sc.tolist(place))} at level {level}', what='unit')
         df = df[keep.values]
     if many: # Each with its country, e.g. 'Kenya:Busia' and 'Uganda:Busia'
         names = list(df.dot_name)
@@ -256,7 +274,7 @@ def rates(place, which, revision=None):
     try:
         return ssd.load(place, which=which, revision=revision)
     except KeyError as E:
-        unknown(place, E)
+        raise unknown(place, E) from E
 
 
 def population(place, year=None, revision=None):
@@ -285,25 +303,35 @@ def population(place, year=None, revision=None):
     """
     ssd = starsim_data()
     if subnational(ssd, place):
-        if revision is not None:
-            errormsg = f'revision={revision} is a revision of the UN World Population Prospects, which are national; the population of {place} is from the US Census'
-            raise ValueError(errormsg)
-        try:
-            df = fetch(ssd, place, 'population_us')
-        except KeyError as E:
-            unknown(place, E)
-        data_year = int(df.Time.iloc[0])
-        if year is not None and year != data_year:
-            ss.note(f'the population of {place} is that of {data_year}, the only year starsim_data has for it, not {year}')
-        single = df.sort_values('AgeGrp').Value.values.astype(float)
-        ages = np.arange(0, len(single), 5, dtype=float)
-        both = np.add.reduceat(single, ages.astype(int)) # By 5-year age group
-        info = ref(ssd, df, place=place, year=data_year, location=df.attrs.get('location'))
-        return by_age(ages, dict(female=both/2, male=both/2), info)
+        return subnational_population(ssd, place, year, revision)
+    return national_population(ssd, place, year, revision)
+
+
+def subnational_population(ssd, place, year=None, revision=None):
+    """ The population of a place within a country, for `population()`: one year (any other is noted), by single year of age, grouped by 5 years and split evenly by sex (starsim_data has these only for US states, from the US Census) """
+    if revision is not None:
+        errormsg = f'revision={revision} is a revision of the UN World Population Prospects, which are national; the population of {place} is from the US Census'
+        raise ValueError(errormsg)
+    try:
+        df = fetch(ssd, place, 'population_us')
+    except KeyError as E:
+        raise unknown(place, E) from E
+    data_year = int(df.Time.iloc[0])
+    if year is not None and year != data_year:
+        ss.note(f'the population of {place} is that of {data_year}, the only year starsim_data has for it, not {year}')
+    single = df.sort_values('AgeGrp').Value.values.astype(float)
+    ages = np.arange(0, len(single), 5, dtype=float)
+    both = np.add.reduceat(single, ages.astype(int)) # By 5-year age group
+    info = ref(ssd, df, place=place, year=data_year, location=df.attrs.get('location'))
+    return by_age(ages, dict(female=both/2, male=both/2), info)
+
+
+def national_population(ssd, place, year=None, revision=None):
+    """ The population of a country, from the UN World Population Prospects, for `population()`: by 5-year age group and sex, interpolated between its years """
     try:
         df = ssd.load(place, which='population', revision=revision)
     except KeyError as E:
-        unknown(place, E)
+        raise unknown(place, E) from E
     rev = df.attrs.get('provenance', {}).get('revision')
     year = sc.ifelse(year, int(rev) if rev else 2024)
     years = np.array(sorted(set(df.Time)))
@@ -361,7 +389,7 @@ def contacts(place, study=None, layer='all'):
         try:
             key = ssd.resolve(place)
         except KeyError as E:
-            unknown(place, E)
+            raise unknown(place, E) from E
         source = 'prem2021' if key in ssd.list_locations('prem2021') else 'prem'
     if layer not in layers:
         errormsg = f'layer="{layer}" is not one of the settings of the contact matrices: {sc.strjoin(layers)}'
@@ -377,8 +405,8 @@ def contacts(place, study=None, layer='all'):
         try:
             key = ssd.resolve(place)
         except KeyError:
-            unknown(place, E)
-        others = [s for s in ['prem', 'prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
+            raise unknown(place, E) from E
+        others = [s for s in studies if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", study="{others[0]}")' if others else ''
         raise sc.KeyNotFoundError(f'"{source}" has no contact matrix for {key}{hint}.')
     labels = age_labels([float(a) for a in df.index])

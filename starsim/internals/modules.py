@@ -167,14 +167,15 @@ class Base:
 
     It holds what both have in common, such as how they are shown.
     """
+    t = None # The timeline (`ss.Timeline`), set in __init__()
+
     def __bool__(self):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
         return True
 
     def __len__(self):
         """ The length of a module is the number of timepoints; see also len(sim) """
-        try:    return self.t.npts
-        except Exception: return 0
+        return self.t.npts if self.t is not None else 0
 
     def __repr__(self):
         """ Equivalent to sc.prettyobj() """
@@ -197,26 +198,22 @@ class Base:
     @property
     def dt(self):
         """ Get the current module timestep """
-        try:    return self.t.dt
-        except Exception: return None
+        return self.t.dt if self.t is not None else None
 
     @property
     def ti(self):
         """ Get the current module time index """
-        try:    return self.t.ti
-        except Exception: return None
+        return self.t.ti if self.t is not None else None
 
     @property
     def now(self):
-        """ Shortcut to self.t.now() """
-        try:    return self.t.now()
-        except Exception: return None
+        """ Shortcut to self.t.now(); None before the timeline is initialized """
+        return self.t.now() if self.t is not None and self.t.initialized else None
 
     @property
     def timevec(self):
         """ Shortcut to self.t.timevec """
-        try:    return self.t.timevec
-        except Exception: return None
+        return self.t.timevec if self.t is not None else None
 
     def copy(self, die=True):
         """
@@ -279,6 +276,13 @@ class Module(Base):
     allow_modifiers = () # For a module written as code: which of its parameters (and for a disease, of rel_sus and rel_trans) its own code reads with current_value(), so ss.modify() of them is applied, including for some people only
     _serials = itertools.count() # Which module each is, kept by its copies: see __init__()
 
+    # Defaults of attributes set later, defined on the class so they exist from the start of __init__() (e.g. __setattr__() reads _lock_attrs)
+    _lock_attrs = False # Whether the locked attributes (_locked_attrs) can't be set directly: True once __init__() is done
+    _given = False # Whether it was given to a sim, which runs its own copy: see ss.simpars.copy_given() and check_not_given()
+    _name_source = 'class' # Where its name came from: 'class' (the default, see default_name), 'variable' (the variable it was assigned to; see ss.Sim._name_modules()), or 'given' (name=, or a key)
+    _class_pars = None # The names of the parameters declared in its class body: see define_class_parts()
+    _effects = None # For a module written as code, what reads the modifiers of its parameters: see current_value()
+
     def __init_subclass__(cls, **kwargs):
         """ A module that defines `update_results()` is one written for Starsim 3 or an early v4: say how to split it, rather than never call it """
         super().__init_subclass__(**kwargs)
@@ -299,7 +303,6 @@ class Module(Base):
 
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
-        self._name_source = 'class' # Where its name came from: 'class' (the default, see default_name), 'variable' (the variable it was assigned to; see ss.Sim._name_modules()), or 'given' (name=, or a key)
         self._name_where = None # For a name from a variable, the function whose variable it is (see name_origin())
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
         self._assigned, self._assigned_in = ss.utils.assigned_name(self) # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...), and the function it is in
@@ -309,7 +312,7 @@ class Module(Base):
             class_pars = {}
         kwargs = sc.mergedicts(pars, kwargs)
         given = {key:kwargs.pop(key) for key in list(kwargs) if key in class_pars}
-        unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
+        unknown = [key for key in kwargs if key not in ss.Timeline.time_args] # Only the timeline's start, stop, and dt pass through (its name is the module's, and it is initialized by the sim)
         if unknown:
             valid = list(class_pars) + module_args + ss.Timeline.time_args
             how = '' if class_pars else '; parameters defined in __init__() are given to update_pars(), after define_pars()' # The usual slip without parameters in the class body: super().__init__(**kwargs)
@@ -330,6 +333,7 @@ class Module(Base):
         self._lock_attrs = True # Prevent key attributes from being overwritten directly
         self._auto_states = [] # Store automatic states (State objects) added via define_states()
         self._early_results = [] # Results defined in __init__(): see define_results()
+        self._converted = {} # Its typed parameters converted to numbers in the sim's unit, each once (see ss.solvers.convert())
         self.define_class_parts(class_pars, class_arrs, given)
         return
 
@@ -390,7 +394,7 @@ class Module(Base):
 
     def __setattr__(self, attr, value):
         """ Don't allow locked attributes to be overwritten """
-        if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
+        if self._lock_attrs and attr in self._locked_attrs:
             if value is getattr(self, attr, None): # Allow assigning the same object back - this happens automatically with some in-place operators (e.g., +=)
                 return
             if attr == 't': # An easy slip in an analyzer, e.g. self.t = []
@@ -418,7 +422,7 @@ class Module(Base):
 
     def check_not_given(self, action):
         """ Raise if this module was given to a sim, which runs its own copy, so that `action` on this one would never be seen """
-        if getattr(self, '_given', False):
+        if self._given:
             kind = ss.simpars.module_kind(self)
             errormsg = (f'{action} on "{self.name}", which was given to a sim: the sim runs its own copy, so it would never be used. '
                         f'Do it before making the sim, or on the sim\'s copy, sim.{kind}.{self.name}, after sim.init()')
@@ -471,15 +475,8 @@ class Module(Base):
         out = f'"{self.name}" ({type(self)})'
         return out
 
-    def _reconcile(self, key, value=None, default=None):
-        """ Reconcile module attributes, parameters, and input arguments """
-        parval = self.pars.get(key)
-        attrval = getattr(self, key, parval)
-        val = sc.ifelse(value, attrval, default)
-        return val
-
     def _collect_required(self):
-        """ Collect all methods marked as required """
+        """ Collect all methods marked as required, each called 0 times so far, for `check_method_calls()` to report those never called """
         reqs = {}
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
@@ -515,14 +512,15 @@ class Module(Base):
         # Set values for name and label
         cls_name = self.__class__.__name__
         cls_lower = cls_name.lower()
-        old_name = getattr(self, 'name', None)
-        self.name = self._reconcile('name', name, cls_lower)
-        if name is not None or (self.name != cls_lower and getattr(self, '_name_source', 'class') == 'class'): # The user (or the class itself, as ss.Pregnancy does) chose the name, so never rename it
+        old_name = getattr(self, 'name', None) # None on the first call, from __init__()
+        self.name = sc.ifelse(name, old_name, cls_lower)
+        if name is not None or (self.name != cls_lower and self._name_source == 'class'): # The user (or the class itself, as ss.Pregnancy does) chose the name, so never rename it
             self._name_source = 'given'
         default_label = self.name if self.name != cls_lower else cls_name
-        if label is None and getattr(self, 'label', None) in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
+        old_label = getattr(self, 'label', None)
+        if label is None and old_label in [old_name, cls_name]: # The existing label is a default, so update it to match the new name
             label = default_label
-        self.label = self._reconcile('label', label, default_label)
+        self.label = sc.ifelse(label, old_label, default_label)
         return
 
     @property
@@ -540,7 +538,7 @@ class Module(Base):
 
     def name_origin(self):
         """ Where the module's name came from, for messages: e.g. 'named from the variable `m` in `make_sim()`', or 'the default for ss.SIR' """
-        source = getattr(self, '_name_source', 'class')
+        source = self._name_source
         if source == 'variable':
             where = self._name_where
             return f'named from the variable `{self.name}`' + (f' in `{where}()`' if where and not where.startswith('<') else '')
@@ -640,7 +638,7 @@ class Module(Base):
             inherit (bool): whether to merge with the parameters already defined, rather than replace them
             **kwargs (dict): the parameters
         """
-        own = self.__dict__.get('_class_pars')
+        own = self._class_pars
         keep = {} # A default in the class body (e.g. of a subclass, n_contacts = ss.par(4)), or the value given for it, stands over one defined by a base class's __init__()
         if own and inherit:
             keep = {k:sc.dcp(v) for k,v in self.pars.with_bounded().items() if k in own and k in kwargs} # Copies (the base's default would set the value of the ss.par kept), applied over the base's default, as update_pars() would apply it, so that a number sets a distribution's value or takes the default's unit
@@ -676,7 +674,7 @@ class Module(Base):
         if engine is not None: # A declared parameter: as the engine reads it, with its modifiers, unless a value by level with none
             if not isinstance(raw, (ss.by, ss.parameters.by_func)) or self.sim.modifiers.get((self.name, 'par', p.name)):
                 return engine.value(p)
-        return ss.parameters.current_value(raw, self.sim, cache=self.__dict__.setdefault('_converted', {}))
+        return ss.parameters.number_now(raw, self.sim, cache=self._converted)
 
     def current_value(self, key, uids=None):
         """
@@ -700,7 +698,7 @@ class Module(Base):
         """
         engine = getattr(self, 'engine', None)
         if engine is None: # Written as code, with no engine of its own: one that reads the modifiers, kept so that a modifier that holds (hold=, until=) is remembered between steps
-            engine = self.__dict__.get('_effects')
+            engine = self._effects
             if engine is None or engine.sim is not self.sim:
                 engine = ss.solvers.Effects(self, self.sim)
                 self.setattribute('_effects', engine)
@@ -739,11 +737,9 @@ class Module(Base):
         self.pars.note_changed(matches) # For the repr: see brief()
         self.pars.update(matches)
 
-        # Update module attributes
-        metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Timeline.time_args}
-        self.set_metadata(**metadata)
-        self.t.update(**timepars)
+        # Update module attributes: its name and label, and its timeline
+        self.set_metadata(**{key:pars.get(key) for key in module_args})
+        self.t.update(**{key:pars.get(key) for key in ss.Timeline.time_args})
 
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
@@ -782,14 +778,10 @@ class Module(Base):
                 self._remove_state(name)
 
         # Add the new states
-        for arg in args:
-            if isinstance(arg, (list, tuple)):
-                state = ss.BoolState(*arg)
-            elif isinstance(arg, dict):
-                state = ss.BoolState(**arg)
-            else:
-                state = arg
-            assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
+        for state in args:
+            if not isinstance(state, ss.Arr):
+                errormsg = f'Could not add {state!r} to {self._debug_name}: define_states() takes arrays, e.g. ss.BoolState("exposed") or ss.FloatArr("level"), not {type(state).__name__}'
+                raise TypeError(errormsg)
             if self.pre_initialized: # The module's arrays were added to the people (with their results) in init_pre(), so a later one would never have a value per agent
                 errormsg = f'"{state.name}" is defined after "{self.name}" was added to the sim (e.g. in init_post()), so the people would not have it: define arrays in __init__() (or in the class body) instead'
                 raise RuntimeError(errormsg)
@@ -937,9 +929,9 @@ class Module(Base):
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
-            if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
-                self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed
             if isinstance(self.pars, ss.Pars):
+                if getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
+                    self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed
                 self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
             if self.name not in sim.pars: # Add a new key, which is allowed even if the sim's parameters are locked
                 sim.pars.update({self.name: self.pars}, create=True)
@@ -1067,15 +1059,13 @@ class Module(Base):
         Find the nearest matching sim time indices for the current module
 
         Args:
-            inds (array): indices to return if the module and sim have the same number of timesteps; if None, all of them
+            inds (array): indices to return if the module and sim have the same timesteps; if None, all of them
         """
         self_tvec = self.t.yearvec
         sim_tvec = self.sim.t.yearvec
-        if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
+        if np.array_equal(self_tvec, sim_tvec): # Shortcut to avoid doing matching (the same times, not just as many)
             return Ellipsis if inds is None else inds
-        else:
-            out = sc.findnearest(sim_tvec, self_tvec)
-            return out
+        return sc.findnearest(sim_tvec, self_tvec)
 
     @required()
     def start_step(self):
@@ -1207,7 +1197,7 @@ class Module(Base):
         shrunk = ss.utils.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
-        self.__dict__.pop('_effects', None) # It holds the sim
+        self.setattribute('_effects', None) # It holds the sim
         for state in self.state_list:
             with sc.tryexcept():
                 to_shrink = ['people', 'raw']

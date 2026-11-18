@@ -297,6 +297,24 @@ def test_move_outside():
     return
 
 
+@sc.timer()
+def test_class_trigger_rebound():
+    sc.heading('Testing that a trigger on several events in a class is of each instance\'s transitions')
+    class D(ss.Disease):
+        S, I, R, V = ss.states('S I R V')
+        infection = S >> I @ 0.3*I
+        recovery = I >> R @ ss.days(10)
+        vax = ss.Transition(R, V, when=recovery | infection)
+    d = D(name='d')
+    event = ss.conditions.event_leaves(d.vax._trigger.x)[0]
+    assert event.obj is d.recovery and event.module is d # Not the class's transition, which has no module
+
+    # A transition not yet in a module has no rate per agent: the error says so
+    S, I = ss.states(2)
+    with pytest.raises(ss.CapabilityError):
+        ss.Transition(S, I, rate=0.1).hazard([0])
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()

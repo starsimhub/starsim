@@ -137,6 +137,8 @@ def test_add_module():
     vx = sim.add_module(ss.modify('sis.pars.beta', multiply=0.2, name='masks'))
     with pytest.raises(ss.CapabilityError):
         sim.add_module(ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5)) # A new product adds a dimension (has_vaccine), which is laid out at init()
+    with pytest.raises(ValueError, match='already exists in diseases'): # The kind of the module whose name it is
+        sim.add_module(ss.Analyzer(name='sis'))
     sim.run()
     assert sim.connectors.masks is vx and vx.ti == sim.ti # It was added, and kept in step with the sim
     assert np.array_equal(sim.results.sis.I[:ti], base.results.sis.I[:ti]) and sim.results.sis.I[-1] < base.results.sis.I[-1]
@@ -359,6 +361,11 @@ def test_solver_options():
     assert ss.Sim(make(), solver='ode', **kw).init().solver == ss.solvers.ode() != euler.solver # A solver after init, not its name
     with pytest.raises(TypeError): # An option of another solver
         ss.solvers.binomial(integrator='euler')
+    for make_solver in [lambda: ss.solvers.gillespie(substeps=2), lambda: ss.solvers.tau(foo=1)]: # An option a solver has none of is not dropped
+        with pytest.raises(TypeError):
+            make_solver()
+    named = ss.solvers.abm(step='midstep') # A step named as the default still overrides a module's suggested step, so it is not the same as abm()
+    assert named != ss.solvers.abm() and repr(named) == "ss.solvers.abm(step='midstep')" and ss.solvers.abm(step='events') == ss.solvers.abm(step='events')
     agents = ss.Sim(make(), solver='abm', n_agents=500, total_pop=5000, unit='day', stop=5, verbose=0).init()
     assert agents.pop_scale == 10 and ss.Sim(make(), solver='ode', **kw).init().pop_scale == 1
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, solver=ss.solvers.abm(step='wholestep'), name='sir')

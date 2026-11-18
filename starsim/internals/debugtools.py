@@ -134,6 +134,8 @@ class Diagnostics(sc.quickobj):
         self.sim = sim
         self.rvs = None
         self.states = None
+        self.rvs_file = None
+        self.states_file = None
         self.detailed = detailed
         if rvs:
             self.rvs = sc.obj()
@@ -183,7 +185,7 @@ class Diagnostics(sc.quickobj):
         return
 
     def export(self):
-        """ Export saved data to file(s); filenames must be set when the object is created """
+        """ Export the data stored to the files named when the object was made """
         if self.rvs:
             sc.savejson(filename=self.rvs_file, obj=self.rvs)
         if self.states:
@@ -193,7 +195,7 @@ class Diagnostics(sc.quickobj):
 
 def metadata(comments=None):
     """
-    Store metadata; like `sc.metadata()`, but optimized for speed
+    Store metadata (`sim.metadata`, made with every sim); like `sc.metadata()`, but optimized for speed
 
     Args:
         comments (str): any comments to store with the metadata
@@ -222,17 +224,17 @@ def metadata(comments=None):
     return md
 
 
-def mock_time(dt=1.0, dur=10, start=2000):
+def mock_time(dt=None, dur=10, start=2000):
     """
     Create a minimal mock "Time" object
 
     Args:
-        dt (float): the timestep
+        dt (`ss.dur`/float): the timestep (default `ss.years(1)`)
         dur (float): the duration
         start (float): the start
     """
     t = sc.obj(
-        dt = dt,
+        dt = sc.ifelse(dt, ss.years(1.0)),
         ti = 0,
         start = start,
         stop = None,
@@ -257,7 +259,7 @@ def mock_sim(n_agents=100, **kwargs):
         label = 'mock_sim',
         people = mock_people(n_agents),
         t = t,
-        dt = kwargs.get('dt', ss.years(1.0)),
+        dt = t.dt,
         pars = t,
         results = sc.obj(),
         networks = sc.obj(), # Needed for infections
@@ -300,26 +302,43 @@ def mock_module(dur=10, **kwargs):
         dur (float): the duration
         **kwargs (dict): passed to `mock_time()`
     """
+    t = mock_time(dur=dur, **kwargs)
     mod = sc.obj(
         name = 'mock_module',
-        t = mock_time(dur=dur, **kwargs),
-        dt = kwargs.get('dt', ss.years(1.0)),
+        t = t,
+        dt = t.dt,
     )
     return mod
+
+
+def summary(sim):
+    """ The summary of a sim as a dict of each result's value, or of a MultiSim as a dict of each result's median, mean, std, ..., and the standard error of the mean (`sem`), as `diff_sims()` compares them """
+    if isinstance(sim, ss.Sim):
+        return sc.obj(sim.summarize().value.to_dict())
+    df = sim.summarize()
+    n = len(sim.runs)/sim.runs['scenario'].nunique() # Runs per scenario
+    df['sem'] = df['std']/np.sqrt(n) # The standard error of each mean
+    return sc.obj(df.to_dict('index'))
 
 
 def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
     '''
     Compute the difference of the summaries of two simulations, and print any values which differ
 
+    For sims, each value is compared by the ratio of the two, and the arrows show how far it is from 1; for MultiSims,
+    each mean is compared by its z-score (the difference over the sum of the standard errors), and the arrows show how large it is.
+
     Args:
         sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summarize().value.to_dict())
         sim2 (Sim/MultiSim/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
-        full (bool): whether to print out all values (not just those that differ)
-        output (bool): whether to return the output as a string (otherwise print)
+        full (bool): whether to show all values (not just those that differ)
+        output (bool): whether to return the table of values that differ (a dataframe, empty if none do; all values with `full=True`) instead of printing it
         die (bool): whether to raise an exception if the sims don't match
+
+    Returns:
+        Whether the sims differ (or the table, with `output=True`)
 
     Examples:
         ```python
@@ -328,19 +347,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         ss.debugtools.diff_sims(s1, s2)
         ```
     '''
-
-    # Convert to dict
-    def as_dict(sim):
-        if isinstance(sim, ss.Sim):
-            return sc.obj(sim.summarize().value.to_dict())
-        df = sim.summarize() # A MultiSim's: each result's median, mean, std, ...
-        n = len(sim.runs)/sim.runs['scenario'].nunique() # Runs per scenario
-        df['sem'] = df['std']/np.sqrt(n) # The standard error of each mean
-        return sc.obj(df.to_dict('index'))
-    if isinstance(sim1, (ss.Sim, ss.MultiSim)):
-        sim1 = as_dict(sim1)
-    if isinstance(sim2, (ss.Sim, ss.MultiSim)):
-        sim2 = as_dict(sim2)
+    # Convert to dicts
+    sim1, sim2 = [summary(sim) if isinstance(sim, (ss.Sim, ss.MultiSim)) else sim for sim in [sim1, sim2]]
     for sim in [sim1, sim2]:
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a dict of its summary'
@@ -394,31 +402,27 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         df = sc.dataframe.from_dict(mismatches).transpose()
         diff, ratio, change, zscore = [], [], [], []
         small_change = 1.96 if multi else 1 + 1e-3  # A change within the 95% CI, roughly speaking, or a rounding error
+        steps = (3, 5, 10) if multi else (1.1, 2, 10) # A further arrow at each: z-scores, or ratios
         for d in mismatches.values():
             old, new = d.sim1, d.sim2
             if sc.isnumber(old) and sc.isnumber(new): # Should all be numeric, but just in case
                 this_diff = new - old
                 this_ratio = new / old if old else np.nan
                 if multi:
-                    abs_ratio = abs(this_diff)/(d.sim1_sem + d.sim2_sem)
-                    this_zscore = abs_ratio
+                    size = abs(this_diff)/(d.sim1_sem + d.sim2_sem) if this_diff else 0.0
+                    this_zscore = size
                 else:
-                    abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
+                    size = 1.0 if new == old else max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
                     this_zscore = np.nan
 
                 # Set the character to use, and how many repeats it should have
-                if abs_ratio < small_change: change_char = '≈'
+                if size < small_change: change_char = '≈'
                 elif new > old:  change_char = '↑'
                 elif new < old:  change_char = '↓'
-                elif new == old: change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
-                repeats = 1
-                if abs_ratio == 0:   repeats = 0
-                if abs_ratio >= 1.1: repeats = 2
-                if abs_ratio >= 2:   repeats = 3
-                if abs_ratio >= 10:  repeats = 4
+                repeats = 1 + sum(size >= step for step in steps)
                 this_change = change_char * repeats
             else:  # pragma: no cover
                 this_diff = this_ratio = this_zscore = np.nan
@@ -442,19 +446,17 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         valmatchmsg += str(df)
 
     # Raise an error if mismatches were found
+    differ = bool(n_mismatch or keymatchmsg) # Values that differ, or keys that don't match (unless skip_key_diffs=True); with full=True, the table alone is not a mismatch
     mismatchmsg = keymatchmsg + valmatchmsg
-    if mismatchmsg:  # pragma: no cover
-        if die and (n_mismatch or keymatchmsg): # Values that differ, or keys that don't match (unless skip_key_diffs=True); with full=True, a message alone is not a mismatch
-            raise ValueError(mismatchmsg)
-        elif output:
-            return df
-        else:
-            print(mismatchmsg)
-            return True
-    else:
-        if not output:
-            print('Sims match')
-        return False
+    if differ and die:
+        raise ValueError(mismatchmsg)
+    elif output:
+        return df
+    if mismatchmsg:
+        print(mismatchmsg)
+    if not differ:
+        print('Sims match')
+    return differ
 
 
 def check_sims_match(*args, full=False):
@@ -476,5 +478,6 @@ def check_sims_match(*args, full=False):
     if len(args) < 2:
         errormsg = 'Must compare at least 2 sims'
         raise ValueError(errormsg)
-    matches = [not diff_sims(args[0], other, full=False, output=False, die=False) for other in args[1:]]
+    first = summary(args[0]) if isinstance(args[0], (ss.Sim, ss.MultiSim)) else args[0] # Summarized once
+    matches = [not diff_sims(first, other, full=False, output=False, die=False) for other in args[1:]]
     return matches if full else all(matches)

@@ -6,6 +6,7 @@ Test calibration
 import starsim as ss
 import starsim.internals.fitting
 import numpy as np
+import pandas as pd
 import sciris as sc
 import scipy.optimize as spo
 import scipy.special as spsp
@@ -84,6 +85,18 @@ def test_posterior_choices():
     truncated = sps.truncnorm((0.1 - 0.45)/0.1, (0.5 - 0.45)/0.1, loc=0.45, scale=0.1)
     assert 0.1 < draws.min() and draws.max() < 0.5 and abs(draws.mean() - truncated.mean()) < 3*truncated.std()/np.sqrt(len(draws))
 
+    # Two diseases with a beta of their own: each is drawn, named as sim.new() takes it
+    two = lambda name, b: ss.Disease(S >> I @ ss.par(b, bounds=[b - 0.05, b + 0.05])*I, I >> R @ ss.days(8), init=dict(I=0.01), name=name)
+    sim2 = ss.Sim([two('a', 0.15), two('b', 0.55)], total_pop=1000, unit='day', stop=30, verbose=0)
+    draws = ss.fitting.prior_draws(sim2, 3, rand_seed=1)
+    assert list(draws.keys()) == ['a.beta', 'b.beta']
+    new = sim2.new(pars={k:v[0] for k,v in draws.items()}).init()
+    assert new.diseases.b.pars.beta.value == draws['b.beta'][0]
+
+    # Synthetic data drawn from a lognormal given by its log_std, as its log-likelihood reads it
+    vals = ss.fitting.draw(ss.lognormal(log_std=0.3), np.full(20_000, 100.0), np.random.default_rng(1))
+    assert abs(np.log(vals).std() - 0.3) < 0.01 and abs(vals.mean() - 100) < 1
+
     # ABC-SMC: refused for a deterministic sim, whose width it would set by the number of generations; for a stochastic one, it reports its tolerance rather than convergence
     beta = ss.par(0.3, bounds=[0.1, 1])
     infection = S >> I @ beta*I
@@ -155,6 +168,14 @@ def test_pmcmc():
     for k,i in enumerate(rows):
         assert np.array_equal(proj.results.sir.I.values[k, :42], fit.trajectories[i].sir.stocks.sir[:, 1]) # Up to the last data point, the run kept
     assert len(set(proj.results.sir.I.values[:, 41])) > 1 and proj.results.sir.I.values.shape == (5, 101)
+    # IF2, with a fitted rate that also has a parameter that is not fitted
+    gamma, k = ss.par(0.1, bounds=[0.05, 0.3], name='gamma'), ss.par(1.0, name='k')
+    sis = ss.Disease(S >> I @ 0.3*I, I >> R @ gamma*k, init=dict(I=0.01), name='sir')
+    truth = ss.Sim(sis, total_pop=1000, unit='day', stop=60, solver='binomial', verbose=0).run().results.sir
+    fit2 = ss.Sim(sis, total_pop=1000, unit='day', stop=60, solver='binomial', verbose=0, data=pd.DataFrame(dict(I=truth.I.values[::5]), index=truth.timevec[::5]))
+    fit2 = fit2.fit(method=ss.fitting.method('if2', particles=50, iterations=3, chains=1), likelihood=ss.poisson(), rand_seed=1, verbose=False)
+    assert 0.05 <= fit2.table.best[0] <= 0.3
+
     proj = fit.project(n_runs=5, rand_seed=1, stop=100, restart=True) # Each draw from the start instead
     assert proj.results.sir.I.values.shape == (5, 101) and proj.sims[0].results_ready
     vaccination = ss.vaccinate(efficacy=0.9, start=50, capacity=ss.perday(20)) # An intervention the kernels don't take, so the runs can't be continued

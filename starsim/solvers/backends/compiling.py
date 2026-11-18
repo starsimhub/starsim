@@ -25,7 +25,7 @@ Used with: agents and compartments; declared and coded modules
 import os
 import sys
 import time
-import importlib
+import importlib.util
 import contextlib
 import hashlib
 import threading
@@ -40,15 +40,22 @@ import starsim as ss
 deps = {} # The extra files each source file's cache depends on
 hashes = {} # The hash of each file's contents, with the time and size it was read at, so that each file is read once
 
+def takes(what, low, high):
+    """ What a set of functions is, and the least and most seconds compiling it takes: the entries of `slow`, and of `ss.jit`'s functions, which Compiling says while they compile """
+    return sc.obj(what=what, low=low, high=high)
+
+
 # Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes (s), erring long (measured 2026-11-07: 34 to 43 s for many runs, 32 to 46 and 33 to 55 s for the particle filter's)
 slow = {
-    'starsim.solvers.numba.passes':                         ('the agent solver', 2, 15), # And for ss.compile(), the rest of what sims with agents compile (30 s measured), as 'agents'
-    'agents':                                               ('the agent solver and what sims with agents use', 20, 60),
-    'starsim.solvers.numba.compartmental.run':              ('the compartmental solvers', 60, 150), # 63 s measured
-    'starsim.solvers.numba.compartmental.one_step':         ('a step of the compartmental solvers', 5, 20),
-    'starsim.solvers.numba.compartmental.run_many':         ('the compartmental solvers for many runs', 30, 70),
-    'starsim.solvers.numba.compartmental.advance':          ("the particle filter's steps", 30, 70),
-    'starsim.solvers.numba.compartmental.advance_threads':  ("the particle filter's steps in threads", 40, 80),
+    'starsim.solvers.numba.passes':                         takes('the agent solver', 2, 15), # And for ss.compile(), the rest of what sims with agents compile (30 s measured), as 'agents'
+    'starsim.solvers.numba.agent_moves.step_moves':         takes("the agent solver's moves", 3, 15), # 5.4 s measured (2026-11-17)
+    'starsim.solvers.numba.agent_events.step_events':       takes('the agent solver by events', 3, 15),
+    'agents':                                               takes('the agent solver and what sims with agents use', 20, 60),
+    'starsim.solvers.numba.compartmental.run':              takes('the compartmental solvers', 60, 150), # 63 s measured
+    'starsim.solvers.numba.compartmental.one_step':         takes('a step of the compartmental solvers', 5, 20),
+    'starsim.solvers.numba.compartmental.run_many':         takes('the compartmental solvers for many runs', 30, 70),
+    'starsim.solvers.numba.compartmental.advance':          takes("the particle filter's steps", 30, 70),
+    'starsim.solvers.numba.compartmental.advance_threads':  takes("the particle filter's steps in threads", 40, 80),
 }
 said = set() # What has been said to be compiling, this session
 
@@ -162,8 +169,24 @@ def is_compiled():
     global on_disk
     step = ss.solvers.numba.compartmental.step
     if on_disk is None:
-        on_disk = bool(step._cache._cache_file._load_index())
+        on_disk = cached(step, in_session=False)
     return on_disk or bool(step.signatures)
+
+
+def numba_kernel(module, name):
+    """ A Numba kernel of `ss.solvers.numba.<module>`, also while Rust's copy is in its place (see `ss.solvers.backends.rust.use()`) """
+    held = ss.solvers.backends.rust.numba
+    return held[module, name] if held and (module, name) in held else getattr(getattr(ss.solvers.numba, module), name)
+
+
+def agent_kernels():
+    """ The Numba functions that stand for the agent solver, one for each file (see `compile_status()`) """
+    return [ss.solvers.numba.passes.bounds, numba_kernel('agent_moves', 'step_moves'), numba_kernel('agent_events', 'step_events')]
+
+
+def cached(func, in_session=True):
+    """ Whether a function compiled by Numba is compiled already: in Numba's cache on disk (an index that is out of date reads as empty), or in this session if `in_session` """
+    return bool((in_session and func.signatures) or func._cache._cache_file._load_index())
 
 
 def work(p, y):
@@ -296,11 +319,11 @@ def compile(check=False, verbose=True):
         return
     T = sc.timer()
     K = ss.solvers.numba.compartmental
-    parts = {'agents':ss.solvers.numba.passes.bounds} | {f'{K.__name__}.{name}':getattr(K, name) for name in ['run', 'one_step', 'run_many', 'advance', 'advance_threads']}
-    cold = [key for key,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())] # In the order compiled below
+    parts = {'agents':agent_kernels()} | {f'{K.__name__}.{name}':[getattr(K, name)] for name in ['run', 'one_step', 'run_many', 'advance', 'advance_threads']}
+    cold = [key for key,funcs in parts.items() if not all(map(cached, funcs))] # In the order compiled below
     batch = None
     if verbose and cold:
-        announce('the solver kernels', 'Numba', sum(slow[k][1] for k in cold), sum(slow[k][2] for k in cold))
+        announce('the solver kernels', 'Numba', sum(slow[k].low for k in cold), sum(slow[k].high for k in cold))
         batch = Batch('the solver kernels', cold) # One bar for all the parts
     part = batch.part if batch is not None else lambda key: contextlib.nullcontext()
     def make(solver='binomial'):
@@ -354,8 +377,8 @@ def compile_status():
     """
     rust = ss.solvers.backends.rust
     N = ss.solvers.numba
-    parts = {'the compartmental solvers':N.compartmental.step, 'the agent solver':N.passes.bounds, 'the draws':N.draws.key} # One function for each file, since a file's functions go out of date together; not one inlined everywhere (e.g. uniform), which is never compiled on its own
-    cold = [part for part,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())]
+    parts = {'the compartmental solvers':[N.compartmental.step], 'the agent solver':agent_kernels(), 'the draws':[N.draws.key]} # One function for each file, since a file's functions go out of date together; not one inlined everywhere (e.g. uniform), which is never compiled on its own
+    cold = [part for part,funcs in parts.items() if not all(map(cached, funcs))]
     if rust.on:
         backend = 'rust'
         missing = ['the Rust kernels'] if rust.source_hash() not in [None, rust.load().source_hash] else [] # None in a wheel, which has no source beside it
@@ -399,6 +422,7 @@ def typical_sims():
         ss.Sim(diseases=ssl.HIV(), networks='sexual', demographics=True, **small),
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', **small),
+        ss.Sim(diseases=ss.SEIR(beta=0.1), networks='random', solver=ss.solvers.abm(step='events'), **small), # The agents taken event by event (ss.solvers.numba.agent_events)
     ]
     if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
         sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.numba.passes.min_threaded, dur=ss.days(5), verbose=0))
@@ -410,12 +434,12 @@ def typical_sims():
 class Ticker:
     """
     While Numba compiles something that takes long (see `Compiling`), a bar of the time taken so far against the most it is
-    estimated to take, redrawn twice a second from a thread of its own, in a terminal or a notebook (see `ss.internals.display.Progress`);
+    estimated to take, redrawn twice a second from a thread of its own, in a terminal or a notebook (see `ss.progress.Progress`);
     to a file, nothing until it is done. Then a line saying how long it took.
     """
     def __init__(self, what, engine, low, high):
         self.what, self.engine, self.low, self.high = what, engine, low, high
-        self.progress = ss.internals.display.Progress()
+        self.progress = ss.progress.Progress()
         self.start = time.time()
         self.stop = threading.Event()
         self.thread = None
@@ -454,13 +478,13 @@ class Batch(Ticker):
     current = None # The batch being compiled, if any
 
     def __init__(self, what, keys):
-        self.fracs = {key:(slow[key][1] + slow[key][2])/2 for key in keys} # Each part's fraction of the bar
+        self.fracs = {key:(slow[key].low + slow[key].high)/2 for key in keys} # Each part's fraction of the bar
         self.finished = set() # The parts done
         self.key = None # The part being compiled, and when it started
         self.part_start = None
-        said.update(slow[key][0] for key in keys) # Not said again on its own, later in the session
+        said.update(slow[key].what for key in keys) # Not said again on its own, later in the session
         Batch.current = self
-        super().__init__(what, 'Numba', sum(slow[key][1] for key in keys), sum(slow[key][2] for key in keys))
+        super().__init__(what, 'Numba', sum(slow[key].low for key in keys), sum(slow[key].high for key in keys))
         return
 
     @contextlib.contextmanager
@@ -496,8 +520,8 @@ class Compiling(event.Listener):
         if not Compiling.depth:
             func = ev.data['dispatcher'].py_func
             info = getattr(ev.data['dispatcher'], 'ss_compiling', None) or slow.get(f'{func.__module__}.{func.__name__}') or slow.get(func.__module__)
-            if info and Batch.current is None and announce(info[0], 'Numba', *info[1:]): # Within a batch, its bar says it
-                Compiling.ticker = Ticker(info[0], 'Numba', *info[1:])
+            if info and Batch.current is None and announce(info.what, 'Numba', info.low, info.high): # Within a batch, its bar says it (info is from takes(), in slow or from ss.jit)
+                Compiling.ticker = Ticker(info.what, 'Numba', info.low, info.high)
         Compiling.depth += 1
         return
 

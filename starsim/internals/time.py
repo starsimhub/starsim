@@ -1,5 +1,5 @@
 """
-Durations and rates, each with its unit (`ss.days`, `ss.peryear`, `ss.probperyear`, ...), and plotting dates and durations with Matplotlib
+Durations and rates, each with its unit (`ss.days`, `ss.peryear`, `ss.probperyear`, ...); plotting them with Matplotlib is in `dates.py`
 
 Units are kept with the values so that a module, whatever its timestep, reads a parameter correctly, and mistakes such as adding a rate to a duration raise an error.
 
@@ -42,16 +42,11 @@ Used with: agents and compartments; declared and coded modules
 """
 import types
 import operator
-import warnings
-import collections
-import datetime as dt
 import functools as ft
-import matplotlib
 import sciris as sc
 import numpy as np
 import pandas as pd
 import starsim as ss
-ss_float = ss.dtypes.float
 
 
 #%% Define base time units and conversion factors
@@ -190,7 +185,7 @@ class TimePar:
                     return getattr(ss.expressions.as_expr(self), func.__name__)(other)
                 elif isinstance(other, ss.by):
                     return other.map(lambda v: func(self, v))
-                elif isinstance(other, (types.FunctionType, ft.partial)):
+                elif isinstance(other, (types.FunctionType, ft.partial, ss.parameters.by_func)): # A function of the sim, including ss.by(patch=fn)
                     return getattr(ss.expressions.as_expr(other), swap)(self)
                 return func(self, other)
             return ft.wraps(func)(wrapper)
@@ -205,7 +200,7 @@ class TimePar:
     @classmethod
     def _check_by_arg(cls, *args):
         """ e.g. ss.permonth(ss.by(age=[1, 2])) is ss.by(age=[ss.permonth(1), ss.permonth(2)]), and ss.peryear(ss.timeseries({2000: 0.1, 2020: 0.2})) is a time series of rates per year """
-        if len(args) and type(args[0]).__name__ in ['by', 'timeseries'] and hasattr(args[0], 'map'): # By name, since ss.by and ss.timeseries are made after this
+        if len(args) and type(args[0]).__name__ in ['by', 'timeseries'] and hasattr(args[0], 'map'): # By name, since this also runs on import (e.g. for ss.year below), before ss.by and ss.timeseries exist
             return args[0].map(cls)
         return None
 
@@ -445,9 +440,7 @@ class Duration(TimePar):
             else: # e.g. ss.Duration(3), which has no unit
                 errormsg = f'ss.Duration({value}) needs a unit, e.g. ss.Duration({value}, "day") or ss.days({value})'
                 raise ValueError(errormsg)
-            self = super().__new__(new_cls)
-            self.__init__(value=value)
-            return self
+            return super().__new__(new_cls) # Python then calls its __init__() with the same arguments
         else:
             return super().__new__(cls) # Otherwise, do default initialization
 
@@ -541,11 +534,8 @@ class Duration(TimePar):
             return self._new(self.value + self.to_base(other), other=other)
         elif isinstance(other, Rate):
             incompatible(self, '+', other)
-        elif isinstance(other, ss.date): # If adding to a date, convert to years (or, for days, add them; see ss.date.__add__())
-            if self.is_array and self.base not in ['days', 'weeks', 'months', 'years']: # Whole calendar units are added exactly by ss.date.__add__()
-                return ss.DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
-            else:
-                return other + self
+        elif isinstance(other, ss.date): # Added by the date (see ss.date.__add__()), which follows the calendar for whole months and years
+            return other + self
         elif isinstance(other, ss.DateArray):
             return ss.DateArray(np.vectorize(self.__add__)(other))
         elif is_number(other):
@@ -797,12 +787,9 @@ class Rate(TimePar):
         if unit is None:
             errormsg = f'Cannot convert {self!r} to unit None; specify the unit to convert to, e.g. rate.to(ss.permonth) or rate.to("month")'
             raise TypeError(errormsg)
-        try:
-            unit_cls = get_unit_class(self.timepar_type, unit)
-        except Exception:
-            unit_cls = None
-        if unit_cls is None or not issubclass(unit_cls, Rate): # Not a rate class, so see if it's a duration unit, e.g. 'month' or ss.months
-            dur_cls = get_dur_class(unit) # Will raise if it isn't a valid duration unit either
+        unit_cls = get_unit_class('full', unit) # A rate class (e.g. 'permonth' or ss.permonth), else a duration class; raises if it is neither
+        if not issubclass(unit_cls, Rate): # A duration unit, e.g. 'month' or ss.months
+            dur_cls = unit_cls
             if dur_cls.base is None: # e.g. ss.Duration itself, which has no unit of its own
                 errormsg = f'Cannot convert {self!r} to "{unit}", since it does not correspond to a time unit; use e.g. ss.months or "month"'
                 raise TypeError(errormsg)
@@ -883,11 +870,13 @@ class Rate(TimePar):
         """ Equal if the same once converted to this rate's unit, or to a bare 0 if zero (a bare number has no unit, so no other is equal); anything else, including an array, is not equal """
         if is_number(other):
             return bool(np.all(np.asarray(other) == 0) and np.all(self.value == 0))
+        elif not isinstance(other, Rate):
+            return False
         try:
             if self.unit is None:
                 return other.unit is None and bool(self.value == other.value)
             return bool(self.value == self._convert_rate(other))
-        except Exception:
+        except (TypeError, ValueError): # A unitless probability and one with a unit, or arrays (whose truth is ambiguous)
             return False
 
     def __truediv__(self, other):
@@ -940,7 +929,7 @@ class Rate(TimePar):
             else:
                 errormsg = f'Cannot convert to a probability with dur=None and non-unity {scale = }. Use simple multiplication instead, e.g. prob*2 rather than prob.to_prob(scale=2).'
                 raise ValueError(errormsg)
-        elif isinstance(dur, np.ndarray) and isinstance(self, ss.prob): # A probability is not scaled by an array of durations, unlike a rate
+        elif isinstance(dur, np.ndarray) and dur.dtype == object and isinstance(self, ss.prob): # A probability is not scaled by an array of durations, unlike a rate (an array of numbers scales its rate, as a number does)
             self.array_mul_error()
         elif isinstance(dur, ss.Duration): # Main use case # TODO: make array calculations robust to branches
             if sc.isnumber(self.rate) and self.rate == 0:
@@ -1008,7 +997,7 @@ class prob(Rate):
         if value is not None and rate is not None:
             errormsg = f'You can supply value or rate, but not both ({value = } and {rate = })'
             raise ValueError(errormsg)
-        Rate.__init__(self, value, unit) # Can't use super() since potentially mutating the class
+        super().__init__(value, unit)
         if rate is not None:
             self.rate = rate
         return
@@ -1050,7 +1039,10 @@ class prob(Rate):
         self._rate = rate
 
         # Set the value
-        self._value = -np.expm1(-self._rate) if np.isfinite(self._rate) else 1.0
+        if sc.isnumber(rate):
+            self._value = -np.expm1(-rate) if np.isfinite(rate) else 1.0
+        else: # An array, e.g. a probability times an array of numbers
+            self._value = -np.expm1(-np.asarray(rate, dtype=float)) # 1 where the rate is infinite
         return
 
     @property
@@ -1420,158 +1412,3 @@ def get_rate_class(unit):
         unit (str/type): the unit, e.g. 'peryear' or `ss.peryear`
     """
     return get_unit_class('rate', unit)
-
-
-#%% Dates, for the converter below; imported last, since dates.py imports the classes above
-
-from .dates import DateArray, date, datedur
-
-
-#%% Plotting dates and durations with Matplotlib: Starsim's dates (`ss.date`, `ss.DateArray`) and durations (`ss.Duration`) as axis values, with date ticks
-
-class MockAxis():
-    """
-    An axis (of float years) as Matplotlib's date locators see it: `get_view_interval()` gives its limits in Matplotlib
-    dates (days since 1970-01-01), which the locators expect, so they can be used unchanged
-    """
-    def __init__(self, axis):
-        self.axis = axis
-
-    def get_view_interval(self):
-        ymin, ymax = self.axis.get_view_interval()
-        vmin, vmax = matplotlib.dates.date2num(ss.date(ymin)), matplotlib.dates.date2num(ss.date(ymax))
-        return vmin, vmax
-
-
-class FloatYearLocator(matplotlib.ticker.Locator):
-    """
-    Tick positions at sensible dates (e.g. whole months) for an axis of float years: Matplotlib's AutoDateLocator, on
-    the years converted to Matplotlib dates, with its ticks converted back to years (for durations, its AutoLocator)
-    """
-
-    def __init__(self, unit):
-        super().__init__()
-        self._convert_dates = isinstance(unit, type) and issubclass(unit, ss.date)
-
-        if self._convert_dates:
-            self._date_locator = matplotlib.dates.AutoDateLocator(minticks=3) # Store an AutoDateLocator instance to calculate the tick locations
-            self._float_locator = None
-        else:
-            self._date_locator = None
-            self._float_locator = matplotlib.ticker.AutoLocator() # Store an AutoLocator to handle DateArrays that contain dur values rather than dates
-
-    def set_axis(self, axis):
-        # The date locator is bound to a MockAxis, which converts the years to Matplotlib dates; the float locator (for durations) to the axis itself
-        super().set_axis(axis)
-        if self._convert_dates:
-            self._date_locator.set_axis(MockAxis(axis))
-        else:
-            self._float_locator.set_axis(axis)
-
-    def __call__(self):
-
-        # If not converting dates, just directly call the underlying float locator
-        if not self._convert_dates:
-            return self.tick_values()
-
-        # Get the axis view limits in matplotlib date units
-        vmin, vmax = self._date_locator.axis.get_view_interval()
-
-        # Calculate approximate number of ticks that can fit
-        if self.axis is not None:
-            ax_width = self.axis.axes.bbox.width*72/self.axis.figure.dpi # In points, so the number of ticks doesn't grow with the dpi (e.g. in a notebook at high resolution)
-            fontsize = matplotlib.font_manager.FontProperties(size=matplotlib.rcParams['xtick.labelsize']).get_size_in_points()
-            label_width = 4.5*fontsize # A label such as "Jan-01", with space between labels
-            self._date_locator.maxticks = collections.defaultdict(lambda: max(self._date_locator.minticks, int(ax_width / label_width)))
-
-        return self.tick_values(vmin, vmax)
-
-
-    def nonsingular(self, vmin, vmax):
-        if self._convert_dates and vmin == vmax: # A single time point (e.g. one year of a resampled result): a year either side, not 5% of the year (two centuries)
-            return vmin - 1, vmax + 1
-        return super().nonsingular(vmin, vmax)
-
-    def tick_values(self, *args, **kwargs):
-        if self._convert_dates:
-            with warnings.catch_warnings(): # On a narrow axis (e.g. one of many in sim.plot()), no interval may give few enough ticks, and Matplotlib warns and takes its longest, which is what is wanted
-                warnings.filterwarnings('ignore', message='AutoDateLocator was unable to pick an appropriate interval')
-                vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
-            yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
-            return np.array(yticks)
-        else:
-            return self._float_locator()
-
-
-class FloatYearFormatter(sc.ScirisDateFormatter):
-    """ Labels for an axis of float years as calendar dates, as `sc.ScirisDateFormatter` gives them for Matplotlib dates """
-    def format_data_short(self, value):
-        return super().format_data_short(matplotlib.dates.date2num(ss.date(value)))
-
-    def format_ticks(self, values, *args, **kwargs):
-        values = np.asarray(values)
-        valid = values >= 1  # Year 0 doesn't exist in Python's datetime
-        safe_values = np.where(valid, values, 1)  # Replace invalid years to avoid crash
-        labels = super().format_ticks(matplotlib.dates.date2num([ss.date(v) for v in safe_values])) # Convert to matplotlib dates, as for format_data_short()
-        return ['' if not v else l for v, l in zip(valid, labels)]
-
-
-class DateConverter(matplotlib.units.ConversionInterface):
-    """
-    The converter Matplotlib uses for `ss.date`, `ss.DateArray`, and `ss.Duration`, so they can be plotted directly
-
-    Dates are plotted as float years (rather than Matplotlib's days since 1970), so they can share an axis with plain
-    years; and if dates are the first thing plotted on an axis, it gets date ticks and labels, even in custom plotting code.
-    """
-
-    @staticmethod
-    def axisinfo(unit, axis):
-        """ The locator and formatter for an axis whose first values are of a registered class: date ticks for dates, else Matplotlib's defaults """
-        if issubclass(unit, ss.date):
-            loc = FloatYearLocator(unit)
-            fmt = FloatYearFormatter(loc)
-        else:
-            loc = None
-            fmt = None
-
-        axis.set_converter(DateConverter()) # All future quantities plotted on this axis should use our converter
-        axis._set_converter = lambda converter: None
-        return matplotlib.units.AxisInfo(majloc=loc, majfmt=fmt, label=None)
-
-    @staticmethod
-    def default_units(x, axis):
-        if isinstance(x, ss.DateArray):
-            return ss.Duration if (len(x) and x.is_dur) else ss.date
-        elif sc.isiterable(x) and not isinstance(x, TimePar): # e.g. a list or pandas Series of durations, so check the first entry
-            x = next(iter(x), None)
-        if isinstance(x, ss.Duration):
-            return ss.Duration
-        else:
-            return ss.date
-
-    @staticmethod
-    def _convert_single(v):
-        """ Convert a single date-like or duration value to a number; pass through numeric values unchanged """
-        if isinstance(v, ss.date):
-            return v.years
-        elif isinstance(v, ss.Duration): # Use the magnitude in the duration's own units, e.g. days(100) -> 100
-            return v.value
-        elif isinstance(v, (pd.Timestamp, dt.date, dt.datetime)):
-            return ss.date(v).years
-        else:
-            return v
-
-    @staticmethod
-    def convert(value, unit, axis):
-        # Registered values as numbers on the axis (float years for dates), so they are compatible with plain years; not by float(), which timepars disallow
-        if isinstance(value, np.ndarray) and value.dtype != object: # Already numeric, e.g. float years
-            return value
-        elif sc.isiterable(value):
-            return [DateConverter._convert_single(v) for v in value]
-        else:
-            return DateConverter._convert_single(value)
-
-# Register the converter for the Starsim date classes
-matplotlib.units.registry[date] = DateConverter() # By the names imported above, since ss.date etc. are not set yet when this module is imported
-matplotlib.units.registry[DateArray] = DateConverter()
-matplotlib.units.registry[Duration] = DateConverter() # Durations are converted here rather than by float(), which is deliberately disallowed

@@ -8,6 +8,7 @@ import sciris as sc
 import starsim as ss
 from .engine import times
 from .agents import Agents
+from .agents_moving import add_events
 from .numba import agent_events as kernel
 
 __all__ = ['Events']
@@ -33,18 +34,22 @@ class Events(Agents):
         self.scheduled = [] # The pass draws every exit (see step()), so the agent engine schedules none: someone it moves (by an intervention, or a trigger) has their exit drawn by the next step's pass
         return
 
+    def refuse_because(self, what, why='which the events do not take yet', fix=''):
+        """ Refuse to run: a `CapabilityError` that says what the events do not take, and why (and `fix`, anything more to say of running it with solver="abm") """
+        errormsg = f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): {what}, {why}. Run it with solver="abm"{fix} (a module can have its own, e.g. ss.Disease(..., solver=ss.solvers.abm())).'
+        raise ss.CapabilityError(errormsg)
+
     def refuse(self):
         """ What the first version does not take: a `CapabilityError` that says what, and why """
         mod = self.mod
         graph = self.graph
         sim = self.sim
-        def no(what, why='which the events do not take yet'):
-            raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): {what}, {why}. Run it with solver="abm" (a module can have its own, e.g. ss.Disease(..., solver=ss.solvers.abm())).')
+        no = self.refuse_because
         if sim.pars.branching:
             no('the sim is a branching process (branching=True)')
         if self.strain is not None:
             no('it has strains')
-        groups, mixing = sim.groups, sim.mixing
+        groups, mixing = sim.groups, sim.contact_rates
         if mixing.frac is not None or mixing.migration is not None or mixing.register is not None:
             no('people move between places (by commuting, visiting, a force between places, migration, or a movement register)', 'which changes who meets whom, or the place people are in, in ways the events do not take yet: they take places whose people stay in them')
         if groups.group_fold is not None:
@@ -97,7 +102,6 @@ class Events(Agents):
         self.trs = list(graph.transitions.values())
         tid = {tr.name:i for i,tr in enumerate(self.trs)}
         self.tid = tid
-        ns = len(graph.people_states)
         ints = lambda x: np.array(x, dtype=np.int64)
         ptr = lambda lists: ints(np.cumsum([0] + [len(x) for x in lists]))
 
@@ -111,7 +115,7 @@ class Events(Agents):
             """ Fractions that are the same for everyone, as the events take them yet: the cumulative fractions (one row per branch, and its end) of the first agent """
             edges = np.asarray(edges, dtype=float).reshape(len(edges), -1)
             if edges.shape[1] > 1 and np.ptp(edges, axis=1).max() > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the fractions of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
+                self.refuse_because(f'the fractions of {what} differ between people')
             return edges[:, 0]
         brs, cums = [], []
         for state in graph.people_states:
@@ -142,7 +146,7 @@ class Events(Agents):
         # Each transition's destinations, with their fractions; -1 for a death
         dsts, cums = [], []
         for tr in self.trs:
-            dst = [index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.may_die)
+            dst = [index[d.name] for d in (tr.dest or [])] + ([-1] if tr._outflow or tr.may_die else [])
             if tr._split:
                 frm = np.full(len(auids), index[tr.source[0].name])
                 edges = same(self.dest_edges(tr, auids, frm), f'the destinations of "{tr.name}"')
@@ -163,11 +167,7 @@ class Events(Agents):
 
     def step_state(self):
         """ At the start of the step: the newborn, and the moves interventions made in the last step, which are news now; the declared transitions are all taken in step() """
-        self._moved = []
-        self.new_round()
-        self.start_phase(0)
-        self.place_newcomers()
-        self.renew_events()
+        self.begin_state_step()
         return
 
     def resize(self, n):
@@ -188,14 +188,14 @@ class Events(Agents):
         """
         hazards = {state: np.asarray(h, dtype=float) for state,h in hazards.items()} # By direction
         if any(h.ndim > 1 for h in hazards.values()):
-            raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+            self.refuse_because(f'its chance per act of "{tr.name}" on "{nkey}" differs between people')
         top = np.max(list(hazards.values()), axis=0)
         on = top > 0
         fracs = {}
         for state,h in hazards.items():
             ratio = h[on]/top[on]
             if len(ratio) and np.ptp(ratio) > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
+                self.refuse_because(f'the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction')
             fracs[state] = float(ratio[0]) if len(ratio) else 0.0
         edges = route.edges
         p1, p2 = np.asarray(edges.p1), np.asarray(edges.p2)
@@ -205,17 +205,17 @@ class Events(Agents):
         return fracs, w1, w2
 
     def is_matrix(self, route):
-        """ Whether a route mixes by a contact matrix between cells everyone in which has the same contacts: within each place or over the model's dimensions (`sim.mixing.pool_terms`), or by age bands of its own (`ss.contacts(ages=...)`) """
-        return route.name in self.sim.mixing.pool_terms or (isinstance(route, ss.networks.MixingPools) and not route.pools and route.edges is not None)
+        """ Whether a route mixes by a contact matrix between cells everyone in which has the same contacts: within each place or over the model's dimensions (`sim.contact_rates.pool_terms`), or by age bands of its own (`ss.contacts(ages=...)`) """
+        return route.name in self.sim.contact_rates.pool_terms or (isinstance(route, ss.networks.MixingPools) and not route.pools and route.edges is not None)
 
     def contact_cells(self, route, n):
         """
         A contact matrix as cells (see `is_matrix()`): the cell of each agent (a level of the matrix, in their place if there are places; -1 for
         none), the matrix between the levels (rows: the level reached), and the number of cells, as the agent engine's exposure has them
-        (see `ss.solvers.Mixing.term_exposure()` and `ss.networks.MixingPools.band_exposure()`)
+        (see `ss.solvers.ContactRates.term_exposure()` and `ss.networks.MixingPools.band_exposure()`)
         """
         sim = self.sim
-        mixing = sim.mixing
+        mixing = sim.contact_rates
         auids = sim.people.auids
         cell = np.full(n, -1, np.int64)
         term = mixing.pool_terms.get(route.name)
@@ -243,8 +243,7 @@ class Events(Agents):
         n_x = n_beta = n_mem = n_cell = n_row = n_ac = 0
         blks = {} # The number of cells a contact on each contact matrix can reach
         self.route_nets = [] # The index in sim.networks of each route of the pass, for who infected whom
-        self._route_memo = {}
-        try:
+        with self.evaluating(route_memo={}): # See route_beta()
             for i,(nkey,route) in enumerate(sim.networks.items() if tr is not None else []):
                 is_net = isinstance(route, ss.Network)
                 if not is_net and mod not in route.diseases:
@@ -255,12 +254,12 @@ class Events(Agents):
                 if acts:
                     coefs, w1, w2 = self.act_weights(tr, nkey, route, coefs)
                 if any(np.ndim(c) for c in coefs.values()):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+                    self.refuse_because(f'the coefficient of "{tr.name}" on "{nkey}" differs between people')
                 ref = max([float(c) for c in coefs.values()] + [0.0])
                 if ref <= 0:
                     continue
                 elif not np.isfinite(ref):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
+                    self.refuse_because(f'the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate', 'which has no time to the next event', fix=', where it is a certain transmission')
                 frac = np.zeros(ns)
                 for state,c in coefs.items():
                     frac[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)
@@ -312,8 +311,6 @@ class Events(Agents):
                 out.bound.append(bound)
                 out.frac.append(frac)
                 out.ctc.append(ctc)
-        finally:
-            self._route_memo = None
         cat = lambda arrs, dtype: np.concatenate(arrs).astype(dtype, copy=False) if len(arrs) > 1 else np.asarray(arrs[0], dtype=dtype) if arrs else np.zeros(1, dtype=dtype)
         nr = len(out.kind)
         index = [cat([ix[k] for ix in out.lists], np.int64) for k in range(6)] # s1, e1, o1, s2, e2, o2 of every network, end to end
@@ -331,17 +328,8 @@ class Events(Agents):
         mod = self.mod
         sim = self.sim
         people = sim.people
-        self._moved = []
-        self.new_round()
-        self.start_phase(2)
-        self.cache.clear() # The interventions have run since the step started
-        for tr in self.graph.transmissions:
-            self.events.pop(tr.name, None)
-            forced = self.forced.pop(tr.name, None) # Infected by code (disease.infect()) since the last step's: news now
-            if forced is not None:
-                self.events[tr.name] = forced
-                self._news = True
-        n = len(mod.rel_sus.raw)
+        self.begin_contact_step()
+        n = self.n_slots
         self.resize(n)
         alive = people.alive.raw[:n]
         names = [s.name for s in self.graph.people_states]
@@ -431,7 +419,7 @@ class Events(Agents):
                     self.add_flow_groups(tr.name, groups, uids)
                     if key in self.flowcounts:
                         self.add_flow_groups(key, groups, uids)
-                self.events[tr.name] = uids if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], uids])
+                add_events(self.events, tr.name, uids)
                 self.record(tr, uids, e_src[lo:hi], e_dst[lo])
                 if dst is not None:
                     self.stamp(dst.name, uids, mod.ti + 1) # Dated at the end of the step it happened in, as an infection is

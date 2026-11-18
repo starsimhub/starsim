@@ -161,8 +161,7 @@ def test_dwell_forms():
         dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(shape=c, scale=ss.years(1))), default_state='A', name='m')
         return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
     assert isinstance(wide(0.5).solver, ss.solvers.ode) and isinstance(wide(0.3).solver, ss.solvers.abm) # Coefficients of variation of 2.2 and 5.4
-    with pytest.warns(RuntimeWarning):
-        wide(0.3, 'ode')
+    assert any('coefficient of variation' in note for note in wide(0.3, 'ode').notes) # Its long tail is lost, which the run notes
     return
 
 

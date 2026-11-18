@@ -130,6 +130,13 @@ def test_edge_ops():
     assert len(net) == 1 and net.p1[0] == 1
     net.remove_edges([0]) # ...or by index
     assert len(net) == 0
+    net.from_df(df)
+    popped = net.pop_inds(slice(1, 3)) # Removed and returned, as append() takes them
+    assert list(popped['p1']) == [1, 2] and list(net.p1) == [0, 3]
+    net.append(popped)
+    assert len(net) == 4
+    net.shrink()
+    assert len(net) == 0 # Not an error once shrunk
     assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
     with pytest.raises(ValueError):
         ss.RandomNet(n_contact=5) # A typo is not an edge column
@@ -436,6 +443,12 @@ def test_matrix():
     assert np.allclose(run_strat(ss.contacts(C), age=[0, 15, 65], patch=['n', 's']), run_strat(ss.contacts(age=C), age=[0, 15, 65], patch=['n', 's']))
     with pytest.raises(ValueError, match='each have 2 levels'):
         run_strat(ss.contacts([[1, 2], [2, 1]]), sex=['f', 'm'], patch=['n', 's'])
+    def run_order(first): # A matrix with its own age groups gives a model with none its groups before any other matrix is used, so the order of the networks doesn't matter
+        risk, ages = ss.contacts(risk=[[4, 1], [1, 2]], name='risk'), ss.contacts([[5, 1, 0.5], [1, 3, 1], [0.5, 1, 2]], ages=[0, 15, 65], name='ages')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ ss.par(dict(risk=0.05, ages=0.05))*I, I >> R @ ss.days(10), init_prev=0.01, name='sir').stratify(risk=['low', 'high'])
+        return ss.Sim(sir, networks=[risk, ages] if first else [ages, risk], unit='day', stop=30, solver='ode', verbose=0).run().results.sir.I[:]
+    assert np.allclose(run_order(True), run_order(False))
 
     # A disease whose beta on a pool is 0 does not spread there
     S, I = ss.states('S I')

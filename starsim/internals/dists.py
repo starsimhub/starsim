@@ -111,7 +111,7 @@ def to_array(val):
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
 
 def same_objects(a, b):
-    """ Whether two lists hold the same objects, or plain values that are equal and of the same type """
+    """ Whether two lists hold the same objects, or plain values that are equal and of the same type: whether the parameters processed last can be reused (see `Dist.process_pars()`) """
     return b is not None and len(a) == len(b) and all(x is y or (type(x) is type(y) and isinstance(x, static_types) and x == y) for x,y in zip(a, b))
 
 
@@ -233,7 +233,7 @@ def seed_paths(sim, dists):
 
 def make_dist(pars=None, **kwargs):
     """
-    Make a distribution from a dictionary
+    Make a distribution from a dictionary, e.g. one that replaces a parameter's distribution (see `ss.Pars._update_dist()`)
 
     Args:
         pars (dict): the distribution, with its name under `type`, e.g. `dict(type='normal', mean=1, std=0.5)`
@@ -258,8 +258,7 @@ class Dists(sc.prettyobj):
 
     It exists so that the sim can seed, jump, and reset every distribution in one place.
     """
-    def __init__(self, obj=None, *args, base_seed=None, sim=None):
-        if len(args): obj = [obj] + list(args)
+    def __init__(self, obj=None, *, base_seed=None, sim=None):
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
@@ -469,7 +468,8 @@ class Dist:
     def __neg__(self):             return self._expr('*', -1, reverse=True)
     def __abs__(self):             return ss.expressions.Func('absolute', self) # E.g. abs(ss.normal(1, 0.2)) or np.abs() of it, in ss.attr()
 
-    valid_pars = None
+    valid_pars = None # Parameters a distribution takes beyond those of its signature (e.g. 'group' for ss.histogram.by_group()), for check_kwargs()
+    native = False # Whether it is drawn natively over all the agents at once, never one draw per slot through the inverse CDF (e.g. ss.choice(replace=False))
     scaling = None # See "scaling" above
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognormal(); None means no check
     unitless_pars = None # Parameters that cannot have time units, e.g. ('shape',) for ss.weibull(); None means no check
@@ -504,9 +504,10 @@ class Dist:
 
         # Auto-generated
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
-        self._use_ppf = None # If True, use the PPF to generate random values. Otherwise, use make_rvs()
+        self._use_ppf = None # In a draw: True if the parameters are arrays (e.g. from functions of the agents), so the values are drawn through the PPF; False for a distribution drawn natively (see `native`)
         self._pars = None # Validated and transformed (if necessary) parameters
-        self._n = None # Internal variable to keep track of "n" argument (usually size)
+        self._callable_keys = None # The arguments of each parameter that is a function: see convert_callable()
+        self._callable_args = None # The values those arguments can take
         self._size = None # Internal variable to keep track of actual number of random variates asked for
         self._uids = None # Internal variable to track currently-in-use UIDs
         self._slots = None # Internal variable to track currently-in-use slots
@@ -521,8 +522,6 @@ class Dist:
         self.initialized = False
         if type(self).__init__ is not Dist.__init__: # One of the distributions, which takes only its own parameters
             self.check_kwargs(kwargs)
-        if self.valid_pars is not None:
-            self.validate_pars()
 
         # Finalize
         if self.unit is not None:
@@ -583,10 +582,11 @@ class Dist:
             if kwargs:
                 errormsg = f'You can supply args or kwargs, but not both (args={len(args)}, kwargs={len(kwargs)})'
                 raise ValueError(errormsg)
-            else: # Convert from args to kwargs
-                parkeys = list(self.pars.keys())
-                for i,arg in enumerate(args):
-                    kwargs[parkeys[i]] = arg
+            parkeys = list(self.pars.keys())
+            if len(args) > len(parkeys):
+                errormsg = f'{self} takes {len(parkeys)} parameters ({sc.strjoin(parkeys)}), so cannot be set with {len(args)} values'
+                raise ValueError(errormsg)
+            kwargs = dict(zip(parkeys, args)) # Convert from args to kwargs
 
         if kwargs:
             if dist is None: # Only validate when not also changing the distribution type (which changes the valid parameters)
@@ -648,14 +648,15 @@ class Dist:
 
     @property
     def bitgen(self):
-        try:    return self.rng._bit_generator
-        except Exception: return None
+        """ The bit generator of the random number generator, or None before initialization """
+        rng = self.rng
+        return None if rng is None else rng._bit_generator
 
     @property
     def state(self):
-        """ Get the current state """
-        try:    return self.bitgen.state
-        except Exception: return None
+        """ Get the current state, or None before initialization """
+        bitgen = self.bitgen
+        return None if bitgen is None else bitgen.state
 
     def get_state(self):
         """ Return a copy of the state """
@@ -775,14 +776,14 @@ class Dist:
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot
-            except Exception as E:
+            except AttributeError as E:
                 warnmsg = f'Could not extract slots from sim object, is this an error?\n{E}'
                 ss.warn(warnmsg)
         if slots is not None:
             self.slots = slots
 
         # Initialize the distribution and finalize
-        if not any(type(v).__name__ == 'by' for v in self.pars.values()): # A value for each group (ss.by) is resolved by the engine that uses the distribution: see ss.transitions.numeric_dist()
+        if not any(isinstance(v, ss.by) for v in self.pars.values()): # A value for each group (ss.by) is resolved by the engine that uses the distribution: see ss.transitions.numeric_dist()
             self.process_dist()
             self.process_pars(call=False)
         none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
@@ -830,7 +831,7 @@ class Dist:
     def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; not for the user """
         unique_name = trace or self.trace or self.name
-        user_offset = getattr(self, 'user_offset', None)
+        user_offset = self.user_offset
         if user_offset is not None: # Given by the user, in place of its path
             self.trace = unique_name
             self.name = self.name or unique_name
@@ -852,13 +853,13 @@ class Dist:
         if self.dist is not None:
 
             # Pull out parameters of an already-frozen distribution
-            named = isinstance(self.dist, scipy_dist) # Only a distribution that was given is SciPy's, which is then imported already
+            named = isinstance(self.dist, scipy_dist) # Only a distribution that was given is SciPy's, which is then imported already; one by name gets its parameters (kwds) when they are processed
             if not named and isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
                 if not self.initialized: # Don't do this more than once
                     self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
 
-            # Convert to a frozen distribution
-            if named or isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+            # Convert a SciPy distribution that was given to a frozen one
+            if not named and isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 spars = self.process_pars(call=False)
                 spars.pop('dtype', None) # Not a valid arg for SciPy distributions
                 self.dist = self.dist(**spars)
@@ -888,7 +889,10 @@ class Dist:
                     size = len(uids)
                 else:
                     if self.slots is None:
-                        errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
+                        if self.initialized == 'partial': # Made with strict=False, outside a sim
+                            errormsg = f'Distribution {self} is only partially initialized (it has no sim), so it cannot draw for UIDs; draw a number of values instead, e.g. dist.rvs(10)'
+                        else:
+                            errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
                         raise ValueError(errormsg)
                     if isinstance(self.slots, ss.arrays.IndexArr) and isinstance(self.slots.shared, ss.arrays.UIDArr): # The usual case: the slots are still the UIDs (see ss.People.make_uids())
                         slots = uids.view(np.ndarray)
@@ -899,7 +903,6 @@ class Dist:
                 slots = np.array([])
                 size = 0
 
-        self._n = n
         self._size = size
         self._uids = uids
         self._slots = slots
@@ -928,16 +931,6 @@ class Dist:
             raise TypeError(errormsg)
         return
 
-    def validate_pars(self):
-        """ Check if parameters are valid; only used for non-SciPy distributions """
-        valid = set(self.valid_pars)
-        user = set(self.pars.keys())
-        unmatched = user - valid
-        if unmatched:
-            errormsg = f'Mismatch for {type(self)} between valid parameters {valid} and user-provided parameters {user}'
-            raise ValueError(errormsg)
-        return
-
     _static = None # The last parameters that were all plain values, and what they were processed into: see process_pars()
 
     def process_pars(self, call=True):
@@ -947,8 +940,7 @@ class Dist:
         static = self._static
         if call and static is not None and same_objects(static[0], self.signature()):
             self._pars = static[1]
-            if self._use_ppf != False:
-                self._use_ppf = None
+            self._use_ppf = False if self.native else None # Plain values
             return static[2]
 
         self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
@@ -966,7 +958,7 @@ class Dist:
         one is replaced; see `process_pars()`), and the draw has no unit or rounding to apply after it; not for the user. For a caller that
         makes the uniforms itself (e.g. the agent engine, keyed by its rounds of moves: see `ss.solvers.Agents.draw()`)
         """
-        if self._use_ppf is False or self.unit is not None or self.round:
+        if self.native or self.unit is not None or self.round:
             return False
         signature = self.signature()
         if signature is None:
@@ -1026,20 +1018,6 @@ class Dist:
             errormsg = f'You have provided timepars both for the distribution itself ({self.unit}) and one or more parameters:\n{timepar_dict}.\nPlease use one or the other, not both!'
             raise ValueError(errormsg)
 
-        # Check for e.g. ss.poisson(3, unit=ss.years) (valid, warning) or ss.gamma(0.5, 1, unit=ss.years) (invalid, error)
-        if self.unit is not None and 'postdraw' not in self.scaling:
-            msg = f'You have supplied a distribution-level timepar {self.unit}, but {self} can only be scaled pre-draw. '
-            if len(self._pars) == 1:
-                self.pars[0] = self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions); store in pars so it persists
-                self.unit = None
-                msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
-                msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)).'
-                ss.warn(msg)
-            else:
-                msg += f'Since ss.{self.__class__.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
-                msg += 'Use e.g. ss.weibull(3, ss.years(5), loc=ss.years(2)) instead of ss.weibull(3, 5, loc=2, unit=ss.years).'
-                raise ValueError(msg)
-
         # Ensure that unitless parameters really are unitless, and that parameters that share dimensions also share time units
         self.check_unitless_pars()
         self.harmonize_par_units()
@@ -1066,10 +1044,8 @@ class Dist:
                     errormsg = f'Unknown timepar type {v}'
                     raise NotImplementedError(errormsg)
 
-                try:
+                if isinstance(self._pars[key], (np.ndarray, np.generic)):
                     self._pars[key] = self._pars[key].astype(float)
-                except Exception:
-                    pass
 
     def check_unitless_pars(self):
         """ Raise if a parameter that has no unit (`unitless_pars`, e.g. the shape of `ss.weibull()`) is given one, since scaling it by `dt` would change the shape """
@@ -1126,7 +1102,7 @@ class Dist:
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
         size_par = uids if uids is not None else size if size is not None else ss.uids() # Allow none size
-        if not getattr(self, '_callable_keys', None):
+        if not self._callable_keys:
             module = self.module
             mapping = {
                 'sim': self.sim,
@@ -1165,23 +1141,17 @@ class Dist:
         self._pars[parkey] = val
         return val
 
-    def call_par(self, key, val, size, uids):
-        """ Check if this parameter needs to be called to be turned into an array; not for the user """
-        if callable(val) and not isinstance(val, type): # If the parameter is callable, then call it (types can appear as callable)
-            val = self.convert_callable(key, val, size, uids)
-        return val
-
     def call_pars(self):
         """ Check if any parameters need to be called to be turned into arrays; not for the user """
 
         # Initialize
         size, uids = self._size, self._uids
-        if self._use_ppf != False: # Allow "False" to prevent ever using dynamic pars (used in ss.choice())
-            self._use_ppf = None
+        self._use_ppf = False if self.native else None # A distribution drawn natively never uses array parameters
 
         # Check each parameter
         for key,val in self._pars.items():
-            val = self.call_par(key, val, size, uids)
+            if callable(val) and not isinstance(val, type): # A function of the agents, called to be turned into an array (types can appear as callable)
+                val = self.convert_callable(key, val, size, uids)
 
             # If it's iterable and UIDs are provided, then we need to use array-parameter logic
             if self._use_ppf is None and np.iterable(val) and uids is not None:
@@ -1194,10 +1164,9 @@ class Dist:
         self.update_dist_pars(spars)
         return spars
 
-    def update_dist_pars(self, pars=None):
+    def update_dist_pars(self, pars):
         """ Update SciPy distribution parameters; not for the user """
         if self.dist is not None:
-            pars = pars if pars is not None else self._pars
             self.dist.kwds = pars
         return
 
@@ -1333,7 +1302,7 @@ class Dist:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
             round (bool/str): if 'random', round up or down at random based on how close the value is; if True or 'nearest', round to the nearest integer; if False, don't round; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
-            repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers, except for `ss.choice` and `ss.histogram`, whose repeats are drawn after every slot)
+            repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers)
         """
         self._check_init()
 
@@ -1343,15 +1312,8 @@ class Dist:
         # Check if size is 0, then we can return -- but still count the call and jump/reset
         # so that CRN behavior does not depend on whether any random numbers were drawn
         if size == 0:
-            self.called += 1
-            if reset:
-                self.reset(-1)
-            else:
-                self.jump()
+            self._end_call(reset)
             return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
-        elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
-            errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
-            raise ValueError(errormsg)
 
         # Store the pre-call state, for reset(): not needed under crn=False with no reset
         if reset or ss.options.crn:
@@ -1362,8 +1324,8 @@ class Dist:
 
         # Actually get the random numbers
         occ = occurrences(np.asarray(slots)) if repeats and slots is not None else None # Each slot's occurrence in the call, if any repeats
-        if slots is not None and self._use_ppf is not False:
-            # Common random numbers: one hashed uniform per slot, keyed by (seed, ind); ss.choice(replace=False) sets _use_ppf=False for the native path below
+        if slots is not None:
+            # Common random numbers: one hashed uniform per slot, keyed by (seed, ind); a distribution drawn natively (e.g. ss.choice(replace=False)) has no slots (see choice.process_size())
             rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
             if occ is not None: # Each repeat from a stream of its own, as each call is
                 for k in range(1, occ.max() + 1):
@@ -1374,35 +1336,12 @@ class Dist:
             rands = self.rand(size)
             rvs = self._ppf(rands) # Convert to actual values via the PPF
         else:
-            if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's
-                self._size = slots.max() + 1 if len(slots) else 0
-                if occ is not None: # And then one for each repeat
-                    rep = occ > 0
-                    self._slots = np.array(self._slots, dtype=np.int64)
-                    self._slots[rep] = self._size + np.arange(rep.sum())
-                    self._size += int(rep.sum())
             rvs = self.make_rvs() # Or, just get regular values
-            if self._slots is not None:
-                rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers
 
-        # Handle unit if provided
+        # Handle unit if provided: only for a distribution that can be scaled after the draw (checked in __init__())
         if self.unit is not None:
-            if 'postdraw' in self.scaling: # It can be scaled post-draw, proceed
-                rvs = self.unit(rvs)
-                if isinstance(rvs, ss.Duration):
-                    rvs = rvs/self.step_dt()
-                elif isinstance(rvs, ss.Rate):
-                    rvs = rvs*self.step_dt()
-                else:
-                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Duration or ss.Rate'
-                    raise NotImplementedError(errormsg)
-            else:  # It can't, raise an error
-                errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
-                if 'predraw' in self.scaling:
-                    errormsg += 'Since this distribution supports pre-draw scaling, please scale the individual input parameters instead. '
-                else:
-                    errormsg += 'Not all distributions can be scaled; see the ss.Dist docstring for how different distributions scale. '
-                raise ValueError(errormsg)
+            rvs = self.unit(rvs)
+            rvs = rvs/self.step_dt() if isinstance(rvs, ss.Duration) else rvs*self.step_dt()
 
         # Round if needed
         if round is None:
@@ -1413,14 +1352,21 @@ class Dist:
         # Tidy up
         if self.sim and self.sim.diagnostics and self.sim.diagnostics.rvs is not None: # Need not None since dict is empty at first
             self.sim.diagnostics.store_rvs(self, rvs)
+        self._end_call(reset)
+        return rvs
+
+    def _end_call(self, reset=False):
+        """
+        End a call (a draw, or a key or streams for compiled code): every call counts, even one that draws nothing, so the random
+        numbers of later calls don't depend on it; then move on to the next random numbers (or back, with reset); not for the user
+        """
         self.called += 1
         if reset:
             self.reset(-1)
         else:
             self.jump()
-        self._n = self._uids = self._slots = None # So a draw for every agent does not keep their UIDs or slots after it
-
-        return rvs
+        self._uids = self._slots = None # So a draw for every agent does not keep their UIDs or slots after it
+        return
 
     def crn_key(self):
         """
@@ -1434,8 +1380,7 @@ class Dist:
             return None
         self.make_history()
         key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
-        self.called += 1
-        self.jump()
+        self._end_call()
         return key
 
     def streams(self, uids):
@@ -1470,9 +1415,7 @@ class Dist:
             u = hash_uniforms(self.seed, self.ind, slots, dtype=np.float64)
         else:
             u = self.rng.random(size)
-        self.called += 1
-        self.jump()
-        self._n = self._uids = self._slots = None
+        self._end_call()
         return draws.streams(u)
 
     def key(self):
@@ -1499,8 +1442,7 @@ class Dist:
         seed = self.seed if ss.options.crn else int(self.rng.integers(2**62)) # Without common random numbers, seeded by the sim but not paired between scenarios
         self.make_history()
         out = draws.key(seed, self.ind if ss.options.crn else 0)
-        self.called += 1
-        self.jump()
+        self._end_call()
         return out
 
     @staticmethod
@@ -1559,12 +1501,12 @@ class Dist:
 
     def clear_run_cache(self):
         """ Clear transient callable/draw caches without unlinking the distribution """
-        self._callable_args = self._callable_keys = self._uids = self._slots = self._n = self._size = None
+        self._callable_args = self._callable_keys = self._uids = self._slots = self._size = None
         return
 
     def shrink(self, max_arr_size=100):
         """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
-        to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
+        to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_uids', '_callable_args', '_callable_keys']
         ss.utils.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
         self._static = None # The cache of processed parameters, which can refer to per-agent arrays

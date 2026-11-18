@@ -34,6 +34,11 @@ def did_you_mean(name, options):
     return f'; did you mean {sc.strjoin(matches)}?' if matches else '.'
 
 
+def total(items):
+    """ The sum of some items (states, flows, or expressions), which need not be numbers, e.g. `total([S, I, R])` is `S + I + R` """
+    return sum(items[1:], items[0])
+
+
 #%% Expressions
 
 class Shared:
@@ -57,7 +62,7 @@ def as_expr(obj):
     elif isinstance(obj, ss.conditions.Cond): # A property of people (ss.person.age), or a condition, which is 1 or 0 for each person
         states = states_of(obj)
         if states is not None: # A set of states, Ia | Is, in a rate is the same as Ia + Is: exposure to the people in either
-            return sum(states[1:], states[0])
+            return total(states)
         return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.source is None: # e.g. S >> I + R @ 0.1, where @ binds before +
         errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a dict of each and its fraction, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
@@ -205,12 +210,12 @@ class Expr:
     @property
     def n(self):
         """ The number in these states, e.g. (S + I + R).n; or a weighted count, each person counted by a value of theirs, e.g. (ss.by(biting=w)*I).n """
-        return Count(*self._sum_states(weights=True), kind='n')
+        return Count(*self._weighted_states(), kind='n')
 
     @property
     def n_infectious(self):
         """ The number in these states, each counted by their infectiousness (`rel_trans`, with the products and modifiers on it, times the state's), e.g. what people shed into an environment: shedding*A.n_infectious """
-        return Count(*self._sum_states(weights=True), kind='n', trans=True)
+        return Count(*self._weighted_states(), kind='n', trans=True)
 
     @property
     def frac(self):
@@ -222,8 +227,12 @@ class Expr:
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count(self._sum_states(), kind='total')
 
-    def _sum_states(self, weights=False):
-        """ The states in a plain sum of states, e.g. S + I + R; with `weights=True`, also a weight for each that is not 1, which may be a value per person (e.g. `ss.by(biting=w)*I + 0.5*E`): (states, weights) """
+    def _sum_states(self):
+        """ The states in a plain sum of states, e.g. S + I + R """
+        return self._weighted_states(weights=False)[0]
+
+    def _weighted_states(self, weights=True):
+        """ The states in a sum of states, and a weight for each that is not 1 (or None if none), which may be a value per person (e.g. `ss.by(biting=w)*I + 0.5*E`): (states, weights); without `weights`, a plain sum """
         const, terms = linear(self)
         weighted = {state:coef for state,coef in terms.items() if not is_one(coef)}
         if const is not None or (weighted and not weights):
@@ -233,7 +242,7 @@ class Expr:
             if not state.people or any(isinstance(leaf, (ss.transitions.State, Count, Clock, Flow, Stock)) for leaf in coef.leaves):
                 errormsg = f'the weight of {state.name} in "{self}.n" is {coef}; a weighted count is of people, each counted by a value of theirs (a number, an ss.by, or a property of people), not by states or counts'
                 raise TypeError(errormsg)
-        return (list(terms.keys()), weighted or None) if weights else list(terms.keys())
+        return list(terms.keys()), weighted or None
 
     @property
     def leaves(self):
@@ -371,7 +380,7 @@ def value_str(val):
 
 
 def rounded(v):
-    """ Numbers to six significant figures, in a list or a dict as given """
+    """ Numbers to six significant figures, in a list or a dict as given, as `value_str()` shows the values of an `ss.by` """
     if isinstance(v, dict):
         return {k:rounded(x) for k,x in v.items()}
     elif isinstance(v, (list, tuple, np.ndarray)):
@@ -761,18 +770,17 @@ class attr(Nameable, Expr):
                 errormsg = f'when= of an attribute is the event(s) that set it, at once; it takes no delay ({when})'
                 raise ValueError(errormsg)
             when = when.x
-        on = when
         if not (callable(combine) or combine in combines):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
         self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs()
         if isinstance(value, dict) and value and all(is_event(key) for key in value):
-            if on is not None:
+            if when is not None:
                 errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no when='
                 raise ValueError(errormsg)
-            on = list(value.keys())
-        self.when = on # The event(s) that set it
+            when = list(value.keys())
+        self.when = when # The event(s) that set it
         self.combine = combine
         self.init = init
         self.name = name
@@ -841,16 +849,16 @@ def dists_in(expr):
     return [leaf for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, ss.Dist)]
 
 
-def events_in(on, graph=None):
+def events_in(on):
     """ The events of an attribute's when=: a transition, a branch (`tr.to(B)`), `X.enter` or `X.exit`, or several joined with `|` """
     if isinstance(on, ss.transitions.Transition):
         return [ss.conditions.Event('tr', on)]
     elif isinstance(on, ss.conditions.Event):
         return [on]
     elif isinstance(on, ss.conditions.Cond) and on.op == '|':
-        return [e for arg in on.args for e in events_in(arg, graph)]
+        return [e for arg in on.args for e in events_in(arg)]
     elif isinstance(on, (list, tuple)):
-        return [e for item in on for e in events_in(item, graph)]
+        return [e for item in on for e in events_in(item)]
     errormsg = f'when= of an attribute takes an event: a transition, a branch of one (tr.to(B)), X.enter, or X.exit, or several joined with |; not {on!r}'
     raise TypeError(errormsg)
 
@@ -1074,8 +1082,9 @@ def per_person(rate, src, people):
 
 def divide(a, b, xp=np):
     """ Division in an expression: nothing divided by anything is nothing, e.g. the infectious fraction of an empty group; the inner where keeps a gradient finite """
-    if type(a) is float and type(b) is float or (np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape')):
-        return 0.0 if a == 0 else a / b
+    if np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape'): # Plain numbers: by zero, infinite, as for an array
+        with np.errstate(divide='ignore'):
+            return 0.0 if a == 0 else np.float64(a) / b
     return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
 
 

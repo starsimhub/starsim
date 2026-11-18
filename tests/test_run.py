@@ -62,6 +62,14 @@ def test_restarted():
     assert all(np.array_equal(fast.results.alive.values[i], slow.sims[i].results.alive.values) for i in range(3))
     sweep = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), pars=dict(beta=[0.3, 0.3, 0.4, 0.4], rand_seed=[1, 2, 1, 2]))
     assert list(sweep.runs.scenario) == ['beta=0.3']*2 + ['beta=0.4']*2 and list(sweep.runs.rand_seed) == [1, 2, 1, 2] # Each seed was a scenario of its own
+
+    a, b = fast.split(chunks=[1, 2]) # Splitting and merging restarted runs keeps them unmade, rather than running them again
+    merged = ss.MultiSim.merge(a, b)
+    assert not fast.sims.made and not a.sims.made and not merged.sims.made and len(merged) == 3
+    assert np.array_equal(b.sims[1].results.sir.I.values, fast.results.sir.I.values[2])
+    dur = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.par(ss.days(10), name='dur'), init_prev=0.01, name='sir')
+    built = ss.parallel(ss.Sim(dur, unit='day', stop=20, solver='binomial', verbose=0), pars=dict(dur=[ss.days(5), ss.lognormal(mean=ss.days(10), std=ss.days(2))]), workers=1) # A distribution needs a sim built for its runs
+    assert len(built) == 2 and not isinstance(built.sims, ss.run.RestartedSims)
     return
 
 

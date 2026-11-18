@@ -8,7 +8,7 @@ import starsim as ss
 __all__ = ['COVID']
 
 
-ages = [0, 5, 15, 35, 60, 80] # MEmilio's age groups: 0-4, 5-14, 15-34, 35-59, 60-79, and 80+
+age_groups = [0, 5, 15, 35, 60, 80] # MEmilio's age groups: 0-4, 5-14, 15-34, 35-59, 60-79, and 80+
 by_age = lambda *values: ss.by(age=list(values))
 days = lambda *values: by_age(*[ss.days(v) for v in values])
 source = 'MEmilio ode_secir_parameter_study_graph (midpoint of its range)'
@@ -104,5 +104,5 @@ class COVID(ss.Disease):
             kwargs = defaults | kwargs
         super().__init__(**kwargs)
         if ages:
-            self.stratify(age=globals()['ages'])
+            self.stratify(age=age_groups)
         return

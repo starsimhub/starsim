@@ -93,6 +93,7 @@ class Loop:
         self.entry = None # The entry of the plan running now, if any
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
         self.cpu_time = [] # Store the CPU time of execution of each function (only if profiling)
+        self.stopped = None # The step at which a run until a condition stopped, if it did: see run()
         self.df = None # User-friendly version of the plan
         self.cpu_df = None # User-friendly time analysis
         self.initialized = False
@@ -121,8 +122,10 @@ class Loop:
     def __len__(self):
         return len(self.plan) if self.initialized else 0
 
-    def __iadd__(self, func):
-        """ Allow functions to be added to the function list """
+    def add(self, func):
+        """ Add a function (a method of the sim, the people, or a module) to the end of the list of functions of a step, unless it would do nothing (see `_keep()`) """
+        if not self._keep(func):
+            return self
         parent = func.__self__
         func_name = func.__name__
 
@@ -135,12 +138,10 @@ class Loop:
             module = parent.__class__.__name__.lower()
 
         # Create the row and append it to the function list
-        func_path = f'{parent.__class__.__module__}.{func_name}'
         row = dict(
             func_order = len(self.funcs),
             module = module,
             func_name = func_name,
-            func_path = func_path,
             func = func,
         )
         self.funcs.append(row)
@@ -168,28 +169,26 @@ class Loop:
         # with that of the modules on its timeline; a module with a timeline of its own moves its own. The first step is at the
         # time the sim starts at, so these are not called then (see make_plan())
         self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
-        self += sim.advance # Note special __iadd__() method above, which appends these to the funcs list
+        self.add(sim.advance)
         for mod in sim.modules:
             if not self._on_sim_time(mod):
-                self += mod.advance
+                self.add(mod.advance)
 
         # Collect the start_steps
-        self += sim.start_step
+        self.add(sim.start_step)
         for mod in sim.modules:
-            if self._keep(mod.start_step):
-                self += mod.start_step
+            self.add(mod.start_step)
 
         # Record the state at the start of the step. A module's record_states() is skipped only when it is the inherited
-        # base method and the module has no auto-generated boolean-state results to count (see _null_record())
+        # base method and the module has no auto-generated boolean-state results to count (see _noop())
         if sim.solver.record_people: # People results can be opted out for lightweight sims
-            self += sim.people.record_states
+            self.add(sim.people.record_states)
         for mod in sim.modules:
-            if self._keep(mod.record_states):
-                self += mod.record_states
+            self.add(mod.record_states)
 
         # Rescale the population if needed
         if sim.solver.rescale:
-            self += sim.rescale
+            self.add(sim.rescale)
 
         if sim.pars.step_order == 'given': # Each module steps in the order it was given in (analyzers still last, after the results)
             self.collect_given(sim)
@@ -197,26 +196,22 @@ class Loop:
             self.collect_by_type(sim)
 
         # Update people who died -- calls each module's on_death() internally
-        if self._keep(sim.people.step_die):
-            self += sim.people.step_die
+        self.add(sim.people.step_die)
 
         # Record what happened in the step
         if sim.solver.record_people:
-            self += sim.people.record_events
+            self.add(sim.people.record_events)
         for mod in sim.modules:
-            if self._keep(mod.record_events):
-                self += mod.record_events
+            self.add(mod.record_events)
 
         # Apply analyzers
         for ana in sim.analyzers():
-            if self._keep(ana.step):
-                self += ana.step
+            self.add(ana.step)
 
         # Clean up dead agents, and perform other housekeeping tasks
         for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
-            if self._keep(func):
-                self += func
-        self += sim.finish_step
+            self.add(func)
+        self.add(sim.finish_step)
 
         return self.funcs
 
@@ -230,37 +225,35 @@ class Loop:
 
         # Update any nonspecific modules
         for mod in sim.custom():
-            self += mod.step
+            self.add(mod.step)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem in sim.demographics():
-            self += dem.step
+            self.add(dem.step)
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in sim.diseases():
             if isinstance(disease, ss.Disease):
-                self += disease.step_state
+                self.add(disease.step_state)
 
         # Update connectors
         for connector in sim.connectors():
-            if self._keep(connector.step):
-                self += connector.step
+            self.add(connector.step)
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
         for network in sim.networks():
-            self += network.step
+            self.add(network.step)
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
         for intv in sim.interventions():
-            if self._keep(intv.step):
-                self += intv.step
+            self.add(intv.step)
 
         # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in sim.diseases():
-            self += disease.step
+            self.add(disease.step)
         return
 
     def collect_given(self, sim):
@@ -269,10 +262,8 @@ class Loop:
         mods.sort(key=lambda mod: getattr(mod, '_given_index', np.inf)) # Modules added later (e.g. by sim.add_module()) after those given, by kind
         for mod in mods:
             if isinstance(mod, ss.Disease):
-                self += mod.step_state
-                self += mod.step
-            elif not isinstance(mod, (ss.Connector, ss.Intervention)) or self._keep(mod.step):
-                self += mod.step
+                self.add(mod.step_state)
+            self.add(mod.step)
         return
 
     def _keep(self, func):
@@ -291,7 +282,7 @@ class Loop:
 
         This is so only for Starsim's own methods, when nothing has been changed that they
         would act on, and for a `step()` with nothing in it: a module's `start_step()` with no random numbers to move on, its
-        `finish_step()`, `record_states()` and `record_events()` (see `_null_record()`) when inherited
+        `finish_step()`, `record_states()` and `record_events()` when inherited
         unchanged, and the people's deaths and removals in a run without agents (in which nobody
         dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
         module overrides is always kept, so a module written as code costs the loop only the
@@ -307,22 +298,14 @@ class Loop:
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
             if name == 'start_step':
                 return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
-            elif name == 'record_states':
-                return self._null_record(obj)
+            elif name == 'record_states': # Counting its states is all it does
+                return inherited and not obj.auto_state_list and not obj.derived_state_names
             return inherited # finish_step() and record_events()
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
-            same = people.step_die is ss.People.step_die and people.finish_step is ss.People.finish_step and people.update_post is ss.People.update_post and people.remove_dead is ss.People.remove_dead
-            return same and not isinstance(sim.solver, ss.solvers.abm) # One row per group, which never die or leave
+            same = all(getattr(people, m) is getattr(ss.People, m) for m in ['step_die', 'finish_step', 'update_post', 'remove_dead'])
+            return same and not sim.solver.agents # One row per group, which never die or leave
         return False
-
-    @staticmethod
-    def _null_record(mod):
-        """
-        Whether a module's `record_states()` is sure to do nothing: it is `ss.Module`'s, not overridden, and the module has no states to count
-        """
-        not_overridden = type(mod).record_states is ss.Module.record_states
-        return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
 
     def collect_abs_tvecs(self):
         """
@@ -334,7 +317,7 @@ class Loop:
 
         # Handle the sim and people first
         sim = self.sim
-        for key in ['sim', sim.people.__class__.__name__.lower()]: # The people by the name of its class, which may be a subclass (see __iadd__())
+        for key in ['sim', sim.people.__class__.__name__.lower()]: # The people by the name of its class, which may be a subclass (see add())
             self.abs_tvecs[key] = sim.t.tvec
             self.abs_numvecs[key] = sim.t.yearvec
 

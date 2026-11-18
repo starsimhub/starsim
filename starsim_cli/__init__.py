@@ -31,7 +31,7 @@ otherwise its Numba kernels, which are compiled on first use (a few minutes, onc
 Compiling them ahead of time is optional: it saves that wait in the first runs, e.g. in a Docker
 image or in CI. "starsim init" skips it when the Rust kernels are in use, and "starsim init
 compile" compiles Numba's anyway. In a clone of Starsim whose Rust kernels are not built, both
-offer to build them instead, saying what that takes (--numba skips asking).
+offer to build them instead, saying what that takes (--numba skips asking, and --rust builds them).
 
 `python -m starsim` does the same, e.g. where the command is not on the path.
 """
@@ -60,10 +60,10 @@ class LazyVersion(argparse.Action):
 
 def run(module, func):
     """ A command, whose module is only imported when it runs """
-    def command(args, extra=()):
+    def command(args):
         import importlib
         mod = importlib.import_module(f'.{module}', __name__)
-        return getattr(mod, func)(args, extra) if func == 'convert' else getattr(mod, func)(args)
+        return getattr(mod, func)(args)
     return command
 
 
@@ -94,16 +94,21 @@ def main(argv=None):
             p.add_argument('-y', '--yes', action='store_true', help='Install without asking "Proceed?"')
         return
 
-    def add_compile_args(p):
-        p.add_argument('--check', action='store_true', help='Say whether the kernels are compiled, rather than compiling them, and exit with 1 if not')
+    def add_compile_args(p, check=True):
         which = p.add_mutually_exclusive_group()
         which.add_argument('--rust', action='store_true', help='In a clone of Starsim, build the Rust kernels rather than compile the Numba ones, installing Rust if it is missing')
         which.add_argument('--numba', action='store_true', help='Compile the Numba kernels without offering to build the Rust ones')
+        if check:
+            p.add_argument('--check', action='store_true', help='Say whether the kernels are compiled, rather than compiling them, and exit with 1 if not')
+            p.add_argument('-y', '--yes', action='store_true', help='Don\'t ask whether to build the Rust kernels: compile the Numba ones')
+        else:
+            p.set_defaults(check=False)
         return
 
     # starsim init
     p = commands.add_parser('init', help='Set Starsim up, once after installing it: "init ai" if an AI coding agent is installed, then "init compile"')
     add_target_args(p)
+    add_compile_args(p, check=False)
     p.set_defaults(func=init)
     sub = p.add_subparsers(dest='what', metavar='<what>')
     a = sub.add_parser('compile', help='Compile the Numba kernels ahead of time (optional: they are otherwise compiled on first use), or in a clone without the Rust kernels, offer to build those instead')
@@ -150,7 +155,7 @@ def main(argv=None):
         p.add_argument('--force', action='store_true', help='Replace the output file if it exists')
         p.add_argument('--ai', nargs='?', const=True, default=False, metavar='AGENT', help='Have an AI coding agent do the conversion, with Starsim\'s skills (optionally naming the agent, e.g. --ai=claude; default: STARSIM_AGENT, or else the first installed of: claude, codex)')
         p.add_argument('--headless', action='store_true', help='With --ai, run the agent on its own, rather than in an interactive session')
-        p.set_defaults(func=run('convert', 'convert'), parser=p)
+        p.set_defaults(func=run('convert', 'convert'), parser=p, takes_extra=True) # The options of a format, e.g. --start=2020
         return
 
     p = commands.add_parser('convert', help='Convert a model between Starsim and another framework, or between two others ("starsim convert" lists the formats)')
@@ -175,7 +180,7 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv[:1] == ['ai'] and argv[1:] and argv[1] not in ai_actions: # A question, e.g. starsim ai "how ...?" or starsim ai -i "how ...?"
         argv.insert(1, 'ask')
-    args, extra = parser.parse_known_args(argv)
+    args, args.extra = parser.parse_known_args(argv)
     if args.command is None or (args.command == 'help' and not args.term): # Bare "starsim" or "starsim help": show the help rather than an error
         parser.print_help()
         if args.command == 'help':
@@ -185,12 +190,11 @@ def main(argv=None):
                     'names and pages of the docs that mention it.')
             print('\n' + textwrap.fill(note, width=min(shutil.get_terminal_size().columns, 100)))
         out = None
-    elif args.command in ['convert', 'import', 'export']:
-        args.input = getattr(args, 'input_opt', None) or args.input
-        out = args.func(args, extra)
-    elif extra:
-        parser.error(f'unrecognized arguments: {" ".join(extra)}')
+    elif args.extra and not getattr(args, 'takes_extra', False): # Only convert, import, and export take options of their own (those of a format)
+        parser.error(f'unrecognized arguments: {" ".join(args.extra)}')
     else:
+        if args.command in ['convert', 'import', 'export']:
+            args.input = getattr(args, 'input_opt', None) or args.input
         out = args.func(args)
     if args.command not in ['init', 'ai']: # Those deal with the skills themselves
         from . import ai

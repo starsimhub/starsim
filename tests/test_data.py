@@ -60,6 +60,8 @@ def test_geo():
     df = sc.dataframe(name=['a', 'b'], population=[100, 200], x=[0, 3], y=[0, 4])
     assert ss.geo.geography(df).populations.tolist() == [100, 200] and ss.geo.geography(df, populations=[5, 6]).populations.tolist() == [5, 6]
     assert ss.geo.geography(df, x=[0, 6], y=[0, 8]).distances[0, 1] == 10
+    g = ss.geo.geography(sc.dataframe(name=['a', 'b'], lat=[0, 0], lon=[0, 1]), x=[0, 5], y=[0, 0]) # Positions of one kind, so the map and the distances agree
+    assert g.lat is None and g.positions()[0] is g.x and g.distances[0, 1] == 5
 
     # As the places of a model, with travel between them
     sir = make_sir()
@@ -69,7 +71,7 @@ def test_geo():
     assert np.allclose(fracs, kenya.populations/kenya.populations.sum()) # People start in each county in proportion to its population
 
     # Gravity gives the shape of the movement and away= its amount (10% if not given); a k that sends people away more than all their time warns
-    home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().mixing.time_frac.diagonal()
+    home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().contact_rates.time_frac.diagonal()
     assert np.allclose(home(ss.geo.gravity()), 0.9) and np.allclose(home(ss.geo.gravity(away=0.2)), 0.8)
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.populations.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
@@ -180,8 +182,24 @@ def test_fertility():
     return sim
 
 
+@sc.timer()
+def test_geo_shapes():
+    sc.heading('Testing geographies of shapes in metres, or with no coordinate reference system: drawn in the same units as their positions')
+    gpd = pytest.importorskip('geopandas')
+    from shapely.geometry import box
+    import matplotlib.pyplot as plt
+    for crs in ['EPSG:32637', None]: # UTM, in metres; and none at all
+        shapes = gpd.GeoDataFrame(dict(name=['a', 'b'], population=[100, 200]), geometry=[box(500e3, 100e3, 510e3, 110e3), box(510e3, 100e3, 520e3, 110e3)], crs=crs)
+        geo = ss.geo.geography(shapes)
+        assert (geo.lon is not None) == (crs is not None) and (crs is None or geo.shapes.crs.to_epsg() == 4326)
+        fig = geo.plot(do_show=False)
+        plt.close(fig)
+    return
+
+
 if __name__ == '__main__':
     test_contacts()
     test_geo()
+    test_geo_shapes()
     test_people()
     test_fertility()

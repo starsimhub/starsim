@@ -115,7 +115,7 @@ def to_ti(sim, val, name='time', after=False):
 
 
 def to_steps(sim, dur):
-    """ The number of steps in a duration (a bare number is in the sim's unit), at least one """
+    """ The number of steps in a duration (a bare number is in the sim's unit), at least one: for `hold=` of a modifier, and `over=` of a condition """
     val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.TimePar) else dur
     dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.TimePar) else sim.t.dt
     return max(int(round(val/dt)), 1)
@@ -141,7 +141,7 @@ def combine(mods, value, engine):
 def contact_mult(engine, name, mods):
     """ The multiplier on the contacts of a network from the modifiers of its `n_contacts`, for an engine (see `Engine.contact_mult()`) """
     val = engine.sim.all_networks()[name].pars.n_contacts
-    base = ss.solvers.Mixing.mean(val, engine.sim.unit_base) if np.ndim(val) == 0 else 1.0 # A matrix of contacts can only be scaled
+    base = ss.solvers.ContactRates.mean(val, engine.sim.unit_base) if np.ndim(val) == 0 else 1.0 # A matrix of contacts can only be scaled
     base = base if base > 0 else 1.0
     value = engine.reduce(combine(mods, base, engine), what=f'{name}.pars.n_contacts')
     return engine.clip(value, f'{name}.pars.n_contacts')/base
@@ -271,9 +271,10 @@ def unapplied(graph, modname, kind, name, mods):
 
 def parse_when(when, start=None, stop=None):
     """
-    The `when=` of a modifier, as (start, stop, schedule, cond): a window, an `ss.schedule()` of the steps within it it applies on, if not all
-    (a function of the date is the schedule of the steps it is true on), and a condition on the population while which it applies (e.g.
-    `sir.I.n >= 1000`). `start=` and `stop=` of `ss.modify()` are the window, as in `ss.schedule()`
+    The `when=` of a modifier, as (start, stop, schedule, cond, either): a window, an `ss.schedule()` of the steps within it it applies on, if not all
+    (a function of the date is the schedule of the steps it is true on), a condition on the population while which it applies (e.g.
+    `sir.I.n >= 1000`), and one joined to the schedule with `|`, while which it also applies. `start=` and `stop=` of `ss.modify()` are the window,
+    as in `ss.schedule()`
     """
     if start is not None or stop is not None:
         if isinstance(when, ss.schedule) and (when.start is not None or when.stop is not None):
@@ -291,16 +292,41 @@ def parse_when(when, start=None, stop=None):
         if steps is not None:
             steps.cond = steps.either = None # Kept apart, as the conditions
         return when.start, when.stop, steps, when.cond, either
-    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when): # While a condition on the population holds, e.g. sir.I.n >= 1000
-        return None, None, None, when, None
-    if callable(when) and not isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition, ss.on, ss.TimePar)):
-        return None, None, ss.schedule(when), None, None
     if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.on)):
+        if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr)) and ss.conditions.on_population(when): # While a condition on the population holds, e.g. sir.I.n >= 1000
+            return None, None, None, when, None
         errormsg = f'when= of ss.modify() is when it applies: a window (ss.schedule(start=..., stop=...)), a function of the date, or a condition on the population (e.g. when=sir.I.n >= 1000), or a schedule joined to one with & (when=ss.schedule(start=2025) & (sir.I.n >= 1000)); {when!r} is a condition on people or an event, which goes in who='
         raise TypeError(errormsg)
+    if callable(when) and not isinstance(when, (ss.Module, ss.TimePar)): # A function of the date
+        return None, None, ss.schedule(when), None, None
     first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
     errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use start={first!r} to start then, or when=ss.schedule(at={when!r}) for those steps only'
     raise TypeError(errormsg)
+
+
+def contact_networks(sim):
+    """ The names of the sim's networks and mixing pools that have a number of contacts (`n_contacts`), which a modifier can scale """
+    return [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
+
+
+def coded_modules(sim):
+    """ The sim's modules written as code (not declared, nor a modifier or a network), by name, whose parameters a modifier can change """
+    nets = contact_networks(sim)
+    return {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
+
+
+def coded_people(sim, modname):
+    """ What a module written as code has for each person that a modifier can scale: for a disease, its `rel_sus` and `rel_trans` (as agents) """
+    return ['rel_sus', 'rel_trans'] if modname in sim.diseases else []
+
+
+def modifiable(sim):
+    """ The paths of every quantity in the sim that a modifier can change, for the error when its target is not found """
+    out = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
+    out += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
+    out += [f'{net}.pars.n_contacts' for net in contact_networks(sim)]
+    out += [f'{key}.{path}' for key,mod in coded_modules(sim).items() for path in [*[f'pars.{k}' for k in mod.pars], *coded_people(sim, key)]]
+    return out
 
 
 class Due:
@@ -441,7 +467,10 @@ class modify(Connector):
             errormsg = f'until= of ss.modify() as a condition keeps the modifier on after who= or when= selects someone, until the condition holds, so it needs who= or when= (e.g. when=sir.I.n >= 2000, until=sir.I.n <= 1000)'
             raise ValueError(errormsg)
         self.hold = hold
+        self.hold_steps = None # hold as a number of steps (see init_pre())
         self.until = None if until is None else ss.conditions.as_cond(ss.ref(until) if isinstance(until, str) else until)
+        self.start_ti = self.stop_ti = None # The steps of start= and stop=, once the sim is initialized (see init_pre()); stop_ti is None for no stop
+        self.on_rate = False # Whether it scales the rate of a transition even for a branch with p= (whose probability a modifier otherwise scales): set by ss.solvers.build
         self.held = {} # With until=: for each engine, the step until which each agent or group is held, and the value it was held at
         self.when_until = -1 # With until=<a duration> and when=: the step until which it is held
         self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
@@ -478,37 +507,15 @@ class modify(Connector):
         super().init_pre(sim)
         if self.target_module is None:
             raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}" does not belong to a module yet. A modifier of a module\'s own quantities is a member of it; otherwise build the module first, then use e.g. sir.pars.beta.')
-        modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
-        if isinstance(self.target_module, str): # A module by its default name, e.g. 'randomnet.pars.n_contacts' for the only ss.RandomNet (see ss.utils.find_module())
-            modname = self.target_module = ss.utils.own_name(sim.modules, modname)
+        modname, kind, name = self.resolve_target(sim)
         mods = {mod.name:mod for mod in sim.declared}
-        nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
-        kind, name = self.target_kind, self.target_name
-        options = [f'{mod.name}.pars.{key}' for mod in sim.declared for key in mod.graph.pars]
-        options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
-        options += [f'{net}.pars.n_contacts' for net in nets]
-        found = False
-        coded = {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
-        people = {key:[] if key not in sim.diseases else ['rel_sus', 'rel_trans'] for key in coded} # What a disease written as code has for each person, as well as its parameters
-        options += [f'{key}.{path}' for key,mod in coded.items() for path in [*[f'pars.{k}' for k in mod.pars], *people[key]]]
-        if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
-            found = kind in [None, 'par'] and name == 'n_contacts'
-            kind = 'par'
-        elif modname in coded: # A module written as code: its parameters, and for a disease its rel_sus and rel_trans, as agents
-            kind = kind or 'par'
-            found = kind in people[modname] or (kind == 'par' and name in coded[modname].pars)
-        elif modname in mods:
-            graph = mods[modname].graph
-            if kind is None:
-                kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
-        if not found:
-            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
+        coded = coded_modules(sim)
+        graph = mods[modname].graph if modname in mods else None
         if kind == 'transition' and getattr(graph.transitions.get(name), '_trigger', None) is not None:
             raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name]._trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
         if kind == 'transition' and name in graph.transitions:
             ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
-        if kind == 'transition' and not getattr(self, 'on_rate', False):
+        if kind == 'transition' and not self.on_rate:
             kind = graph.modifier_kind(name)
             msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
             if msg:
@@ -537,15 +544,49 @@ class modify(Connector):
         for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
         ss.conditions.check_clocks(self.amount, self._who_now, f'the modifier "{self.name}"')
-        if self.start is not None and to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True) >= sim.t.npts: # A start after the end never starts it, e.g. in a sim run to an earlier stop
+        self.start_ti = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True)
+        if self.start_ti >= sim.t.npts: # A start after the end never starts it, e.g. in a sim run to an earlier stop
             ss.note(f'the modifier "{self.name}" starts after the end of the sim, so it never applies', sim=sim)
-        if self.stop is not None:
-            to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
+        self.stop_ti = None if self.stop is None else to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
         self._when_date = None if self._schedule is None else Due(self._schedule, sim) # The steps it applies on
         self.held = {}
         self.when_until = -1
         return
+
+    def resolve_target(self, sim):
+        """ The module, kind, and name of the quantity this modifies, found in the sim (see `parse_target()`); raises, listing what can be modified, if it is not there
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
+        modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
+        if isinstance(self.target_module, str): # A module by its default name, e.g. 'randomnet.pars.n_contacts' for the only ss.RandomNet (see ss.utils.find_module())
+            modname = self.target_module = ss.utils.own_name(sim.modules, modname)
+        mods = {mod.name:mod for mod in sim.declared}
+        nets = contact_networks(sim)
+        coded = coded_modules(sim)
+        kind, name = self.target_kind, self.target_name
+        found = False
+        if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
+            found = kind in [None, 'par'] and name == 'n_contacts'
+            kind = 'par'
+        elif modname in coded: # A module written as code: its parameters, and for a disease its rel_sus and rel_trans, as agents
+            kind = kind or 'par'
+            found = kind in coded_people(sim, modname) or (kind == 'par' and name in coded[modname].pars)
+        elif modname in mods:
+            graph = mods[modname].graph
+            moved = name in graph.transitions or name in graph.transfers # A transition, or a transfer, whose rate is modified as a transition's is
+            if kind is None:
+                kind = 'transition' if moved else 'attr' if name in graph.attrs else 'par'
+            if kind == 'transition':
+                found = moved or graph.destination(name) is not None # Or one destination of a transition with several
+            else:
+                found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'attr' and name in graph.attrs)
+        if not found:
+            options = modifiable(sim)
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
+        return modname, kind, name
 
     def init_post(self):
         """ A parameter of a module written as code with no engine of its own (an `ss.Module` or `ss.Connector`), whose code reads it from `self.pars`: written there at the start of each step, as the engine of a disease written as code does """
@@ -571,11 +612,6 @@ class modify(Connector):
         return
 
     @property
-    def timed(self):
-        """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
-        return self._who_now is None and self._schedule is None and self._either is None and self.fixed_amount
-
-    @property
     def holding(self):
         """ Whether it stays on for people after `who=` selects them: for a while, or until a condition holds (`until=`) """
         return self.hold is not None or self.until is not None
@@ -588,10 +624,10 @@ class modify(Connector):
     @property
     def fixed_amount(self):
         """ Whether the amount depends at most on time: not a function of the sim, nor an expression that reads states (e.g. `1 - 0.7*b.R.frac`), which is worked out at each step """
-        timed = lambda val: not callable(val) or isinstance(val, ss.parameters.TimeValue)
+        of_time = lambda val: not callable(val) or isinstance(val, ss.parameters.TimeValue)
         if isinstance(self.amount, ss.expressions.Expr):
-            return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
-        return timed(self.amount)
+            return all(isinstance(leaf, ss.par) and of_time(leaf.raw) for leaf in self.amount.leaves)
+        return of_time(self.amount)
 
     @property
     def constant_amount(self):
@@ -604,22 +640,17 @@ class modify(Connector):
         """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no steps within them (`when=`); else none """
         if self._schedule is not None or (self.start is None and self.stop is None):
             return []
-        sim = self.sim
-        timevec = sim.results.timevec
-        start = 0 if self.start is None else to_ti(sim, self.start, after=True)
-        if start >= len(timevec): # It never starts
+        timevec = self.sim.results.timevec
+        if self.start_ti >= len(timevec): # It never starts
             return []
-        stop = len(timevec) - 1 if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec) - 1)
-        return [(timevec[start], timevec[stop])]
+        stop = len(timevec) - 1 if self.stop_ti is None else min(self.stop_ti, len(timevec) - 1)
+        return [(timevec[self.start_ti], timevec[stop])]
 
     @property
     def active(self):
         """ Whether the modifier applies on the current step """
         sim = self.sim
-        now = sim.t.now()
-        start = to_time(sim, self.start)
-        stop = to_time(sim, self.stop)
-        if (start is not None and not reached(now, start)) or (stop is not None and reached(now, stop)):
+        if sim.ti < self.start_ti or (self.stop_ti is not None and sim.ti >= self.stop_ti): # Outside its window (see to_ti())
             return False
         if self._when_date is None:
             return True

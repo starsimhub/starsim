@@ -112,7 +112,7 @@ class Function:
         self.py_func = func
         self.nopython = nopython # Whether Numba not compiling it is an error, rather than running it as Python
         self.parallel = parallel # Whether its nb.prange loops are shared by threads
-        self.numba = None # The Numba dispatcher, once made
+        self.numba = {} # The Numba dispatchers, once made: by the names of the arguments that are NumPy Generators (whose draws are rewritten)
         self.jax_func = None # The function traced by JAX, once made
         self.failed = False # Whether Numba can't compile it
         self.said = False # Whether it has said that it runs as Python
@@ -134,16 +134,19 @@ class Function:
             return self.call_jax(args, kwargs)
         return self.call_numba(args, kwargs)
 
-    def dispatcher(self, args=()):
-        """ The Numba dispatcher, made on first use (rewriting draws from a Generator if any argument is one) """
-        if self.numba is None:
-            func = self.py_func
-            gens = [name for name,a in zip(inspect.signature(func).parameters, args) if isinstance(a, np.random.Generator)]
-            if gens:
-                func = rewrite_gens(func, gens)
-            self.numba = make_dispatcher(func, parallel=self.parallel)
-            self.numba.ss_compiling = (f'{self.py_func.__qualname__}()', 1, 10) # Said by compiling.Compiling
-        return self.numba
+    def dispatcher(self, args=(), kwargs=None):
+        """ The Numba dispatcher, made on first use (rewriting draws from a Generator if any argument is one, by position or by name) """
+        kwargs = kwargs or {}
+        gens = ()
+        if any(isinstance(a, np.random.Generator) for a in [*args, *kwargs.values()]): # Checked first, as binding the arguments is slower
+            bound = inspect.signature(self.py_func).bind_partial(*args, **kwargs).arguments
+            gens = tuple(name for name,a in bound.items() if isinstance(a, np.random.Generator))
+        if gens not in self.numba:
+            func = rewrite_gens(self.py_func, gens) if gens else self.py_func
+            dispatcher = make_dispatcher(func, parallel=self.parallel)
+            dispatcher.ss_compiling = ss.solvers.backends.compiling.takes(f'{self.py_func.__qualname__}()', 1, 10) # Said by compiling.Compiling
+            self.numba[gens] = dispatcher
+        return self.numba[gens]
 
     def call_numba(self, args, kwargs):
         if not self.failed:
@@ -152,7 +155,7 @@ class Function:
                 if threads and threads != nb.get_num_threads():
                     nb.set_num_threads(min(threads, nb.config.NUMBA_NUM_THREADS))
             try:
-                return self.dispatcher(args)(*[plain(a) for a in args], **{k:plain(v) for k,v in kwargs.items()})
+                return self.dispatcher(args, kwargs)(*[plain(a) for a in args], **{k:plain(v) for k,v in kwargs.items()})
             except (NumbaError, Unsupported) as e:
                 if self.nopython:
                     errormsg = f'ss.jit: Numba can\'t compile {self.py_func.__qualname__}(): {reason(e)}. Write it with what Numba supports, or use @ss.jit(nopython=False) to run it as Python when it can\'t be compiled'
@@ -184,11 +187,12 @@ class Function:
 
 @typeof_impl.register(Function)
 def typeof_function(val, c):
+    """ Numba's type of a `Function`, so that a compiled function can call one given as an argument """
     return val.numba_type()
 
 
 def with_jnp(func):
-    """ A copy of the function in which the NumPy module it uses is jax.numpy """
+    """ A copy of the function in which the NumPy module it uses is jax.numpy, for JAX to trace (see `Function.call_jax()`) """
     jnp = ss.gradients.jax().numpy
     g = {k:(jnp if v is np else v) for k,v in func.__globals__.items()}
     new = type(func)(func.__code__, g, func.__name__, func.__defaults__, func.__closure__)
@@ -257,15 +261,17 @@ def rng_poisson(rng, lam):
 
 @overload(rng_binomial)
 def ov_rng_binomial(rng, n, p):
+    """ Numba's `rng_binomial()`, which `rewrite_gens()` puts in place of rng.binomial() """
     n_arr, p_arr = isinstance(n, types.Array), isinstance(p, types.Array)
     if not n_arr and not p_arr:
         return lambda rng, n, p: rng.binomial(n, p)
-    def impl(rng, n, p): # In C order, as NumPy draws them, so the numbers are NumPy's
-        shape = n.shape if n_arr else p.shape
-        nf, pf = np.asarray(n).ravel(), np.asarray(p).ravel()
-        out = np.empty(max(nf.size, pf.size), dtype=np.int64)
+    def impl(rng, n, p): # Broadcast, and in C order, as NumPy draws them, so the numbers are NumPy's
+        na, pa = np.asarray(n), np.asarray(p)
+        shape = np.broadcast_shapes(na.shape, pa.shape) # Raises, as NumPy does, if they don't broadcast
+        nf, pf = np.broadcast_to(na, shape).ravel(), np.broadcast_to(pa, shape).ravel()
+        out = np.empty(nf.size, dtype=np.int64)
         for i in range(out.size):
-            out[i] = rng.binomial(nf[i % nf.size], pf[i % pf.size])
+            out[i] = rng.binomial(nf[i], pf[i])
         return out.reshape(shape)
     return impl
 
@@ -299,6 +305,7 @@ def numpy_poisson(rng, lam):
 
 @overload(rng_poisson)
 def ov_rng_poisson(rng, lam):
+    """ Numba's `rng_poisson()`, which `rewrite_gens()` puts in place of rng.poisson() """
     if not isinstance(lam, types.Array):
         return lambda rng, lam: numpy_poisson(rng, lam)
     def impl(rng, lam):

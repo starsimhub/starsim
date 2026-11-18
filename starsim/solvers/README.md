@@ -9,7 +9,7 @@ How a module's declared states and transitions are run. The same declared model 
 - `agents.py`: the agent engine, `Agents`, which runs a model as individual people; its parts are `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, and `agents_branching.py`
 - `agents_compiled.py`: `Compiled`, the default engine of `solver='abm'`: the agent engine with the moves of each step taken in one compiled call
 - `agents_events.py`: `Events`, the agent engine taken event by event within each step (`solver=ss.solvers.abm(step='events')`), for a module or for the whole sim
-- `mixing.py`: who meets whom in a compartmental run (the contact rates between groups that the networks become)
+- `contact_rates.py`: the contact rates between groups that the networks become (who meets whom in a compartmental run; also the places and mixing pools of an agent run)
 - `joint_states.py`: diseases whose states are tracked jointly in a compartmental run
 - `deliveries.py`: what an intervention's delivery does differently in a compartmental run
 - `particles.py`: many runs stepped forward together, for a particle filter

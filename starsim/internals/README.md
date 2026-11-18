@@ -4,6 +4,7 @@ How Starsim works under the hood, for developers rather than modelers. Each modu
 
 - `graph.py`: the graph of a declared module (its states, transitions, and parameters), completed with defaults and checked (`ss.graph.Graph`)
 - `display.py`: how a model is shown: `describe()`, `diagram()`, and `equations()`
+- `progress.py`: what a run prints as it goes (`ss.progress`): its first lines, its progress, and its last line, for one sim or many
 - `expressions.py`: the expressions that rates, results, and conditions are made of (`ss.par`, counts, arithmetic), and how they are evaluated and printed
 - `fitting.py`: fitting to data (`ss.fitting`, and what `sim.fit()` runs): likelihoods, particle filters, and samplers; imported when first used
 - `gradients.py`: the ODE run in JAX, for gradients (`sim.gradient()`), log-densities (`sim.log_density()`), and many runs at once

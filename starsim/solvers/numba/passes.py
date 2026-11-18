@@ -58,6 +58,13 @@ def compile_drivers(make):
     return out
 
 
+no_slots = np.empty(0, dtype=np.int32) # "The slots are the UIDs", for a pass that takes the slots of agents: of the dtype of real slots (ss.IndexArr), so a pass is compiled for one signature
+
+def slots_or_none(slots):
+    """ The slots of the agents (see `ss.People.slot_raw()`), or `no_slots` if they are the UIDs (None) """
+    return no_slots if slots is None else slots
+
+
 def threads(drivers, n, width=1):
     """ The serial or threaded driver of a pass over n agents or edges (see `n_chunks()`), and the number of chunks to take it in """
     nchunks = n_chunks(n, width)
@@ -173,6 +180,12 @@ def crossed(raw, level, lo, hi):
     return out[:m]
 
 
+@nb.jit(nopython=True, cache=True, error_model='numpy', inline='always')
+def chance(rate, rel, state_sus, adjust, mult, dt):
+    """ The chance of infection in a step (as Rust's `chance()`): one place for its arithmetic, whose order the agents' chances must all share to give the same numbers """
+    return -np.expm1(-max(rate*rel*state_sus*adjust*mult, 0.0)*dt)
+
+
 @jit
 def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust, mult, dt):
     """
@@ -195,14 +208,14 @@ def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust
     probs = np.empty(len(auids))
     usual = np.empty(len(rate)) # The probability for someone of average susceptibility, which is most people
     for g in range(len(rate)):
-        usual[g] = -np.expm1(-max(rate[g]*1.0*state_sus*adjust[g]*mult, 0.0)*dt)
+        usual[g] = chance(rate[g], 1.0, state_sus, adjust[g], mult, dt)
     n = 0
     for uid in auids: # Written every time and kept only if n advances, since a branch on who is susceptible cannot be predicted
         g = groups[uid]
         if rel_sus[uid] == 1:
             prob = usual[g]
         else:
-            prob = -np.expm1(-max(rate[g]*rel_sus[uid]*state_sus*adjust[g]*mult, 0.0)*dt) # In this order, to match the arithmetic of the general case
+            prob = chance(rate[g], rel_sus[uid], state_sus, adjust[g], mult, dt)
         uids[n] = uid
         probs[n] = prob
         n += susceptible[uid] & (prob > 0)
@@ -519,7 +532,7 @@ def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, m
             if rs[i] == 1:
                 prob = usual[g]
             else:
-                prob = -np.expm1(-max(rate[g]*rs[i]*state_sus*adjust[g]*mult, 0.0)*dt) # As in infection_probs()
+                prob = chance(rate[g], rs[i], state_sus, adjust[g], mult, dt)
             if prob > 0:
                 got = draws.crn_uniform(key, a + i if by_uid else sl[i], shift, scale) < prob
         hs[i] = got
@@ -533,7 +546,7 @@ def infect_driver(threaded):
         n = len(susceptible)
         usual = np.empty(len(rate)) # The probability for someone of average susceptibility, which is most people
         for g in range(len(rate)):
-            usual[g] = -np.expm1(-max(rate[g]*1.0*state_sus*adjust[g]*mult, 0.0)*dt)
+            usual[g] = chance(rate[g], 1.0, state_sus, adjust[g], mult, dt)
         key = draws.key(seed, ind)
         hit = np.empty(n, dtype=np.bool_)
         found = np.zeros(nchunks + 1, dtype=np.int64)
@@ -568,8 +581,7 @@ def infect(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slot
     Returns the UIDs of the agents infected, in order.
     """
     shift, scale = draws.crn_bits(dtype)
-    if slots is None:
-        slots = np.empty(0, dtype=np.int32)
+    slots = slots_or_none(slots)
     func, nchunks = threads(infect_drivers, len(susceptible))
     return func(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slots, seed, ind, shift, scale, nchunks)
 
@@ -1285,7 +1297,7 @@ def competing_exits(uids, slots, seed, ind, dtype, p_exit, edges):
     pos = np.empty(len(uids), dtype=np.int64) # Only those who leave are written
     which = np.empty(len(uids), dtype=np.int64)
     func, nchunks = threads(competing_exits_drivers, len(uids))
-    m = func(uids, np.empty(0, dtype=np.int64) if slots is None else slots, seed, ind, *draws.crn_bits(dtype), float(p_exit), np.asarray(edges, dtype=float), pos, which, nchunks)
+    m = func(uids, slots_or_none(slots), seed, ind, *draws.crn_bits(dtype), float(p_exit), np.asarray(edges, dtype=float), pos, which, nchunks)
     return pos[:m], which[:m]
 
 
@@ -1330,5 +1342,5 @@ def competing_agent_exits(uids, slots, seed, ind, dtype, p_exit, frac, hazards):
     pos = np.empty(len(uids), dtype=np.int64)
     which = np.empty(len(uids), dtype=np.int64)
     func, nchunks = threads(competing_agent_exits_drivers, len(uids))
-    m = func(uids, np.empty(0, dtype=np.int64) if slots is None else slots, seed, ind, *draws.crn_bits(dtype), np.ascontiguousarray(p_exit, dtype=float), np.ascontiguousarray(frac, dtype=float), np.ascontiguousarray(hazards, dtype=float), pos, which, nchunks)
+    m = func(uids, slots_or_none(slots), seed, ind, *draws.crn_bits(dtype), np.ascontiguousarray(p_exit, dtype=float), np.ascontiguousarray(frac, dtype=float), np.ascontiguousarray(hazards, dtype=float), pos, which, nchunks)
     return pos[:m], which[:m]

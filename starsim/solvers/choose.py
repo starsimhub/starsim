@@ -41,9 +41,15 @@ class Solver:
     name = None # e.g. 'ode'
     options = {} # Each option's default, and the values it can take (None for any)
     example = None # e.g. "ss.solvers.ode(integrator='euler')"
+    agents = False # Whether it runs agents (only abm); test this rather than the class, e.g. `sim.solver.agents`
+    integer = False # Whether it moves whole people (binomial, gillespie, tau, and abm), not fractions of them (ode)
     rescale = even_draws = keep_times = record_people = False # The options of agents (see abm), which a compartmental run doesn't have (it records the results about people in its own way)
 
     def __init__(self, **kwargs):
+        unknown = [key for key in kwargs if key not in self.options]
+        if unknown:
+            errormsg = f'ss.solvers.{self.name}() has no option {sc.strjoin(unknown)}; ' + (f'its options are {sc.strjoin(self.options)}' if self.options else 'it has none')
+            raise TypeError(errormsg)
         for key,(default, choices) in self.options.items():
             val = kwargs.get(key, default)
             if choices is not None and val not in choices:
@@ -99,6 +105,7 @@ class binomial(Solver):
         substeps (int): the number of substeps per timestep (default: enough that no more than about a tenth of the people in a compartment leave it in one). More is more accurate and slower; 1 takes each step whole, as discrete-time chain-binomial models (and most other frameworks') do, e.g. to reproduce their numbers
     """
     name = 'binomial'
+    integer = True
     options = dict(substeps=(None, None))
     example = 'ss.solvers.binomial(substeps=1)'
 
@@ -109,11 +116,13 @@ class binomial(Solver):
 class gillespie(Solver):
     """ The exact stochastic solver for compartments (Gillespie's algorithm: one event at a time, with no error from the timestep, but slow for a large population), which has no options: `ss.Sim(solver='gillespie')` """
     name = 'gillespie'
+    integer = True
 
 
 class tau(Solver):
     """ Tau-leaping (stochastic compartments, in leaps short enough that the rates change little over each: close to Gillespie's exact answer, and much faster for a large population), which has no options: `ss.Sim(solver='tau')` """
     name = 'tau'
+    integer = True
 
 
 class abm(Solver):
@@ -123,11 +132,12 @@ class abm(Solver):
     Also a declared module's own way of running as agents, which the sim's does not override: `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`;
     or what a module's class suggests, `suggested_solver = ss.solvers.abm(step='wholestep')` in the class body, which `solver='abm'` (or `'auto'`)
     follows, and a sim's solver that names a step (e.g. `ss.solvers.abm(step='midstep')`) overrides (see `ss.solvers.agent_solver()`).
+    So `ss.solvers.abm()` (step None) and `ss.solvers.abm(step='midstep')` differ when a module's class suggests another step.
 
     Args:
-        step (str): how the agents of a declared module are stepped:
+        step (str): how the agents of a declared module are stepped (default None: as the module's class suggests, else 'midstep'):
 
-            - 'midstep' (the default): by steps, with those who arrive in a state during a step facing its rates for the rest of it, which is the more exact at a coarse step
+            - 'midstep': by steps, with those who arrive in a state during a step facing its rates for the rest of it, which is the more exact at a coarse step
             - 'wholestep': by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step; use it to match a model written as code
             - 'events': event by event in continuous time within each step (a prototype)
 
@@ -137,12 +147,12 @@ class abm(Solver):
         record_people (bool): record the results about people (alive, female, birth, death, emigration, etc.) every step (default True); False saves a little time in a sim that doesn't need them
     """
     name = 'abm'
-    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
+    agents = integer = True
+    options = dict(step=(None, [None, 'midstep', 'wholestep', 'events']), rescale=(False, None), even_draws=(False, [False, True]), keep_times=(False, [False, True]), record_people=(True, [True, False]))
     example = "ss.solvers.abm(step='events', rescale=True)"
 
     def __init__(self, *, step=None, rescale=False, even_draws=False, keep_times=False, record_people=True):
-        super().__init__(step=sc.ifelse(step, 'midstep'), rescale=rescale, even_draws=even_draws, keep_times=keep_times, record_people=record_people)
-        self.named = step is not None # Whether the step was asked for, which overrides what a module's class suggests (see agent_solver())
+        super().__init__(step=step, rescale=rescale, even_draws=even_draws, keep_times=keep_times, record_people=record_people)
         check_rescale(rescale)
 
 
@@ -174,7 +184,10 @@ def as_solver(solver):
     if not isinstance(solver, str) or solver not in solver_names:
         errormsg = f'Unknown solver {solver!r}; the choices are {sc.strjoin(solver_names)}, or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm()'
         raise ValueError(errormsg)
-    return globals()[solver]()
+    return by_name[solver]()
+
+
+by_name = {cls.name:cls for cls in [ode, binomial, gillespie, tau, abm]} # Each solver by its name, for as_solver()
 
 
 class Undeclared(Transmission):
@@ -257,7 +270,7 @@ def make_engine(module, sim):
     """ Create the engine that runs a module's graph under the sim's solver: in a compartmental run, the one laid out to choose the solver (see `lay_out()`), unless the groups changed since; for a disease that declares nothing, one that runs nothing """
     if module.graph is None:
         return Undeclared(module, sim)
-    if isinstance(sim.solver, ss.solvers.abm):
+    if sim.solver.agents:
         if agent_solver(module, sim) == 'events':
             return Events(module, sim)
         return Compiled(module, sim)
@@ -323,10 +336,10 @@ def choose_solver(sim):
             if note is not None:
                 ss.note(note, sim=sim)
     init_capabilities(sim)
-    joints, mixing = init_layouts(sim)
+    joints, mixing, trial = init_layouts(sim)
 
     # The choice: the solver that runs, with its options (see ss.Solver)
-    solver = as_solver(sim.pars.solver)
+    solver = sim.pars.solver # Already a solver, or "auto" (see init_model())
     if solver == 'auto':
         reasons = auto_reasons(sim)
         if reasons:
@@ -339,7 +352,7 @@ def choose_solver(sim):
         solver = as_solver(solver)
     elif getattr(solver, 'dwells', None) == 'exact': # The ODE, with each dwell time as it is rather than as Erlang stages
         reason = 'requested (as an integro-differential model)'
-    elif isinstance(solver, abm) and solver.named: # Agents in a particular way, for every declared module without its own (see agent_solver())
+    elif solver.agents and solver.step is not None: # Agents in a particular way, for every declared module without its own (see agent_solver())
         how = dict(midstep='those who arrive during a step face its rates for the rest of it', wholestep='rates over whole steps only', events='by events, in continuous time')[solver.step]
         reason = f'requested ({how})'
     else:
@@ -350,11 +363,12 @@ def choose_solver(sim):
 
     # The population, for the solver
     init_lifetables(sim)
-    if isinstance(solver, abm):
+    if solver.agents:
+        drop_notes(sim, trial) # The layouts tried are not used
         init_agents(sim, reason)
     else:
-        init_compartments(sim, joints, mixing)
-    sim.layouts = {name:engine for name,engine in sim.layouts.items() if not isinstance(solver, abm) and engine.current()} # Those the run uses (see make_engine())
+        init_compartments(sim, joints, mixing, trial)
+    sim.layouts = {} if solver.agents else {name:engine for name,engine in sim.layouts.items() if engine.current()} # Those the run uses (see make_engine())
     check_model(sim)
     return
 
@@ -365,7 +379,7 @@ def check_solver_options(sim):
     and n_agents= with no other population size (total_pop=, or a named population's), which would otherwise be taken as the number of people; with one, n_agents= is noted as unused
     (see `init_compartments()`), so one sim can be run both ways
     """
-    if isinstance(sim.solver, ss.solvers.abm):
+    if sim.solver.agents:
         if sim.solver.even_draws and not ss.options.crn:
             raise ValueError('ss.solvers.abm(even_draws=True) needs common random numbers, but ss.options.crn is False')
         return
@@ -388,27 +402,36 @@ def init_layouts(sim):
     """
     Under `auto` or `abm`, with nothing yet that needs agents: what the layout of the compartments refuses, found by making it
     as the ODE would (which runs none of the model's code), and added to `sim.capabilities`, so that it is said in one place: see
-    `layouts`. What is made is kept, for a compartmental run to use; its notes are said only then.
+    `layouts`. What is made is kept, for a compartmental run to use; if it is not used, its notes are dropped (see `drop_notes()`).
 
-    Returns the layouts of the diseases to track jointly, and the mixing, if they were made.
+    Returns the layouts of the diseases to track jointly, the mixing, if they were made, and the notes said in making them.
     """
-    sim.laid = sc.obj(joints=None, mixing=None)
+    sim.laid = sc.obj(joints=None, contact_rates=None)
+    n_notes = len(sim.notes)
     if (sim.pars.solver == 'auto' or isinstance(sim.pars.solver, ss.solvers.abm)) and not auto_reasons(sim):
         add_records(sim, layouts)
     laid = sim.__dict__.pop('laid') # As for sim.gathered
-    return laid.joints, laid.mixing
+    return laid.joints, laid.contact_rates, sim.notes[n_notes:]
+
+
+def drop_notes(sim, notes):
+    """ Forget the notes said by layouts that were tried but are not used (see `init_layouts()`), so that only what the run does is said; a layout made again says its own """
+    if notes:
+        sim.notes[:] = [msg for msg in sim.notes if msg not in notes]
+        if sim._held is not None:
+            sim._held[:] = [msg for msg in sim._held if msg not in notes]
+    return
 
 
 def lay_out(sim, mod, solver):
     """
     The engine of a declared module laid out as compartments for a solver (see `Compartmental.build()`), made once for the
-    sim's groups and kept in `sim.layouts` for the run (see `make_engine()`), with its notes held until then; raises a
+    sim's groups and kept in `sim.layouts` for the run (see `make_engine()`); raises a
     `CapabilityError` for what has no compartmental form yet
     """
     engine = sim.layouts.get(mod.name)
     if engine is None or not engine.current(solver):
         engine = Compartmental(mod, sim, solver=solver)
-        engine.unsaid = []
         engine.init_dims()
         engine.build()
         sim.layouts[mod.name] = engine
@@ -427,11 +450,11 @@ def init_agents(sim, reason):
         pars.n_agents = int(min(pars.total_pop, pars.n_agents))
         if sim.pop_scale > 1000 and 'solver' not in sim.given: # Chosen for the user, at a scale they did not choose either
             ss.note(f'running as agents ({reason}), with the default {pars.n_agents:n} agents for total_pop={pars.total_pop:n}, so each agent stands for {sim.pop_scale:n} people; give n_agents= for more, since small numbers (a seed, a fade-out) are coarse at this scale', sim=sim)
-    sim.mixing.init_pools()
+    sim.contact_rates.init_pools()
     return
 
 
-def init_compartments(sim, joints=None, mixing=None):
+def init_compartments(sim, joints=None, mixing=None, trial=None):
     """
     Once the model runs as compartments: refuse what has no compartmental form, note the variation between people that is
     lost, and lay out the groups, the diseases tracked jointly, and the mixing, which replaces the networks
@@ -439,14 +462,15 @@ def init_compartments(sim, joints=None, mixing=None):
     Args:
         sim (`ss.Sim`): the sim
         joints (list): the layouts already made for the diseases to track jointly (see `init_layouts()`), if any
-        mixing (`ss.solvers.Mixing`): the mixing already laid out (see `init_layouts()`), if any, used if the groups are the same
+        mixing (`ss.solvers.ContactRates`): the mixing already laid out (see `init_layouts()`), if any, used if the groups are the same
+        trial (list): the notes said in laying them out, dropped if the groups change, since then they are laid out again
     """
     pars = sim.pars
     solver = sim.solver
     if 'n_agents' in sim.given and ('total_pop' in sim.given or sim.pop_from is not None): # With no other population size, an error (see check_solver_options())
         ss.note(f'n_agents={pars.n_agents:n} is not used, since a compartmental run has one row per group of people rather than agents; the population is total_pop={pars.total_pop:n}', sim=sim)
     for cap in sim.capabilities:
-        if cap.fatal and not cap.get('switch', True): # Says what to do itself, whatever the solver asked for (e.g. at_age=)
+        if cap.fatal and not cap.switch: # Says what to do itself, whatever the solver asked for (e.g. at_age=)
             raise ss.CapabilityError(cap.reason)
         elif cap.fatal:
             raise ss.CapabilityError(f'cannot run with solver="{solver}": {cap.reason}.\n'
@@ -456,22 +480,21 @@ def init_compartments(sim, joints=None, mixing=None):
         for name,raw in spread:
             msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
             binned = f'{mod.name}.stratify({name}_group=ss.levels({{"low": 0.5, "high": 0.5}}, {name}=[0.5, 1.5]))' if name in ['rel_sus', 'rel_trans'] else f'a value by level, ss.by(group=[0.5, 1.5]), in place of the distribution, with {mod.name}.stratify(group={{"low": 0.5, "high": 0.5}})' # A multiplier for each level
-            if ss.options.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {binned}.')
-            else:
-                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
+            ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension, e.g. {binned}', sim=sim, approx=True)
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
     boxed = any(mod._boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
-    if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)): # Levels that the deliveries and transfers need now the solver is known: see ss.Event.dims()
+    regroup = staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Event)) # Levels that the deliveries and transfers need now the solver is known: see ss.Event.dims()
+    if regroup or joint_groups(sim): # The groups change, so the mixing and the engines are laid out again (see make_engine()), each saying its own notes
+        drop_notes(sim, trial)
+    if regroup:
         sim.groups.init()
-        sim.mixing = ss.solvers.Mixing(sim)
+        sim.contact_rates = ss.solvers.ContactRates(sim)
 
     init_joint_states(sim, joints)
     if mixing is not None and mixing.laid_out == (sim.groups, sim.groups.version):
-        sim.mixing = mixing
-        mixing.say()
+        sim.contact_rates = mixing
     else:
-        sim.mixing.init(approximations=ss.options.approximations)
+        sim.contact_rates.init()
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
     pars.n_agents = None # No agents: the people are one row for each group (sim.groups.n_groups); the number of people is total_pop
@@ -527,7 +550,7 @@ def choose_backend(sim):
 #%% Diseases tracked jointly, and what decides the solver
 
 def leaves(mod):
-    """ The transitions by which people die of a declared disease (to `ss.dead`), who leave the people of every other disease too """
+    """ The transitions by which people die of a declared disease (to `ss.dead`), who leave the people of every other disease too, so `joint_groups()` tracks those diseases jointly """
     return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr.may_die) and not getattr(tr, 'every_state', False)]
 
 
@@ -666,7 +689,7 @@ def init_joint_states(sim, layouts=None):
         sim.joint_states.append(ss.solvers.JointStates(sim, layout.names, reasons=layout.reasons))
         ss.note(f'the states of {" × ".join(layout.names)} are tracked jointly: {" × ".join(map(str, layout.sizes))} = {int(np.prod(layout.sizes)):,} joint states per group ({"; ".join(layout.reasons)})', sim=sim)
     sim.groups.init()
-    sim.mixing = ss.solvers.Mixing(sim)
+    sim.contact_rates = ss.solvers.ContactRates(sim)
     return
 
 
@@ -728,8 +751,7 @@ def findings(sim, rows, mods=None):
         mods (list): for rules of the declared modules, the modules to read, if not all of them
     """
     def run(rule, *subject):
-        found = rule.test(sim, *subject)
-        found = [found] if isinstance(found, dict) else found if hasattr(found, '__iter__') else [{}] if found else []
+        found = as_found(rule, rule.test(sim, *subject))
         names = dict(zip(['mod', 'tr'], subject))
         return [(rule, item, dict(sim=sim, **names) | item) for item in found] # Each is taken in turn, since what a later one reads may depend on what was recorded
 
@@ -755,6 +777,19 @@ def findings(sim, rows, mods=None):
     return
 
 
+def as_found(rule, found):
+    """ What a rule's test found, as a list of the values for its message: from None or False (nothing), True (one, with no values), a dict, or an iterable of dicts """
+    if isinstance(found, (bool, np.bool_)) or found is None:
+        return [{}] if found else []
+    elif isinstance(found, dict):
+        return [found]
+    found = list(found)
+    if not all(isinstance(item, dict) for item in found):
+        errormsg = f'The test of the rule "{rule.message}" gave {found!r}: a rule\'s test gives None, a bool, a dict of the values for its message, or a list of them'
+        raise TypeError(errormsg)
+    return found
+
+
 def why_not(sim, kind, mods=None):
     """
     Why a sim cannot be run in one of two ways (`'compiled'`, the whole run in one compiled call; or `'jax'`, the ODE in JAX, as for gradients), in a few words, or None if it can
@@ -767,7 +802,7 @@ def why_not(sim, kind, mods=None):
     if kind not in ['compiled', 'jax']:
         errormsg = f'ss.solvers.why_not() asks about "compiled" or "jax", not {kind!r}'
         raise ValueError(errormsg)
-    rows = compiled if kind == 'compiled' else [rule for rule in jax if kind not in rule.engines]
+    rows = dict(compiled=compiled, jax=jax)[kind]
     rows = [rule for rule in rows if rule.scope == 'declared'] if mods else rows
     for rule,_,values in findings(sim, rows, mods):
         return rule.message.format(**values)
@@ -940,11 +975,10 @@ def beyond_stages(raw, exact, sim):
 def far_dwell(sim, mod, tr):
     """ A dwell time that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     raw = None if tr.dur is None else tr.dur.raw
-    if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
+    if not isinstance(raw, ss.Dist) or isinstance(raw, ss.expon):
         return None
-    shape = raw.pars.get('shape')
     fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.solvers.numba.compartmental.convey())
-    exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
+    exact = fixed or tr.stages is not None or ss.transitions.exact_stages(raw) is not None
     how = beyond_stages(raw, exact, sim)
     return dict(kind=type(raw).__name__, how=how) if how else None
 
@@ -1006,8 +1040,7 @@ def varying_transfers(sim, mod):
 def far_transfers(sim, mod):
     """ A transfer's `dur=` that Erlang stages cannot follow, or with `ss.options.approximations="error"`, not exactly """
     for name,raw in timed_transfers(mod):
-        shape = raw.pars.get('shape')
-        how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape), sim)
+        how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, ss.transitions.exact_stages(raw) is not None, sim)
         if how:
             yield dict(name=name, kind=type(raw).__name__, how=how)
 
@@ -1065,10 +1098,9 @@ def refused_layout(sim, mod):
 def refused_mixing(sim):
     """ What the layout of the mixing refuses, e.g. a network's partnerships, or a network with no approximation """
     try:
-        mixing = ss.solvers.Mixing(sim)
-        mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approximations=ss.options.approximations, solver=ode())
-        sim.laid.mixing = mixing
+        mixing = ss.solvers.ContactRates(sim)
+        mixing.init(solver=ode())
+        sim.laid.contact_rates = mixing
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
     return None
@@ -1192,7 +1224,7 @@ compiled = [ # What stops the compiled backend taking a whole run in one call: s
     Rule('declared', lambda sim, mod: modified_key(sim, mod, 'branch'), STEPPED, 'a modifier changes a branch probability of "{mod.name}"'), # Where arrivals go is set once for a whole run
     Rule('declared', changed_branch, STEPPED, 'a modifier changes "{name}", which a branch probability of "{mod.name}" reads'),
     Rule('declared', fixed_reason, STEPPED, '{reason}'),
-    Rule('sim', lambda sim: sim.loop.index or sim.loop.insertions, STEPPED, 'it has been stepped already, or has functions inserted into its loop'), # Last, since a sim that was stepped for one of the reasons above is still stepped for it
+    Rule('sim', lambda sim: bool(sim.loop.index or sim.loop.insertions), STEPPED, 'it has been stepped already, or has functions inserted into its loop'), # Last, since a sim that was stepped for one of the reasons above is still stepped for it
 ]
 
 
@@ -1238,7 +1270,8 @@ fixed = [ # The same, for what cannot change once the sim is initialized
 
 def not_whole(sim):
     """ Whatever stops the kernels taking the whole run """
-    return dict(reason=sim._compiled_reason()) if sim._compiled_reason() is not None else None
+    reason = sim._compiled_reason()
+    return dict(reason=reason) if reason is not None else None
 
 
 def certain_rate(sim, mod):
@@ -1251,7 +1284,7 @@ jax = [ # What stops JAX taking a whole run of the ODE
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), COMPILED, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
     Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), COMPILED, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
     Rule('sim', not_whole, COMPILED, '{reason}'),
-    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), COMPILED, '"{mod.name}" has a movement register'),
+    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src) > 0, COMPILED, '"{mod.name}" has a movement register'),
     Rule('declared', certain_rate, COMPILED, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which a whole compiled run takes as everyone moving at once'),
     Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], COMPILED, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
 ]
@@ -1261,7 +1294,7 @@ rules = capabilities + layouts + compiled + fixed + jax # The whole table, as so
 
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
-    return [cap.reason for cap in getattr(sim, 'capabilities', []) if cap.get('switch', True)]
+    return [cap.reason for cap in getattr(sim, 'capabilities', []) if cap.switch]
 
 
 def as_ode(sim, **kwargs):

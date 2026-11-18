@@ -53,7 +53,7 @@ def unconvert(val, number, unit):
 
 
 def ratio_parts(expr):
-    """ A result's numerator and denominator, if it is a ratio (scaled by a number, e.g. infection/N*1e5, is a numerator scaled by it); else the whole """
+    """ A result's numerator and denominator, if it is a ratio (scaled by a number, e.g. infection/N*1e5, is a numerator scaled by it); else the whole: so a ratio by group adds up each part before dividing (see `Engine.init_results()`) """
     BinOp, number = ss.expressions.BinOp, lambda e: isinstance(e, ss.par) and e.literal and sc.isnumber(e.raw)
     if isinstance(expr, BinOp) and expr.op == '/':
         return [expr.a, expr.b]
@@ -65,7 +65,7 @@ def ratio_parts(expr):
 
 
 def changed(old, new):
-    """ Whether the number inside a typed quantity differs from the one it was converted from """
+    """ Whether the number inside a typed quantity differs from the one it was converted from, which can be changed in place: so `convert()` and `Engine.value()` convert it again """
     if isinstance(new, np.ndarray):
         return not np.array_equal(old, new)
     return old != new
@@ -145,10 +145,37 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
     return rows, starts
 
 
+def is_step_function(raw):
+    """ Whether a value that varies in time (or an `ss.by` of them) is a step function, so is held for each step """
+    items = raw.items if isinstance(raw, ss.by) else [raw]
+    return all(not isinstance(v, ss.parameters.TimeValue) or (isinstance(v, ss.timeseries) and v.interpolation == 'step') for v in items)
+
+
+def runs_compartments(sim):
+    """ Whether the sim runs as compartments: its solver is chosen (as it is once the sim is initialized), and is not agents """
+    return sim.solver is not None and not sim.solver.agents
+
+
+def people_mods(sim):
+    """ The declared modules whose states hold people """
+    return [mod for mod in sim.declared if mod.graph.people_states]
+
+
+def people_flow(tr):
+    """ The flow of people a transition makes: 'death' (people who die, not a count leaving, such as bacteria in water decaying), 'emigration' (people leaving alive: ss.emigration()), 'birth' (ss.birth(), or ss.unborn >> S), or None """
+    if tr._deaths is not None and tr.people:
+        return 'death'
+    elif tr._outflow and tr.migration:
+        return 'emigration'
+    elif tr._inflow and tr.people and not tr.migration:
+        return 'birth'
+    return None
+
+
 def init_people(sim):
     """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
-    mods = [mod for mod in sim.declared if mod.graph.people_states]
-    if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' in sim.results or not mods:
+    mods = people_mods(sim)
+    if not runs_compartments(sim) or 'alive' in sim.results or not mods:
         return
     t = mods[0].t # On the timeline of the first disease, whose states hold everyone (see people_counts())
     kw = dict(module='People', timevec=t.timevec, scale=False)
@@ -163,7 +190,7 @@ def init_people(sim):
 
 def record_people(sim, ti=None, keys=None):
     """ In a compartmental run, the results that agents give the sim (alive, birth, death, emigration), from the declared states and flows: at every time point, or at `ti` (only `keys`, if given) """
-    if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' not in sim.results:
+    if not runs_compartments(sim) or 'alive' not in sim.results:
         return
     if ti is None:
         counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
@@ -183,7 +210,7 @@ def record_people(sim, ti=None, keys=None):
 
 def people_counts(sim, get):
     """ The number alive, the births, the deaths, and the emigrants of a compartmental sim, from the results of its declared modules, as `get(mod, key)` gives them (of one run, or of many with a run axis first); or None if it has no people """
-    mods = [mod for mod in sim.declared if mod.graph.people_states]
+    mods = people_mods(sim)
     if not mods:
         return None
     first = mods[0] # Each disease's states hold everyone
@@ -192,12 +219,10 @@ def people_counts(sim, get):
     has = lambda mod, key: key in mod.results or key in getattr(mod.engine, 'held_flows', {}) # Including the births and deaths of everyone, once the run is done (see hold_flows())
     for mod in mods:
         for tr in mod.graph.transitions.values():
-            if tr._deaths is not None and has(mod, tr._deaths) and tr.people: # People who die, not a count leaving (bacteria in water decaying)
-                gone['death'] += get(mod, tr._deaths)
-            elif tr._outflow and tr.migration and has(mod, tr.name): # People leaving alive (ss.emigration())
-                gone['emigration'] += get(mod, tr.name)
-            elif tr._inflow and tr.people and not tr.migration and has(mod, tr.name): # People born (ss.birth(), or ss.unborn >> S)
-                gone['birth'] += get(mod, tr.name)
+            flow = people_flow(tr)
+            key = tr._deaths if flow == 'death' else tr.name # The result of the deaths, or of the transition
+            if flow is not None and has(mod, key):
+                gone[flow] += get(mod, key)
     return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
 
 
@@ -207,15 +232,7 @@ def people_flows(sim):
     the declared modules (`ss.death(rate=0)` has deaths, which are all zero; a sim with no deaths at all has no `death`), and from `ss.Births`
     and `ss.Deaths`; a module written as code adds its own as it asks for them (see `People.request_death()`)
     """
-    out = set()
-    for mod in sim.declared:
-        for tr in mod.graph.transitions.values():
-            if tr._deaths is not None and tr.people:
-                out.add('death')
-            elif tr._outflow and tr.migration:
-                out.add('emigration')
-            elif tr._inflow and tr.people and not tr.migration:
-                out.add('birth')
+    out = {people_flow(tr) for mod in sim.declared for tr in mod.graph.transitions.values()} - {None}
     for mod in sim.modules:
         if isinstance(mod, ss.Births):
             out.add('birth')
@@ -226,8 +243,8 @@ def people_flows(sim):
 
 def people_t(sim):
     """ The timeline of the sim's results about people: as agents, the sim's; in a compartmental run, that of the first declared module whose states hold everyone (see `init_people()`) """
-    mods = [mod for mod in sim.declared if mod.graph.people_states]
-    return mods[0].t if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)) and mods else sim.t
+    mods = people_mods(sim)
+    return mods[0].t if runs_compartments(sim) and mods else sim.t
 
 
 def crude_rates(birth, death, alive, dt_year):
@@ -380,30 +397,6 @@ class Evaluating:
         return False
 
 
-class Telling:
-    """
-    The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used
-
-    It exists so that a layout tried and not used says nothing.
-    """
-    unsaid = None # The notes and warnings held, as calls; None to say them at once
-
-    def tell(self, func, *args, **kwargs):
-        """ Say a note (`ss.note`) or warning (`ss.warn`) about the layout, or hold it until it is used (see `say()`) """
-        if self.unsaid is None:
-            func(*args, **kwargs)
-        else:
-            self.unsaid.append((func, args, kwargs))
-        return
-
-    def say(self):
-        """ Say the notes and warnings held from making the layout, now that it is used """
-        unsaid, self.unsaid = self.unsaid or [], None
-        for func,args,kwargs in unsaid:
-            func(*args, **kwargs)
-        return
-
-
 class Effects(sc.prettyobj):
     """
     What the engine of every disease gives the modules that act on it, whether the disease is declared or written as code: the modifiers
@@ -416,6 +409,16 @@ class Effects(sc.prettyobj):
     agents = False # Whether it runs the disease's states as agents
     compartmental = False # Whether it runs them as compartments; a disease written as code does neither
     joint = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.JointStates
+    _dt = None # The timestep it was last worked out for, and its value: see dt
+    _uids = _src = _rtr = _leaving = None # What a block is evaluated for, set by evaluating() (see Evaluating) and read where it matters
+    _for_uids = _unmodified = _drawing = _own_rates = False
+    _ti = None # The time point people are back-dated to, while they are: see ti, and Agents.backfill()
+    _selector = _net_mods = _met = None # Made when first needed: see selector, net_mods(), and met_counts()
+    _warned_short = False # Whether people left short of a step have been warned about: see check_short()
+    rel_adjust = None # Multipliers on infectiousness and susceptibility by dimension, once worked out: see init_adjust()
+    derived_res = flow_derived = None # The results kept by a stratification of their own, once the results are made: see init_results()
+    stocks_start = None # The counts at the start of the step, kept for the results worked out with its flows: see record_states()
+    res_found = res_scale = None # The results found, and how they are scaled, as they are kept: see find_results() and write_scale()
 
     def __init__(self, module, sim):
         self.mod = module
@@ -428,7 +431,7 @@ class Effects(sc.prettyobj):
     def dt(self):
         """ The module's timestep, in the sim's unit (worked out again only if the timestep is replaced) """
         dt = self.mod.t.dt
-        cached = self.__dict__.get('_dt')
+        cached = self._dt
         if cached is None or cached[0] is not dt:
             cached = self._dt = (dt, dt.to(self.sim.unit_base).value)
         return cached[1]
@@ -440,7 +443,7 @@ class Effects(sc.prettyobj):
     @property
     def selector(self):
         """ Evaluates conditions for this module: see `ss.conditions.Selector` """
-        if getattr(self, '_selector', None) is None:
+        if self._selector is None:
             self._selector = ss.conditions.Selector(self.sim, self.mod)
         return self._selector
 
@@ -526,7 +529,7 @@ class Effects(sc.prettyobj):
         return self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
 
 
-class Engine(Telling, Effects):
+class Engine(Effects):
     """
     Base class for the engines that run a graph
 
@@ -716,13 +719,9 @@ class Engine(Telling, Effects):
         return sum(terms[1:], terms[0]), dims
 
     def moves(self, tr):
-        """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); or None """
+        """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); empty for one with neither """
         if tr.move is None and getattr(tr, 'increment', None) is None:
-            return None
-        return self.own_moves(tr) or None
-
-    def own_moves(self, tr):
-        """ The moves of `move=` and `increment=`: see `moves()` """
+            return ()
         if tr.name not in self.move_levels:
             out = []
             for dim,level in list((tr.move or {}).items()) + [(dim, ('+', k)) for dim,k in (tr.increment or {}).items()]:
@@ -763,7 +762,7 @@ class Engine(Telling, Effects):
             out = None
             if strain is not None or moved or not np.array_equal(a, b):
                 ng = self.sim.groups.n_groups
-                if not isinstance(self.solver, ss.solvers.abm) and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups
+                if not self.solver.agents and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups
                     raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
                                              f'     Run with solver="abm", or with fewer groups (fewer dimensions, or fewer diseases tracked jointly).')
                 out = np.ones((1, 1))
@@ -839,7 +838,7 @@ class Engine(Telling, Effects):
             return
         graph = self.graph
         reason = strains.needs_agents(graph)
-        if reason and not isinstance(self.solver, ss.solvers.abm):
+        if reason and not self.solver.agents:
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.source}
         infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains._carriers())
@@ -921,7 +920,7 @@ class Engine(Telling, Effects):
         People who move at the start of a step (as all but infections do) are timed from then, and infections from its end
         (`ti + 1`); either way their time of entering (`ti_X`) reads as the step's index (see `ss.solvers.Agents.index_of()`).
         """
-        ti = self.__dict__.get('_ti') # Set while people are back-dated: see Agents.backfill()
+        ti = self._ti # Set while people are back-dated: see Agents.backfill()
         return self.mod.t.ti if ti is None else ti
 
     @property
@@ -979,7 +978,7 @@ class Engine(Telling, Effects):
     def modified(self, p, value):
         """ Apply the modifiers that are active on a parameter: set, then multiply, then add """
         mods = self.sim.modifiers.get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
-        if not mods or getattr(self, '_unmodified', False): # See note_steps()
+        if not mods or self._unmodified: # See note_steps()
             return value
         out = self.reduce(ss.connectors.combine(mods, value, self), what=p.name)
         return self.clip(out, f'{self.mod.name}.pars.{p.name}') if p.slot in ['rate', 'dur'] else out
@@ -987,7 +986,7 @@ class Engine(Telling, Effects):
     @property
     def net_mods(self):
         """ The modifiers of the contacts of networks """
-        if getattr(self, '_net_mods', None) is None:
+        if self._net_mods is None:
             nets = self.sim.all_networks()
             self._net_mods = [m for (modname,kind,name),mods in self.sim.modifiers.items() if modname in nets and name == 'n_contacts' for m in mods]
         return self._net_mods
@@ -1114,7 +1113,7 @@ class Engine(Telling, Effects):
                 with self.evaluating(for_uids=False): # For everyone, even when asked while a rate is evaluated for some agents
                     self.cache[key] = super().mult_raw(kind, name, state)
             out = self.cache[key]
-        if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
+        if self.rel_adjust and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
         return out
 
@@ -1137,10 +1136,10 @@ class Engine(Telling, Effects):
         """ Expand a value for each level of one or more dimensions to a value for each group, once a step """
         key = ('by', id(by))
         if key not in self.cache:
-            if by.varies and (self.year is None or ss.solvers.Compartmental.held(by)): # At the start of the step: worked out for every step at once, as in call()
-                self.cache[key] = np.array(self.held_value(by))
-            else:
-                self.cache[key] = by.per_group(self.sim, self.convert) if ss.solvers.Compartmental.held(by) else np.array(self.held_value(by, self.year)) # A step function at the start of the step, as in call()
+            if not by.varies:
+                self.cache[key] = by.per_group(self.sim, self.convert)
+            else: # Worked out for every step at once: a step function at the start of the step, as in call()
+                self.cache[key] = np.array(self.held_value(by, None if is_step_function(by) else self.year))
         return self.cache[key]
 
     def check_counted_strains(self):
@@ -1333,9 +1332,7 @@ class Engine(Telling, Effects):
     def call(self, func, p=None):
         """ Call a user function of the sim: once a step, if it takes only the sim """
         if isinstance(func, ss.parameters.TimeValue): # Its values converted, then interpolated as numbers
-            if self.year is None or ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
-                return self.held_value(func)
-            return self.held_value(func, self.year)
+            return self.held_value(func, None if is_step_function(func) else self.year) # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
         if self.takes_uids(func):
             return self.call_uids(func, p)
         key = ('called', id(func))
@@ -1440,19 +1437,19 @@ class Engine(Telling, Effects):
 
     def met_counts(self):
         """ The ids of the counts in rates that the sim's contact matrices act on (see `ss.graph.Graph.met_counts`): none if it has none """
-        mixing = self.sim.mixing
-        kept = getattr(self, '_met', None)
-        if kept is None or kept[0] is not mixing.terms or kept[1] is not mixing.pool_terms: # Once for each layout of the mixing (see ss.solvers.Mixing.init())
+        mixing = self.sim.contact_rates
+        kept = self._met
+        if kept is None or kept[0] is not mixing.terms or kept[1] is not mixing.pool_terms: # Once for each layout of the mixing (see ss.solvers.ContactRates.init())
             leaves = self.graph.met_counts
             self._met = (mixing.terms, mixing.pool_terms, {id(leaf) for leaf in leaves} if leaves and self.count_matrices() else set())
         return self._met[2]
 
     def count_matrices(self):
-        """ The contact matrices that act on a count in a rate, as this engine has them (see `ss.solvers.Mixing.count_terms()`); by the engines """
+        """ The contact matrices that act on a count in a rate, as this engine has them (see `ss.solvers.ContactRates.count_terms()`); by the engines """
         return []
 
     def met_count(self, states, expr):
-        """ The number of people in some states met through the sim's contact matrices (`Σ_j C_ij·I_j`, or `Σ_j C_ij·w_j·I_j` for a weighted count: see `ss.solvers.Mixing.count_terms()`), for whoever it is evaluated for; by the engines """
+        """ The number of people in some states met through the sim's contact matrices (`Σ_j C_ij·I_j`, or `Σ_j C_ij·w_j·I_j` for a weighted count: see `ss.solvers.ContactRates.count_terms()`), for whoever it is evaluated for; by the engines """
         raise NotImplementedError
 
     def product_of(self, expr):
@@ -1480,7 +1477,7 @@ class Engine(Telling, Effects):
                 raw = trans.by_dist(scaled[0].raw)
             if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # A function's value is the mean of an exponential, not each person's own time
                 fname = getattr(raw, '__name__', 'the function')
-                self.tell(ss.warn, f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
+                ss.warn(f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
             dw = Bunch(par=p, raw=raw, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
             if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
                 self.varying_dwell(name, tr, raw, dw, to_unit)
@@ -1490,12 +1487,12 @@ class Engine(Telling, Effects):
                 dw.mean, dw.std = mean, std
                 dw.dist = trans.numeric_dist(raw, to_unit)
                 if np.isnan(mean): # A parameter is a function of the agents
-                    if not isinstance(self.solver, ss.solvers.abm):
+                    if not self.solver.agents:
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
                     typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days
                     if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.expressions.Expr)))
-                        self.tell(ss.note, f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
+                        ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
@@ -1540,7 +1537,7 @@ class Engine(Telling, Effects):
                     raise ValueError(f'the modifier "{m.name}" sets {path} to a distribution ({m.amount}), but {path} is a duration, the mean of an exponential dwell time for "{name}", so it can only be set to another duration.\n'
                                      f'     Give a duration (e.g. set=ss.years(5)), or make the parameter a distribution (e.g. ss.expon(ss.years(1))) so it can be set to another.')
             return
-        if not isinstance(self.solver, ss.solvers.abm):
+        if not self.solver.agents:
             raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
                                      f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
         funcs = [key for key,val in ss.transitions.varying_pars(raw).items() if not isinstance(val, ss.by)] if isinstance(raw, ss.Dist) else []
@@ -1576,29 +1573,50 @@ class Engine(Telling, Effects):
         return
 
     def note_fast_steps(self):
-        """ See `note_steps()` """
+        """ See `note_steps()`: which notes apply to the solver """
+        solver = self.sim.solver
+        euler = isinstance(solver, ss.solvers.ode) and solver.integrator == 'euler' and solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
+        self.note_density()
+        self.note_smoothing()
+        if solver.agents or euler:
+            self.note_fast(euler)
+        elif not isinstance(solver, ss.solvers.binomial): # Which takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (ss.solvers.binomial(substeps=1) for a model written in discrete time)
+            self.note_bare_rates()
+        return
+
+    def note_density(self):
+        """ Say if an infection at a rate per person grows with a count of people (density-dependent), and is fast for that, which is often a count written for a fraction """
         sim = self.sim
         for tr in self.graph.acquisitions: # An infection at a rate per person that grows with a count of people, which is often a count written for a fraction
             if tr.people and not tr._inflow and tr.rate is not None and tr.flow_given is None and ss.expressions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent), and is fast for that: one infectious person would infect {self.density_rate(tr):,.3g} people a day, if everyone were susceptible. For a fraction of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
-        if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth: # Exact only for rates that are constant within a step
+        return
+
+    def note_smoothing(self):
+        """ Say that Gillespie's algorithm and tau-leaping hold values that vary in time at the middle of each step, since they are exact only for rates that are constant within one """
+        sim = self.sim
+        if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth:
             what = 'solver="gillespie"' if isinstance(sim.solver, ss.solvers.gillespie) else 'Tau-leaping'
-            msg = f'{what} holds values that vary in time for each step, at its middle'
-            if ss.options.approximations == 'error':
-                raise ss.CapabilityError(f'{msg}, which ss.options.approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
-            ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if ss.options.approximations == 'allow' else None)
-        euler = isinstance(sim.solver, ss.solvers.ode) and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
+            ss.note(f'{what} holds values that vary in time for each step, at its middle; a shorter step follows them more closely, and solver="ode" follows them exactly', sim=sim, approx=True)
+        return
+
+    def note_bare_rates(self):
+        """ For a solver that is right whatever the step, say if a bare number for a rate has a mean dwell shorter than a step, which is usually meant as a duration (rate=10) """
+        sim = self.sim
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
-        if not isinstance(sim.solver, (ss.solvers.abm, ss.solvers.binomial)) and not euler: # The solver is right whatever the step, but a bare number for a rate with a mean dwell shorter than a step is usually meant as a duration (rate=10)
-            for name,dw in self.dwells.items():
-                if name not in inflows and dw.is_rate and sc.isnumber(dw.par.raw):
-                    mean = self.dwell_mean(name)
-                    if np.ndim(mean) == 0 and 0 < mean < self.dt:
-                        ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', sim=sim)
-            return
-        if isinstance(sim.solver, ss.solvers.binomial): # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (ss.solvers.binomial(substeps=1) for a model written in discrete time)
-            return
+        for name,dw in self.dwells.items():
+            if name not in inflows and dw.is_rate and sc.isnumber(dw.par.raw):
+                mean = self.dwell_mean(name)
+                if np.ndim(mean) == 0 and 0 < mean < self.dt:
+                    ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', sim=sim)
+        return
+
+    def note_fast(self, euler):
+        """ For agents, and Euler with steps of a given size, which take whole steps: say which transitions are fast compared with the step """
+        sim = self.sim
+        unit = sim._unit_name
+        inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
         dt = self.dt/(sim.solver.substeps if euler else 1)
         step = 'step' if dt == self.dt else 'substep'
         plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
@@ -1621,7 +1639,7 @@ class Engine(Telling, Effects):
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if isinstance(sim.solver, ss.solvers.abm) and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
+            if sim.solver.agents and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
                 continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.solvers.numba.compartmental.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
@@ -1714,7 +1732,7 @@ class Engine(Telling, Effects):
                 by_count[state.name] = init
                 continue
             if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A)
-                if state.people and not is_n and isinstance(self.solver, ss.solvers.abm): # Read for each person, as agents: see Agents.init_post()
+                if state.people and not is_n and self.solver.agents: # Read for each person, as agents: see Agents.init_post()
                     exact = False
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
@@ -1726,7 +1744,7 @@ class Engine(Telling, Effects):
                 strat = self.sim.groups.strats[self.strain]
                 errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the fraction of each strain, or set of strains carried together, in ss.Strains(fractions=...), e.g. fractions={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
                 raise ValueError(errormsg)
-            if isinstance(init, ss.by) and state.people and not is_n and isinstance(self.solver, ss.solvers.abm) and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
+            if isinstance(init, ss.by) and state.people and not is_n and self.solver.agents and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
                 exact = False
                 continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
@@ -1926,7 +1944,7 @@ class Engine(Telling, Effects):
         """ One count per state, one flow per transition (`res.infection.cum` is its cumulative total), and a result for each expression, outcome, and transfer """
         mod = self.mod
         graph = self.graph
-        abm = isinstance(self.solver, ss.solvers.abm)
+        abm = self.solver.agents
         results = sc.autolist()
         for state in graph.states.values():
             key = state.name
@@ -2055,7 +2073,7 @@ class Engine(Telling, Effects):
         """ Work out the sources and delay of each outcome, and the order to compute them in """
         graph = self.graph
         trans = ss.transitions
-        abm = isinstance(self.solver, ss.solvers.abm)
+        abm = self.solver.agents
         dt = self.dt
         self.outcomes = sc.obj()
         todo = dict(graph.outcomes)
@@ -2122,7 +2140,7 @@ class Engine(Telling, Effects):
         res = self.mod.results
         ti = self.mod.ti
         ng = self.sim.groups.n_groups
-        integer = isinstance(self.solver, (ss.solvers.abm, ss.solvers.gillespie, ss.solvers.tau, ss.solvers.binomial))
+        integer = self.solver.integer
 
         def flow_of(key):
             if key in self.outcomes:
@@ -2213,7 +2231,7 @@ class Engine(Telling, Effects):
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
             self.flow_groups.clear()
-        if getattr(self, 'flow_derived', None):
+        if self.flow_derived:
             self.flow_derived.clear()
         return
 
@@ -2233,7 +2251,7 @@ class Engine(Telling, Effects):
         module (e.g. `ss.Pregnancy`), each state has its fraction. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
-        if not isinstance(sim.solver, ss.solvers.abm) or not sim.solver.rescale or 'unrepresented' not in sim.results:
+        if not sim.solver.agents or not sim.solver.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
         n_alive = sim.people._n_agents_alive()
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
@@ -2258,7 +2276,7 @@ class Engine(Telling, Effects):
     def find_results(self):
         """ What the results are written to, found once (results are not added during the run) """
         mod, graph, res = self.mod, self.graph, self.mod.results
-        if getattr(self, 'res_found', None) == len(res):
+        if self.res_found == len(res):
             return
         self.res_found = len(res)
         self.in_people = [r for r in res.values() if getattr(r, 'in_people', False)]
@@ -2277,7 +2295,7 @@ class Engine(Telling, Effects):
     def write_scale(self):
         """ The scale counts of people are written in, as agents (see `ss.results.people_scale()`), set on the results that keep values by group """
         scale = ss.results.people_scale(self.sim)
-        if scale != getattr(self, 'res_scale', None): # The values by group, as they are kept
+        if scale != self.res_scale: # The values by group, as they are kept
             self.res_scale = scale
             for r in self.in_people:
                 r._write_scale = scale
@@ -2300,7 +2318,7 @@ class Engine(Telling, Effects):
         values = self.res_values
         for name,val in stocks.items():
             values[name][ti] = val
-        derived = getattr(self, 'derived_res', {})
+        derived = self.derived_res or {}
         for name,val in stock_groups.items():
             if name not in derived:
                 res[name]._store_group(ti, val, self.rows)
@@ -2324,13 +2342,13 @@ class Engine(Telling, Effects):
         ti = mod.ti
         self.find_results()
         scale = self.write_scale()
-        stocks, stock_groups = getattr(self, 'stocks_start', None) or self.with_unrepresented()
+        stocks, stock_groups = self.stocks_start or self.with_unrepresented()
         values = self.res_values
         for name,val in self.flowcounts.items():
             values[name][ti] = val
         if self.outcomes:
             self.step_outcomes()
-        derived = getattr(self, 'derived_res', {})
+        derived = self.derived_res or {}
         for name,val in self.flow_groups.items():
             if name not in derived:
                 res[name]._store_group(ti, val, self.rows, flow=True)
@@ -2377,9 +2395,9 @@ class Engine(Telling, Effects):
         """
         sim = self.sim
         graph = self.graph
-        d = sim.mixing.space
+        d = sim.contact_rates.space
         placed = [s.name for s in graph.people_states if self.applies[s.name][d]] # States that people in a place can be in
-        ev = sim.mixing.events()
+        ev = sim.contact_rates.events()
         sets = [(None, None)]
         for key in ev.sets:
             if key[0] is not None and key not in sets:
@@ -2401,7 +2419,7 @@ class Engine(Telling, Effects):
 
     def check_short(self, short):
         """ Warn, once, if events of a movement register asked for more people than there were """
-        if short > 0 and not getattr(self, '_warned_short', False):
+        if short > 0 and not self._warned_short:
             self._warned_short = True
             ss.warn(f'Events of the movement register asked "{self.mod.name}" for {short:n} more people than there were in the places and states they named; they moved (or removed) everyone there was instead')
         return

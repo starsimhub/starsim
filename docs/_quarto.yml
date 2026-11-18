@@ -235,6 +235,8 @@ website:
           contents:
             - href: api/internals.arrays.qmd
               text: arrays
+            - href: api/internals.by.qmd
+              text: by
             - href: api/internals.conditions.qmd
               text: conditions
             - href: api/internals.dates.qmd
@@ -263,6 +265,8 @@ website:
               text: modules
             - href: api/internals.parameters.qmd
               text: parameters
+            - href: api/internals.progress.qmd
+              text: progress
             - href: api/internals.time.qmd
               text: time
             - href: api/internals.timeline.qmd
@@ -295,7 +299,7 @@ website:
               text: engine
             - href: api/solvers.joint_states.qmd
               text: joint_states
-            - href: api/solvers.mixing.qmd
+            - href: api/solvers.contact_rates.qmd
               text: mixing
             - href: api/solvers.particles.qmd
               text: particles
@@ -362,6 +366,7 @@ quartodoc:
       desc: How Starsim works under the hood, for developers rather than modelers.
       contents:
         - internals.arrays
+        - internals.by
         - internals.conditions
         - internals.dates
         - internals.debugtools
@@ -376,6 +381,7 @@ quartodoc:
         - internals.loop
         - internals.modules
         - internals.parameters
+        - internals.progress
         - internals.time
         - internals.timeline
         - internals.transitions
@@ -433,7 +439,7 @@ quartodoc:
         - solvers.deliveries
         - solvers.engine
         - solvers.joint_states
-        - solvers.mixing
+        - solvers.contact_rates
         - solvers.particles
 format:
   html:

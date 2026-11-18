@@ -451,7 +451,8 @@ def test_agent_steps():
     assert res['midstep'].tick[3] == 10_000 and np.isclose(res['midstep'].leave[3]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['wholestep'].leave[3] == 0
     assert np.isclose(res['wholestep'].leave[4]/10_000, 1 - np.exp(-0.5), atol=0.02)
     wholestep = lambda sim_solver, **kw: ss.Sim(make(**kw), solver=sim_solver, n_agents=500, unit='day', stop=5, verbose=0).init().diseases.d.engine.wholestep
-    assert wholestep('abm', solver=ss.solvers.abm(step='wholestep')) and not wholestep(ss.solvers.abm(step='wholestep'), solver='abm')
+    assert wholestep('abm', solver=ss.solvers.abm(step='wholestep')) and not wholestep(ss.solvers.abm(step='wholestep'), solver=ss.solvers.abm(step='midstep')) # A module's own step wins
+    assert wholestep(ss.solvers.abm(step='wholestep'), solver='abm') # A module's own solver with no step takes the sim's
 
     # The compiled moves make the draws the agent engine's own moves make
     def make(seed):

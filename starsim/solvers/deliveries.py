@@ -17,6 +17,23 @@ import starsim as ss
 __all__ = ['CompartmentalDelivery', 'memory_strats', 'memory_layout', 'remember_levels', 'current_groups', 'trigger_groups', 'carry_moved', 'water_fill']
 
 
+def for_other_module(now, selector, what, sim):
+    """
+    In a compartmental run: a selection of people (a fraction of each state and group of one module) carried over to another module's selector, which has other states: it
+    can depend only on the group, not the state, else `what` (what selects them, and how) cannot be carried over
+    """
+    if not np.allclose(now, now[0]):
+        raise ss.CapabilityError(f'{what}, which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
+    return np.broadcast_to(now[0], selector.shape).astype(float)
+
+
+def frac_of(x, n):
+    """ x as a fraction of n (e.g. the people chosen in each state and group, of those there), clipped to 0 to 1, and 0 where n is 0 """
+    x, n = np.asarray(x), np.asarray(n)
+    out = np.zeros(np.broadcast_shapes(x.shape, n.shape), dtype=np.result_type(x, n, np.float16)) # Floats, of the inputs' precision
+    return np.clip(np.divide(x, n, out=out, where=n>0), 0, 1)
+
+
 #%% Events, for every solver: the people something happened to on a step, what each person remembers of them, and the order of the deliveries
 
 def modules_of(sim, key):
@@ -144,23 +161,10 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 cond = ss.conditions.join('&', [c for c in [cond, tr._who_now] if c is not None])
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
-            if not isinstance(sim.solver, ss.solvers.abm): # As fractions of each state and group
-                ss.solvers.trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
-                continue
-            tgt = mod.engine
-            srcs = [s for s in tr.source if s.people]
-            uids = sel if isinstance(sel, ss.uids) else ss.uids(np.flatnonzero(sel))
-            uids = uids[np.logical_or.reduce([mod[s.name].raw[uids] for s in srcs])] if len(uids) else uids
-            if cond is not None and len(uids):
-                uids = uids[np.asarray(tgt.selector.select(cond), dtype=bool)[uids]]
-            if not len(uids):
-                continue
-            ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr._split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
-            tgt.new_round() # A way in from code: see ss.solvers.Agents.new_round()
-            rvs = tgt.draw(f'trig_{tr.name}', uids)
-            edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-            for k,dst in enumerate(tr.dest):
-                tgt.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)
+            if sim.solver.agents:
+                mod.engine.trigger(tr, cond, sel)
+            else: # As fractions of each state and group
+                trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
     return
 
 
@@ -181,22 +185,31 @@ def order_steps(mods):
         elif isinstance(obj, ss.Product):
             found = [m for m in mods if isinstance(m, ss.Event) and m.product is obj]
             return found or find(obj.name) # A copy of the product (conditions keep the object they were written with, and the engines read them by name)
-        return [obj] if id(obj) in index else find(obj.name) if getattr(obj, 'name', None) else [] # Or a copy of the delivery, e.g. after a deep copy of the interventions
+        if id(obj) in index:
+            return [obj]
+        if getattr(obj, 'name', None): # A copy of the delivery, e.g. after a deep copy of the interventions
+            return find(obj.name)
+        return []
     deps = {}
     for i,m in enumerate(mods):
         deps[i] = set()
-        if isinstance(m, ss.Event):
-            for leaf in ss.conditions.event_leaves(m._trigger) if isinstance(m._trigger, ss.conditions.Cond) else []:
-                if leaf.op == 'event' and isinstance(leaf.args[0], (ss.products.EventSource, str)):
-                    found = find(leaf.args[0])
-                    if not found:
-                        errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
-                        raise ValueError(errormsg)
-                    if m._delay is None: # A delayed delivery reads the events since its last step (see ss.Event._delayed_arrivals())
-                        deps[i] |= {index[id(d)] for d in found if d is not m}
-            if m._delay is None and any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], ss.Event) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m._trigger) if isinstance(m._trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
+        if not isinstance(m, ss.Event) or not isinstance(m._trigger, ss.conditions.Cond):
+            continue
+        for leaf in ss.conditions.event_leaves(m._trigger):
+            if leaf.op != 'event':
+                continue
+            src = leaf.args[0]
+            own = src is m or (isinstance(src, ss.Event) and id(src) not in index and src.name == m.name) # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
+            if own and m._delay is None:
                 errormsg = f'"{m.name}" is triggered by its own event ({m._trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), or be triggered by itself with a delay (when=ss.on(event, delay=...)), but not otherwise'
                 raise ValueError(errormsg)
+            if isinstance(src, (ss.products.EventSource, str)):
+                found = find(src)
+                if not found:
+                    errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(src)}" is not delivered in the sim: add it to interventions='
+                    raise ValueError(errormsg)
+                if m._delay is None: # A delayed delivery reads the events since its last step (see ss.Event._delayed_arrivals())
+                    deps[i] |= {index[id(d)] for d in found if d is not m}
     out, done = [], set()
     while len(out) < len(mods):
         ready = [i for i in range(len(mods)) if i not in done and deps[i] <= done]
@@ -256,7 +269,7 @@ def remember_levels(owner, outcome, sel, before, eng):
         return
     shifter = owner if isinstance(owner, ss.Event) else next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is owner)
     after = eng.state_counts()
-    now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
+    now = frac_of(sel*before, after)
     shifter.in_compartments.follow(now, now, {sim.groups.dim_index(strat.name):1}, ss.conditions.Cond('event', owner, outcome))
     return
 
@@ -267,11 +280,9 @@ def current_groups(owner, outcome, entries, selector):
     out = None
     for _,sel,before,eng in entries: # Parts of the people one delivery reached (e.g. those cured, and the rest), which are disjoint; a product delivered by several steps is agents only (see ss.solvers.init_capabilities())
         after = eng.state_counts()
-        now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, now that others may have moved
+        now = frac_of(sel*before, after) # The same people, now that others may have moved
         if eng.mod is not selector.mod:
-            if not np.allclose(now, now[0]):
-                raise ss.CapabilityError(f'the event "{owner.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}", which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-            now = np.broadcast_to(now[0], selector.shape).astype(float)
+            now = for_other_module(now, selector, f'the event "{owner.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}"', sim)
         out = now if out is None else out + now
     return selector.nobody() if out is None else np.clip(out, 0, 1)
 
@@ -282,11 +293,9 @@ def trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before):
     tgt = mod.engine
     srcs = [s for s in tr.source if s.people]
     after = eng.state_counts()
-    now = sel if before is None else np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, as a fraction of those now in each state and group
+    now = frac_of(sel*before, after) # The same people, as a fraction of those now in each state and group (`before` is always given: see ss.products.EventSource._fire())
     if tgt is not eng:
-        if not np.allclose(now, now[0]):
-            raise ss.CapabilityError(f'"{tr.name}" of "{mod.name}" is triggered by {event}, whose people are chosen by their state in "{eng.mod.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-        now = np.broadcast_to(now[0], tgt.selector.shape).astype(float)
+        now = for_other_module(now, tgt.selector, f'"{tr.name}" of "{mod.name}" is triggered by {event}, whose people are chosen by their state in "{eng.mod.name}"', sim)
     frac = now*tgt.selector.in_states([s.name for s in srcs])
     if cond is not None:
         frac = frac*tgt.selector.select(cond)
@@ -311,14 +320,14 @@ def carry_moved(owner, outcome, eng, before):
     entries = [e for e in owner.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti and e[3] is eng]
     if not entries:
         return
-    mine = entries[-1][1]*(before if entries[-1][2] is None else entries[-1][2]) # The people of the event that triggered the move
+    mine = entries[-1][1]*entries[-1][2] # The people of the event that triggered the move
     for m in [m for m in list(sim.interventions()) + list(sim.products()) if m.__dict__.get('_live')]:
         for out,es in m._live.items():
             for entry in es:
                 t, sel, b, e = entry
                 if t != sim.ti or e is not eng:
                     continue
-                people = sel*(before if b is None else b)
+                people = sel*b
                 if np.allclose(people, mine):
                     new = np.maximum(people - left, 0) + came
                 else:
@@ -327,7 +336,7 @@ def carry_moved(owner, outcome, eng, before):
                     total = moved.sum()
                     if total > 0 and came.sum() > 0:
                         new = new + came*(total/came.sum())
-                entry[1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after]
+                entry[1:3] = [frac_of(new, after), after]
     return
 
 
@@ -406,18 +415,14 @@ class CompartmentalDelivery(sc.prettyobj):
         if not changes:
             return
         for mod in sim.declared:
-            frac = sel
-            if mod is not d._dis and mod.engine.joint is not None and mod.engine.joint is self.eng.joint: # The same people, tracked jointly: see ss.solvers.JointStates
-                continue
-            if mod is not d._dis: # Another disease has other states, so the selection cannot depend on the state
-                if not np.allclose(sel, sel[0]):
-                    raise ss.CapabilityError(f'"{d.name}" selects people by their state in "{d._dis.name}", which cannot be carried over to "{mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-                frac = np.broadcast_to(sel[0], mod.engine.selector.shape)
-            before = mod.engine.state_counts() if mod is d._dis else None
-            mod.engine.shift(frac, changes)
+            eng = mod.engine
             if mod is d._dis:
-                target = mod.engine.targets(changes)
-                self.carry_events(frac*(target != np.arange(len(target)))[None, :], before, mover, target=target)
+                before = eng.state_counts()
+                eng.shift(sel, changes)
+                target = eng.targets(changes)
+                self.carry_events(sel*(target != np.arange(len(target)))[None, :], before, mover, target=target)
+            elif eng.joint is None or eng.joint is not self.eng.joint: # Another disease has other states, so the selection cannot depend on the state; one tracked jointly has the same people (see ss.solvers.JointStates)
+                eng.shift(for_other_module(sel, eng.selector, f'"{d.name}" selects people by their state in "{d._dis.name}"', sim), changes)
         return
 
     def carry_events(self, frac, before, mover=None, target=None, dst=None):
@@ -438,7 +443,7 @@ class CompartmentalDelivery(sc.prettyobj):
                 for i,(t,sel,b,e) in enumerate(entries):
                     if t != sim.ti or e is not eng:
                         continue
-                    people = np.clip(np.divide(sel*b, before, out=np.zeros_like(before), where=before>0), 0, 1)*before # As they were just before the move
+                    people = frac_of(sel*b, before)*before # As they were just before the move
                     rel = None
                     if isinstance(mover, ss.conditions.Cond):
                         same = (owner.name, outcome) == (ss.conditions.modname(mover.args[0]), mover.args[1])
@@ -449,13 +454,13 @@ class CompartmentalDelivery(sc.prettyobj):
                         np.add.at(new, (slice(None), target), m)
                     else:
                         new[selector.states.index(dst.name)] += m.sum(axis=0)
-                    entries[i][1:3] = [np.clip(np.divide(new, after, out=np.zeros_like(after), where=after>0), 0, 1), after] # In place, so a pending memory has it too
+                    entries[i][1:3] = [frac_of(new, after), after] # In place, so a pending memory has it too
         return
 
     def same_people(self, sel, before):
         """ A selection made from the people in each state and group as they were (`before`), as a fraction of them as they are now that some have moved """
         after = self.eng.state_counts()
-        return np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
+        return frac_of(sel*before, after)
 
     def follow(self, sel, chosen, changes, mover=None):
         """ Move the selected people to other levels of some dimensions; returns those chosen among them, as they now are """
@@ -466,14 +471,14 @@ class CompartmentalDelivery(sc.prettyobj):
         after = eng.state_counts()
         moved = np.zeros_like(chosen)
         np.add.at(moved, (slice(None), target), chosen*before) # The people chosen are now in another group, along with whoever was offered it before
-        return np.clip(np.divide(moved, after, out=np.zeros_like(moved), where=after>0), 0, 1)
+        return frac_of(moved, after)
 
     def relocate(self, amount, changes):
         """ Move some people (by state and group) to other levels; returns where they are now """
         eng = self.eng
         N = eng.state_counts()
         target = eng.targets(changes)
-        self.shift(np.clip(np.divide(amount, N, out=np.zeros_like(N), where=N>0), 0, 1), changes)
+        self.shift(frac_of(amount, N), changes)
         out = np.zeros_like(N)
         np.add.at(out, (slice(None), target), amount)
         return out
@@ -494,14 +499,14 @@ class CompartmentalDelivery(sc.prettyobj):
                     B = B + self.relocate(part, {d:j + 1})
             A = B
         N = eng.state_counts()
-        return np.clip(np.divide(A, N, out=np.zeros_like(N), where=N>0), 0, 1)
+        return frac_of(A, N)
 
     def arrived(self, dst, total):
         """ The people who have just moved into a state (a number per group), as a fraction of those in it """
         eng = self.eng
         out = self.selector.nobody()
         n = eng.count([dst], total=False)
-        out[self.selector.states.index(dst.name)] = np.clip(np.divide(total, n, out=np.zeros(len(n)), where=n>0), 0, 1)
+        out[self.selector.states.index(dst.name)] = frac_of(total, n)
         return out
 
     #%% Choosing
@@ -516,7 +521,7 @@ class CompartmentalDelivery(sc.prettyobj):
         if not keys:
             return cands*(n/amount.sum())
         served = water_fill(amount, n, keys)
-        return np.clip(np.divide(served, N, out=np.zeros_like(N), where=N>0), 0, 1)
+        return frac_of(served, N)
 
     #%% What is given
 
@@ -635,7 +640,7 @@ class CompartmentalDelivery(sc.prettyobj):
             X = sum(X if eng is home else joint.local(joint.joint(eng, X), home) for eng,X in pairs)
             counts = np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
             n = home.state_counts()
-            return np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1)
+            return frac_of(counts, n)
         d._fire('cured', home_frac(*[(eng, c) for eng,c,_ in parts]))
         d._fire('failed', home_frac(*[(eng, f) for eng,_,f in parts]))
         d._fire('unneeded', home_frac((cur, U)))

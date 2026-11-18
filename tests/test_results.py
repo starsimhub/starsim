@@ -267,6 +267,10 @@ def test_find():
     with pytest.raises(KeyError):
         both['I']
     assert both['sir.I'] is both.sir.I
+    res = ss.Result('n_x', shape=3) # Its attributes are updated by name, not by a dict (which was ignored)
+    assert res.update(label='New') is res and res.label == 'New'
+    with pytest.raises(TypeError):
+        res.update(dict(label='x'))
     return
 
 
