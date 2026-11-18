@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs; examples tidied and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with comparing, combining, and copying runs adapted from the Starsim 3 user guide
 ---
 
 Let's be honest: there isn't much you can do with a single sim run. A scenario is a sim with something changed (an intervention added, a parameter set to another value, a different population), and 99.9% of the time you'll want to compare several, each run many times, since one stochastic run is just one draw of what could happen. [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) teaches the same through one example; [Running sims](running_sim.qmd) covers single sims.

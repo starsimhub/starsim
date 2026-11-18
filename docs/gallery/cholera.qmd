@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; amount and concentration made consistent on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 Cholera spreads mostly through water rather than from person to person: infected people shed bacteria into the water, the bacteria decay over weeks, and susceptible people are infected by drinking it. A model of it needs a state that is not people at all: the amount of bacteria in the water, W. This page models W as a state of the disease that holds a count rather than people, following the model of Codeço (2001).

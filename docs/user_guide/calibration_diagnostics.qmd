@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged on Nov 11 by AI with "Parameter identification" (based on an AI draft, with the plot of the ridge and fixing a known value added by AI), now the section on whether the data can tell the parameters apart. Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with Optuna's plots as in the Starsim 3 calibration page
 ---
 
 `sim.fit()` always returns values. Whether to trust them has several parts: does the model match the data, did the search find the best values, do the data determine the values, and does the fitted model predict data it hasn't seen? This page goes through the checks in that order. It assumes the basics of [Fitting a model](calibration_fitting.qmd).

@@ -184,6 +184,7 @@ website:
             - user_guide/library_mnch.qmd
             - user_guide/library_econ.qmd
             - user_guide/library_import.qmd
+            - user_guide/library_epiverse.qmd
         - section: "Mechanics"
           href: user_guide.qmd#mechanics
           contents:

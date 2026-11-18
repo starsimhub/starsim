@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer; restructured on Nov 12 by AI after the docs review, with antibodies boosted by each infection as the example that needs a value for each person, and the disease and network written as code as advanced sections; the table of base classes replaced by a link on Nov 15 by AI
+  note: Written by AI, with parts adapted from the Starsim 3 user guide page on adding modules and its diseases tutorial
 ---
 
 **When people hear about an outbreak, some of them go and get vaccinated. How much does that slow the outbreak down, and what limits it?**

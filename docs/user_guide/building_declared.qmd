@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from a short prompt, with each example run and each timing measured; shortened on Nov 11 by AI; timings moved to Speed and scale on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, how to mix the two, and what each costs in speed.

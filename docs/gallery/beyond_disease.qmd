@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Moved from the user guide page "Nonstandard usage" to the gallery on Nov 11 by AI. The wealth model is adapted from the Starsim 3 user guide page on nonstandard usage; the page, and the boids model, written by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with the wealth model adapted from the Starsim 3 user guide
 ---
 
 Starsim is built for infectious diseases, but its machinery for agents is general: a population of agents, each with properties kept as arrays over all of them; modules that change those properties at each step; results recorded over time; and random numbers drawn so that runs can be repeated and compared. A [module written as code](../user_guide/building_modules.qmd) can hold any property of people and any rule for changing it, so Starsim can run agent-based models with no disease at all. This page shows two classic ones: a model of wealth, from economics, and a model of flocking birds, from computer graphics.

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; examples made realistic and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 People differ in ways that change how a disease spreads: children mix more than adults, some people are vaccinated, some take more risks. Stratifying a model divides its population into groups by such a property (age, sex, place, risk, vaccination), so that each group can have its own rates, contacts, and results. In Starsim this is one operation, `stratify()`, applied to a finished model: its states and transitions don't change, and the property becomes a dimension of each. For a step-by-step introduction, see [T4 – Mixing](../tutorials/t4_mixing.qmd) and [T7 – Stratification and co-transmission](../tutorials/t7_strata.qmd).

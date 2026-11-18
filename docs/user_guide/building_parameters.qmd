@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Written by AI, with the section on parameters of modules written as code adapted from the Starsim 3 user guide page on parameters; examples made realistic and an appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (units, copying, priors)
+  note: Written by AI, with parameters of modules written as code adapted from the Starsim 3 user guide
 ---
 
 The parameters of a model are the numbers in it: transmission rates, durations, fractions, and the like. This page covers where they live, their units, how to name and change them, and the forms a value can take.

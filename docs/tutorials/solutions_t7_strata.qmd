@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; split from the combined solutions page, with a setup for each part, on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 These are solutions to the exercises of [T7 – Stratification and co-transmission](t7_strata.qmd). Many exercises are open-ended, so these are examples: there are often other good answers.

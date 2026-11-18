@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI; links updated on Nov 12 by AI after the docs review
+  note: Written by AI, following the Starsim 3 user guide page on adding modules
 ---
 
 Most of a Starsim model is declared, but some parts are easier to say as code: a quantity that each person carries and that changes continuously (an antibody level, a CD4 count), a rule of behavior of your own, or a result worked out in a way of your own. A module written as code is a Python class with a `step()` method, which Starsim calls once each step. It can read and change the rest of the sim, and sits in the same sim as declared diseases. [T8 – Custom modules](../tutorials/t8_modules.qmd) builds modules up a step at a time.

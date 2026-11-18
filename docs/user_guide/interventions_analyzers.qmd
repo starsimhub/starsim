@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Based on the AI-written v4 draft, with the description of the infection log and of function analyzers adapted from the Starsim 3 user guide page on analyzers; the comparison of mixing patterns written by AI; example made realistic and appendix added by AI; shortened on Nov 11 by AI
+  note: Written by AI, with the infection log and function analyzers adapted from the Starsim 3 user guide
 ---
 
 An analyzer records something during a run that the results don't keep, without changing the model. Most quantities don't need one: every state and transition of a declared disease has a result, ratios and outcomes are declared with the model (see [Results](building_results.qmd) and [Outcomes](building_outcomes.qmd)), and results by age or any other group come from [stratifying](building_stratification.qmd) the model. An analyzer is for the rest: something about individual agents (their ages when infected, who infected whom), or a quantity worked out from several modules at once. Besides the infection log in core Starsim, the library has analyzers for costs, DALYs, and cost-effectiveness (on [Health economics](library_econ.qmd)) and for the CD4 counts of `ssl.HIV`; all are listed in the [appendix](#appendix-every-analyzer).

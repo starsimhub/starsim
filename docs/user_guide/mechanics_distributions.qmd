@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 24
   ai: 76
-  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI; SciPy distributions and the appendix added by AI. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (priors; the generated list of distributions replaced by a link)
+  note: Adapted by AI from the Starsim 3 user guide page on distributions, with new sections
 ---
 
 Distributions appear in a model in three ways: as the distribution of a **duration** (how long people stay in a state, or the delay before an event is reported), as **variation between people** (each person's own value of a parameter), and, in modules written as code, as the **random draws** that decide what happens to each person (who is infected, who tests positive).

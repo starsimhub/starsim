@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged from the gallery pages "Final size" and "The chance of a major outbreak" on Nov 11 by AI; both written by AI; solver comparison measured on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 Two classic results of epidemic theory hold for the simplest SIR model, and are good checks of any way of running it. The first is deterministic: the fraction of people ever infected, the final size, depends only on R0. The second is stochastic: an epidemic with R0 above 1 doesn't always take off, and the chance that it does also depends only on R0. This page sweeps R0 and checks Starsim against each: the final size with the ODE, and the chance of a major outbreak with many stochastic runs.

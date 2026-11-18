@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of the architecture page on solvers and of "Mixing, interventions, and results", with a section on how each engine computes transmission, checked against the current code; routes example given realistic values by AI. Merged from "Engines and kernels" and "Transmission" on Nov 11 by AI; shortened on Nov 11 by AI; linked to the one description of a step on Nov 12 by AI after the docs review; the choice of solver and the kernels shortened to links on Nov 15 by AI
+  note: Written by AI from the code
 ---
 
 

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the Claude draft, with a note on sampling-importance resampling from the Starsim 3 user guide page on SIR calibration; the time-varying transmission rate fitted to a real change, and the note on how honest the posterior is, by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with a note from the Starsim 3 user guide page on SIR calibration
 ---
 
 For a deterministic model, run as an ODE, Starsim can work out the *gradient*: how each result changes as each parameter changes. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step. Gradients make it possible to fit many parameters quickly, to draw from a posterior with the No-U-Turn sampler (NUTS), and to see which parts of the epidemic a parameter affects.

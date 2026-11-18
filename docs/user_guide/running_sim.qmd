@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 19
   ai: 81
-  note: Based on the Claude draft, with the order of a step, partial runs, and the make_sim() pattern adapted from the Starsim 3 user guide pages on the Sim and on multiple runs; the shared-start example made realistic and an appendix of settings added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with parts adapted from the Starsim 3 user guide pages on the Sim and on multiple runs
 ---
 
 A sim (`ss.Sim`) is one model put together with everything needed to run it: the diseases, the population, the time span, how people mix, and any births and deaths, interventions, and analyzers. It runs them in the right order, and holds the results afterwards. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd) build and run the measles model used here; running many sims and comparing them is in [Scenarios](running_scenarios.qmd).

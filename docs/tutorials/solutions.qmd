@@ -4,7 +4,7 @@ format-links: false
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; made an index of the solution pages on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 The solutions to each tutorial's exercises. Many exercises are open-ended, so these are examples: there are often other good answers. Each page starts from its tutorial's model, so it runs on its own.

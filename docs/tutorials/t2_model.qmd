@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI and lightly edited by a human
 ---
 
 This tutorial goes through the SIR model of [Tutorial 1](t1_intro.qmd) in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?**

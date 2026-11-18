@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Merged with the first two steps of the agent-based diseases tutorial (A1) on Nov 11 by AI. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI and lightly edited by a human
 ---
 
 Starsim is a framework for modeling the spread of disease. In Starsim, you write a model as an epidemiologist would describe it: the states people can be in, and the transitions between them and their rates. Starsim runs it as a compartmental model (equations for the number of people in each state) or as agents (one simulated person at a time). Starsim is in Python, and can also be used from R with [R-Starsim](https://r.starsim.org).

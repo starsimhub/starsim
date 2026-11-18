@@ -40,6 +40,8 @@ def test_contacts():
     for df in [pd.DataFrame(m), pd.DataFrame(m, index=['young', 'old'], columns=['young', 'old'])]:
         assert np.array_equal(ss.contacts(df).bare, m) and ss.contacts(df).edges is None
         assert np.array_equal(ss.contacts(age=df).dims['age'], ss.contacts(age=m).dims['age'])
+    intervals = pd.DataFrame(m, index=['[0,18)', '[18,Inf)'], columns=['[0,18)', '[18,Inf)']) # Age groups as R's cut() and socialmixr label them
+    assert ss.data.age_edges(intervals.index) == [0, 18] and list(ss.contacts(intervals).edges) == [0, 18]
     assert ss.data.contacts('Japan').attrs['ref']['study'] == 'Prem et al. 2017' # By default, Prem 2021 where it has the place, else Prem 2017
     return sims
 

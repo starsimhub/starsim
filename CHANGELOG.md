@@ -19,7 +19,8 @@ Starsim 4 adds a way to write models using declared states and transitions, whic
 - **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`, the one way to give births and deaths; UN data by country (`ss.population('Kenya')`, `ss.birth(rate='Kenya')`).
 - **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC (keeping a run with each draw, which `fit.project()` continues), iterated filtering or ABC-SMC; process noise on a rate (`noise=`); `sim.sensitivity()` and `sim.optimize()`.
 - **Runs**: `ss.parallel()` returns a MultiSim with summaries, bands and comparisons by scenario.
-- **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 13 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
+- **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 14 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epidemics, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
+- **Epiverse-TRACE**: `ss.converters.epiverse` reads parameters from epiparameter (`parameter()`) and contact matrices from socialmixr (`contacts()`), and writes a sim's outbreak as a line list, incidence, and chains of transmission (`linelist()`, `incidence()`, `chains()`, `offspring()`) for Epiverse's R packages; `ss.data.age_edges()` and `ss.contacts()` read age groups labeled as intervals (`'[0,5)'`).
 - **Library**: `starsim.library` (`ssl`) holds simple models of many diseases, maternal and newborn health, more networks, and health economics.
 - **Command line and speed**: `starsim init`, `convert`, `help` and `ai`; Numba kernels throughout, with Rust copies that give the same numbers; optional JAX.
 

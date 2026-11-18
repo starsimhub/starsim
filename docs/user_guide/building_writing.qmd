@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 4
   ai: 96
-  note: Written by AI, with a little from the Starsim 3 user guide page on model structure; appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (a table of the shorthand and its written-out form)
+  note: Written by AI, with a little from the Starsim 3 user guide page on model structure
 ---
 
 A Starsim model is a sim (`ss.Sim`) that holds a population and a set of modules: one or more diseases, and whatever else the model needs (contacts, births and deaths, interventions). This page covers how those parts fit together, and how to check that the model Starsim built is the one you meant. For a first walk through a model, see [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd).

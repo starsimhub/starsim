@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 In an SEIR model, people infected first pass through a latent period (E, exposed) before they become infectious. In the simplest SEIR, the time spent in each state is exponentially distributed: many people leave a state almost at once and a few stay a long time, which is rarely realistic. A gamma-distributed (Erlang) period with a few stages is closer to most real infections: each person passes through *k* stages, each exponential, and the total has the same mean but much less spread. This page compares the two, for the same mean infectious period.

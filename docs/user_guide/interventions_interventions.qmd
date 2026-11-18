@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Based on the AI-written v4 drafts on deliveries and on changing parameters, with ideas on eligibility and naming from the Starsim 3 user guide page on interventions; the overview, custom intervention, and advice on comparisons written by AI; examples made realistic, delivery without a product, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with ideas on eligibility and naming from the Starsim 3 user guide
 ---
 
 An intervention is anything done to change the course of an epidemic. Most are one of two kinds. Some **deliver a product** (a vaccine, a test, or a drug) to the people who are eligible, at given times or when something happens to them. Others **change a quantity** in the model, giving nothing to anyone: masks, distancing, and school closures change transmission. Anything else is an intervention written as code.

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 30
   ai: 70
-  note: Merged on Nov 11 by AI from "What is Starsim?" (adapted from the Starsim 3 page of the same name, updated for compartmental models in v4), "Why use a framework?" (written by AI, with the problems taken from Starsim's changelogs and design record), "Starsim models" (adapted from Starsim 3, with the sections on the library and choosing a starting model by AI), and the first half of "Modeling landscape" (written by AI); shortened on Nov 11 by AI; repeated catalogs cut on Nov 12 by AI after the docs review
+  note: Written by AI, with parts adapted from the Starsim 3 pages "What is Starsim?" and "Starsim models"
 ---
 
 ## Introduction

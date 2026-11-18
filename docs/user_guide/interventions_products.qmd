@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Based on the AI-written v4 draft, with the framing of products and deliveries and the custom product adapted from the Starsim 3 user guide page on products; examples made realistic, treatment outcomes and resistance, and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with the framing of products and deliveries and the custom product adapted from the Starsim 3 user guide
 ---
 
 Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, so the same vaccine can be given routinely in one scenario and in a campaign in another. This page covers products; deliveries, and changes to parameters that need no product, are on [Interventions](interventions_interventions.qmd), and costs on [Health economics](library_econ.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and then tests and treatment ([Advanced: interventions as agents](../tutorials/t5_interventions.qmd#as-agents)).

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; headings split writing from running on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 The SIR model is the starting point of most epidemic modeling: people are susceptible (S), infectious (I), or recovered and immune (R), infection is frequency-dependent (each susceptible person is infected at a rate of β times the fraction of people who are infectious), and people stay infectious for an exponentially distributed time. This page writes it in each of the ways Starsim accepts, checks that they are the same model, and runs it as a deterministic ODE, as two kinds of stochastic compartmental model, and as agents.

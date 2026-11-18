@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 20
   ai: 80
-  note: The household and spatial network sections are adapted from the Starsim 3 user guide page on library modules; the rest, and every comparison, written by AI; school closure example and appendix added by AI; shortened on Nov 11 by AI; the random-number experiment labeled as advanced on Nov 12 by AI after the docs review
+  note: Written by AI, with the household and spatial network sections adapted from the Starsim 3 user guide
 ---
 
 Core Starsim's networks (random contacts, partnerships, mother and child, mixing pools, and contact matrices), and how to write a network of your own, are on [Mixing](populations_mixing.qmd). The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd)) has more, for households and other clusters, for space, and for theoretical work:

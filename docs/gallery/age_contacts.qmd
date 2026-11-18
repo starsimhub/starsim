@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged from the gallery pages "Age groups and a contact matrix" and "Closing schools" on Nov 11 by AI; both written by AI, the second adapting the school closure example of the Epidemics R package; school closure labeled as advanced on Nov 12 by AI after the docs review
+  note: Written by AI; the school closure example adapts one from the epidemics R package
 ---
 
 People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the rate of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the fraction of *j* who are infectious. This page builds an age-structured SIR with a contact matrix written by hand, as in the age-structured models of Keeling and Rohani (2008, chapter 3). Then it uses a real country's population and contact matrices, one for each setting (home, school, work, and the rest of the community), and closes schools by removing one of them.

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Based on the Claude draft, with the introduction to calibration and to optimization-based fitting adapted from the Starsim 3 user guide page on calibration; the worked fit made realistic (data from an agent-based run, the initial infections fitted, a fitted dispersion) and appendices added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with the introduction adapted from the Starsim 3 user guide page on calibration
 ---
 
 Calibration is fitting a model's parameters to data: finding the values for which the model's results match what was observed. A model of a measles outbreak may know from the literature how long people are infectious, but not how fast measles spreads in this particular town, or what fraction of cases were reported: those are the parameters to estimate. A best fit (the single set of values that fits best) is usually enough for a first exploration; when the uncertainty in the values matters too, a posterior (the distribution of values consistent with the data) can be fitted instead.
