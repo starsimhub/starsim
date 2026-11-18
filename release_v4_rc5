@@ -1,0 +1,1 @@
+gh release create v4.0.0rc5 --repo starsimhub/starsim --target v4 --prerelease --title "v4.0.0rc5" --notes "Release candidate 5 for Starsim 4.0.0"
