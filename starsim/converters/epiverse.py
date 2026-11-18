@@ -17,10 +17,11 @@ import json
 import numpy as np
 import pandas as pd
 import sciris as sc
-import scipy.stats as sps
-import scipy.optimize as spo
-from scipy.special import gamma as gamma_fn
 import starsim as ss
+
+sps = sc.lazyimport('scipy.stats') # Imported when first used, since most runs never fit a distribution
+spo = sc.lazyimport('scipy.optimize')
+sspec = sc.lazyimport('scipy.special')
 
 __all__ = ['parameters', 'parameter', 'contact_matrix', 'contacts', 'linelist', 'incidence', 'chains', 'offspring']
 
@@ -87,9 +88,9 @@ def from_summary(family, ss_):
         elif family == 'lnorm':
             return dict(meanlog=np.log(mean**2/np.sqrt(sd**2 + mean**2)), sdlog=np.sqrt(np.log(sd**2/mean**2 + 1)))
         elif family == 'weibull':
-            f = lambda k: sd**2/mean**2 - gamma_fn(1 + 2/k)/gamma_fn(1 + 1/k)**2 + 1 # As epiparameter solves it
+            f = lambda k: sd**2/mean**2 - sspec.gamma(1 + 2/k)/sspec.gamma(1 + 1/k)**2 + 1 # As epiparameter solves it
             shape = spo.brentq(f, 0.1, 1000)
-            return dict(shape=shape, scale=mean/gamma_fn(1 + 1/shape))
+            return dict(shape=shape, scale=mean/sspec.gamma(1 + 1/shape))
         elif family == 'norm':
             return dict(mean=mean, sd=sd)
     if family == 'lnorm' and median is not None and disp is not None:
