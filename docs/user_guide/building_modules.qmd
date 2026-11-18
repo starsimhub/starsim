@@ -116,6 +116,8 @@ A module subclasses one of Starsim's module types, so that it runs at the right 
 
 The sim keeps each kind in its own list, e.g. `sim.custom.antibodies` and `sim.interventions[0]`. A module is named after its class in lower case (`antibodies`), unless it is given `name=`. To give a module of your own to a sim by name, as a string (`diseases='mydisease'`), as Starsim's own can be, register the Python module it is in with `ss.register_modules(my_package)` ([`ss.register_modules`](../api/internals.modules.qmd)).
 
+Use subclassing sparingly: a subclass inherits all of its parent's parameters and states, whether or not it uses them. For example, before subclassing a class and replacing its `step()`, consider whether you can subclass its parent instead.
+
 ## The parts of a module
 
 ### Parameters
@@ -143,6 +145,8 @@ class Antibodies(ss.Module):
 ```
 
 The two can be mixed: parameters in the class body are defined by `super().__init__()`, before the rest. Give rates and durations as Starsim's [time parameters](building_time.qmd) (e.g. `ss.days(60)`), so that they mean the same whatever the step: `self.t.dt/self.pars.half_life` is a number of half-lives per step, whether the step is a day or a week. For a default that is a distribution, a number sets its main value (`ssl.AgentSIR(p_death=0.02)`), and another distribution of the same kind replaces it. A parameter of a distribution can itself be a function of the sim and the people ([Distributions](mechanics_distributions.qmd)).
+
+For parameters that vary by group, you can either write them out (e.g. `debut_f` and `debut_m`), for a few simple or commonly used ones, or use `ss.by()` for one parameter with a value for each group (e.g. `ss.by(risk=[0.1, 0.5, 0.9])`; see [Stratification](building_stratification.qmd#values-by-group)).
 
 ### States
 

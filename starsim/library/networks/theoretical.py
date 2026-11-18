@@ -63,7 +63,7 @@ class StaticNet(ss.Network):
     and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
     if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
 
-    If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
+    If "seed=True" is passed as a keyword argument or a parameter in pars, the graph is made with the network's own random numbers.
     The parameter "n" is supplied automatically to be equal to n_agents. With no graph, it is a random (Erdős–Rényi)
     graph: the one `nx.fast_gnp_random_graph()` would make, edge for edge, made without NetworkX (see `random_graph()`).
 
@@ -114,10 +114,8 @@ class StaticNet(ss.Network):
         """
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
-        if not self.own_graph:
-            n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
-            if self.pars.p is None: # Convert from n_contacts to probability
-                self.pars.p = n_contacts/self.n_agents
+        if not self.own_graph: # The chance of each pair: p, or else n_contacts over the population
+            self.p = self.pars.p if self.pars.p is not None else self.pars.n_contacts/self.n_agents
         return
 
     def mean_contacts(self, sim):
@@ -138,21 +136,21 @@ class StaticNet(ss.Network):
 
     def init_post(self):
         super().init_post()
-        if 'seed' in self.pars and self.pars.seed is True:
-            self.pars.seed = self.dist.rng
-        seed = self.pars.seed if 'seed' in self.pars else self.dist.rng # A subclass's graph uses the network's own random numbers
+        given = self.pars.get('seed', True)
+        seed = self.dist.rng if given is True else given # The network's own random numbers, unless a seed was given (a subclass's graph always uses them)
         if self.nx_graph is None: # A random (Erdős–Rényi) graph
-            if isinstance(self.pars.seed, np.random.Generator) and 0 < self.pars.p < 1 and not self.graph_kwargs:
-                p1, p2 = random_graph(self.n_agents, self.pars.p, self.pars.seed)
+            if isinstance(seed, np.random.Generator) and 0 < self.p < 1 and not self.graph_kwargs:
+                p1, p2 = random_graph(self.n_agents, self.p, seed)
                 if not len(p1):
-                    raise ValueError(f'The random graph of {self.n_agents} agents with p={self.pars.p} has no edges')
+                    raise ValueError(f'The random graph of {self.n_agents} agents with p={self.p} has no edges')
                 self.append(p1=p1, p2=p2, weight=np.ones(len(p1)))
                 return
             import networkx as nx # Lazy import since slow
             self.nx_graph = nx.fast_gnp_random_graph
         if callable(self.nx_graph):
             args = inspect.signature(self.nx_graph).parameters
-            kw = {k:v for k,v in dict(self.pars, seed=seed).items() if k in args} # Only pass p and seed if the generator accepts them
+            pars = dict(self.pars, seed=seed) if self.own_graph else {k:v for k,v in dict(self.pars, p=self.p, seed=seed).items() if k != 'n_contacts'} # Its own graph's parameters, or the chance of each pair (from n_contacts if p was not given)
+            kw = {k:v for k,v in pars.items() if k in args} # Only pass p and seed if the generator accepts them
             try:
                 self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
