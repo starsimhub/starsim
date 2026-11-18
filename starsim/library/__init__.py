@@ -8,6 +8,8 @@ Starsim, at the top level (e.g. `ssl.HouseholdNet`, `ssl.Cholera`).
 
 Each class appears in exactly two places: where it is defined, and in its subpackage's
 `__init__.py`. The top-level exports below, and the API docs, follow automatically.
+Unlike core Starsim, whose `__init__.py` imports each public name by name, this one
+re-exports everything its subpackages import, so that adding a class needs no change here.
 """
 import inspect
 from . import diseases

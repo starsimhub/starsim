@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 9
   ai: 91
-  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; Explicit tab that repeated the Python tab removed on Nov 17 by AI
+  note: Written by AI and lightly edited by a human; merged with a second AI draft. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 This tutorial goes through the SIR model of [Tutorial 1](t1_intro.qmd) in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?**
@@ -86,6 +86,23 @@ msim <- parallel(list("Nobody immune" = nobody, "90% immune" = immune))
 msim$plot("measles.I")
 ```
 
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection_explicit = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')
+recovery_explicit  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery')
+transitions = [infection_explicit, recovery_explicit]
+nobody_immune = ss.Disease(transitions=transitions, init=dict(S=0.999, I=0.001), name='measles')        # The fraction of people in each state at the start
+some_immune   = ss.Disease(transitions=transitions, init=dict(S=0.099, I=0.001, R=0.9), name='measles')
+
+settings = dict(networks=ss.MixingPool(n_contacts=1), total_pop=100_000, start=ss.days(0), stop=ss.days(365), dt=ss.days(1), unit='day', solver='ode')
+msim_explicit = ss.parallel({
+    'Nobody immune': ss.Sim(diseases=nobody_immune, **settings),
+    '90% immune':    ss.Sim(diseases=some_immune, **settings),
+})
+msim_explicit.plot('measles.I')
+```
 :::
 
 With 10% susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others: the reproduction number at the start, which the run prints after R0 (`R = 1.51 at the start, with 10% susceptible`). R0, for a fully susceptible population, is still 15.2. The outbreak grows slowly, peaking at about 700 infectious rather than 74,000, and infects about 6,000 people rather than almost everyone. An outbreak grows only when the reproduction number is above 1, so to stop measles, more than 1 − 1/R0 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak die out.

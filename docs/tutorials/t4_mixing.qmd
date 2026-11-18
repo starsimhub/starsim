@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 4
   ai: 96
-  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; the section on looking inside a network replaced by a link on Nov 15 by AI; Explicit tabs that repeated the Python tab removed on Nov 17 by AI
+  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; the section on looking inside a network replaced by a link on Nov 15 by AI
 ---
 
 **Who meets whom, and why does it matter?** So far, everyone in the town mixes equally. In reality, children have more contacts than adults, mostly with other children; people travel between towns; and some infections pass only between people who know each other, such as sexual partners. This tutorial goes from equal mixing, to a contact matrix between age groups, to movement between places, to contacts between particular people. The last part runs as agents.
@@ -99,6 +99,40 @@ sim$run()
 sim$results$measles$infection$by("age")$plot()
 ```
 
+## Explicit
+
+```{python}
+S, E, I, R = ss.State(name='S'), ss.State(name='E'), ss.State(name='I'), ss.State(name='R')
+beta_explicit = ss.par(ss.perday(0.14), bounds=[ss.perday(0.05), ss.perday(0.5)], name='beta') # Per contact with an infectious person
+
+measles_explicit = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=E, rate=beta_explicit*I, name='infection'),
+        ss.Transition(source=E, dest=I, dur=ss.expon(mean=ss.days(10)), name='progression'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'),
+    ],
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The rest start in S
+    init_n = dict(I=10),
+    name   = 'measles',
+)
+measles_explicit.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people would age through
+
+contacts_explicit = ss.contacts(matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]], ages=[0, 15, 65], name='contacts')
+sim_explicit = ss.Sim(
+    diseases  = measles_explicit,
+    networks  = contacts_explicit,
+    total_pop = 100_000,
+    start     = '2025-01-01',
+    stop      = '2026-01-01',
+    dt        = ss.days(1),
+    unit      = 'day',
+    solver    = 'ode',
+    aging     = False, # Nobody is born or dies, so nobody ages
+    label     = 'Contact matrix',
+)
+sim_explicit.run()
+sim_explicit.results.measles.infection.by('age').plot()
+```
 :::
 
 The reproduction number at the start is now about 2.5 rather than 1.7, since the susceptible people are children, who have the most contacts:
@@ -143,6 +177,14 @@ cat("Fraction of each group infected:\n")
 print(round(infections / c(30000, 60000, 10000), 3))
 ```
 
+## Explicit
+
+```{python}
+sizes = {'0-14': 30_000, '15-64': 60_000, '65+': 10_000}
+for age, size in sizes.items():
+    total = res.infection.select(age=age).sum()
+    print(age, ' infections:', round(total), ' fraction infected:', round(total/size, 3))
+```
 :::
 
 Children have nearly two thirds of the infections, though under a third of the town. For more on stratification, see [T7 – Stratification and co-transmission](t7_strata.qmd) and [Stratification](../user_guide/building_stratification.qmd).

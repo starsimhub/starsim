@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 7
   ai: 93
-  note: Written by AI, with the section on diseases written as code adapted from the Starsim 3 user guide page on diseases; examples made realistic and appendices, the list of names with special meaning, and the "Explicit" tabs added by AI; shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review (common transitions first, then advanced sections); the opening SIR example replaced by a link to Writing models on Nov 15 by AI; Explicit tabs that repeated the Python tab removed on Nov 17 by AI
+  note: Written by AI, with the section on diseases written as code adapted from the Starsim 3 user guide page on diseases; examples made realistic and appendices, the list of names with special meaning, and the "Explicit" tabs added by AI; shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review (common transitions first, then advanced sections); the opening SIR example replaced by a link to Writing models on Nov 15 by AI
 ---
 
 A disease in Starsim is declared the way a compartmental model is drawn: as states (the compartments) and the transitions between them (the flows), each driven by a rate or a duration. It runs as a compartmental model or as agents, unchanged. For a step-by-step introduction, see [T2 – Building a model](../tutorials/t2_model.qmd) and [T3 – Building a disease](../tutorials/t3_disease.qmd); for the syntax itself, see [Writing models](building_writing.qmd#shorthand-and-its-written-out-form).
@@ -86,6 +86,23 @@ measles <- Disease(
 sim <- Sim(measles, total_pop = 100000, stop = days(365), verbose = 0)
 sim$run()
 cat("Infections in a year:", round(sum(sim$results$measles$infection$values)), "\n")
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+V = ss.State(name='V', rel_sus=0.03) # Vaccinated: 3% as susceptible as others
+measles_explicit = ss.Disease(
+    ss.Transition(source=[S, V], dest=I, rate=1.9*I, name='infection'), # From either S or V
+    ss.Transition(source=I, dest=R, dur=ss.days(8), name='recovery'),
+    init = dict(V=0.9, I=0.0001),
+    name = 'measles',
+)
+
+sim_explicit = ss.Sim(measles_explicit, total_pop=100_000, stop=ss.days(365), verbose=0)
+sim_explicit.run()
+print('Infections in a year:', round(sim_explicit.results.measles.infection.sum()))
 ```
 
 :::
@@ -262,7 +279,10 @@ cat("Deaths:", round(sum(sim$results$measles$death$values)), "\n")
 ```
 :::
 
-**One transition with several destinations** is decided when people leave: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Each destination has a result, `<transition>.<state>` (or `.dead`). After `@`, the duration has to be a Starsim value (`ss.days(8)`), not a bare number:
+**One transition with several destinations** is decided when people leave: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Each destination has a result, `<transition>.<state>` (or `.dead`). After `@`, the duration has to be a Starsim value (`ss.days(8)`), not a bare number. The "Explicit" tab builds the same model with `ss.Transition()`:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -275,6 +295,25 @@ sim.run()
 res = sim.results.measles
 print('Deaths:', round(res['outcome.dead'].sum()))
 ```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+measles_explicit = ss.Disease(
+    ss.Transition(source=S, dest=I, rate=1.9*I, name='infection'),
+    ss.Transition(source=I, dest={ss.dead: 0.002, R: None}, dur=ss.days(8), name='outcome'),
+    init_prev = 0.001,
+    name = 'measles',
+)
+
+sim_explicit = ss.Sim(measles_explicit, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim_explicit.run()
+res_explicit = sim_explicit.results.measles
+print('Deaths:', round(res_explicit['outcome.dead'].sum()))
+```
+
+:::
 
 **Which form?** With the same duration on every branch, the two forms give the same numbers; they differ in their results (`recovery` and `death`, or `outcome.R` and `outcome.dead`), and only separate transitions can give each branch its own duration. The tutorials use separate transitions.
 

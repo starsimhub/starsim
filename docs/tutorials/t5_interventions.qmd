@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Merged from the Codex and Claude drafts of this tutorial and of the tutorials on repeated runs and seasonality, all written by AI; vaccination over the year relabeled by AI. Merged on Nov 11 by AI with the agent-based interventions tutorial (A4), adapted from the Starsim 3 interventions tutorial, as its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; Explicit tabs that repeated the Python tab removed on Nov 17 by AI
+  note: Merged from the Codex and Claude drafts of this tutorial and of the tutorials on repeated runs and seasonality, all written by AI; vaccination over the year relabeled by AI. Merged on Nov 11 by AI with the agent-based interventions tutorial (A4), adapted from the Starsim 3 interventions tutorial, as its section on agents. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
 ---
 
 **How much difference could a vaccination campaign make?** Most models are built to answer questions like this. This tutorial compares a one-off campaign, vaccination over the year, and a response that cuts transmission, as scenarios. It then runs the scenarios many times to see how sure the answer is, and, in an advanced section on agents, turns to interventions that reach particular people because of what has happened to them. By the end of this tutorial, you will be able to:
@@ -103,6 +103,19 @@ msim <- parallel(list(
 msim$plot("measles.infection")
 ```
 
+## Explicit
+
+```{python}
+vaccine = ss.Vaccine(efficacy=0.93, leaky=True) # The product: everyone vaccinated is 93% less likely to be infected
+campaign_explicit = ss.vaccinate(vaccine, who=measles.age < 15, when='2025-03-01', coverage=0.8, name='campaign') # The delivery: who, when, and how many
+settings_explicit = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', dt=ss.days(1), unit='day', solver='ode', aging=False)
+
+msim_explicit = ss.parallel({
+    'No intervention': ss.Sim(diseases=measles, **settings_explicit),
+    'Campaign':        ss.Sim(diseases=measles, interventions=campaign_explicit, **settings_explicit),
+})
+msim_explicit.plot('measles.infection')
+```
 :::
 
 After the campaign, the outbreak peaks within weeks, since those already infected still fall ill, then dies away. Like real campaigns, it reaches children whether or not they are immune, so most doses go to children already protected. Each delivery has its own results, such as doses delivered:
@@ -130,6 +143,12 @@ gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, rate=ss.probperyear(
 gradual <- vaccinate(efficacy = 0.93, who = measles$age < 15, rate = ss$probperyear(0.8))
 ```
 
+## Explicit
+
+```{python}
+p_day = 1 - (1 - 0.8)**(1/365) # The daily probability that gives 0.8 over 365 days
+gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, rate=ss.probperday(p_day))
+```
 :::
 
 Routine childhood immunization instead vaccinates each child at an age (`who=ss.at_age(ss.months(9))`; see [below](#vaccination-as-people-reach-an-age)).

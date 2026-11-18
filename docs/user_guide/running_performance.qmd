@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 24
   ai: 76
-  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; "A step as one compiled pass" added on Nov 17 by AI; the appendices moved to "Command line and options" on Nov 17 by AI
+  note: Merged on Nov 11 by AI from "Getting the most speed" (written by AI from measurements of the kernels, JAX, and the agents) and "Deployment" (based on an AI draft adapted from the Starsim 3 user guide page on deployment, with sections on scripts, compiling, and job schedulers, written by AI); shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; "A step as one compiled pass" added on Nov 17 by AI
 ---
 
 Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. The first half of this page covers what makes a run slow and what to do about it; the second, running many sims from a script, on a large computer, on a cluster, or behind a dashboard. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd), and making and comparing many sims in [Scenarios](running_scenarios.qmd).

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review; the solver example replaced by a link to Solvers and backends on Nov 15 by AI; Explicit tab that repeated the Python tab removed on Nov 17 by AI
+  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review; the solver example replaced by a link to Solvers and backends on Nov 15 by AI
 ---
 
 This page is the mental model of Starsim on one page: what a model is made of, how it runs, and how Starsim decides whether to run it as compartments or as agents. For a hands-on start, see [T1 – Getting started](../tutorials/t1_intro.qmd).
@@ -84,6 +84,15 @@ measles <- Disease(
 measles$diagram()
 ```
 
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at 1.9 per day times the fraction infectious
+recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
+measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
+measles_explicit.diagram()
+```
 :::
 
 Because the model is a description rather than code, Starsim can read it: it can write out its equations, draw its diagram (as above), work out its basic reproduction number, choose a solver, and list everything it assumed. [Writing models](building_writing.qmd) covers the syntax, and [Diseases](building_diseases.qmd) what transitions can do (durations, branches, competing exits, and transmission).

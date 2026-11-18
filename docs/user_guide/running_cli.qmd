@@ -3,7 +3,7 @@ title: Command line and options
 authorship:
   human: 10
   ai: 90
-  note: Moved on Nov 17 by AI from the appendices of "Speed and scale" (the starsim command, and every option), both written by AI
+  note: Written by AI, from what were the appendices of "Speed and scale"
 ---
 
 This page lists the `starsim` command that comes with Starsim, and Starsim's global options (`ss.options`), which can be set from Python or from the shell.

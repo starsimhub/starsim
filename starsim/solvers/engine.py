@@ -284,9 +284,9 @@ def by_level(levels, n):
 
 
 def no_set_count(mod, name):
-    """ Setting the number of people in a state (`sir.I.n = 0`), which would make or lose people: they are moved instead (`ss.move()`), so the number of people stays the same in every disease """
-    raise ss.CapabilityError(f'{mod}.{name}.n is the number of people in {name}, which is read, not set: setting it would make or lose people.\n'
-                             f'     Move them with ss.move(), e.g. ss.move({mod}.{name}, <the state they go to>, n=...); people come into the model and leave it by births and deaths, which are declared.')
+    """ Setting the number of agents in a state (`sir.I.n = 0`), which does not say which agents: they are set by their UIDs instead """
+    raise ss.CapabilityError(f'{mod}.{name}.n is the number of agents in {name}, which does not say which of them to change.\n'
+                             f'     Set the agents themselves, e.g. {mod}.{name}[uids] = False and {mod}.<the state they go to>[uids] = True, or move them with ss.move({mod}.{name}, <the state they go to>, n=...).')
 
 
 class CountState:
@@ -319,8 +319,7 @@ class CountState:
 
     @n.setter
     def n(self, value):
-        if self.state.people:
-            no_set_count(self.engine.mod.name, self.name)
+        """ Set the number in this state, keeping its split between groups: a manual override (see `values`) """
         self.engine.set_count(self.state, value)
         return
 
@@ -343,6 +342,21 @@ class CountState:
     def values(self):
         """ The number in this state in each group """
         return self.engine.count([self.state], total=False)
+
+    @values.setter
+    def values(self, values):
+        """
+        Set the number in this state in each group, e.g. to move people by hand, as `ss.move()` does:
+
+            moved = sir.S.values*0.1
+            sir.S.values -= moved
+            sir.R.values += moved
+
+        A manual override: people taken out of a state leave each of its compartments in proportion, and people added enter
+        it as people moving into it do, but nothing checks that people are moved rather than made or lost (`ss.move()` does).
+        """
+        self.engine.set_values(self.state, values)
+        return
 
     def no_agents(self, what):
         """ A read of agents, which a compartmental run does not have (e.g. a module that reads each person's state, run beside the compartments) """

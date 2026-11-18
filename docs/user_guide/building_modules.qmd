@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI; links updated on Nov 12 by AI after the docs review; Explicit tab that repeated the Python tab removed on Nov 17 by AI
+  note: Written by AI, following the structure of the Starsim 3 user guide page on adding modules, with its parts on parameters, states, aliases, the lifecycle, and modules from functions adapted; shortened on Nov 11 by AI; links updated on Nov 12 by AI after the docs review
 ---
 
 Most of a Starsim model is declared, but some parts are easier to say as code: a quantity that each person carries and that changes continuously (an antibody level, a CD4 count), a rule of behavior of your own, or a result worked out in a way of your own. A module written as code is a Python class with a `step()` method, which Starsim calls once each step. It can read and change the rest of the sim, and sits in the same sim as declared diseases. [T8 – Custom modules](../tutorials/t8_modules.qmd) builds modules up a step at a time.
@@ -206,7 +206,10 @@ When a sim is built and run, each module goes through these stages:
 
 ## Modules from functions
 
-For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `custom=` (or as an argument) an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step:
+For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `custom=` (or as an argument) an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step (the "Explicit" tab makes the analyzer from the function itself, with `ss.Analyzer.from_func()`):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -225,6 +228,28 @@ sim = ss.Sim(measles, analyzers=check_states, n_agents=10_000, stop=ss.days(50),
 sim.run()
 print(sim.analyzers[0].name)
 ```
+
+## Explicit
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+def check_states(sim):
+    """ Check that everyone alive is in exactly one state of measles """
+    m = sim.diseases.measles
+    in_states = m.S.sum() + m.I.sum() + m.R.sum()
+    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
+    return
+
+checker = ss.Analyzer.from_func(check_states) # The analyzer that analyzers=check_states makes
+sim = ss.Sim(measles, analyzers=checker, n_agents=10_000, stop=ss.days(50), verbose=0)
+sim.run()
+print(sim.analyzers[0].name)
+```
+:::
 
 A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`; not `==`, which a date between two steps never meets). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, frac=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
 

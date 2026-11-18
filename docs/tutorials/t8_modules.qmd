@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer; restructured on Nov 12 by AI after the docs review, with antibodies boosted by each infection as the example that needs a value for each person, and the disease and network written as code as advanced sections; the table of base classes replaced by a link on Nov 15 by AI; Explicit tab that repeated the Python tab removed on Nov 17 by AI
+  note: Written by AI, from the earlier AI-written tutorial on modules written as code, with a new example of vaccine demand that responds to an outbreak. Merged on Nov 11 by AI with the agent-based tutorial on custom modules (A5), adapted from the Starsim 3 user guide page on adding modules and the waning-immunity example of its diseases tutorial. Shortened on Nov 11 by AI, which also added the analyzer; restructured on Nov 12 by AI after the docs review, with antibodies boosted by each infection as the example that needs a value for each person, and the disease and network written as code as advanced sections; the table of base classes replaced by a link on Nov 15 by AI
 ---
 
 **When people hear about an outbreak, some of them go and get vaccinated. How much does that slow the outbreak down, and what limits it?**
@@ -49,6 +49,9 @@ During measles outbreaks, parents who had put off vaccinating hear about cases a
 
 The smallest module written as code is a function of the sim, called once each step; given as `interventions=`, it becomes an intervention. In it, `sim.results` has the results so far, and `sim.ti` is the index of the current time point. `ss.move()` moves people between a declared disease's states, the same way under every solver: here, those vaccinated and protected from `S` to `R`. `to_prob()` turns a rate into the chance of an event in one step, 1 − exp(−rate × dt). Two simplifications keep this short: everyone in `S` is taken to be unvaccinated (the model doesn't record who was vaccinated), and the vaccine is all or nothing (93% of those vaccinated are fully protected), unlike the leaky vaccine of [T5](t5_interventions.qmd):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 def vaccine_demand(sim):
     """ The unvaccinated seek vaccination at a rate that rises with the cases reported in the last week """
@@ -59,6 +62,27 @@ def vaccine_demand(sim):
     ss.move(measles.S, measles.R, p=seeking*0.93)                             # Those vaccinated and protected become immune
     return
 ```
+
+## Explicit
+
+```{python}
+import numpy as np
+
+def vaccine_demand(sim):
+    """ The unvaccinated seek vaccination at a rate that rises with the cases reported in the last week """
+    measles = sim.diseases.measles
+    last_week = sim.results.measles.cases[max(sim.ti-7, 0):sim.ti].sum()      # Cases reported in the last 7 steps: a week, since each step here is a day
+    frac = last_week/(last_week + 300)                                        # From 0 to 1, a half at 300 cases a week
+    rate = 0.1/7*frac                                                         # The rate of seeking vaccination, per day
+    seeking = 1 - np.exp(-rate*sim.t.dt.days)                                 # The chance of seeking vaccination in this step
+    protected = measles.S.values*seeking*0.93                                 # The number vaccinated and protected, in each age group
+    measles.S.values -= protected                                             # Set by hand: what leaves S must be added to R,
+    measles.R.values += protected                                             # since nothing checks that people are not made or lost
+    return
+```
+:::
+
+The explicit tab sets the number in each state itself, a manual override that is up to you to get right: as compartments, `S.values` is the number in `S` in each group. As agents, the same is done by setting each agent's state (`measles.S[uids] = False`, `measles.R[uids] = True`).
 
 ```{python}
 sims = {

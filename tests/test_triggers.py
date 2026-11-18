@@ -297,6 +297,26 @@ def test_move_outside():
     return
 
 
+def test_set_values():
+    sc.heading('Setting the number in states by hand moves people as ss.move() does')
+    def by_hand(sim):
+        sir = sim.diseases.sir
+        moved = sir.S.values*0.01
+        sir.S.values -= moved
+        sir.R.values += moved
+    def by_move(sim):
+        ss.move(sim.diseases.sir.S, sim.diseases.sir.R, p=0.01)
+    out = []
+    for fn in [by_hand, by_move]:
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
+        sir.stratify(age={0: 0.3, 15: 0.7})
+        sim = ss.Sim(sir, interventions=fn, total_pop=10_000, stop=ss.days(60), verbose=0).run()
+        out.append(sim.results.sir.R.values)
+    assert np.allclose(out[0], out[1])
+    return
+
+
 @sc.timer()
 def test_class_trigger_rebound():
     sc.heading('Testing that a trigger on several events in a class is of each instance\'s transitions')
@@ -328,3 +348,4 @@ if __name__ == '__main__':
     test_paths_and_memory()
     test_code_every_solver()
     test_move_outside()
+    test_set_values()
