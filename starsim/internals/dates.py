@@ -945,7 +945,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def default_units(x, axis):
         if isinstance(x, ss.DateArray):
             return ss.Duration if (len(x) and x.is_dur) else ss.date
-        elif sc.isiterable(x) and not isinstance(x, TimePar): # e.g. a list or pandas Series of durations, so check the first entry
+        elif sc.isiterable(x) and not isinstance(x, ss.TimePar): # e.g. a list or pandas Series of durations, so check the first entry
             x = next(iter(x), None)
         if isinstance(x, ss.Duration):
             return ss.Duration

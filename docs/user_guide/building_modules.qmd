@@ -206,7 +206,7 @@ When a sim is built and run, each module goes through these stages:
 
 ## Modules from functions
 
-For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `custom=` (or as an argument) an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step (the "Explicit" tab makes the analyzer from the function itself, with `ss.Analyzer.from_func()`):
+For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `custom=` (or as an argument) an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step (the "Explicit" tab writes the same check as a class, with a result of its own):
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -237,17 +237,27 @@ infection = S >> I @ 1.9*I        # β = 1.9 per day
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
-def check_states(sim):
+class CheckStates(ss.Analyzer):
     """ Check that everyone alive is in exactly one state of measles """
-    m = sim.diseases.measles
-    in_states = m.S.sum() + m.I.sum() + m.R.sum()
-    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
-    return
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('in_states', label='Agents in a state of measles', kind='stock'),
+        )
+        return
 
-checker = ss.Analyzer.from_func(check_states) # The analyzer that analyzers=check_states makes
-sim = ss.Sim(measles, analyzers=checker, n_agents=10_000, stop=ss.days(50), verbose=0)
+    def step(self): # What the function was: called once each step
+        m = self.sim.diseases.measles
+        in_states = m.S.sum() + m.I.sum() + m.R.sum()
+        alive = self.sim.people.alive.count()
+        assert in_states == alive, f'{in_states} agents in states, but {alive} alive'
+        self.results.in_states[self.ti] = in_states
+        return
+
+sim = ss.Sim(measles, analyzers=CheckStates(name='check_states'), n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.run()
 print(sim.analyzers[0].name)
+print(sim.results.check_states.in_states[-1])
 ```
 :::
 

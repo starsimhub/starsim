@@ -75,14 +75,15 @@ def vaccine_demand(sim):
     frac = last_week/(last_week + 300)                                        # From 0 to 1, a half at 300 cases a week
     rate = 0.1/7*frac                                                         # The rate of seeking vaccination, per day
     seeking = 1 - np.exp(-rate*sim.t.dt.days)                                 # The chance of seeking vaccination in this step
-    protected = measles.S.values*seeking*0.93                                 # The number vaccinated and protected, in each age group
-    measles.S.values -= protected                                             # Set by hand: what leaves S must be added to R,
-    measles.R.values += protected                                             # since nothing checks that people are not made or lost
+    y = measles.y                                                             # The number in each compartment (rows: S, E, I, R) and age group (columns)
+    protected = y[0]*seeking*0.93                                             # The number vaccinated and protected, in each age group
+    y[0] -= protected                                                         # Set by hand: what leaves S must be added to R,
+    y[3] += protected                                                         # since nothing checks that people are not made or lost
     return
 ```
 :::
 
-The explicit tab sets the number in each state itself, a manual override that is up to you to get right: as compartments, `S.values` is the number in `S` in each group. As agents, the same is done by setting each agent's state (`measles.S[uids] = False`, `measles.R[uids] = True`).
+The explicit tab changes the compartments themselves, a manual override that is up to you to get right: as compartments, `measles.y` is the array the solver steps, with a row for each compartment (S, E, I, R) and a column for each age group. As agents, the same is done by setting each agent's state (`measles.S[uids] = False`, `measles.R[uids] = True`).
 
 ```{python}
 sims = {

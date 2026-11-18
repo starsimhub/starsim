@@ -298,12 +298,13 @@ def test_move_outside():
 
 
 def test_set_values():
-    sc.heading('Setting the number in states by hand moves people as ss.move() does')
+    sc.heading('Changing the compartments by hand moves people as ss.move() does')
     def by_hand(sim):
         sir = sim.diseases.sir
-        moved = sir.S.values*0.01
-        sir.S.values -= moved
-        sir.R.values += moved
+        moved = sir.y[0]*0.01 # S, in each group
+        sir.y[0] -= moved
+        sir.y[2] += moved # R
+        assert sir.R.rows == [2] and np.isclose(sir.y[sir.R.rows].sum(), sir.R.n)
     def by_move(sim):
         ss.move(sim.diseases.sir.S, sim.diseases.sir.R, p=0.01)
     out = []

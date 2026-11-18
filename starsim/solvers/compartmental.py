@@ -895,10 +895,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def set_count(self, state, value):
         """ Set the number in a state, keeping its split between groups and sub-compartments """
-        if state.people: # By group, so that what it gains enters as people do (see set_values())
-            have = self.count([state], total=False)
-            total = have.sum()
-            return self.set_values(state, have*(value/total) if total > 0 else value*self.state_split[state.name])
         inds = self.state_comps[state.name]
         current = self.y[inds]
         total = current.sum()
@@ -906,16 +902,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.y[inds] = current*(value/total)
         else:
             self.y[inds[0]] = value*self.state_split[state.name]
-        return
-
-    def set_values(self, state, values):
-        """ Set the number in a state in each group, from code (`sir.S.values = ...`), as a manual override: what it loses leaves its compartments in proportion, and what it gains arrives as people moving into it do; nothing checks that people were moved rather than made or lost """
-        have = self.count([state], total=False)
-        values = np.broadcast_to(np.asarray(values, dtype=float), have.shape)
-        inds = self.state_comps[state.name]
-        keep = np.divide(np.minimum(values, have), have, out=np.ones_like(have), where=have > 0)
-        self.y[inds] = self.y[inds]*keep
-        self.arrive(state.name, np.maximum(values - have, 0), self.y)
         return
 
     def n_people(self, total=True):

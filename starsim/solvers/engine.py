@@ -319,7 +319,7 @@ class CountState:
 
     @n.setter
     def n(self, value):
-        """ Set the number in this state, keeping its split between groups: a manual override (see `values`) """
+        """ Set the number in this state, keeping its split between groups: a manual override (see `dis.values`) """
         self.engine.set_count(self.state, value)
         return
 
@@ -339,24 +339,9 @@ class CountState:
     def __invert__(self):      return ~ss.conditions.as_cond(self)
 
     @property
-    def values(self):
-        """ The number in this state in each group """
-        return self.engine.count([self.state], total=False)
-
-    @values.setter
-    def values(self, values):
-        """
-        Set the number in this state in each group, e.g. to move people by hand, as `ss.move()` does:
-
-            moved = sir.S.values*0.1
-            sir.S.values -= moved
-            sir.R.values += moved
-
-        A manual override: people taken out of a state leave each of its compartments in proportion, and people added enter
-        it as people moving into it do, but nothing checks that people are moved rather than made or lost (`ss.move()` does).
-        """
-        self.engine.set_values(self.state, values)
-        return
+    def rows(self):
+        """ Its rows in the disease's compartments (`dis.y`): one, or one for each stage, e.g. `sir.y[sir.I.rows].sum(0)` is the number in I in each group """
+        return list(self.engine.state_comps[self.name])
 
     def no_agents(self, what):
         """ A read of agents, which a compartmental run does not have (e.g. a module that reads each person's state, run beside the compartments) """

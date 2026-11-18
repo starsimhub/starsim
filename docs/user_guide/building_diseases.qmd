@@ -91,10 +91,11 @@ cat("Infections in a year:", round(sum(sim$results$measles$infection$values)), "
 ## Explicit
 
 ```{python}
-S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-V = ss.State(name='V', rel_sus=0.03) # Vaccinated: 3% as susceptible as others
+S, I, R, V = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='V')
+beta = ss.par(1.9, name='beta') # One β, shared by both infections
 measles_explicit = ss.Disease(
-    ss.Transition(source=[S, V], dest=I, rate=1.9*I, name='infection'), # From either S or V
+    ss.Transition(source=S, dest=I, rate=beta*I, name='infection_S'),
+    ss.Transition(source=V, dest=I, rate=0.03*beta*I, name='infection_V'), # Vaccinated: 3% as susceptible as others
     ss.Transition(source=I, dest=R, dur=ss.days(8), name='recovery'),
     init = dict(V=0.9, I=0.0001),
     name = 'measles',
@@ -102,12 +103,13 @@ measles_explicit = ss.Disease(
 
 sim_explicit = ss.Sim(measles_explicit, total_pop=100_000, stop=ss.days(365), verbose=0)
 sim_explicit.run()
-print('Infections in a year:', round(sim_explicit.results.measles.infection.sum()))
+res = sim_explicit.results.measles
+print('Infections in a year:', round(res.infection_S.sum() + res.infection_V.sum()))
 ```
 
 :::
 
-`S + V >> I` is one transition from either state. Each person also has their own `rel_sus` and `rel_trans`, which interventions and connectors change: a vaccine lowers the `rel_sus` of those who get it ([Products](interventions_products.qmd)), and `ss.modify(hiv.rel_sus, ...)` can make one disease change the risk of another ([Connectors](interventions_connectors.qmd)). These act on the transitions that are an **acquisition** of the disease: every transmission, and any other transition out of the first state if the disease has no transmission ([appendix](building_writing.qmd#appendix-what-starsim-names-and-fills-in)).
+`S + V >> I` is one transition from either state, with the rate of each person multiplied by their `rel_sus`; the "Explicit" tab writes it as two transitions, the one out of V with its rate multiplied by 0.03. Each person also has their own `rel_sus` and `rel_trans`, which interventions and connectors change: a vaccine lowers the `rel_sus` of those who get it ([Products](interventions_products.qmd)), and `ss.modify(hiv.rel_sus, ...)` can make one disease change the risk of another ([Connectors](interventions_connectors.qmd)). These act on the transitions that are an **acquisition** of the disease: every transmission, and any other transition out of the first state if the disease has no transmission ([appendix](building_writing.qmd#appendix-what-starsim-names-and-fills-in)).
 
 ## Other transitions
 
@@ -279,7 +281,7 @@ cat("Deaths:", round(sum(sim$results$measles$death$values)), "\n")
 ```
 :::
 
-**One transition with several destinations** is decided when people leave: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Each destination has a result, `<transition>.<state>` (or `.dead`). After `@`, the duration has to be a Starsim value (`ss.days(8)`), not a bare number. The "Explicit" tab builds the same model with `ss.Transition()`:
+**One transition with several destinations** is decided when people leave: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Each destination has a result, `<transition>.<state>` (or `.dead`). After `@`, the duration has to be a Starsim value (`ss.days(8)`), not a bare number. The "Explicit" tab writes it as two competing transitions out of I, which split the rate of leaving, 1/8 per day, by p and 1 − p:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -299,10 +301,13 @@ print('Deaths:', round(res['outcome.dead'].sum()))
 ## Explicit
 
 ```{python}
+p = 0.002            # The fraction who die
+leave = 1/ss.days(8) # The rate of leaving I: 1/8 per day
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
 measles_explicit = ss.Disease(
     ss.Transition(source=S, dest=I, rate=1.9*I, name='infection'),
-    ss.Transition(source=I, dest={ss.dead: 0.002, R: None}, dur=ss.days(8), name='outcome'),
+    ss.Transition(source=I, dest=ss.dead, rate=p*leave, name='death'),    # The two compete: p of those who leave I die
+    ss.Transition(source=I, dest=R, rate=(1 - p)*leave, name='recovery'), # And the rest recover
     init_prev = 0.001,
     name = 'measles',
 )
@@ -310,7 +315,7 @@ measles_explicit = ss.Disease(
 sim_explicit = ss.Sim(measles_explicit, total_pop=100_000, stop=ss.days(50), verbose=0)
 sim_explicit.run()
 res_explicit = sim_explicit.results.measles
-print('Deaths:', round(res_explicit['outcome.dead'].sum()))
+print('Deaths:', round(res_explicit.death.sum()))
 ```
 
 :::

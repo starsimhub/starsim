@@ -350,7 +350,7 @@ This appendix answers "will my model run as an ODE?", feature by feature, and th
 | Write a module that reads counts and results? | Supported | Supported | `sir.I.n`, `sim.results` ([Modules](architecture_index.qmd)) |
 | Write a module that keeps a value for each person? | Unsupported | Supported | Arrays such as `ss.FloatArr` ([Custom modules](building_modules.qmd)) |
 | Write a rate as a Python function? | Supported, if it works on groups | Supported | ([Severity by age](../gallery/hospitalization.qmd)) |
-| Read counts by group from code? | Supported: `sir.I.values` is per group | Supported, but `sir.I.values` is per agent: use `sir.I.n` or the results | |
+| Read or change counts by group from code? | Supported: `sir.y[sir.I.rows].sum(0)` is per group, and changing `sir.y` changes the model | Read `sir.I.n` or the results; change agents' states (`sir.I[uids] = False`) | |
 | Write my own ODE in NumPy? | Supported | Supported, running beside the agents, unconnected to them | ([Measles in London](../gallery/measles_london.qmd)) |
 
 ### The rules Starsim checks

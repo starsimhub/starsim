@@ -142,7 +142,7 @@ For `rel_sus` and `rel_trans`, the multipliers can also go with the levels, so t
 
 ### Several dimensions
 
-A model can be stratified by several properties, in one call or several. Here 90% of people are vaccinated, with a vaccine that is 97% protective, as a second dimension with susceptibility by level. The "Explicit" tab gives each dimension with `ss.levels()` and the kind that Starsim takes from its name and levels:
+A model can be stratified by several properties, in one call or several. Here 90% of people are vaccinated, with a vaccine that is 97% protective, as a second dimension with susceptibility by level. The "Explicit" tab gives the joint groups by hand instead: a table of every combination of age group and vaccination, with the fraction of people in it, and each dimension's kind, which Starsim otherwise takes from its name and levels:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -174,20 +174,31 @@ res.infection.by('vaccinated').plot()
 ## Explicit
 
 ```{python}
-def make_measles_explicit(vaccinated):
-    S, I, R = ss.states('S I R')
-    beta = 0.14*ss.by(vaccinated=[1, 0.03]) if vaccinated else 0.14 # The vaccinated are 3% as susceptible
-    infection = S >> I @ beta*I
-    recovery  = I >> R @ ss.days(8)
-    measles = ss.Disease(infection, recovery, init_prev=0.001)
-    measles.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people age through
-    if vaccinated:
-        measles.stratify(vaccinated=ss.levels({False: 0.1, True: 0.9}, kind='plain')) # Plain groups, which people stay in
-    return measles
+import pandas as pd
 
-sim = ss.Sim(make_measles_explicit(True), networks=contacts, total_pop=100_000, stop=ss.days(365), verbose=0)
+S, I, R = ss.states('S I R')
+beta = 0.14*ss.by(vaccinated=[1, 0.03]) # The vaccinated are 3% as susceptible
+infection = S >> I @ beta*I
+recovery  = I >> R @ ss.days(8)
+measles_explicit = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+
+groups = pd.DataFrame(dict( # Every combination of the levels, with the fraction of people in it
+    age        = ['0-14', '0-14', '15-64', '15-64', '65+', '65+'],
+    vaccinated = [False,  True,   False,   True,    False, True],
+    value      = [0.03,   0.27,   0.06,    0.54,    0.01,  0.09], # 90% of each age group vaccinated
+))
+measles_explicit.stratify(
+    age        = ss.levels([0, 15, 65], kind='age'), # Age groups, which people age through
+    vaccinated = ss.levels([False, True], kind='plain', fractions=ss.by(groups)), # Plain groups, which people stay in
+)
+
+sim = ss.Sim(measles_explicit, networks=contacts, total_pop=100_000, stop=ss.days(365), verbose=0)
 sim.run()
-sim.results.measles.infection.by('vaccinated').plot()
+res = sim.results.measles
+print('Infections with 90% vaccinated:', round(res.infection.sum()))
+print('Among the vaccinated:', round(res.infection.select(vaccinated=True).sum()))
+print('Among unvaccinated children:', round(res.infection.select(age='0-14', vaccinated=False).sum()))
+res.infection.by('vaccinated').plot()
 ```
 :::
 
