@@ -169,7 +169,7 @@ def debut_fn(sim):
     dis = sim.diseases.sexual
     people = sim.people.auids # Everyone alive
     ready = people[dis.U[people] & (sim.people.age[people] >= 15)]
-    dis.move(ready, dis.A)
+    dis.move(dis.A, uids=ready)
     return
 
 demog = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
@@ -513,7 +513,7 @@ A disease that needs what states and transitions can't say, such as a quantity e
 | `transmissibility()`, `susceptibility()`, `transmit()` | Who can transmit, who can be infected, and who is infected; override rarely |
 | `route_betas()` | The beta of each network and direction, e.g. by sex: start from `super().route_betas()` |
 
-`self.infect(uids)` infects people from code. With `strains=ss.Strains(...)`, each person carries one strain at a time (`self.strain`), `strain_value()` reads a strain's values, and `infect(uids, strain='b')` infects with one. [Custom modules](building_modules.qmd) covers the parts of a module, and [T1](../tutorials/t1_intro.qmd#the-same-model-as-agents) builds a disease among agents.
+`self.infect(uids)` infects people from code. Strains (`ss.Strains`) are only for a declared disease. [Custom modules](building_modules.qmd) covers the parts of a module, and [T1](../tutorials/t1_intro.qmd#the-same-model-as-agents) builds a disease among agents.
 
 ## Advanced: strains {#strains}
 

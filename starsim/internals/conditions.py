@@ -25,7 +25,6 @@ comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.person.age)
 leaves = ['people', 'state', 'dim', 'kind', 'array', 'incidence', 'event', 'memory', 'move']
 memory_kinds = ['ever', 'n_times', 'since']
-bool_ops = comparisons + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # The operations whose value is true or false (see Cond.is_bool)
 
 
 class Cond(Shared): # A condition is never changed once made, and refers to modules by name, so is shared between copies of a sim
@@ -88,9 +87,10 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == 'event': return modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '')
         elif op == 'memory': return f'{args[0]!r}.{args[1]}'
-        elif op == '~':    return f'~{args[0]!r}'
-        elif op == 'isin': return f'{args[0]!r}.isin({list(args[1])})'
-        return f'({args[0]!r} {op} {args[1]!r})'
+        inner = lambda x: f'({x!r})' if ss.expressions.op_of(x) is not None else repr(x)
+        if op == '~':      return f'~{inner(args[0])}'
+        elif op == 'isin': return f'{inner(args[0])}.isin({list(args[1])})'
+        return ss.expressions.join_binop(self, repr, a=args[0], b=args[1])
 
     def __bool__(self):
         errormsg = f'The condition {self} has no single truth value: it is evaluated when the sim runs. Use &, |, and ~ instead of "and", "or", and "not"; anything else can be written as a function of the sim.'
@@ -144,11 +144,6 @@ class Cond(Shared): # A condition is never changed once made, and refers to modu
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
         return Cond(op, a, b)
-
-    @property
-    def is_bool(self):
-        """ Whether it is true or false for each person (a comparison, a logical operation, a state, an event, or whether an event ever happened), as opposed to a quantity such as `ss.person.age` """
-        return self.op in bool_ops or (self.op == 'memory' and self.args[1] == 'ever')
 
     @property
     def time_in(self):
@@ -571,14 +566,7 @@ def ref(path):
 
 def module_refs(cond):
     """ The names of the modules whose states, arrays, or events a condition reads (not those of a function of the sim) """
-    out = set()
-    if isinstance(cond, Event):
-        out.add(modname(cond.module))
-    elif isinstance(cond, Cond) and cond.op in ['state', 'array']:
-        out.add(modname(cond.args[0]))
-    elif isinstance(cond, Cond) and cond.op not in leaves:
-        for arg in cond.args:
-            out |= module_refs(arg)
+    out = {modname(c.module) if isinstance(c, Event) else modname(c.args[0]) for c in ss.expressions.nodes(cond) if isinstance(c, Event) or (isinstance(c, Cond) and c.op in ['state', 'array'])}
     return out - {None}
 
 
@@ -735,32 +723,26 @@ def modname(mod):
 
 def leaf_states(cond):
     """ The state leaves of a condition, as (module, state name), with the module as given (an object, a name, or None) """
-    if cond.op == 'state':
-        return [(cond.args[0], cond.args[1])]
-    elif cond.op in leaves:
-        return []
-    return [ref for arg in cond.args if isinstance(arg, Cond) for ref in leaf_states(arg)]
+    return [(c.args[0], c.args[1]) for c in ss.expressions.nodes(cond) if isinstance(c, Cond) and c.op == 'state']
 
 
 def state_refs(obj):
     """ The states of named modules that the conditions of a module (e.g. an `ss.modify()` or a delivery, and its product) refer to, as (module name, state name), and the dimensions of a disease's own (e.g. `measles.age`), as (module name, dimension name) """
     out = []
     def walk(cond):
-        if cond.op == 'state':
-            if modname(cond.args[0]) is not None:
-                out.append((modname(cond.args[0]), cond.args[1]))
-        elif cond.op == 'dim':
-            if cond.owner is not None: # See ss.Disease.stratify()
-                out.append((modname(cond.owner), cond.args[0]))
-        elif isinstance(cond, Event): # The transition, or the states entered or left
-            kind, obj = cond.kind, cond.obj
-            name = modname(cond.module)
-            if name is not None:
-                out.extend([(name, obj.name)] if kind in ['tr', 'to'] else [(name, n) for n in cond.names])
-        elif cond.op not in leaves:
-            for arg in cond.args:
-                if isinstance(arg, Cond):
-                    walk(arg)
+        for c in ss.expressions.nodes(cond):
+            if not isinstance(c, Cond):
+                continue
+            elif c.op == 'state':
+                if modname(c.args[0]) is not None:
+                    out.append((modname(c.args[0]), c.args[1]))
+            elif c.op == 'dim':
+                if c.owner is not None: # See ss.Disease.stratify()
+                    out.append((modname(c.owner), c.args[0]))
+            elif isinstance(c, Event): # The transition, or the states entered or left
+                name = modname(c.module)
+                if name is not None:
+                    out.extend([(name, c.obj.name)] if c.kind in ['tr', 'to'] else [(name, n) for n in c.names])
         return
     for holder in [obj, getattr(obj, 'product', None)]:
         for val in (vars(holder).values() if holder is not None else []):
@@ -869,11 +851,7 @@ def is_event(cond):
 
 def has_event(cond):
     """ Whether a condition has an event in it """
-    if not isinstance(cond, Cond):
-        return False
-    if cond.op in leaves:
-        return is_event(cond)
-    return any(has_event(arg) for arg in cond.args)
+    return isinstance(cond, Cond) and any(isinstance(c, Cond) and c.op in ['event', 'move'] for c in ss.expressions.nodes(cond))
 
 
 def group_reasons(cond, sim):
@@ -911,18 +889,11 @@ def group_reasons(cond, sim):
 
 def rebind(cond, memo):
     """ The condition with the transitions of its events replaced by their copies in `memo`, as `ss.expressions.rebind()` for an expression: e.g. `vax = ss.Transition(R, V, when=recovery)` in a class is of each instance's copy of `recovery`; a condition is not copied (see `Cond.__copy__()`), so this is a new one if anything changed """
-    if not isinstance(cond, Cond):
-        return cond
     if isinstance(cond, Event):
         if cond.kind in ['tr', 'to'] and id(cond.obj) in memo:
             return Event(cond.kind, memo[id(cond.obj)], memo.get(id(cond.dst), cond.dst))
         return cond
-    args = tuple(rebind(arg, memo) for arg in cond.args)
-    if all(new is old for new,old in zip(args, cond.args)):
-        return cond
-    out = object.__new__(type(cond))
-    out.__dict__.update(cond.__dict__, _args=args)
-    return out
+    return ss.expressions.rebind(cond, memo) if isinstance(cond, Cond) else cond
 
 
 def event_leaves(cond):
@@ -956,13 +927,13 @@ def join(op, conds):
 
 def path_events(cond):
     """ A path made an event (see `split_where()`) is the event of going through that transition, of a module made before that one exists """
-    if isinstance(cond, StatePath):
-        event = Event('tr', Named(*cond.args))
-        event.path = cond # Checked when the sim is initialized: see check_path_events()
+    def fn(c):
+        if not isinstance(c, StatePath):
+            return c
+        event = Event('tr', Named(*c.args))
+        event.path = c # Checked when the sim is initialized: see check_path_events()
         return event
-    if isinstance(cond, Cond) and cond.op not in leaves:
-        return Cond(cond.op, *[path_events(arg) for arg in cond.args])
-    return cond
+    return ss.expressions.transform(cond, fn) if isinstance(cond, Cond) else cond
 
 
 def path_module(sim, path):
@@ -994,27 +965,22 @@ def resolve_paths(cond, sim):
     A condition (or trigger) with each path in it (`ss.ref('mod.name')`, or a string) made whatever is at the path, once the sim is initialized:
     the event of a transition (or transfer), or the condition of being in a state; anything else (e.g. an array of a module written as code) stays a path
     """
-    if not isinstance(cond, Cond):
-        return cond
-    if isinstance(cond, StatePath) or cond.path is not None:
-        path = cond if isinstance(cond, StatePath) else cond.path
+    def fn(c):
+        if not (isinstance(c, StatePath) or (isinstance(c, Cond) and c.path is not None)):
+            return c
+        path = c if isinstance(c, StatePath) else c.path
         modname, name, mod = path_module(sim, path)
         graph = getattr(mod, 'graph', None)
         if graph is not None and (name in graph.transitions or name in graph.transfers):
-            if isinstance(cond, StatePath):
+            if isinstance(c, StatePath):
                 event = Event('tr', Named(modname, name))
                 event.path = path
                 return event
-            return cond
+            return c
         elif graph is not None and name in graph.states:
             return path
-        return cond
-    if cond.op in leaves:
-        return cond
-    args = tuple(resolve_paths(arg, sim) for arg in cond.args)
-    if all(new is old for new,old in zip(args, cond.args)):
-        return cond
-    return Cond(cond.op, *args)
+        return c
+    return ss.expressions.transform(cond, fn) if isinstance(cond, Cond) else cond
 
 
 def split_events(cond):

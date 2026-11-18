@@ -200,7 +200,6 @@ def test_timeline():
     ]
     for start, stop, dt, n in cases:
         assert len(ss.Timeline(start, stop, dt)) == n, f'{start} to {stop} by {dt}: {len(ss.Timeline(start, stop, dt))} points, not {n}'
-    assert np.array_equal(ss.Timeline(start=2000, stop=2002, dt=0.1).init().relvec[:3], [0, 0.1, 0.2]) # Numbers in the sim's units
 
     dd30 = ss.date(2030) - ss.date(2000) # The time between two dates, in days
     y = ss.years
@@ -336,7 +335,7 @@ def test_time_regressions():
     # Outside the run, now() gives each key's own kind of time
     t = ss.Timeline(start='2020-01-01', stop='2020-12-31', dt=ss.weeks(1))
     t.ti = -1
-    assert t.now('ti') == -1 and t.now('rel') == -1 and t.now() == ss.date('2019-12-25')
+    assert t.now('year') == ss.date('2019-12-25').years and t.now() == ss.date('2019-12-25')
 
     # A module whose timeline is shifted from the sim's, with as many points, is not read as on the sim's times
     sim = ss.Sim(n_agents=100, start=2000, stop=2010, demographics=ss.Births(start=2002, stop=2012), verbose=0).init()

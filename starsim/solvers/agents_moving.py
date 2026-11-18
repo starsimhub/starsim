@@ -10,7 +10,6 @@ from .engine import Bunch, times
 
 __all__ = ['Moving']
 
-check_draws = sc.parse_env('STARSIM_CHECK_DRAWS', False, bool) # Whether the agent engine checks that no agent is drawn twice from a stream in a round: see ss.solvers.Agents.draw()
 ROUNDS = 2**52 # The index of the engine's draws is ROUNDS + ti*ROUND_MAX + round, apart from each distribution's own (see Agents.draw())
 ROUND_MAX = 2**20
 
@@ -751,7 +750,6 @@ class Moving:
         self.round = (ti, n, tag)
         if n >= ROUND_MAX:
             raise ValueError(f'"{self.mod.name}" took more than {ROUND_MAX} rounds of moves in step {ti}')
-        self._drawn = {}
         return
 
     def draw_ind(self):
@@ -780,8 +778,6 @@ class Moving:
         dist = self.dists[key]
         if not ss.options.crn:
             return dist.rvs(uids)
-        if check_draws:
-            self.check_drawn(key, uids)
         how = self._draw_how.get(key)
         if how is None: # The uniforms themselves (most of them), the unit exponential of a dwell time (see sample_dwell()), a distribution with values by sex, drawn from a table kept for the run (see agent_pars()), or any other as it is
             how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.mean == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'own'
@@ -846,24 +842,13 @@ class Moving:
             held = self.lifelong[('pars', key)] = (n, *new) if held is None else (n, join(held[1], new[0]), None if new[1] is None else join(held[2], new[1]))
         return held
 
-    def crn_key(self, key, uids=None):
-        """ As `ss.Dist.crn_key()`, for a compiled pass that makes the draws of one of the engine's distributions itself (for `uids`), keyed as `draw()` is; None if it cannot """
+    def crn_key(self, key):
+        """ As `ss.Dist.crn_key()`, for a compiled pass that makes the draws of one of the engine's distributions itself, keyed as `draw()` is; None if it cannot """
         dist = self.dists[key]
         diagnostics = self.sim.diagnostics
-        if not ss.options.crn or dist.even or dist.initialized is not True or dist.slots is None or (diagnostics and diagnostics.rvs is not None):
+        if not ss.options.crn or dist.initialized is not True or dist.slots is None or (diagnostics and diagnostics.rvs is not None):
             return None
-        if check_draws and uids is not None:
-            self.check_drawn(key, uids)
         return (self.round_seed(dist.seed), self.draw_ind(), np.dtype(dist.hash_dtype or ss.dtypes.float))
-
-    def check_drawn(self, key, uids):
-        """ With STARSIM_CHECK_DRAWS=1 (for testing): that none of some agents has been drawn from a stream already in this round """
-        uids = np.unique(np.asarray(uids, dtype=np.int64))
-        seen = self._drawn.get(key)
-        if seen is not None and len(np.intersect1d(seen, uids)):
-            raise RuntimeError(f'"{self.mod.name}" drew {key} twice in round {self.round} for {np.intersect1d(seen, uids)[:5]}')
-        self._drawn[key] = uids if seen is None else np.union1d(seen, uids)
-        return
 
     def stamp(self, name, uids, ti):
         """

@@ -428,13 +428,41 @@ class Stock(Expr):
         return self.state.name
 
 
+def transform(obj, fn):
+    """
+    An expression or a condition with `fn` applied to each part, from the top: where it gives something else, that is the
+    part; otherwise the part's operands (of arithmetic, a NumPy function, a condition in a rate, or a condition's operator) are transformed, and the part is made again only if any changed
+    """
+    new = fn(obj)
+    if new is not obj:
+        return new
+    if isinstance(obj, BinOp):
+        parts = [obj.a, obj.b]
+    elif isinstance(obj, Func):
+        parts = obj.args
+    elif isinstance(obj, Prop):
+        parts = [obj.cond]
+    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
+        parts = obj.args
+    else:
+        return obj
+    new = [transform(part, fn) for part in parts]
+    if all(a is b for a,b in zip(new, parts)):
+        return obj
+    if isinstance(obj, BinOp):
+        return BinOp(obj.op, *new)
+    elif isinstance(obj, Func):
+        return Func(obj.name, *new)
+    elif isinstance(obj, Prop):
+        return Prop(*new)
+    out = object.__new__(type(obj)) # A condition, with what else it holds (e.g. the state it stands for)
+    out.__dict__.update(obj.__dict__, _args=tuple(new))
+    return out
+
+
 def mapped(expr, func):
     """ An expression with `func` applied to each part that is not arithmetic or a NumPy function """
-    if isinstance(expr, BinOp):
-        return BinOp(expr.op, mapped(expr.a, func), mapped(expr.b, func))
-    elif isinstance(expr, Func):
-        return Func(expr.name, *[mapped(arg, func) for arg in expr.args])
-    return func(expr)
+    return transform(expr, lambda e: e if isinstance(e, (BinOp, Func)) else func(e))
 
 
 def as_stocks(expr):
@@ -477,17 +505,7 @@ class Prop(Expr):
 
     def leaves_of(self, op):
         """ The leaves of its condition of one kind, e.g. 'people' """
-        out = []
-        def walk(c):
-            if c.op == op:
-                out.append(c)
-            elif c.op not in ss.conditions.leaves:
-                for arg in c.args:
-                    if isinstance(arg, ss.conditions.Cond):
-                        walk(arg)
-            return
-        walk(self.cond)
-        return out
+        return [c for c in nodes(self.cond) if isinstance(c, ss.conditions.Cond) and c.op == op]
 
     @property
     def names(self):
@@ -518,16 +536,14 @@ def substitute(expr, subs):
 
 def unheld(expr):
     """ A rate with each parameter that holds an expression of states or counts (`ss.par(beta*I)`) replaced by that expression, since that is what it is: worked out as the rate is, under every solver, rather than as a value """
-    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, HeldFrac)) for part in nodes(expr.value)):
-        if expr.bounds is not None or expr.prior is not None:
-            errormsg = f'The parameter {expr.name or ""} holds the rate {expr.value}, which reads the model\'s states, so it cannot be fitted as a value; give the bounds or prior to the parameters inside it instead, e.g. beta = ss.par(0.3, bounds=[0.1, 1]) in ss.par(beta*I)'
-            raise ValueError(errormsg)
-        return unheld(expr.value)
-    parts = [expr.a, expr.b] if isinstance(expr, BinOp) else expr.args if isinstance(expr, Func) else []
-    new = [unheld(part) for part in parts]
-    if all(a is b for a,b in zip(new, parts)):
-        return expr
-    return BinOp(expr.op, *new) if isinstance(expr, BinOp) else Func(expr.name, *new)
+    def fn(e):
+        if isinstance(e, par) and isinstance(e.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, HeldFrac)) for part in nodes(e.value)):
+            if e.bounds is not None or e.prior is not None:
+                errormsg = f'The parameter {e.name or ""} holds the rate {e.value}, which reads the model\'s states, so it cannot be fitted as a value; give the bounds or prior to the parameters inside it instead, e.g. beta = ss.par(0.3, bounds=[0.1, 1]) in ss.par(beta*I)'
+                raise ValueError(errormsg)
+            return unheld(e.value)
+        return e
+    return transform(expr, fn)
 
 
 binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
@@ -865,20 +881,20 @@ def events_in(on):
 
 def rebind(expr, memo):
     """ The expression with the states, transitions, and parameters it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; other parameters are kept, not copied """
-    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition, par)):
-        return memo.get(id(expr), expr)
-    if not isinstance(expr, (BinOp, Func, Count, Flow, Clock)):
-        return expr
-    new = sc.cp(expr)
-    if isinstance(expr, BinOp):
-        new.a, new.b = rebind(expr.a, memo), rebind(expr.b, memo)
-    elif isinstance(expr, Func):
-        new.args = [rebind(arg, memo) for arg in expr.args]
-    elif isinstance(expr, Flow):
-        new.tr = rebind(expr.tr, memo)
-    else:
-        new.states = [s if isinstance(s, tuple) else rebind(s, memo) for s in expr.states]
-    return new
+    def fn(e):
+        if isinstance(e, (ss.transitions.State, ss.transitions.Transition, par)):
+            return memo.get(id(e), e)
+        elif isinstance(e, ss.conditions.Event): # As ss.conditions.rebind()
+            return ss.conditions.rebind(e, memo)
+        elif not isinstance(e, (Count, Flow, Clock)):
+            return e
+        new = sc.cp(e) # Always a copy, since these are compared by identity
+        if isinstance(e, Flow):
+            new.tr = rebind(e.tr, memo)
+        else:
+            new.states = [s if isinstance(s, tuple) else rebind(s, memo) for s in e.states]
+        return new
+    return transform(expr, fn)
 
 
 def clocks_in(obj):
@@ -915,18 +931,38 @@ class BinOp(Expr):
         return self.a.leaves + self.b.leaves
 
 
-precedence = {'+':1, '-':1, '*':2, '/':2, '**':3}
+precedence = {'>':0, '<':0, '>=':0, '<=':0, '==':0, '!=':0, '|':1, '&':2, '+':3, '-':3, '*':4, '/':4, '**':5} # Of arithmetic, comparisons, and logic, in expressions and conditions, as Python reads them
 
 
-def join_binop(e, fmt, op=None):
-    """ Write arithmetic between two expressions, with parentheses only where they are needed: a - (b - c), a / (b * c), (a + b) ** c """
-    p = precedence[e.op]
-    a, b = fmt(e.a), fmt(e.b)
-    if isinstance(e.a, BinOp) and (precedence[e.a.op] < p or (e.op == '**' and precedence[e.a.op] == p)):
-        a = f'({a})'
-    if isinstance(e.b, BinOp) and (precedence[e.b.op] < p or (precedence[e.b.op] == p and e.op in ['-', '/'])):
-        b = f'({b})'
-    return f'{a} {op or e.op} {b}'
+def op_of(x):
+    """ The operator of a part of an expression or a condition, for its brackets (see `join_binop()`); None for a leaf or a function """
+    if isinstance(x, Prop):
+        x = x.cond
+    if isinstance(x, BinOp) or (isinstance(x, ss.conditions.Cond) and x.op in precedence):
+        return x.op
+    elif isinstance(x, Func) and x.name in comparisons:
+        return comparisons[x.name]
+    return None
+
+
+def operand(x, op):
+    """ An expression or a condition as text beside the operator `op`, bracketed if it binds less tightly, e.g. `(I.n > 1000)` beside `&` """
+    p = precedence.get(op_of(x), 9)
+    return f'({x!r})' if p < precedence[op] else repr(x)
+
+
+def join_binop(e, fmt, op=None, a=None, b=None):
+    """ Write arithmetic, a comparison, or a logical operation between two parts (`e.a` and `e.b`, or `a` and `b`), with parentheses only where they are needed: a - (b - c), a / (b * c), (a + b) ** c, (a > b) & c """
+    a, b = (e.a, e.b) if a is None else (a, b)
+    eop = getattr(e, 'op', None) or comparisons[e.name]
+    p = precedence[eop]
+    pa, pb = [precedence.get(op_of(x), 9) for x in (a, b)]
+    ta, tb = fmt(a), fmt(b)
+    if pa < p or (pa == p and (eop == '**' or p == 0)): # Comparisons do not chain
+        ta = f'({ta})'
+    if pb < p or (pb == p and (eop in ['-', '/'] or p == 0)):
+        tb = f'({tb})'
+    return f'{ta} {op or eop} {tb}'
 
 
 def linear(expr, die=True):
@@ -1216,7 +1252,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return join_binop(e, fmt, op=mul if e.op == '*' else e.op)
         elif isinstance(e, Func):
             if e.name in comparisons:
-                return f'({fmt(e.args[0])} {comparisons[e.name]} {fmt(e.args[1])})'
+                return join_binop(e, fmt, a=e.args[0], b=e.args[1])
             return f'{e.name}({", ".join(fmt(arg) for arg in e.args)})'
         elif isinstance(e, par):
             if e.name and not e.literal and not values:

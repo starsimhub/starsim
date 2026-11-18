@@ -83,7 +83,7 @@ def vaccine_demand(sim):
 ```
 :::
 
-The explicit tab changes the compartments themselves, a manual override that is up to you to get right: as compartments, `measles.y` is the array the solver steps, with a row for each compartment (S, E, I, R) and a column for each age group. As agents, the same is done by setting each agent's state (`measles.S[uids] = False`, `measles.R[uids] = True`).
+The explicit tab changes the compartments themselves, a manual override that is up to you to get right: as compartments, `measles.y` is the array the solver steps, with a row for each compartment (S, E, I, R) and a column for each age group. As agents, the same is done by setting each agent's state (`measles.S[uids] = False`, `measles.R[uids] = True`). That is a plain write: the counts see it, but it doesn't date the entry (`ti_R`) or count as an event for `when=measles.R.enter`; set `ti_R` yourself if you need it, or use `ss.move()`, which does both.
 
 ```{python}
 sims = {

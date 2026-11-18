@@ -5,7 +5,7 @@ The kernels themselves are Numba's, in `ss.solvers.numba` (the reference), and R
 
     ss.jit                                               # Compile a function (see its docstring)
     ss.solvers.backends.rust                             # Swaps in the Rust kernels, once built (see ss.options.backend)
-    ss.solvers.backends.compiling                        # Choosing compiled or plain Python for a compartmental run, ss.compile(), and Numba's cache
+    ss.solvers.backends.compiling                        # Choosing the kernels for a compartmental run, ss.compile(), and Numba's cache
     ss.solvers.backends.workers                          # Starting the workers of ss.parallel() and of a calibration
     ss.solvers.backends.keep_memory(), release_memory()  # Keep large freed arrays for reuse (the default), or give them back
     ss.solvers.backends.timed_compile()                  # Say what is being compiled within a block, about how long it takes, and then how long it took (timed_first_call() for a function's first call)

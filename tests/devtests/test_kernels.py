@@ -214,7 +214,7 @@ def test_caches():
     import os
     compiling = ss.solvers.backends.compiling
     deps = {os.path.basename(k):[os.path.basename(f) for f in v] for k,v in compiling.deps.items()}
-    for name in ['passes.py', 'agent_moves.py', 'agent_events.py', 'compartmental.py']:
+    for name in ['passes.py', 'agent_events.py', 'compartmental.py']:
         assert 'draws.py' in deps.get(name, []), f'{name} does not depend on draws.py: {deps}'
     for name in ['expon', 'weibull', 'binomial', 'poisson', 'nbinom']: # Numba keys its cache by a closure's variables, which change each session, so none is a closure
         func = compiling.numba_kernel('many', name) if ss.solvers.backends.rust.numba else D.many[name]

@@ -218,7 +218,7 @@ def test_rescale():
 #%% Modules in the sim
 
 def test_module_order():
-    """ Custom modules are initialized after the modules they may read; modules step in the order given with step_order='given', and by kind otherwise """
+    """ Custom modules are initialized after the modules they may read; modules step by kind, unless moved with sim.loop.insert() """
     class Demography(ss.Demographics):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -255,11 +255,13 @@ def test_module_order():
         def step(self):
             log.append(self.name)
             return super().step()
-    make = lambda order: ss.Sim([Mark(name='first'), Net(name='net'), ss.SIR(name='sir'), Mark(name='last')], step_order=order, n_agents=200, stop=2001, verbose=0)
-    make('type').run()
+    make = lambda: ss.Sim([Mark(name='first'), Net(name='net'), ss.SIR(name='sir'), Mark(name='last')], n_agents=200, stop=2001, verbose=0)
+    make().run()
     assert log[:3] == ['first', 'last', 'net'] # Modules of no standard kind first, then the networks
     log.clear()
-    sim = make('given').run()
+    sim = make().init()
+    sim.loop.insert(sim.networks.net, label='first.step') # Moved to just after the first module's step
+    sim.run()
     assert log[:3] == ['first', 'net', 'last'] and len(sim.custom) == 2 and len(sim.networks) == 1 # Still found by kind
     sim = ss.Sim(Mark(name='a'), custom=[Mark(name='b'), ss.SIR()], n_agents=100, verbose=0).init() # custom= keeps them where they are given
     assert list(sim.custom.keys()) == ['a', 'b', 'sir'] and not len(sim.diseases)
@@ -370,9 +372,8 @@ def test_solver_options():
     assert agents.pop_scale == 10 and ss.Sim(make(), solver='ode', **kw).init().pop_scale == 1
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, solver=ss.solvers.abm(step='wholestep'), name='sir')
     assert isinstance(ss.Sim(sir, unit='day', stop=5, verbose=0).init().solver, ss.solvers.abm)
-    for kw in [dict(rescale=True), dict(even_draws=True)]: # Settings for agents only are dropped for what R0() and Rt() work out as an ODE
-        sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks='random', n_agents=500, total_pop=1e4, stop=10, verbose=0, solver=ss.solvers.abm(**kw)).run()
-        assert sim.diseases.sir.R0() > 0 and len(sim.diseases.sir.Rt())
+    sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks='random', n_agents=500, total_pop=1e4, stop=10, verbose=0, solver=ss.solvers.abm(rescale=True)).run() # Settings for agents only are dropped for what R0() and Rt() work out as an ODE
+    assert sim.diseases.sir.R0() > 0 and len(sim.diseases.sir.Rt())
     return euler
 
 

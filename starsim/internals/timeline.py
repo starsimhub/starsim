@@ -140,11 +140,9 @@ class Timeline:
     After initialization, it has these time vectors:
 
     - `tvec`: ground truth simulation time, either as absolute `ss.date` instances, or relative `ss.Duration` instances, e.g. `DateArray([<2021-01-01>, <2021-01-03>, <2021-01-05>, <2021-01-07>])`
-    - `tivec`: the vector of time indices (`np.arange(len(tvec))`)
     - `timevec`: the "human-friendly" representation of `tvec`: same as `tvec` if using `ss.date`, else floats if using `ss.Duration`
     - `yearvec`: time represented as floating-point years
     - `datevec`: time represented as `ss.date` instances
-    - `relvec`: relative time, in the unit of the sim's step (`dt`)
 
     And these attributes and methods:
 
@@ -169,7 +167,7 @@ class Timeline:
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
-    _time_vecs = ['tvec', 'tivec', 'timevec', 'yearvec', 'datevec', 'relvec']
+    _time_vecs = ['tvec', 'timevec', 'yearvec', 'datevec']
 
     keywords = ['start', 'stop', 'dt', 'name', 'init', 'sim'] # Those of __init__() that a module passes on (not dur, which is a parameter of many modules, e.g. ss.RandomNet(dur=...))
 
@@ -188,16 +186,12 @@ class Timeline:
         self.unit = None # The class of the sim's unit, e.g. ss.days, in which a bare time with no calendar is read
         self.origin = None # The start of the sim's run, from which a duration given as a time is counted when there is a calendar; set in reconcile_args()
 
-        # Populated on init: tvec, tivec, and yearvec then, and timevec, datevec, and relvec when first read (see the properties below), since most sims never read them
+        # Populated on init: tvec and yearvec then, and timevec and datevec when first read (see the properties below), since most sims never read them
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.tvec    = None # The time vector for this instance in date or dur format
-        self.tivec   = None # The time index vector
         self.yearvec = None # Time vector as floating point years
         self._timevec = None
         self._datevec = None
-        self._relvec  = None
-        self._rel_start = None # The start that relvec counts from, set on init (None: this timeline's own start)
-        self._rel_dur_class = None # The duration class of relvec, set on init
         self.unitless = False # Whether time is counted in steps, with no unit or calendar (a declared model in which nothing has a unit); then there are no dates
         self.initialized = False # Call self.init(sim) to initialize the object
 
@@ -244,21 +238,6 @@ class Timeline:
         if self._timevec is None and self.tvec is not None:
             self._timevec = self.tvec.to_float() if self.calendar is None else self.tvec.to_human() # By the calendar, not by whether the times could be dates (a sim from 10 with no calendar is not in the year 10)
         return self._timevec
-
-    @property
-    def relvec(self):
-        """ Time since the start of the sim, as numbers in the unit of the sim's step, `dt` (e.g. weeks for `dt=ss.weeks(1)`, whatever the sim's unit); derived lazily """
-        if self._relvec is None and self.yearvec is not None:
-            start = self._rel_start # The sim start date, or start year if the sim is duration-based
-            dur_class = self._rel_dur_class
-            if self.is_absolute and isinstance(start, ss.date): # Date-based: use the exact number of days since the sim start date
-                dur_vec = ss.days(self.tvec.days_since(start))
-            else: # Otherwise, use years
-                year0 = start.years if isinstance(start, ss.date) else start
-                dur_vec = ss.years(self.yearvec - year0)
-            dur_vec = dur_class(dur_vec) # Convert to the intended class
-            self._relvec = np.round(dur_vec.to_array(), decimals=6) # Only keep the numeric array, rounded since yearvec is only precise to 9 decimals, e.g. 2.000000004 months
-        return self._relvec
 
     @property
     def dt_year(self):
@@ -330,13 +309,11 @@ class Timeline:
             now = vec[ti]
         else: # Special case, we are before or after the sim period: whole steps from the start, as the key reads them
             now = self.tvec[0] + self.dt*ti
-            if key == 'tivec':
-                now = ti
-            elif key == 'yearvec':
+            if key == 'yearvec':
                 now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
             elif key == 'datevec' or (key == 'timevec' and self.calendar is not None):
                 now = now if isinstance(now, ss.date) else ss.date(now.years)
-            elif key in ['relvec', 'timevec'] and len(vec) > 1: # Numbers, at the same spacing
+            elif key == 'timevec' and len(vec) > 1: # Numbers, at the same spacing
                 now = vec[0] + ti*(vec[1] - vec[0])
 
         if to_str:
@@ -381,7 +358,7 @@ class Timeline:
                         self.stop = None
                 stale = True
         if stale and self.initialized:
-            self._timevec = self._datevec = self._relvec = None # Clear the lazy vectors
+            self._timevec = self._datevec = None # Clear the lazy vectors
             self.init(force=True)
         return
 
@@ -440,7 +417,7 @@ class Timeline:
         given = self.given
         if not self.initialized: # As given, or as set since (e.g. module.t.dt = ss.days(1)); once initialized, they are what they were read as, so the inputs are those kept
             given.update(start=self.start, stop=self.stop, dt=self.dt) # The length (dur) is kept as given
-        own = sim is None or self is sim.t or not isinstance(sim.t, Timeline) # The sim's own timeline, or one standing alone (or with a mock sim: see ss.debugtools.mock_sim())
+        own = sim is None or self is sim.t # The sim's own timeline, or one standing alone
         dt = given.dt
         if sim is not None:
             dt = sc.ifelse(dt, sim.pars.dt if own else sim.t.dt)
@@ -584,9 +561,7 @@ class Timeline:
             errormsg = f'Unexpected start {self.start}: expecting ss.Duration or ss.date'
             raise TypeError(errormsg)
 
-        # Finalize the eager vectors: tvec (as a DateArray) and the time-index vector
         self.tvec = ss.DateArray(self.tvec) # Ensure tvec is a DateArray
-        self.tivec = np.arange(self.npts) # Simple time indices
         npts = self.npts
 
         # Warn if the number of steps is very large
@@ -602,10 +577,8 @@ class Timeline:
             warnmsg += 'Set ss.options.max_years = 0 to turn off this warning.'
             ss.warn(warnmsg)
 
-        self._set_relvec_start(sim)
-
         # Check that the vectors built are the same length (the others are made from yearvec)
-        for k in ['tvec', 'tivec', 'yearvec']:
+        for k in ['tvec', 'yearvec']:
             v = getattr(self, k)
             if len(v) != npts:
                 errormsg = f'Expected all vectors be the same length, but len({k})={len(v)} ≠ len(tvec)={npts}'
@@ -627,31 +600,11 @@ class Timeline:
 
     def _copy_from(self, source):
         """ Copy the time vectors from a matching (sim) timeline: as shallow copies, and those made when read only if they have been """
-        for attr in ['tvec', 'tivec', 'yearvec']:
+        for attr in ['tvec', 'yearvec']:
             setattr(self, attr, getattr(source, attr).copy())
-        for attr in ['_timevec', '_datevec', '_relvec']:
+        for attr in ['_timevec', '_datevec']:
             src = getattr(source, attr)
             setattr(self, attr, src.copy() if src is not None else None)
-        self._rel_start = source._rel_start
-        self._rel_dur_class = source._rel_dur_class
-        return
-
-    def _set_relvec_start(self, sim):
-        """ Set the start (the first date, or year if duration-based) and the duration class that relvec reads, from the sim's timeline (which may be this one; or its own, standing alone), so it can be made later without the sim """
-        ref_t = sim.t if sim is not None and isinstance(sim.t, Timeline) and sim.t.tvec is not None else self # The sim's is built before its modules' (this one is built already)
-        start = ref_t.tvec[0] if ref_t.is_absolute else ref_t.yearvec[0]
-        rel_dt = ref_t.dt
-
-        # Get the class for dt, which we use as the unit for the relative durations
-        if isinstance(rel_dt, ss.Duration):
-            dur_class = type(rel_dt)
-            if dur_class == ss.dates.datedur: # Don't use a datedur, since we want something numeric
-                dur_class = type(rel_dt.to_dur())
-        else:
-            dur_class = self.default_type
-
-        self._rel_start = start
-        self._rel_dur_class = dur_class
         return
 
 
@@ -735,7 +688,7 @@ class schedule:
         out = f'ss.schedule({", ".join(what)})'
         if self.either is not None:
             out = f'({out} | {self.either!r})'
-        return out if self.cond is None else f'{out} & {self.cond!r}'
+        return out if self.cond is None else f'{out} & {ss.expressions.operand(self.cond, "&")}'
 
     def __and__(self, other):
         """

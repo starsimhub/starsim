@@ -9,7 +9,6 @@ backend computes a run) is set in one place, e.g.:
 Used with: agents and compartments; declared and coded modules
 """
 import os
-import sys
 import tempfile
 import numpy as np
 import numba as nb
@@ -23,7 +22,7 @@ __all__ = ['options', 'dtypes', 'style'] # The public names, shown in the API re
 backends = ['auto', 'rust', 'numba', 'python', 'jax'] # The values of ss.options.backend: how the solvers' numbers are computed
 approximations = ['note', 'allow', 'error'] # The values of ss.options.approximations: what a sim does with each approximation a solver makes
 warning_options = ['warn', 'print', 'error', 'errors', 'ignore'] # The values of ss.options.warnings: what ss.warn() does ('errors' is the same as 'error')
-choices = dict(backend=backends, approximations=approximations, warnings=warning_options, precision=[32, 64]) # The values that these options can take
+choices = dict(backend=backends, approximations=approximations, warnings=warning_options) # The values that these options can take
 thread_limit = None # The fewest threads asked for in the environment when Starsim was imported (STARSIM_BLAS_THREADS, SCIRIS_NUM_THREADS, or OMP_NUM_THREADS), before it set its own (see ss.gradients.jax()); None if none was
 
 
@@ -127,10 +126,9 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
         add('style', 'starsim', 'The plotting style: "starsim" (default), "fancy", "simple", or any of Matplotlib\'s styles. To change it for one plot only, use ss.style() in a with block.')
         add('show', True, 'Whether plots are shown as soon as they are made (with plt.show()); set False to make figures without showing them, e.g. in a script that saves them to files.')
         add('reticulate', False, 'Whether a NumPy integer array indexes a state by UIDs, as needed for a module written in R (through reticulate), which cannot keep ss.uids; leave False in Python.')
-        add('precision', 32, 'The precision of the numbers kept for each agent: 32 (default) for float32, which takes half the memory, or 64 for float64, for when small differences matter (e.g. comparing against another model to many decimal places).')
         add('threads', 0, 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, use: 0 (default) for as many as Numba has (by default, one per core) for the agents, and one for the particles (whose steps are too short for threads to pay off); or 1 for no extra threads, e.g. on a shared machine. Each worker of ss.parallel() and of a calibration uses one, since the workers already share the cores.')
         add('blas_threads', int(os.getenv('SCIRIS_NUM_THREADS') or 1), 'The number of threads for BLAS, the linear algebra in NumPy and SciPy: 1 (default), since more threads rarely speed up a sim but do slow down many sims run in parallel; or 0 to leave BLAS as it is. For the threads of Starsim itself, see "threads"; see also the "Deployment" page of the user guide.') # 1 by default, set before Sciris is imported (see starsim/__init__.py)
-        add('backend', 'auto', 'The backend: how the solvers\' numbers are computed (all give the same results, to rounding for JAX):\n\n- "auto" (default): Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md); otherwise Numba, running compartmental sims in plain Python until Numba has compiled (Numba compiles first if a run, or the runs of a session, would take longer in plain Python than compiling takes, about two minutes, once per install; a note says which)\n- "rust": Rust, compiled ahead of time, so a first run takes no compiling\n- "numba": always compile with Numba first (see ss.compile())\n- "python": the compartmental solvers in plain Python (the passes over agents are still Numba), e.g. for debugging\n- "jax": a whole run of the ODE in JAX, and many ODE runs with different values in one call (ss.parallel(sim, pars=...)); everything else as "auto". Worth it only for long runs over many groups, since JAX takes about half a second to start and compiles each model\n\nGradients and the fits that use them take JAX whatever this is, and ss.jit always uses Numba.')
+        add('backend', 'auto', 'The backend: how the solvers\' numbers are computed (all give the same results, to rounding for JAX):\n\n- "auto" (default): Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md); otherwise Numba, compiled on the first run that needs it (a few minutes, once per install; or ahead of time with ss.compile())\n- "rust": Rust, compiled ahead of time, so a first run takes no compiling\n- "numba": always compile with Numba first (see ss.compile())\n- "python": the compartmental solvers in plain Python (the passes over agents are still Numba), e.g. for debugging\n- "jax": a whole run of the ODE in JAX, and many ODE runs with different values in one call (ss.parallel(sim, pars=...)); everything else as "auto". Worth it only for long runs over many groups, since JAX takes about half a second to start and compiles each model\n\nGradients and the fits that use them take JAX whatever this is, and ss.jit always uses Numba.')
         add('jax_platform', 'cpu', 'Where JAX runs when Starsim uses it (sim.gradient(), fits, and ODE runs with backend="jax"): "cpu" (default), "auto" for JAX\'s own choice (a GPU if it finds one), or another platform, e.g. "cuda". The CPU is the default since Starsim\'s runs in JAX are long loops of small steps, which a GPU runs several times slower. It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has already started on other platforms, it is restarted on these the next time Starsim uses it (and "auto" goes back to the platforms it had before).')
         add('uncompiled_warning', True, 'Whether to say on import that Starsim has not been compiled yet (see ss.compile()); True by default. Since it is read on import, it only has an effect as the environment variable STARSIM_UNCOMPILED_WARNING.')
         add('crn', True, 'Whether to use common random numbers (default True): each agent gets the same random numbers in every scenario, so the difference between two scenarios is due to what changed rather than to chance. Set False for slightly faster draws (one plain random number per agent or edge), which are statistically valid but differ between scenarios.')
@@ -271,7 +269,7 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
             super().__setitem__(key, value) # Not self[key], which calls this
 
             # The options that take effect when set
-            setter = dict(jupyter=self.set_jupyter, precision=self.set_precision, blas_threads=self.set_blas_threads, style=self.set_style).get(key)
+            setter = dict(jupyter=self.set_jupyter, blas_threads=self.set_blas_threads, style=self.set_style).get(key)
             if setter is not None:
                 setter()
         return
@@ -356,30 +354,6 @@ class Options(sc.obj): # Not public (only ss.options is), to avoid confusion wit
                 setter(n)
         return
 
-    def set_precision(self, refresh=True):
-        """ Set the data types of the arrays of agents and kernels (`ss.dtypes`) to the precision of `ss.options.precision`
-
-        Args:
-            refresh (bool): whether to pass the new data types on to the modules that keep their own copies
-        """
-        if self.precision == 32: # Else 64, the only other value it takes (see check())
-            dtypes.update(rand_int=np.int32, rand_uint=np.uint32, float=np.float32, nbfloat=nb.float32)
-        else:
-            dtypes.update(rand_int=np.int64, rand_uint=np.uint64, float=np.float64, nbfloat=nb.float64)
-        # The integers and the results stay 64-bit at either precision, since 32-bit integers broke the indexing of arrays
-        if refresh:
-            self.refresh_references()
-        return
-
-    def refresh_references(self):
-        """ Pass the data types on to the modules that keep their own copies, for speed (e.g. `ss.arrays.ss_int`) """
-        for name in ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks', 'library.networks.clusters']:
-            module = sys.modules.get(f'starsim.{name}') or sys.modules.get(f'starsim.internals.{name}') # The library, if it has been imported: otherwise it reads them when it is
-            for key, value in dtypes.items():
-                if module is not None and hasattr(module, f'ss_{key}'):
-                    setattr(module, f'ss_{key}', value)
-        return
-
     def set_style(self):
         """ Set the plotting style from `ss.options.style` (used by `ss.style()`) """
         self.setattribute('_style', sc.dcp(rc_starsim) if self.style == 'starsim' else self.style) # An attribute, not an option
@@ -445,7 +419,6 @@ class OptionsContext:
 
 # Create the options on module load
 options = Options()
-options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 options.set_blas_threads()
 
 # Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in internals/assets/; if it can't be written, the cache isn't rebuilt)

@@ -423,8 +423,6 @@ class modify(Connector):
     """
     compartmental = True # It works on groups as well as on agents
 
-    timepar_skip = ['who', 'when', '_who_now', 'until', '_when_date', '_schedule', '_either', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
-
     def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, frac=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
@@ -766,7 +764,7 @@ class modify(Connector):
             when = f'ss.schedule({window})'
         if self._either is not None:
             when = f'({when} | {self._either!r})'
-        when = sc.strjoin([w for w in [when, population if population is None else repr(population)] if w is not None], sep=' & ')
+        when = sc.strjoin([w for w in [when, population if population is None else ss.expressions.operand(population, '&')] if w is not None], sep=' & ')
         if when:
             out += f'   when={when}'
         if self.hold is not None:

@@ -252,7 +252,7 @@ def test_paths_and_memory():
 
 
 def test_code_every_solver():
-    sc.heading('Code that counts and moves people means the same under every solver: .frac, conditions in code, people.n, a fraction of an agent moved, and ss.move(I >> R)')
+    sc.heading('Code that counts and moves people means the same under every solver: .frac, conditions in code, people.n, a fraction of an agent moved, and ss.move()')
     S, I, R = ss.states('S I R')
     out = {}
     for solver in ['ode', 'abm']:
@@ -263,9 +263,7 @@ def test_code_every_solver():
         moved = sum(ss.move(sir.S, sir.R, n=0.3) for _ in range(500)) # 0.03 agents each time as agents: rounded at random, not to 0
         assert np.isclose(moved, 150, rtol=0.4), moved
         I0 = sir.I.n
-        assert np.isclose(ss.move(sir.I >> sir.R, p=0.5), I0/2, rtol=0.2) # A move written with the states, as ss.Event() takes
-        with pytest.raises(ValueError, match='not both'):
-            ss.move(sir.I >> sir.R, sir.S)
+        assert np.isclose(ss.move(sir.I, sir.R, p=0.5), I0/2, rtol=0.2)
         if solver == 'ode':
             with pytest.raises(ss.CapabilityError):
                 people.alive.sum() # Counts agents, which a compartmental run has none of

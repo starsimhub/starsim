@@ -196,8 +196,12 @@ def record_people(sim, ti=None, keys=None):
         counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
     elif len({mod.t.npts for mod in sim.declared}) > 1: # Modules on different timelines: worked out once the run is done
         return
-    else:
-        counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values[ti], dtype=float))
+    else: # One step: from the results they add up, found once
+        plan = people_plan(sim)
+        for key in keys or ['alive', 'birth', 'death', 'emigration']:
+            if key in sim.results:
+                sim.results[key][ti] = sum(r.values[ti] for r in plan[key]) # Not as Python floats, which sum() adds up more exactly than the whole run does
+        return
     for key in keys or ['alive', 'birth', 'death', 'emigration']:
         if key not in sim.results: # A flow that nothing in the sim makes, dropped when the sim was finalized (see Sim.drop_unused_flows())
             continue
@@ -206,6 +210,22 @@ def record_people(sim, ti=None, keys=None):
         else:
             sim.results[key][ti] = counts[key]
     return
+
+
+def people_plan(sim):
+    """ The results that the sim's results about people add up, as `people_counts()` finds them: those of the states that hold everyone, and of each flow of people; found once (and again if a declared module is added) """
+    engine = sim.declared[-1].engine
+    if engine.people_plan is None:
+        mods = people_mods(sim)
+        plan = sc.obj(alive=[mods[0].results[state.name] for state in mods[0].graph.people_states], birth=[], death=[], emigration=[])
+        for mod in mods:
+            for tr in mod.graph.transitions.values():
+                flow = people_flow(tr)
+                key = tr._deaths if flow == 'death' else tr.name
+                if flow is not None and key in mod.results:
+                    plan[flow].append(mod.results[key])
+        engine.people_plan = plan
+    return engine.people_plan
 
 
 def people_counts(sim, get):
@@ -307,10 +327,6 @@ class CountState:
 
     def __repr__(self):
         return f'CountState({self.name}, n={self.n:n})'
-
-    def __rshift__(self, other):
-        """ A move between two states, as for agents (`ss.move(sir.I >> sir.R, p=0.5)`); see `ss.move()` """
-        return ss.transitions.run_move(self, other)
 
     @property
     def n(self):
@@ -416,8 +432,9 @@ class Effects(sc.prettyobj):
     _warned_short = False # Whether people left short of a step have been warned about: see check_short()
     rel_adjust = None # Multipliers on infectiousness and susceptibility by dimension, once worked out: see init_adjust()
     derived_res = flow_derived = None # The results kept by a stratification of their own, once the results are made: see init_results()
-    stocks_start = None # The counts at the start of the step, kept for the results worked out with its flows: see record_states()
+    stocks_start = None # The counts by group at the start of the step, kept for the results by group worked out with its flows: see record_states()
     res_found = res_scale = None # The results found, and how they are scaled, as they are kept: see find_results() and write_scale()
+    people_plan = None # Of the last declared module, the results that the sim's results about people add up: see people_plan()
 
     def __init__(self, module, sim):
         self.mod = module
@@ -534,7 +551,7 @@ class Engine(Effects):
 
     It exists to keep what does not depend on the solver in one place.
 
-    Each engine (`ss.solvers.Compartmental`, and `ss.solvers.Agents` with its variants `Compiled` and `Events`) defines the rest, in its
+    Each engine (`ss.solvers.Compartmental`, and `ss.solvers.Agents` with its variant `Events`) defines the rest, in its
     own terms (as agents, uids; in compartments, fractions of each state and group):
 
     - `define()`: put the run-time form of the declared states on the module, and make its distributions
@@ -592,7 +609,6 @@ class Engine(Effects):
         self.immune_states = [] # Protection between strains: the states whose people can be infected again, and the protection by level in a state (see init_immunity())
         self.protect = {}
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
-        self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
 
     #%% What the engines share
@@ -1627,7 +1643,7 @@ class Engine(Effects):
                     continue # It reads states (e.g. another disease's prevalence), which have no values yet
                 try:
                     rate = max(float(np.max(np.asarray(self.eval(coef), dtype=float))) for coef in tr.terms.values())
-                except Exception: # A value not known until the run (e.g. a function of time)
+                except (ValueError, TypeError, IndexError): # A value not known until the run (e.g. a function of time, which raises a ValueError such as ss.CapabilityError, or a TypeError; or a value by person, read before the people have them, an IndexError)
                     continue
                 per = 'per infectious contact' if len(sim.networks) else 'with everyone infectious'
                 fast.append((rate*dt, tr.name, f'{tr.name} transmits at up to {rate:.2g} per {unit} ({per}), {-np.expm1(-rate*dt):.0%} in a {step}'))
@@ -1669,7 +1685,7 @@ class Engine(Effects):
             return False
         try:
             return not np.any(np.asarray(self.eval(tr.p[0]), dtype=float))
-        except Exception: # Not known until the run
+        except (ValueError, TypeError, IndexError): # Not known until the run (see note_fast())
             return False
 
     def density_rate(self, tr):
@@ -1680,7 +1696,7 @@ class Engine(Effects):
         one = ss.expressions.substitute(tr.rate, {id(leaf):1.0 for leaf in tr.rate.leaves if isinstance(leaf, ss.expressions.Count)})
         try:
             per_day = float(np.max(np.asarray(self.eval(one))))*float(self.convert(ss.days(1)))
-        except Exception: # A value not known until the run (e.g. a function of time)
+        except (ValueError, TypeError, IndexError): # A value not known until the run (see note_fast())
             return None
         return per_day*self.sim.pars.total_pop
 
@@ -2284,8 +2300,8 @@ class Engine(Effects):
             for key in list(self.stocks) + list(self.flowcounts):
                 if res[key].values.dtype.kind in 'iu':
                     res[key]._init_values(dtype=float, force=True)
-        self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts) + list(graph.exprs)}
-        self.exprs_by_group = {name for name in graph.exprs if getattr(res[name], 'strata', None) is not None}
+        self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts)}
+        self.exprs_by_group = [name for name in graph.exprs if getattr(res[name], 'strata', None) is not None]
         stock_names = set(graph.states) | set(self.coded)
         self.stock_people = [r for r in self.in_people if r.name in stock_names]
         self.flow_people = [r for r in self.in_people if r.name not in stock_names]
@@ -2313,7 +2329,8 @@ class Engine(Effects):
         scale = self.write_scale()
         self.count_stocks() # Now, with the people in the groups they are in now (e.g. by age, once they have aged at the end of the last step)
         stocks, stock_groups = self.with_unrepresented()
-        self.stocks_start = (sc.obj(stocks), sc.obj(stock_groups)) # As they are now (shallow copies: the engine replaces its counts in the step, rather than changing them in place)
+        if self.exprs_by_group: # Kept for the results by group worked out with the flows of the step (a shallow copy: the engine replaces its counts in the step, rather than changing them in place)
+            self.stocks_start = sc.obj(stock_groups)
         values = self.res_values
         for name,val in stocks.items():
             values[name][ti] = val
@@ -2341,7 +2358,6 @@ class Engine(Effects):
         ti = mod.ti
         self.find_results()
         scale = self.write_scale()
-        stocks, stock_groups = self.stocks_start or self.with_unrepresented()
         values = self.res_values
         for name,val in self.flowcounts.items():
             values[name][ti] = val
@@ -2359,18 +2375,16 @@ class Engine(Effects):
                 self.row_flows = sc.obj()
             for name,val in self.flow_groups.items():
                 self.row_flows[name] = self.row_flows.get(name, 0) + val
-        if graph.exprs:
-            ctx = StockCtx(self, stocks, ti=ti) # Before the results are scaled
-            for name,expr in graph.exprs.items():
-                values[name][ti] = ss.expressions.evaluate(expr, ctx)
-                if name in self.exprs_by_group: # By group: in a row of several steps, from the states at its start and the flows over it
-                    ctx_g = StockCtx(self, stock_groups if self.rows is None else self.row_stocks(stock_groups, ti), self.flow_groups if self.rows is None else self.row_flows, ti=ti)
-                    if name in self.ratios:
-                        num, den = [ss.expressions.evaluate(part, ctx_g) for part in self.ratios[name]]
-                        row = ti if self.rows is None else self.rows[ti]
-                        res[name].strata[row], res[name].denom[row] = num, den
-                    else:
-                        res[name]._store_group(ti, ss.expressions.evaluate(expr, ctx_g), self.rows)
+        if self.exprs_by_group: # By group: in a row of several steps, from the states at its start and the flows over it (the totals are worked out once the run is done: see store_derived())
+            stock_groups = self.stocks_start if self.stocks_start is not None else self.with_unrepresented()[1]
+            ctx = StockCtx(self, stock_groups if self.rows is None else self.row_stocks(stock_groups, ti), self.flow_groups if self.rows is None else self.row_flows, ti=ti)
+            for name in self.exprs_by_group:
+                if name in self.ratios:
+                    num, den = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
+                    row = ti if self.rows is None else self.rows[ti]
+                    res[name].strata[row], res[name].denom[row] = num, den
+                else:
+                    res[name]._store_group(ti, ss.expressions.evaluate(graph.exprs[name], ctx), self.rows)
         if scale != 1:
             for r in self.flow_people: # The values written this step
                 r[ti] = r[ti]*scale
@@ -2443,8 +2457,42 @@ class Engine(Effects):
                     f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.{infected[0].name} after that point', sim=sim)
         return
 
+    def derived_values(self, n, new, outcomes=True, expected=False, seeds=None):
+        """
+        The results that are worked out from the number in each state and the flow along each transition
+
+        Args:
+            n (dict): the number in each state (in people) at each step: a series, or an array whose last dimension is the steps
+            new (dict): the same for the flow along each transition
+            outcomes (bool): whether to work out the outcomes (in a compartmental run: see `derived_outcomes()`)
+            expected (bool): see `derived_outcomes()`
+            seeds (list): see `derived_outcomes()`
+
+        Returns a dict of the outcomes and the results given as expressions.
+        """
+        graph = self.graph
+        out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.obj()
+        if graph.exprs:
+            ctx = StockCtx(self, n, new, scale=1.0)
+            for name,expr in graph.exprs.items():
+                out[name] = ss.expressions.evaluate(expr, ctx)
+        return out
+
+    def store_derived(self, ti=None):
+        """ The results given as expressions (e.g. prevalence), from the states and flows recorded: once the run is done, or up to time point `ti` when it pauses (`sim.run(until=)`) """
+        if not self.graph.exprs:
+            return
+        res = self.mod.results
+        n = sc.obj({name:res[name].values for name in self.graph.states})
+        new = sc.obj({name:res[name].values for name in self.flowcounts if name in res})
+        end = None if ti is None else ti + 1
+        for name,vals in self.derived_values(n, new, outcomes=False).items():
+            res[name][:end] = vals if np.ndim(vals) == 0 else vals[:end]
+        return
+
     def finalize_results(self):
-        """ Once the results are final (and scaled: see `ss.Result._apply_scale()`), say where chance would matter """
+        """ Once the results are final (and scaled: see `ss.Result._apply_scale()`), work out those given as expressions, and say where chance would matter """
+        self.store_derived()
         self.note_chance()
         return
 
@@ -2460,12 +2508,13 @@ class StockCtx(sc.prettyobj):
         stocks (dict): the number in each state: one number for the current step (the default), or an array over the steps
         flows (dict): the same for the flow along each transition
         ti (int/array): the time point, for one step, or for stocks by group, the time point of each row; if None, an array over the steps
+        scale (float): the people each count stands for (default: as agents, the people each agent stands for; else 1)
     """
-    def __init__(self, engine, stocks=None, flows=None, ti=None):
+    def __init__(self, engine, stocks=None, flows=None, ti=None, scale=None):
         self.engine = engine
         self.stocks = engine.stocks if stocks is None else stocks
         self.flows = engine.flowcounts if flows is None else flows
-        self.scale = engine.scale if engine.agents else 1.0 # As agents, the stocks are numbers of agents
+        self.scale = scale if scale is not None else engine.scale if engine.agents else 1.0 # As agents, the stocks are numbers of agents
         self.ti = ti
         return
 

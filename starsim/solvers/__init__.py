@@ -7,7 +7,7 @@ the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `contact_rates` (who meets whom in a
 compartmental run), `compartmental` and `agents` (the two engines; `agents_expressions`, `agents_moving`, `agents_stepping`, `agents_transmission`, and `agents_branching` are parts of the second;
-its variants are `agents_compiled`, whose `Compiled` is the default engine of `solver='abm'` and takes the moves of a step as one compiled call, and `agents_events`, which takes it event by event), `joint_states`
+its variant `agents_events` takes a step event by event), `joint_states`
 (diseases tracked jointly), `choose` (which solver runs a model, and why), `build` (the steps that build a declared model),
 `deliveries` (what a delivery does differently in a compartmental run), and
 `particles` (many runs of a program stepped together, for a particle filter).
@@ -28,7 +28,6 @@ from .compartmental import *
 from .joint_states import *
 from .agents import *
 from .agents_events import *
-from .agents_compiled import *
 from .choose import *
 from .build import *
 from .deliveries import *

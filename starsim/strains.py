@@ -1,7 +1,7 @@
 """
 Strains of a disease (`ss.Strains`), and protection between them (`ss.immunity`)
 
-These exist so that one disease can have several strains, with their own values and with protection between them, without being written as several diseases. The strains of a declared disease share its states; a disease written as code (`ss.AgentDisease(strains=...)`) carries one at a time, as an index for each person (`dis.strain`), passed on by the same code as a declared disease's.
+These exist so that one disease can have several strains, with their own values and with protection between them, without being written as several diseases. The strains of a declared disease share its states.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -562,7 +562,7 @@ def prepare(strains, trs):
                         Q[l, strains.level_of(left)] += np.prod([1 - c[j] if j in left else c[j] for j in s])
                 Q[l] = Q[l]/Q[l].sum() if Q[l].sum() > 0 else np.eye(L)[l]
             tr.per_given = dict(p=given)
-            tr.p = [ss.by(**{strains.name:none.tolist()}), None]
+            tr.p = [ss.expressions.as_expr(ss.by(**{strains.name:none.tolist()})), None]
             named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
             tr.level_mult = strains._level_values(name) if named else np.ones(L)
         tr.move = sc.obj({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})

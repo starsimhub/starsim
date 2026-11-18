@@ -698,11 +698,10 @@ class Groups(sc.prettyobj):
         self.note_strats()
         self.split_from_people()
         self.make_grid()
-        split, births = self.make_splits()
+        split = self.make_splits()
         self.resolve_conditional()
         self.init_ragged()
         self.group_split = self.fold(split)
-        self.birth_split = self.fold(births)
         for strat in self.strats:
             strat.sim_coords = self.group_levels # So a result can look up which group is which
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
@@ -816,28 +815,19 @@ class Groups(sc.prettyobj):
         return
 
     def make_splits(self):
-        """ For init(): the fraction of people in each group, and of newborns (before folding: see `fold()`) """
+        """ For init(): the fraction of people in each group (before folding: see `fold()`) """
         split = np.ones(self.n_groups)
-        births = np.ones(self.n_groups)
-        ages = self.resolve_joint()
+        self.resolve_joint()
         if self.joint is not None:
             ds, grid = self.joint
             split *= grid[tuple(self.group_coords[:, d] for d in ds)]
-            born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its fraction of the others (or everyone's, if it has nobody)
-            born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
-            births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
-            frac = strat.fractions[self.group_coords[:, d]]
             if self.joint is None or d not in self.joint[0]:
-                split *= frac
-            if strat.kind == 'age':
-                births *= self.group_coords[:, d] == 0 # People are born into the youngest group
-            elif self.joint is None or d not in self.joint[0]:
-                births *= frac
-        return split, births
+                split *= strat.fractions[self.group_coords[:, d]]
+        return split
 
     def resolve_joint(self):
-        """ For init(): a split over several dimensions at once (`ss.levels(fractions=ss.by(...))`), as `self.joint`, with each dimension's own split the total over the others; returns the positions of age among its dimensions """
+        """ For init(): a split over several dimensions at once (`ss.levels(fractions=ss.by(...))`), as `self.joint`, with each dimension's own split the total over the others """
         sim = self.sim
         joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the fraction entering each level: see below
         if len(joints) > 1:
@@ -851,7 +841,7 @@ class Groups(sc.prettyobj):
                         f'and is the fraction of people at each combination (e.g. the fraction in each level of "{strat.name}" within each row, times the fraction of the row)')
             raise ValueError(errormsg)
         if not joints:
-            return []
+            return
         ds, grid = joints[0].joint.grid(sim)
         ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
         within = [] # A split over age and other dimensions whose rows each sum to 1 is the fraction at each level of the others within each age group, so people keep their ages (otherwise it is the fraction at each combination, and sets the ages)
@@ -875,7 +865,7 @@ class Groups(sc.prettyobj):
                 if within:
                     self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
         self.joint = (ds, grid)
-        return ages
+        return
 
     def resolve_conditional(self):
         """ For init(): a split of a dimension of some states only, given the levels of others (e.g. clinical severity by age), normalized over this dimension """

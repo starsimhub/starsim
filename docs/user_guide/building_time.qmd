@@ -245,13 +245,13 @@ print(ss.date('2025-07-01') - d)    # The time between two dates, in days
 
 Six months later is 1 July, but half a year later is 2 July, since 2025.5 is closer to 2 July: a month is 1/12 of a year, and 6/12 is certainly 0.5, but calendars don't care. Likewise `dt=ss.months(1)` steps a dated sim by calendar months. A sequence of dates is made with `ss.date.arange(start='2025-07-01', stop='2025-09-18', step='week')`. `ss.years(2000)` is not `ss.date(2000)`: the first is a duration of 2,000 years of 365 days with no calendar, the second is 1 January 2000.
 
-`sim.t` (an `ss.Timeline`) holds the sim's time points as `datevec` (dates), `yearvec` (years as numbers), `relvec` (time since the start, in the unit of the step), and `tivec` (step numbers); `timevec`, which results use, is dates for a dated sim and time since the start otherwise:
+`sim.t` (an `ss.Timeline`) holds the sim's time points as `datevec` (dates) and `yearvec` (years as numbers); `timevec`, which results use, is dates for a dated sim and time since the start otherwise:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-03-01', dt=ss.weeks(1), verbose=0).init()
 print(sim.t.datevec[:4])
 print(sim.t.yearvec[:4])
-print(sim.t.relvec[:4]) # Weeks since the start
+print(sim.t.timevec[:4])
 ```
 
 ## Values that change over time

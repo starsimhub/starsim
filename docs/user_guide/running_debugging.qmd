@@ -244,7 +244,6 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `sim.perf_profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
 | `sim.perf_profile(kind='function')` | How long every function the run calls takes | Runs |
 | `sim.elapsed` | The seconds the last run took | No |
-| `STARSIM_CHECK_COUNTS=1` (environment variable) | Checks, at every step, the counts the agent solver keeps against a new count (for testing the solver) | Applies to every run as agents |
 
 ## Appendix: errors and warnings
 

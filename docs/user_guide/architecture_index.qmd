@@ -150,7 +150,7 @@ A module goes through four stages: it is made, initialized with the sim, stepped
 
 **Finalized.** After the last step, `finalize()` calls `finalize_results()` on each module, which scales the results that count people by the number of people each agent stands for. A module can override `finalize_results()` to work out results from others; it calls `super().finalize_results()` first. A module that has been finalized can't be stepped again: running it again raises `ss.AlreadyRunError`, which says to copy it first.
 
-Forgetting to call `super()` is the commonest mistake in writing a module, so the base class's methods that must be called are marked with `@ss.required()`. After a run, `sim.run()` warns about any that weren't, naming the method and the module.
+Forgetting to call `super()` is the commonest mistake in writing a module. Most base methods raise an error if it is left out; for the three where it would silently give wrong results (`start_step()`, `finalize()`, and `finalize_results()`), defining the module's class warns if the override does not call the base method.
 
 ## Declared modules and modules written as code
 

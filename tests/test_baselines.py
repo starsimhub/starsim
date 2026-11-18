@@ -149,7 +149,6 @@ def perf_cases():
     Factories for the performance-guard sims; each guards a distinct cost term
 
     - bare_init / bare_run: canonical timeline construction, per-tick dispatch, result collection
-    - bare_run_no_people: the People-results opt-out (largest removable per-tick cost)
     - het_init: the heterogeneous-dt numeric-sort plan fallback
     - births_run: demographics (birth draw + grow)
     - crn_false_run: the crn=False path (guards the distribution jumping gate; most other
@@ -174,7 +173,6 @@ def perf_cases():
     return {
         'bare_init':          (bare, 'init', True),
         'bare_run':           (bare, 'run', True),
-        'bare_run_no_people': (lambda: bare(solver=ss.solvers.abm(record_people=False)), 'run', True),
         'het_init':           (het, 'init', True),
         'births_run':         (births, 'run', True),
         'crn_false_run':      (crnf, 'run', False),
@@ -230,7 +228,7 @@ def test_performance_guard(do_save=False, verbose=True):
     if not do_save and os.environ.get('PYTEST_XDIST_WORKER') is not None:
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
-    repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
+    repeats = dict(bare_init=8, bare_run=4, het_init=8, births_run=4, crn_false_run=4)
     repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age', 'tb'] for which in ['init', 'run']})
     repeats.update(contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
     repeats.update(copy_sim=8, parallel_ode=5, fit_best=3, fit_pmcmc=3, diagnose=8, jax_gradient=8)

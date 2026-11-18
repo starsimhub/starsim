@@ -35,7 +35,6 @@ def str2int(string, modulo=1_000_000_000):
 
 
 _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
-_EVEN_IND = 2**61 # Added to the draw index for the offset of evenly spaced uniforms (see even_out())
 _REPEAT_IND = 2**60 # Added to the draw index (with 2**40 for each repeat) for an agent's repeats in a call (see Dist.rvs(repeats=True))
 
 
@@ -115,36 +114,14 @@ def same_objects(a, b):
     return b is not None and len(a) == len(b) and all(x is y or (type(x) is type(y) and isinstance(x, static_types) and x == y) for x,y in zip(a, b))
 
 
-def even_out(rands, seed, ind):
-    """
-    Evenly spaced uniforms in the same order as `rands`, for `ss.solvers.abm(even_draws=True)`; not for the user
-
-    The smallest of n uniforms becomes (0 + v)/n, the next (1 + v)/n, and so on, with one offset v for the call. Each number
-    is still exactly uniform, so every distribution keeps its shape, but together they have the mean and spread they should.
-    Each stays close to its original value, so CRN keeps working, though less well (see `ss.Sim`).
-
-    Args:
-        rands (array): the uniforms
-        seed (int): the seed of the call, as `hash_uniforms()`
-        ind (int): the index of the call, as `hash_uniforms()`
-    """
-    n = len(rands)
-    if n < 2:
-        return rands
-    offset = hash_uniforms(seed, ind + _EVEN_IND, [0])[0]
-    out = np.empty(n, dtype=rands.dtype)
-    out[np.argsort(rands)] = (np.arange(n) + offset)/n
-    return np.minimum(out, np.nextafter(out.dtype.type(1), out.dtype.type(0))) # Rounding to float32 could reach 1, which uniforms never do
-
-
-def hash_uniforms(seed, ind, slots, dtype=None, even=False):
+def hash_uniforms(seed, ind, slots, dtype=None):
     """
     One uniform random number in (0, 1) per slot, by a counter-based (splitmix64) hash keyed by (seed, ind); not for the user
 
     This is the engine of common random numbers: each value depends only on its slot and the key, so the same slot
     gets the same value however many other agents are drawn. The values are at `dtype` (default `ss.dtypes.float`),
     with the mantissa width matched to it, so every value stays strictly below 1 (a cast from float64 to float32
-    could round up to 1.0, e.g. making `expon.ppf()` infinite). With `even`, they are evenly spaced (see `even_out()`).
+    could round up to 1.0, e.g. making `expon.ppf()` infinite).
     """
     if dtype is None:
         dtype = ss.dtypes.float
@@ -159,7 +136,7 @@ def hash_uniforms(seed, ind, slots, dtype=None, even=False):
 
     out = np.empty(slots.shape[0], dtype=dtype)
     _hash_uniforms_fill(seed, ind, slots, out, *draws.crn_bits(dtype)) # The top 24 bits for float32, 53 for float64
-    return even_out(out, seed, ind) if even else out
+    return out
 
 
 def timepar_of(val):
@@ -187,6 +164,23 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **
         if init: # Usually this is false since usually these are initialized centrally by the sim
             dist.init()
     return dists
+
+
+def link_owners(sim, dists):
+    """
+    Link each distribution found in a sim (by its path, from `sc.search()`) to the module it belongs to: the last one on its path, or whose parameters are;
+    one already linked (e.g. the people's) is left as it is. One found first elsewhere (e.g. a module's parameters kept on the sim too, as STIsim's
+    `sim.dem_pars`) belongs to the module whose parameters hold it.
+    """
+    owners = {id(obj):mod for mod in sim.modules for obj in [mod, mod.pars]}
+    held = {id(val):mod for mod in sim.modules for val in mod.pars.values() if isinstance(val, ss.Dist)}
+    for path,dist in dists.items():
+        obj, owner = sim, None
+        for key in path[:-1]:
+            obj = obj[key] if sc.sc_nested.check_iter_type(obj) in ['dict', 'list', 'tuple'] else obj.__dict__[key] # As sc.search() reads it
+            owner = owners.get(id(obj), owner)
+        dist.link_module(owner if owner is not None else held.get(id(dist)))
+    return
 
 
 def seed_names(sim):
@@ -304,6 +298,7 @@ class Dists(sc.prettyobj):
             skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
             skip['subclasses'] += (ss.Module,) # Found on the first round
             dists += sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
+            link_owners(sim, dists)
             dists = sc.sc_nested.flatten_traces(seed_paths(sim, dists))
         else:
             dists = sc.search(obj, type=Dist, flatten=True)
@@ -331,15 +326,6 @@ class Dists(sc.prettyobj):
         """ Advance all RNGs, e.g. to call "to", by jumping """
         return [dist.jump(to=to, delta=delta, force=force) for dist in self.dists.values()]
 
-    def jump_dt(self, ti=None, force=False):
-        """
-        Advance all RNGs to the next timestep
-
-        Args:
-            ti (int): if specified, jump to this timestep (default: current sim timestep)
-        """
-        return [dist.jump_dt(ti=ti, force=force) for dist in self.dists.values()]
-
     def reset(self):
         """ Reset each RNG """
         return [dist.reset() for dist in self.dists.values()]
@@ -359,6 +345,8 @@ class Dists(sc.prettyobj):
             new.__dict__.update(self.__dict__) # Shallow-copy all values over
             new.obj = module # Replace the module
             new.dists = sc.obj(matches) # Replace the dists with a shallow copy of the matching dists
+            for dist in matches.values():
+                dist._ti = -1 # Each step of the module draws from its own index on (see Dist.ind)
             module.setattribute('dists', new) # Copy to the module
         else:
             new = None
@@ -428,7 +416,7 @@ class Dist:
         strict (bool): if True, require initialization
         sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
         module (Module): usually determined on initialization; the module to use as input to callable parameters
-        mock (int): if provided, then initialize with a mock Sim object (of size `mock`) for debugging purposes
+        mock (int): if provided, initialize it in a small sim (of `mock` agents; see `ss.debugtools.mock_module()`), for testing and debugging
         kwargs (dict): parameters of the distribution
 
     Examples:
@@ -497,7 +485,6 @@ class Dist:
         self.module = module
         self.sim = sim
         self.slots = None # Created on initialization with a sim
-        self.even = False # Whether each call's uniforms are evenly spaced, from the sim's `even_draws`: set on initialization
         self.strict = strict
         self.scaling = sc.tolist(self.scaling) # Convert e.g. 'predraw' to ['predraw'] so can use "if x in y" later
         self.given = None # What the distribution was made from, if not its parameters (e.g. ('erlang', dict(k=4, mean=ss.days(10)))), for its repr
@@ -516,9 +503,11 @@ class Dist:
         self.dt_jump_size = 1000 # How much to advance the RNG for each timestep (must be larger than the number times dist is called per timestep)
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
-        self.ind = 0 # The index of the RNG (usually updated on each timestep)
+        self._ind = 0 # The index of the RNG: see ind
+        self._ti = None # For a distribution of a module in the sim, the module's step that the index is at (-1 for the initialization): see ind
         self.called = 0 # The number of times the distribution has been called
-        self.history = [] # Previous states
+        self.initial = None # The state at initialization, for reset(0)
+        self.last = None # The state before the last call, for reset(-1)
         self.initialized = False
         if type(self).__init__ is not Dist.__init__: # One of the distributions, which takes only its own parameters
             self.check_kwargs(kwargs)
@@ -537,8 +526,8 @@ class Dist:
             if mock is True: # Convert from boolean to a reasonable int
                 mock = 100
             strict = False
-            self.sim = ss.debugtools.mock_sim(mock)
-            self.module = ss.debugtools.mock_module()
+            self.module = ss.debugtools.mock_module(n_agents=mock)
+            self.sim = self.module.sim
             self.trace = 'mock_dist'
 
         if not strict: # Otherwise, wait for a sim
@@ -619,6 +608,20 @@ class Dist:
     _synced = True # Whether the generator has been moved to the current index: see jump()
 
     @property
+    def ind(self):
+        """
+        The index of the random numbers of the next call
+
+        Under common random numbers, the calls in step `ti` of a distribution's module start at `dt_jump_size*(ti + 1)` (0 being
+        the initialization's): it jumps there at the first call of the step, rather than every distribution of every module
+        being jumped at the start of every step.
+        """
+        if self._ti is not None and self._ti != self.module.t.ti and self.sim.started:
+            self._ti = ti = self.module.t.ti
+            self.jump_dt(ti)
+        return self._ind
+
+    @property
     def rng(self):
         """
         The random number generator
@@ -627,9 +630,10 @@ class Dist:
         next needed. Draws for agents are hashed from the index and never use the
         generator, so for most distributions the move is never made.
         """
+        ind = self.ind # Jumped to this step's first, if not yet
         if not self._synced and self._rng is not None:
             self._synced = True
-            self.sync(self.ind)
+            self.sync(ind)
         return self._rng
 
     @rng.setter
@@ -641,7 +645,7 @@ class Dist:
     def sync(self, ind):
         """ Move the generator to an index: its initial state, jumped that many times """
         bitgen = self._rng._bit_generator
-        bitgen.state = self.history[0] # First back to the initial state (in case of different numbers of calls)
+        bitgen.state = self.initial # First back to the initial state (in case of different numbers of calls)
         if ind: # Seems to randomize state if jumps=0
             bitgen.advance((ind*210306068529402873165736369884012333109) % 2**128) # As bitgen.jumped(ind), in place (a seventh of the time)
         return
@@ -663,21 +667,22 @@ class Dist:
         return self.state.copy()
 
     def make_history(self, reset=False):
-        """ Store the current state in history """
+        """ Store the current state, for reset(); with reset=True, as the initial one """
+        ind = self.ind
+        self.last = self.get_state() if self._synced else ind # The state, or the index it is at if the generator has not been moved there
         if reset:
-            self.history = []
-        self.history.append(self.get_state() if self._synced else self.ind) # Store the state, or the index it is at if the generator has not been moved there
+            self.initial = self.last
         return
 
     def reset(self, state=0):
         """
         Restore state, allowing the same numbers to be resampled
 
-        Use 0 for original state, -1 for most recent state. Note: with `ss.options.crn=False`,
+        Use 0 for the initial state, -1 for the state before the last call. Note: with `ss.options.crn=False`,
         the state is only stored for `rvs(reset=True)`, so -1 may refer to an earlier state.
 
         Args:
-            state (int/dict): the position in the history to restore, or a state of the generator
+            state (int/dict): 0 or -1, or a state of the generator
 
         Examples:
             ```python
@@ -694,7 +699,9 @@ class Dist:
             ```
         """
         if not isinstance(state, dict):
-            state = self.history[state]
+            if state not in (0, -1):
+                raise ValueError(f'The state to reset to must be 0 (the initial state), -1 (the state before the last call), or a state of the generator, not {state!r}')
+            state = self.initial if state == 0 else self.last
         self._synced = True
         if isinstance(state, dict):
             self._rng._bit_generator.state = state.copy()
@@ -717,15 +724,16 @@ class Dist:
             return self.state
 
         # Validation
-        jumps = to if (to is not None) else self.ind + delta
-        if self.ind > jumps and not force:
+        ind = self.ind
+        jumps = to if (to is not None) else ind + delta
+        if ind > jumps and not force:
             errormsg = f'You tried to jump the distribution "{self}" to state {jumps}, but the ' \
-                       f'RNG state is already at state {self.ind}, meaning you will draw the same ' \
+                       f'RNG state is already at state {ind}, meaning you will draw the same ' \
                         'random numbers twice. If you are sure you want to do this, set force=True.'
             raise ss.errors.DistSeedRepeatError(msg=errormsg)
 
         # Do the jumping: the generator itself is moved when it is next needed (see rng)
-        self.ind = jumps
+        self._ind = jumps
         self._synced = False
         return
 
@@ -763,6 +771,7 @@ class Dist:
             ss.warn(msg)
 
         # Calculate the offset (starting seed)
+        self._ti = None # Until its module is known (see Dists.copy_to_module())
         self.process_seed(trace, seed)
 
         # Create the actual RNG
@@ -772,7 +781,6 @@ class Dist:
         # Handle the sim, module, and slots
         self.link_sim(sim)
         self.link_module(module)
-        self.even = self.sim is not None and bool(getattr(getattr(self.sim, 'solver', None), 'even_draws', False))
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot
@@ -799,11 +807,11 @@ class Dist:
         return self
 
     def mock(self, trace='mock', **kwargs):
-        """ Create a distribution using a mock sim for testing purposes
+        """ Initialize the distribution in a small sim (see `ss.debugtools.mock_module()`), for testing
 
         Args:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
-            **kwargs (dict): passed to `ss.debugtools.mock_sim()` as well as `ss.debugtools.mock_module()` (typically time args, e.g. dt)
+            **kwargs (dict): passed to `ss.debugtools.mock_module()` (e.g. dt)
 
         Examples:
             ```python
@@ -811,9 +819,8 @@ class Dist:
             dist.rvs(10)
             ```
         """
-        mock_sim = ss.debugtools.mock_sim(**kwargs)
-        mock_mod = ss.debugtools.mock_module(**kwargs)
-        self.init(trace=trace, module=mock_mod, sim=mock_sim)
+        mod = ss.debugtools.mock_module(**kwargs)
+        self.init(trace=trace, module=mod, sim=mod.sim)
         return self
 
     def link_sim(self, sim=None, overwrite=False):
@@ -1326,7 +1333,7 @@ class Dist:
         occ = occurrences(np.asarray(slots)) if repeats and slots is not None else None # Each slot's occurrence in the call, if any repeats
         if slots is not None:
             # Common random numbers: one hashed uniform per slot, keyed by (seed, ind); a distribution drawn natively (e.g. ss.choice(replace=False)) has no slots (see choice.process_size())
-            rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
+            rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype)
             if occ is not None: # Each repeat from a stream of its own, as each call is
                 for k in range(1, occ.max() + 1):
                     rep = occ == k
@@ -1376,7 +1383,7 @@ class Dist:
         are being recorded), in which case `rvs()` is called instead.
         """
         diagnostics = self.sim.diagnostics if self.sim is not None else None
-        if not ss.options.crn or self.even or self.initialized is not True or self.slots is None or (diagnostics and diagnostics.rvs is not None):
+        if not ss.options.crn or self.initialized is not True or self.slots is None or (diagnostics and diagnostics.rvs is not None):
             return None
         self.make_history()
         key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
@@ -1473,7 +1480,7 @@ class Dist:
             slots (array): if provided, use one CRN uniform per slot (distinct from the draw itself) rather than the next numbers from the RNG
         """
         if slots is not None:
-            rands = hash_uniforms(self.seed, self.ind + _ROUND_IND, slots, even=self.even)
+            rands = hash_uniforms(self.seed, self.ind + _ROUND_IND, slots)
         else:
             rands = self.rand(rvs.shape)
         rvs = np.array(np.floor(rvs+rands), dtype=ss_int) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise
@@ -1508,7 +1515,7 @@ class Dist:
         """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
         to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_uids', '_callable_args', '_callable_keys']
         ss.utils.shrink(self, to_shrink)
-        self.history = [] # Clear history explicitly rather than shrinking it
+        self.initial = self.last = self._ti = None # Its history, and the step of the module it no longer has
         self._static = None # The cache of processed parameters, which can refer to per-agent arrays
         shrunk = ss.utils.shrink()
         for key, val in self.pars.items():

@@ -44,16 +44,6 @@ def has_structure(kwargs):
     return any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.grouped for key,v in kwargs.items())
 
 
-def rebind_when(when, memo):
-    """ A transition's when= as given, with the transitions it names replaced by their copies in `memo` (see `rebind_member()`) """
-    if isinstance(when, ss.on):
-        new = ss.on(rebind_when(when.x, memo), delay=when.delay)
-        return when if new.x is when.x else new
-    if isinstance(when, ss.Transition):
-        return memo.get(id(when), when)
-    return ss.conditions.rebind(when, memo)
-
-
 def rebind_member(obj, memo):
     """ A member given to an instance of a declared class (e.g. `ssl.Measles(rash=ss.outcome(0.9*ssl.Measles.onset))`), reading the instance's copies of the class's states, transitions, and parameters (`memo`, see `ss.expressions.rebind()`); a transition is copied only if it reads any of them """
     if isinstance(obj, (list, tuple)): # E.g. transitions=[...]
@@ -80,9 +70,8 @@ def rebind_member(obj, memo):
 
 
 def rebind_conditions(tr, memo):
-    """ In place: who a transition applies to (`_who_now`), and its `when=` as given and as resolved (`_trigger`), reading the copies in `memo` (see `rebind_member()`) """
+    """ In place: who a transition applies to (`_who_now`), and its `when=` as resolved (`_trigger`), reading the copies in `memo` (see `rebind_member()`) """
     tr._who_now = ss.conditions.rebind(tr._who_now, memo)
-    tr.when = rebind_when(tr.when, memo)
     if tr._trigger is not None and (x := ss.conditions.rebind(tr._trigger.x, memo)) is not tr._trigger.x:
         tr._trigger = ss.on(x, delay=tr._trigger.delay)
     return
@@ -118,7 +107,7 @@ def reuse(args, members, names=None):
             elif isinstance(obj, ss.expressions.Count):
                 counted.update({id(st):st for st in obj.states})
             for key,val in vars(obj).items():
-                if key not in ['module', 'who', 'when']: # who= and when= as given are also kept resolved, as _who_now and _trigger
+                if key not in ['module', 'who']: # who= as given is also kept resolved, as _who_now
                     walk(val, depth + 1, where or key == '_who_now')
     walk(list(args) + list(members.values()))
     others = {key:st for key,st in counted.items() if key not in endpoints and getattr(st, 'module', None) is not None} # Another disease's state in a rate, e.g. syph.I.n: a reference to it, not a copy

@@ -48,25 +48,15 @@ def people_scale(sim):
 
 def agent_weights(sim):
     """ Each agent's weight (`people.scale`), by UID, if agents' weights differ; else None. A module written as code counts each agent by its weight when they differ, as `alive` does """
-    scale = getattr(sim.people, 'scale', None) # Not in a mock sim
-    return scale.raw if getattr(scale, 'weighted', False) else None
+    scale = sim.people.scale
+    return scale.raw if scale.weighted else None
 
 
 def add_count(res, ti, uids, sim):
     """ Add the number of agents `uids` to result `res` at time index `ti`, each by their weight if agents' weights differ (see `agent_weights()`), as a module written as code counts e.g. its new infections """
     weights = agent_weights(sim)
-    if weights is None:
-        res[ti] += len(uids)
-    else:
-        as_float(res)[ti] += weights[uids].sum()
+    res[ti] += len(uids) if weights is None else weights[uids].sum()
     return
-
-
-def as_float(res):
-    """ Make a count result hold floats (a sum of agents' weights need not be whole), keeping its values; returns it """
-    if res.values.dtype.kind in 'iu':
-        res._init_values(dtype=float, force=True)
-    return res
 
 
 def in_people(*results):
@@ -74,8 +64,6 @@ def in_people(*results):
     for res in results:
         if res.scale:
             res.in_people = True
-            if res.values is not None: # A count times a scale that need not be whole
-                as_float(res)
     return
 
 
@@ -161,6 +149,8 @@ class Result(ss.arrays.BaseArr):
         self.kind = self._get_kind(name, kind, summarize_by, dtype)
         self.summarize_by = self._get_summarize_by(name, summarize_by, self.kind)
         self.scale = self.kind in ['flow', 'stock'] if scale == 'auto' else scale # A count scales with the population, a ratio does not
+        if self.scale and dtype is not None and np.issubdtype(dtype, np.integer): # A count that scales holds floats, since scaled, or summed over agents of different weights, it need not be whole
+            self.dtype = float
         self.columns = columns
         self.runs = runs
         self.groups = groups

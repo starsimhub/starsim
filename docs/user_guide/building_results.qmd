@@ -58,7 +58,7 @@ res
 ```
 :::
 
-A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from, plus any ratio or outcome declared with it, such as `prevalence` here. `res.I` and `res['I']` are the same. [Names with special meaning](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the results every disease and the sim get, and [Outcomes](building_outcomes.qmd) covers declaring more, such as reported cases.
+A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from, plus any ratio or outcome declared with it, such as `prevalence` here. A ratio or sum of states (`prevalence`, `infected`) is worked out from the states and flows once the run ends (or pauses, with `sim.run(until=)`), so during the run a module reads the states instead (`sir.I.n`). `res.I` and `res['I']` are the same. [Names with special meaning](building_writing.qmd#appendix-what-starsim-names-and-fills-in) lists the results every disease and the sim get, and [Outcomes](building_outcomes.qmd) covers declaring more, such as reported cases.
 
 Each result is an `ss.Result`. It behaves like a NumPy array, one number per time point, but also carries what it is:
 

@@ -195,10 +195,10 @@ def test_current_state():
     sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0) # Nobody seeded, so only the moves below
     sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
     sir = sim.diseases.sir
-    sir.move(ss.uids([0, 1]), sir.I) # From wherever they are; the arguments are told apart by what they are
-    ss.move(sir, [2], 'R')
+    sir.move(sir.I, uids=ss.uids([0, 1])) # From wherever they are
+    sir.move(sir.R, uids=ss.uids([2]))
     assert sir.move(sir.S, sir.I, uids=ss.uids([1, 3, 4])) == 2 # Of these, only those in S
-    sir.move('I', 'S', uids=[3, 4]) # By name
+    ss.move(sir.I, sir.S, uids=ss.uids([3, 4]))
     cs = sir.current_state()
     assert isinstance(cs, ss.IntArr) and cs.labels == ['S', 'I', 'R']
     assert cs[ss.uids([0, 1, 2, 3])].tolist() == [1, 1, 2, 0]
@@ -206,11 +206,9 @@ def test_current_state():
     sub = sir.current_state(['R', sir.I]) # Some of them, by name or as states
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
     assert sir.current_state(['R', sir.I], uids=ss.uids([3, 2, 0])).tolist() == [-1, 0, 1] # Some agents only, in the order given
-    assert ss.move(sir.S >> sir.I, sir.R >> sir.I, uids=ss.uids([2, 3, 5])) == 3 # Several moves at once, each from its own source
+    assert ss.move([sir.S, sir.R], sir.I, uids=ss.uids([2, 3, 5])) == 3 # From several states
     assert sir.current_state(uids=ss.uids([2, 3, 5])).tolist() == [1, 1, 1]
-    ss.move([sir.I >> sir.R], uids=ss.uids([2])); ss.move(sir.I >> sir.S, uids=ss.uids([3, 5])) # Back as they were (a list of moves too)
-    with pytest.raises(ValueError, match='separate calls'):
-        ss.move(sir.S >> sir.I, sir.I >> sir.R, uids=ss.uids([0]))
+    sir.move(sir.R, uids=ss.uids([2])); sir.move(sir.S, uids=ss.uids([3, 5])) # Back as they were
     with pytest.raises(ValueError): # Read-only
         cs.raw[0] = 2
     with pytest.raises(KeyError, match='"sir" has no state X'):
@@ -224,17 +222,6 @@ def test_current_state():
         by_age = d.count('I', by='age')
         assert by_age.shape == (3,) and np.isclose(by_age.sum(), d.I.n) and np.isclose(d.count([d.I, d.R]), (d.I | d.R).n)
         assert np.isclose(d.count((ss.person.age < 15) & d.I, by=True)[0], by_age[0]) and d.count((ss.person.age < 15) & d.I, by='age')[1:].sum() == 0
-
-    # A split between several destinations, under every solver
-    for kw in [dict(n_agents=20_000), dict(solver='ode')]:
-        d = ss.Sim(diseases=ss.SIR(init_prev=0), stop=2001, verbose=0, **kw).init().diseases.sir
-        n = d.S.n
-        moved = d.move(d.S, [d.I, d.R], p=[0.2, 0.3])
-        assert np.isclose(moved, 0.5*n, rtol=0.03) and np.isclose(d.I.n, 0.2*n, rtol=0.05) and np.isclose(d.R.n, 0.3*n, rtol=0.05)
-        d.move(d.S, ['I', 'R'], p=[None, 0.5]) # The rest, by name
-        assert d.S.n == 0 and np.isclose(d.I.n, 0.45*n, rtol=0.05)
-        with pytest.raises(ValueError, match='more than everyone'):
-            d.move(d.I, [d.S, d.R], p=[0.6, 0.6])
 
     # Only the people for whom a condition holds (where=), under every solver
     for kw in [dict(n_agents=1000), dict(solver='ode')]:
@@ -266,16 +253,14 @@ def test_infect():
 
 
 def test_same_transmission():
-    sc.heading('Testing that an SIR declared and one written as code transmit the same, by the same code: the same infections, sources, networks, and strains, CRN included')
+    sc.heading('Testing that an SIR declared and one written as code transmit the same, by the same code: the same infections, sources, and networks, CRN included')
     seeds = lambda self, sim, uids: (uids % 50 == 0).astype(float) # Every 50th agent, so seeding takes no random numbers
-    make_strains = lambda: ss.Strains(['a', 'b'], rel_trans=[1, 2])
 
     class CodedSIR(ss.AgentDisease): # Written as code, overriding only what it adds to ss.AgentDisease
-        def __init__(self, seed_strain=None, **kwargs):
-            super().__init__(strains=make_strains())
+        def __init__(self, **kwargs):
+            super().__init__()
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
             self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
-            self.seed_strain = seed_strain # The strain of each seed, as the declared one gives them
             self.update_pars(**kwargs)
         def step_state(self):
             done = (self.infected & self.ti_recovered.due()).uids # At the start of the step after dur_inf, as a declared dwell time ends
@@ -283,24 +268,18 @@ def test_same_transmission():
             self.recovered[done] = True
         def set_prognoses(self, uids, sources=None):
             super().set_prognoses(uids, sources)
-            if not self.sim.initialized:
-                self.strain[uids] = self.seed_strain[uids]
             self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of the step (the seeds at the start, step 0)
 
     kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
               connectors=[ss.modify('sir.rel_sus', multiply=0.5, who=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
               interventions=ss.vaccinate(ss.Vaccine(efficacy=0.7), when=10, coverage=0.3))
-    dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=lambda sim, uids: seeds(None, sim, uids), strains=make_strains()), solver='abm', **kw).init()
-    seed_strain = dec.diseases.sir.engine.strain_raw().copy()
-    cod = ss.Sim(diseases=CodedSIR(name='sir', seed_strain=seed_strain), **kw).run()
-    dec.run()
+    dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=lambda sim, uids: seeds(None, sim, uids)), solver='abm', **kw).run()
+    cod = ss.Sim(diseases=CodedSIR(name='sir'), **kw).run()
     d, c = dec.results.sir, cod.results.sir
     assert d.infection.sum() > 500
     assert np.array_equal(d.infection, c.infection) and np.array_equal(d.I, c.infected) and np.array_equal(d.R, c.recovered)
     logs = [sim.analyzers[0].to_df().sort_values('target')[['target', 'source', 'network']].fillna('-').astype(str).values for sim in [dec, cod]]
     assert np.array_equal(*logs) # Who infected whom, and over which network
-    held = cod.diseases.sir.strain.raw >= 0 # The same strain for everyone infected, one of several sources drawn at random
-    assert np.array_equal(dec.diseases.sir.engine.strain_raw()[held], cod.diseases.sir.strain.raw[held]) and (np.bincount(cod.diseases.sir.strain.raw[held]) > 100).all()
     return dec, cod
 
 
@@ -513,10 +492,11 @@ def test_rel_dists():
 
 @sc.timer()
 def test_coded_strains_checks():
-    sc.heading('A disease written as code with strains is checked as one without: no networks is an error, not silence')
-    for strains in [None, ss.Strains(['a', 'b'])]:
-        with pytest.raises(ValueError, match='no one'):
-            ss.Sim(diseases=ssl.AgentSIR(strains=strains, init_prev=0.05), n_agents=500, stop=3, verbose=0).run()
+    sc.heading('A disease written as code with no networks is an error, not silence; strains are only for a declared disease')
+    with pytest.raises(ValueError, match='no one'):
+        ss.Sim(diseases=ssl.AgentSIR(init_prev=0.05), n_agents=500, stop=3, verbose=0).run()
+    with pytest.raises(Exception, match='strains'):
+        ssl.AgentSIR(strains=ss.Strains(['a', 'b']))
     return
 
 

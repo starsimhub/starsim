@@ -54,7 +54,9 @@ def rate_size(rates):
 
 def per_year(rate):
     """ A crude rate of births or deaths as a number per year: a bare number is per year, and a typed rate is converted """
-    return rate.to('year').value if isinstance(rate, ss.Rate) else rate
+    if isinstance(rate, ss.Rate):
+        return rate.value if type(rate) is ss.peryear else rate.to('year').value # The usual case, without making a new rate each step
+    return rate
 
 
 def check_rate_per(per, name):
@@ -324,7 +326,7 @@ def adds_agents(mod, sim):
 
 
 def crude_rate(mod, counts):
-    """ A crude rate of a module's events (births or deaths), per 1,000 people per year: the events of each step, over the people alive at its start; None if the sim does not record them (`ss.Sim(record_people=False)`) """
+    """ A crude rate of a module's events (births or deaths), per 1,000 people per year: the events of each step, over the people alive at its start; None if the sim does not record the number alive """
     if 'alive' not in mod.sim.results:
         return None
     n_alive = mod.sim.results.alive[mod.match_time_inds()]
@@ -614,9 +616,11 @@ class Deaths(Demographics):
             drd = drd.at(sim.t.now('year'), sim)
 
         if sc.isnumber(drd): # A rate per year
-            return ss.peryear(drd / self.pars.rate_per * self.pars.rel_death).to_prob(self.t.dt)
+            death_rate = drd / self.pars.rate_per * self.pars.rel_death
+            if death_rate < 0:
+                raise ValueError(f'A death rate must be >= 0, not {death_rate}; a negative rate is only net migration, ss.migration()')
         elif isinstance(drd, ss.Rate): # A typed rate (or probability per unit time), over the step
-            return (drd * (self.pars.rel_death / self.pars.rate_per)).to_prob(self.t.dt)
+            return drd.to_prob(self.t.dt, scale=self.pars.rel_death / self.pars.rate_per)
         else: # Rates by year, sex, and age
             ppl = sim.people
             uids = ppl.auids if uids is None else uids
@@ -631,7 +635,7 @@ class Deaths(Demographics):
             death_rate = death_rate.astype(ss_float)
             death_rate *= self.pars.rel_death / self.pars.rate_per
 
-        return ss.peryear(death_rate).to_prob(self.t.dt) # A rate per year, as a probability over the step
+        return -np.expm1(-death_rate*self.t.dt_year) # A rate per year, as a probability over the step (as ss.peryear(death_rate).to_prob(dt), without making a rate each step)
 
     def init_pre(self, sim):
         """ Read the death rates from the parameters, which may have changed since the module was made, and note if they are far apart in time

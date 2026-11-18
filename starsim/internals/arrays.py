@@ -14,7 +14,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 
-# Shorten these for performance -- reset with ss.options.refresh_references(), which is called automatically
+# Shorter names for the data types (ss.dtypes)
 ss_float   = ss.dtypes.float
 ss_nbfloat = ss.dtypes.nbfloat
 ss_int     = ss.dtypes.int
@@ -49,25 +49,14 @@ def nb_indexer(arr, inds):
     return out
 
 @nb.jit(cache=True) # No fastmath: it assumes no NaNs, which would break the truthiness test for NaN floats
-def nb_true(auids, vals, want):
-    """ The UIDs where `bool(vals[k])` equals `want`: one branchless pass, ~4-5x faster than `auids[vals.astype(bool)]` for large arrays (`vals[k] != 0` matches `.astype(bool)`, including NaN being truthy) """
-    n = auids.shape[0]
-    out = np.empty(n, dtype=auids.dtype)
-    m = 0
-    for k in range(n):
-        out[m] = auids[k] # Written every iteration (branchless); only kept if m advances
-        m += (vals[k] != 0) == want
-    return out[:m]
-
-@nb.jit(cache=True)
 def nb_true_raw(auids, raw, want):
-    """ As `nb_true()`, reading each agent's value from the full array, so the values of the active agents are not gathered first """
+    """ The active agents whose `bool(raw[uid])` equals `want`, in one branchless pass over the full array, so the values of the active agents are not gathered first (`raw[uid] != 0` matches `.astype(bool)`, including NaN being truthy) """
     n = auids.shape[0]
     out = np.empty(n, dtype=auids.dtype)
     m = 0
     for k in range(n):
         uid = auids[k]
-        out[m] = uid
+        out[m] = uid # Written every iteration (branchless); only kept if m advances
         m += (raw[uid] != 0) == want
     return out[:m]
 
@@ -285,7 +274,7 @@ class Arr(BaseArr):
         raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people (`ss.People`): Optionally specify an initialized People object, used to construct temporary Arr instances
-        mock (int): if provided, create a mock People object (of length `mock`, unless `raw` is provided) to initialize the array (for debugging purposes)
+        mock (int): if provided, initialize the array with the people of a small sim (of `mock` agents, unless `raw` is provided; see `ss.debugtools.mock_sim()`), for testing and debugging
         columns (int/list): if provided, create a 2D array with this many columns (e.g. one per variant), or a list of column names (e.g. `['wildtype', 'mutant']`)
         shared (bool/Arr): if True, the array takes no memory per agent until a value is set (other than by its default, which must be a scalar): until then every agent has the default, and `raw` is a read-only view of it; if an `Arr`, the same with that array's values (as `people.slot` reads `people.uid`)
 
@@ -370,7 +359,7 @@ class Arr(BaseArr):
                     errormsg = f'Cannot populate array of length {self.len_tot} with values of length {len(raw)}'
                     raise ValueError(errormsg)
 
-        # If we have a mock People object, initialize the values
+        # With the people of a small sim, initialize the values
         if mock:
             n_agents = len(raw) if raw is not None else mock
             self.people = ss.debugtools.mock_people(n_agents)
@@ -454,7 +443,7 @@ class Arr(BaseArr):
 
     def __setitem__(self, key, value):
         if isinstance(key, slice) and key == slice(None) and np.ndim(value) == 0 and not isinstance(self, BoolArr): # One value for everyone (e.g. rel_sus[:] = 1): every agent's place, since the inactive's values are never read as theirs (a state's are its members, so not for one)
-            pass
+            key = slice(0, self.len_used) # Every agent made, not the room for those not yet made, which holds NaN
         elif not isinstance(key, uids):
             if isinstance(key, str): # Named column for all active agents, e.g. arr['mutant'] = 0.5
                 key = (slice(None), key)
@@ -737,21 +726,22 @@ class Arr(BaseArr):
             self.len_used += n_new
             if self.len_used > self.len_tot:
                 self.len_tot += max(n_new, self.len_tot//5) # The same room as below, so its length is that of the other arrays
-            self.raw = self.shared_raw()
+                self.raw = self.shared_raw()
+            elif self.shared is not True:
+                self.raw = self.shared_raw()
             return
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
 
         # Physically reshape the arrays, if needed
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//5)  # Minimum 20% growth, since growing arrays is slow (but each agent's arrays take a fifth more memory at most)
-            new_empty = np.empty((n_grow, *self.item_shape), dtype=self.dtype) # 10x faster than np.zeros()
-            self.raw = np.concatenate([self.raw, new_empty], axis=0)
+            new_room = np.empty((n_grow, *self.item_shape), dtype=self.dtype) if self.nan is None else np.full((n_grow, *self.item_shape), self.nan, dtype=self.dtype) # The room holds NaN, if the array has one
+            self.raw = np.concatenate([self.raw, new_room], axis=0)
             self.len_tot = len(self.raw)
-            if self.len_tot > self.len_used: # There is space at the end beyond the new agents (including when they fill only part of what was added), set to NaN
-                nan_uids = np.arange(self.len_used, self.len_tot)
-                self.set_nan(nan_uids)
 
-        # Set new values, and NaN if needed
+        # Set new values; with no default, the room's NaN is already theirs
+        if new_vals is None and self.default is None and self.shared is None and self.nan is not None:
+            return
         self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
         return
 
@@ -1344,10 +1334,6 @@ class BoolState(BoolArr):
     (e.g. in `module.define_states()`), whether or not they are BoolStates.
     """
     watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
-
-    def __rshift__(self, other):
-        """ A move between two states of a declared disease, as code sees them at run time (`ss.move(sir.I >> sir.R, p=0.5)`); see `ss.move()` """
-        return ss.transitions.run_move(self, other)
 
     @property
     def n(self):

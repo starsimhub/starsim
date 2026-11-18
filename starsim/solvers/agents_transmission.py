@@ -8,7 +8,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .engine import Effects, times
-from .agents_moving import ROUNDS, ROUND_MAX, step_key, check_draws
+from .agents_moving import ROUNDS, ROUND_MAX, step_key
 
 __all__ = ['Transmission', 'Transmitting']
 
@@ -28,10 +28,10 @@ class Transmission(Effects):
     - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
       several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, every strain is passed on
       in one pass, and someone reached by several is infected by one of them drawn at random, whose strain they take (`pick_sources()`), and
-      then only if they are not protected against it (`unprotected()`): declared or written as code, by the same code.
+      then only if they are not protected against it (`unprotected()`); only a declared disease has strains.
     - **Random numbers.** Each edge's is drawn by its source and target from the disease's `trans_rng`, so the same disease, by the same name,
-      gives the same edges the same numbers, declared or written as code; and so are the draws of who infects whom, and of protection, which
-      are keyed by the step alone (`step_draw()`).
+      gives the same edges the same numbers, declared or written as code; the draws of who infects whom, and of protection, are keyed by the
+      step alone (`step_draw()`).
     """
     def current_value(self, kind, *factors):
         """ `rel_sus` or `rel_trans` (`kind`) of every agent (by UID), times the factors (e.g. whether each is susceptible), with the modifiers and products active on it applied; may be the array itself, so it is not to be changed """
@@ -109,7 +109,7 @@ class Transmission(Effects):
         elif not ss.options.crn:
             return dist.rvs(uids)
         slots = self.sim.people.slot_raw()
-        return ss.dists.hash_uniforms(dist.seed, ROUNDS + step_key(self.mod)*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype, even=dist.even)
+        return ss.dists.hash_uniforms(dist.seed, ROUNDS + step_key(self.mod)*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype)
 
     def pick_sources(self, pairs, name):
         """
@@ -129,45 +129,37 @@ class Transmission(Effects):
         return self.step_draw(f'protect_{name}', uids) < kept
 
 
+    def add_pool_hazard(self, route, pool_hazard, strains, strain_raw, ref, rel_trans, sus, mult):
+        """ Over a mixing pool (or mixing pools), each person's hazard of infection, for each strain, added to `pool_hazard`, for each person's susceptibility `sus` (by UID); declared or written as code """
+        sim = self.sim
+        if route.name in sim.contact_rates.pool_terms: # A contact matrix within each place: see ss.solvers.ContactRates.init_pools()
+            groups = sim.groups.group_raw()
+            auids = sim.people.auids
+            n = np.bincount(groups[auids], minlength=sim.groups.n_groups).astype(float)
+            for k,strain in enumerate(strains):
+                frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                infectious = np.bincount(groups[auids], weights=(rel_trans*frac)[auids], minlength=sim.groups.n_groups)
+                expo = sim.contact_rates.term_exposure(sim.contact_rates.pool_terms[route.name], infectious, n)
+                pool_hazard[k] += ref*expo[groups]*sus*mult(None, slice(None))
+        elif isinstance(route, ss.networks.MixingPools): # A matrix: from the fraction of each group or band that is infectious
+            for k,strain in enumerate(strains):
+                frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                auids, expo = route.exposure(rel_trans*frac)
+                pool_hazard[k][auids] += ref*expo*sus[auids]*mult(None, auids)
+        elif len(route.source_uids) and len(route.target_uids): # A mixing pool, which has no direction
+            dst = route.target_uids
+            for k,strain in enumerate(strains):
+                frac = 1.0 if strain is None else self.strain_weights[strain_raw[route.source_uids], strain]
+                trans = np.mean(rel_trans[route.source_uids]*frac) # The infectiousness-weighted fraction of the source group that is infectious
+                pool_hazard[k][dst] += ref*trans*route.eff_contacts.raw[dst]*sus[dst]*mult(None, dst)
+        return
+
+
     # Transmission written as code: what ss.Disease.transmit() and the methods it calls do, so that each can be overridden on its own
 
     def over_routes(self, rel_trans, rel_sus, betamap):
         """ The infections over each of the sim's routes in turn (`code_route()`), each a tuple of targets, sources, and network IDs: see `ss.Disease.transmit()` """
         return [self.code_route(i, route, betamap[ss.networks.standardize_netkey(nkey)], rel_trans, rel_sus) for i,(nkey,route) in enumerate(self.sim.networks.items())]
-
-    def strain_cases(self, rel_trans, rel_sus, betamap):
-        """
-        The infections of a disease written as code with strains (`ss.AgentDisease(strains=...)`), as for a declared disease's: every strain in
-        one pass, at the infectiousness of the strain each carries (`rel_trans` of `ss.Strains`); each new case is infected by one of those who
-        reached them, at random (`pick_sources()`), whose strain they take, unless protected against it (`dis.strain_sus()`, `unprotected()`)
-
-        Returns:
-            The new cases, and for each the source, the route, and the index of the strain
-        """
-        dis = self.mod
-        strains = dis.strains
-        held = dis.strain.raw
-        rel = strains.values['rel_trans'] if 'rel_trans' in strains.values else np.ones(len(strains))
-        trans = np.asarray(rel_trans.raw if isinstance(rel_trans, ss.Arr) else rel_trans)*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0) # Nobody without a strain transmits
-        out = []
-        for i,(nkey,route) in enumerate(self.sim.networks.items()):
-            betas = betamap[ss.networks.standardize_netkey(nkey)]
-            if isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
-                trgs, srcs, nets = self.code_route(i, route, betas, trans, rel_sus)
-                out.append((srcs, trgs, nets, held[srcs]))
-            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
-                for k in range(len(strains)):
-                    trgs, srcs, nets = self.code_route(i, route, betas, trans*(held == k), rel_sus)
-                    out.append((srcs, trgs, nets, k))
-        out = [pair for pair in out if len(pair[1])]
-        if not out:
-            return ss.uids(), ss.uids(), np.empty(0, dtype=ss.dtypes.int), np.empty(0, dtype=ss.dtypes.int)
-        new, sources, routes, strain = self.pick_sources(out, 'infection')
-        kept = np.ones(len(new))
-        for k in np.unique(strain):
-            kept[strain == k] = np.broadcast_to(dis.strain_sus(k), trans.shape)[new[strain == k]]
-        ok = self.unprotected('infection', new, kept)
-        return new[ok], sources[ok], routes[ok], strain[ok]
 
     def code_route(self, i, route, betas, rel_trans, rel_sus):
         """
@@ -183,20 +175,18 @@ class Transmission(Effects):
         rel_trans = times(raw(rel_trans), self.mult_raw('rel_trans'))
         rel_sus = times(raw(rel_sus), self.mult_raw('rel_sus'))
 
-        # Main use case: networks
         if isinstance(route, ss.Network):
             pairs = self.over_network(i, route, rel_trans, rel_sus, betas, 'rel_sus')
-
-        # Handle everything else: mixing pools, environmental transmission, etc.
-        elif isinstance(route, ss.networks.Route):
+        else: # A mixing pool: a hazard for each person, as for a declared disease (see add_pool_hazard()), from the probability in the step
             beta = betas[0].to_prob(dis.t.dt) if isinstance(betas[0], ss.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
-            rel_sus = times(rel_sus, self.route_mult('rel_sus', route)(None, slice(None)))
-            as_arr = self.sim.people.age.asnew # Values by UID, as an array of the people
-            target_uids = route.compute_transmission(as_arr(rel_sus, copy=False), as_arr(rel_trans, copy=False), beta, disease=dis)
+            target_uids = ss.uids()
+            if beta and dis in route.diseases:
+                hazard = [np.zeros(len(rel_sus))]
+                with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard
+                    self.add_pool_hazard(route, hazard, [None], None, -np.log1p(-beta), rel_trans, rel_sus, self.route_mult('rel_sus', route))
+                uids = ss.uids(np.flatnonzero((hazard[0] > 0) & self.sim.people.alive.raw))
+                target_uids = uids[self.step_draw('mix_infection', uids) < -np.expm1(-hazard[0][uids])]
             pairs = [(np.full(len(target_uids), dtype=ss.dtypes.int, fill_value=ss.dtypes.int_nan), target_uids, i)]
-        else:
-            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.networks.Route and define a compute_transmission() method'
-            raise TypeError(errormsg)
 
         new_cases = ss.uids.concatenate([pair[1] for pair in pairs])
         sources = ss.uids.concatenate([pair[0] for pair in pairs])
@@ -322,19 +312,27 @@ class Transmitting:
                     pairs += prs
                     new_cases += [pr[1] for pr in prs]
                 continue
-            everyone = ss.uids(np.arange(len(sus_raw)))
-            with self.evaluating(memo={} if len(tr.terms) > 1 else None): # The factor the source states share (e.g. a susceptibility of each person) is worked out once
-                coefs = {state: self.route_beta(coef, nkey, route, everyone) for state,coef in tr.terms.items()}
-            coefs, target = self.by_target(coefs, route) # For each source state
+            key = ('route', tr.name, nkey, len(sus_raw))
+            kept = self._route_kept.get(key)
+            if kept is None:
+                everyone = ss.uids(np.arange(len(sus_raw)))
+                with self.evaluating(memo={} if len(tr.terms) > 1 else None): # The factor the source states share (e.g. a susceptibility of each person) is worked out once
+                    coefs = {state: self.route_beta(coef, nkey, route, everyone) for state,coef in tr.terms.items()}
+                coefs, target = self.by_target(coefs, route) # For each source state
+                ref = max([np.max(c) for c in coefs.values()] + [0])
+                scale = ref if np.isfinite(ref) else 1/dt # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance, from their hazard in the step
+                rel = {state:np.minimum(c/scale, np.finfo(float).max) for state,c in coefs.items()} if ref > 0 else None # Each source state's hazard, relative to the scale: the beta below is that of the scale, and over a network every factor scales the hazard (see over_network())
+                kept = (target, ref, scale, rel)
+                if target is None and all(self._route_kept.get(id(coef)) for coef in tr.terms.values()): # Fixed for the run, as its coefficients are (see route_beta())
+                    self._route_kept[key] = kept
+            target, ref, scale, rel = kept
             route_sus = rel_sus if target is None else rel_sus.asnew(rel_sus.raw*target, copy=False)
-            ref = max([np.max(c) for c in coefs.values()] + [0])
             if ref <= 0:
                 continue
             mult = self.route_mult(tr.name, route) # From the modifiers of its contacts and of the transmission on it
-            scale = ref if np.isfinite(ref) else 1/dt # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance, from their hazard in the step
             weights = None
-            for state,c in coefs.items():
-                frac = np.minimum(c/scale, np.finfo(float).max)*state.rel_trans # Each source state's hazard, relative to the scale: the beta below is that of the scale, and over a network every factor scales the hazard (see over_network())
+            for state,r in rel.items():
+                frac = r*state.rel_trans
                 w = mod[state.name].raw if np.ndim(frac) == 0 and frac == 1 else mod[state.name].raw*frac # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
             rel_trans = times(self.current_value('rel_trans', weights), by_strain) # By UID
@@ -343,11 +341,9 @@ class Transmitting:
                 for pair in self.over_network(i, route, rel_trans, route_sus.raw, [beta, beta], tr.name):
                     new_cases.append(pair[1])
                     pairs.append(pair)
-            elif isinstance(route, ss.networks.PoolRoute): # A hazard for each person
+            else: # A mixing pool: a hazard for each person
                 any_pools = True
-                self.add_pool_hazard(route, pool_hazard, strains, strain_raw, ref, rel_trans, route_sus, mult)
-            else: # Any other route works out its own transmission
-                new_cases.append(ss.uids(route.compute_transmission(route_sus, mod.rel_trans.asnew(rel_trans, copy=False), beta, disease=mod)))
+                self.add_pool_hazard(route, pool_hazard, strains, strain_raw, ref, rel_trans, route_sus.raw, mult)
         if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them, one of those who reached them (see Transmission)
             pairs, new_cases = self.assign_strains(tr, src, pairs, new_cases, strain_raw, carried, superinfects, protects)
         self._pairs = pairs
@@ -369,33 +365,6 @@ class Transmitting:
                 protect = self.protection(src, sus, strain) if protects else 1.0 # The strains they carry, or remember, protect them in part
                 hazards.append(self.strain_rate(tr, self.eval_for(tr.rate, sus), strain)*mod.rel_sus[sus]*src.rel_sus*adjust*self.mult('rel_sus', None, sus)*protect)
         return self.draw_infections(tr, sus, hazards, self.dt, carried, superinfects)
-
-    def add_pool_hazard(self, route, pool_hazard, strains, strain_raw, ref, rel_trans, route_sus, mult):
-        """ Over a mixing pool (or pools), each person's hazard of infection, for each strain, added to `pool_hazard` """
-        sim = self.sim
-        if route.name in sim.contact_rates.pool_terms: # A contact matrix within each place: see ss.solvers.ContactRates.init_pools()
-            groups = sim.groups.group_raw()
-            auids = sim.people.auids
-            n = np.bincount(groups[auids], minlength=sim.groups.n_groups).astype(float)
-            for k,strain in enumerate(strains):
-                frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
-                infectious = np.bincount(groups[auids], weights=(rel_trans*frac)[auids], minlength=sim.groups.n_groups)
-                expo = sim.contact_rates.term_exposure(sim.contact_rates.pool_terms[route.name], infectious, n)
-                pool_hazard[k] += ref*expo[groups]*route_sus.raw*mult(None, slice(None))
-        elif isinstance(route, ss.networks.MixingPools) and not route.pools: # A matrix of numbers: from the fraction of each group or band that is infectious
-            for k,strain in enumerate(strains):
-                frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
-                auids, expo = route.exposure(rel_trans*frac)
-                pool_hazard[k][auids] += ref*expo*route_sus.raw[auids]*mult(None, auids)
-        else: # Has no direction
-            for pool in (route.pools if isinstance(route, ss.networks.MixingPools) else [route]):
-                if len(pool.source_uids) and len(pool.target_uids):
-                    dst = pool.target_uids
-                    for k,strain in enumerate(strains):
-                        frac = 1.0 if strain is None else self.strain_weights[strain_raw[pool.source_uids], strain]
-                        trans = np.mean(rel_trans[pool.source_uids]*frac) # The infectiousness-weighted fraction of the source group that is infectious
-                        pool_hazard[k][dst] += ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
-        return
 
     def assign_strains(self, tr, src, pairs, new_cases, strain_raw, carried, superinfects, protects):
         """ Each new case over a network takes the strain of whoever infected them, one of those who reached them (see Transmission), unless that changes nothing or they are protected; returns who infected whom, and the new cases left """
@@ -542,7 +511,7 @@ class Transmitting:
         with self.evaluating(by_group=True):
             rate = np.broadcast_to(np.asarray(self.eval(tr.rate), dtype=float), ng)
         adjust = (1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])*self.mult_raw('transition', tr.name)
-        key = self.crn_key(f'mix_{tr.name}', mod[src.name].uids if check_draws else None)
+        key = self.crn_key(f'mix_{tr.name}')
         if key is not None: # The usual case: the draws are made in the same pass, so only the agents infected are listed
             uids = ss.solvers.numba.passes.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
                                      float(self.mult_raw('rel_sus')), self.dt, sim.people.slot_raw(), *key)

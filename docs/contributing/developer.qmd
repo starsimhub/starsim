@@ -89,7 +89,7 @@ Each path, when it is used, and the tests that check it against its reference (a
 | Path | When it is used | Pinned by |
 |---|---|---|
 | ODE in the kernels | `ode`, or `'auto'` choosing it | `test_transitions.py::test_solvers` (within 1e-4 of SciPy, and the analytic final size); `test_kernels.py::test_ode` (whole run equals stepped run to 1e-9) |
-| Kernels as plain Python, and in Rust | before Numba's are compiled; Rust's when built | `test_kernel_sets.py` (equal to Numba's, bit for bit, every solver) |
+| Kernels as plain Python, and in Rust | `ss.options.backend = 'python'`; Rust's when built | `test_kernel_sets.py` (equal to Numba's, bit for bit, every solver) |
 | ODE in JAX | `ss.options.backend = 'jax'`, gradients, fitting, many parameter sets | `devtests/test_gradients.py::test_jax_run` (equals the kernels to 1e-9), `test_kernel_sets.py::test_jax`; `test_gradient` (against finite differences) |
 | `binomial`, `gillespie` in the kernels | asked for by name | `devtests/test_contracts.py::test_solvers_agree` (means within 5% of the ODE, and people conserved), `test_exits`; `devtests/test_kernels.py::test_stochastic` (whole and stepped runs identical) |
 | `tau` in the kernels | asked for by name | `devtests/test_contracts.py::test_exits`; `test_kernels.py::test_stages`; `devtests/test_contracts_inference.py::test_particle_filter` (against the ODE at a large population) |
@@ -174,7 +174,7 @@ The inner loops of Starsim are *kernels*: small compiled functions that step com
 
 | Set | Where | Compiled | Role |
 |---|---|---|---|
-| Numba | `solvers/numba/` (`compartmental.py`, `passes.py`, `agent_moves.py`, `agent_events.py`, `draws.py`), and small kernels in `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` and `people.py` | On first use, then cached on disk | The reference: every change starts here |
+| Numba | `solvers/numba/` (`compartmental.py`, `passes.py`, `agent_events.py`, `draws.py`), and small kernels in `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` and `people.py` | On first use, then cached on disk | The reference: every change starts here |
 | Rust | `solvers/rust/src/`, each file named after the Numba file (or section of `compartmental.py`) it copies, and loaded by `solvers/backends/rust.py` | Ahead of time, by `./build` or in the wheels | The default when it has been built; the same numbers as Numba's, bit for bit |
 | Plain Python | Numba's compartmental kernels, run without compiling them (chosen by `solvers/backends/compiling.py`) | Never | For runs too short to be worth compiling; the same numbers, bit for bit |
 | JAX | `internals/gradients.py` (`ss.gradients`) | Traced on first use in a session | Gradients, many ODE runs at once, and long ODE runs; the ODE only, and the same numbers up to rounding |
