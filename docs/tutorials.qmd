@@ -3,7 +3,7 @@ pagetitle: "Tutorials"
 authorship:
   human: 15
   ai: 85
-  note: Adapted by AI from the Starsim 3 tutorials page; updated on Nov 11 by AI for the merged tutorials; setup, downloads, and choosing a tutorial revised on Nov 12 by AI after the docs review
+  note: Adapted by AI from the Starsim 3 tutorials page
 ---
 
 # Tutorials

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Merged on Nov 11 by AI from the data by place of "Population data" and the places, maps, and values by place of "Geography". Both were based on the AI-written v4 drafts (Claude's pages on contact matrices and data by place, and on places and movement, with the table of source data, the advice on using data of your own, and the checks of spatial models from Codex's); the coverage of the data, looking up a place, the Kenya example, and the appendices added by AI. Shortened on Nov 11 by AI, with movement between places moved here from Mixing; revised on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 A model of a particular setting needs data about its people and its places: how many people there are and of what ages, how fast they are born and die, who has contact with whom, and where they live. Starsim has these for 187 countries and territories, by name, and takes data of your own in the same forms. This page covers that data, and then places: geographies of towns or of a country's administrative units, movement between them, and maps of results.
@@ -65,7 +65,7 @@ ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2000))
 
 ### Towns linked by commuting
 
-A **geography** (`ss.geo.geography`) is a set of named places, with the population of each and where they are. Stratifying a disease by it makes a copy of each state for each place, and `mobility=` says how people move between them (see [Movement between places](#movement-between-places)), as `stratify(patch=ss.levels(towns, mobility=...))`. Here are three towns of measles, with 10 infectious people in Upelis at the start, and people spending 0.1% of their time in the other towns, split between them by a gravity model:
+A **geography** (`ss.geo.geography`) is a set of named places, with the population of each and where they are. Stratifying a disease by it makes a copy of each state for each place, and `mobility=` says how people move between them (see [Movement between places](#movement-between-places)), as `stratify(patch=ss.levels(towns, mobility=...))`. Here are three towns of measles, with 10 infectious people in Smalininkai at the start, and people spending 0.1% of their time in the other towns, split between them by a gravity model:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -74,7 +74,7 @@ A **geography** (`ss.geo.geography`) is a set of named places, with the populati
 import starsim as ss
 
 towns = ss.geo.geography(
-    names       = ['Upelis', 'Kalnava', 'Ezerynas'],
+    names       = ['Smalininkai', 'Coumeenoole', 'Amedzofe'],
     populations = [60_000, 30_000, 10_000],
     x           = [0, 20, 50], # Positions in km
     y           = [0, 0, 10],
@@ -84,7 +84,7 @@ S, R = ss.states('S R')
 I = ss.State('I', infected=True) # Infected: counted in the results infected and prevalence
 infection = S >> I @ 1.9*I        # β = 1.9 per day
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-measles = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0]))) # 10 infectious people in Upelis
+measles = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0]))) # 10 infectious people in Smalininkai
 measles.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.001)))
 
 sim = ss.Sim(measles, stop=ss.days(60))
@@ -98,7 +98,7 @@ sim.results.measles.I.by('patch').plot()
 library(starsim)
 
 towns <- ss$geo$geography(
-  names       = c("Upelis", "Kalnava", "Ezerynas"),
+  names       = c("Smalininkai", "Coumeenoole", "Amedzofe"),
   populations = c(60000, 30000, 10000),
   x           = c(0, 20, 50), # Positions in km
   y           = c(0, 0, 10)
@@ -109,7 +109,7 @@ states("I", infected = TRUE) # Infected: counted in the results infected and pre
 measles <- Disease(
   infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
   recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  init_n    = list(I = ss$by(patch = c(10, 0, 0)))  # 10 infectious people in Upelis
+  init_n    = list(I = ss$by(patch = c(10, 0, 0)))  # 10 infectious people in Smalininkai
 )
 measles$stratify(patch = ss$levels(towns, mobility = ss$geo$gravity(away = 0.001)))
 
@@ -157,7 +157,7 @@ for county in ['Nairobi', 'Kiambu', 'Mombasa', 'Turkana']:
 
 ### Values by place
 
-Anything that can vary by level of a stratification can vary by place, with `ss.by(patch=...)`: a value for each place, in order, or a dict by name. In a starting value (`init`, `init_n`, or `init_prev`), a place left out of a dict starts with 0, while a rate or other parameter by name needs every place; a transmission rate by place is `S >> I @ ss.by(patch=[1.9, 1.9, 1.0])*I`. Results are by place too: `by('patch')` splits a result into one column for each place, and `select()` picks one, e.g. `sim.results.measles.I.select(patch='Kalnava')`. Contact matrices act within each place, so a model can be stratified by age and by place together.
+Anything that can vary by level of a stratification can vary by place, with `ss.by(patch=...)`: a value for each place, in order, or a dict by name. In a starting value (`init`, `init_n`, or `init_prev`), a place left out of a dict starts with 0, while a rate or other parameter by name needs every place; a transmission rate by place is `S >> I @ ss.by(patch=[1.9, 1.9, 1.0])*I`. Results are by place too: `by('patch')` splits a result into one column for each place, and `select()` picks one, e.g. `sim.results.measles.I.select(patch='Coumeenoole')`. Contact matrices act within each place, so a model can be stratified by age and by place together.
 
 ## Maps
 
@@ -226,15 +226,15 @@ borders.results.measles.prevalence.map(t=['2025-05-01', '2025-07-01', '2025-09-0
 
 ### A movement register
 
-A table of moves on given dates (a movement register, such as livestock sales between farms) is `ss.geo.register(...)`, a file name or a DataFrame with columns `date`, `from`, `to`, and `n`, and optionally `states` (who can move, or which state people added go into). A row with no `from` adds people, and one with no `to` removes them. Here, in the three towns, 100 people move from Upelis to Ezerynas on day 5, and 50 people join Kalnava:
+A table of moves on given dates (a movement register, such as livestock sales between farms) is `ss.geo.register(...)`, a file name or a DataFrame with columns `date`, `from`, `to`, and `n`, and optionally `states` (who can move, or which state people added go into). A row with no `from` adds people, and one with no `to` removes them. Here, in the three towns, 100 people move from Smalininkai to Amedzofe on day 5, and 50 people join Coumeenoole:
 
 ```{python}
 import pandas as pd
 
 register = pd.DataFrame({
     'date': [5, 5],
-    'from': ['Upelis', None],
-    'to':   ['Ezerynas', 'Kalnava'],
+    'from': ['Smalininkai', None],
+    'to':   ['Amedzofe', 'Coumeenoole'],
     'n':    [100, 50],
 })
 measles_moves = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0])))
@@ -257,7 +257,7 @@ kw = dict(stop=ss.days(60), verbose=0)
 for label, sim in {'As an ODE': ss.Sim(measles_slow, **kw), 'As agents': ss.Sim(measles_slow, n_agents=10_000, **kw)}.items():
     sim.run()
     peaks = sim.results.measles_slow.I.by('patch').values.argmax(axis=0)
-    print(label, '- day of the peak in Upelis, Kalnava, and Ezerynas:', peaks)
+    print(label, '- day of the peak in Smalininkai, Coumeenoole, and Amedzofe:', peaks)
 ```
 
 ## Pitfalls

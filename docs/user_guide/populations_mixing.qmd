@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Merged on Nov 11 by AI from "Contact networks", the contact matrices of "Population data", and the movement between places of "Geography". "Contact networks" was based on the AI-written v4 draft, with the sections on how mixing pools transmit, hybrid networks, and editing edges adapted from the Starsim 3 user guide page on networks; the contact matrices and movement were from the AI-written v4 drafts (Claude's and Codex's). The realistic examples, movement between neighbors, and the tables completed, by AI. Shortened on Nov 11 by AI, with movement between places moved to Places and data; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with parts adapted from the Starsim 3 user guide page on networks
 ---
 
 A disease model says how infectious people are; the mixing says who meets whom, and how often. This page goes from the simplest mixing to the most detailed: homogeneous mixing, mixing pools, contact matrices between groups (such as age groups), and networks of individual contacts. Everything but networks runs as written as compartments or as agents; networks are about particular people, so only agents run them as written, and a compartmental solver approximates them ([below](#which-solver-runs-it)). Movement between places is in [Places and data](populations_places.qmd#movement-between-places), and the tutorial [T4 – Mixing](../tutorials/t4_mixing.qmd) builds up the same material as a single worked path.

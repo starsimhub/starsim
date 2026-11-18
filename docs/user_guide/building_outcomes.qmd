@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; appendix added by AI; shortened on Nov 11 by AI; the table of likelihoods moved to Fitting a model on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 What a model tracks is not what is observed: a model of measles tracks who is susceptible, latent, infectious, and immune, while surveillance sees some of the cases, some days after infection. This page covers declaring more results (such as prevalence), declaring **outcomes** (reported quantities worked out from the model's flows: cases, hospital admissions, deaths), and attaching data to results by name, so that it can be plotted and fitted. For a step-by-step introduction, see [T6 – Data and calibration](../tutorials/t6_data.qmd).

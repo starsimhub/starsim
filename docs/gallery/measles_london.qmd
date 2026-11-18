@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, reproducing the model of He, Ionides and King (2010). Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, reproducing the model of He, Ionides and King (2010)
 ---
 
 Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes a model with several such parts, the measles model of He, Ionides and King (2010), and writes it in Starsim in three ways:

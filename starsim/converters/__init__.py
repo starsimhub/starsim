@@ -21,6 +21,8 @@ import sciris as sc
 from .core import Source, Code, write, build, tested, check_version
 from .camdl import load_camdl
 from .emulsion import load_emulsion
+from .epidemics import load_epidemics
+from . import epiverse
 from .epimodel import load_epimodel
 from .epipack import load_epipack
 from .epymorph import load_epymorph
@@ -35,12 +37,13 @@ from .summer2 import load_summer2
 from .starsim_json import load_json
 from .export import exporters, extensions, export_to, to_hub
 
-__all__ = ['Source', 'Code', 'write', 'build', 'importers', 'tested', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
+__all__ = ['epiverse', 'Source', 'Code', 'write', 'build', 'importers', 'tested', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
 
 importers = dict(
     atomica  = load_atomica,
     camdl    = load_camdl,
     emulsion = load_emulsion,
+    epidemics = load_epidemics,
     epimodel = load_epimodel,
     epipack  = load_epipack,
     epymorph = load_epymorph,
@@ -98,6 +101,8 @@ def sniff(source):
     elif ext == '.r':
         if re.search(r'EpiModel', text) and re.search(r'\b(netsim|dcm|icm)\s*\(', text):
             return 'epimodel'
+        elif re.search(r'\bepidemics\b', text) and re.search(r'\bmodel_(default|vacamole|diphtheria|ebola)\s*\(', text):
+            return 'epidemics'
         elif re.search(r'^\s*(deriv|update|initial)\s*\(', text, re.M) and 'mparse(' not in text:
             return 'odin'
         elif 'mparse(' in text or (re.search(r'\b(SIR|SIS|SEIR|SISe3?)\s*\(', text) and 'tspan' in text): # SimInf's own models need tspan
@@ -106,8 +111,8 @@ def sniff(source):
         return 'sbml'
     elif ext == '.json' and re.match(r'\s*\{\s*"starsim"\s*:', text): # Starsim's own JSON form, which starts with the version that wrote it
         return 'json'
-    elif ext == '.json': # As written by summer2.py, epydemix.py, epipack.py, epymorph.py, or memilio.py (run as scripts), or dump_epimodel.R; or camdlc's JSON form
-        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|epipack|epymorph|memilio)"', text)
+    elif ext == '.json': # As written by summer2.py, epydemix.py, epipack.py, epymorph.py, or memilio.py (run as scripts), or dump_epimodel.R or dump_epidemics.R; or camdlc's JSON form
+        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|epidemics|epipack|epymorph|memilio)"', text)
         if match:
             return match.group(1)
         elif '"ir_version"' in text and '"model"' in text:

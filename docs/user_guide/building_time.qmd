@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 30
   ai: 70
-  note: Combines the Starsim 3 user guide page on time (its philosophy, dates, timepars, and their use in code) with an AI-written page on units, steps, and values that change over time; appendix added by AI; shortened on Nov 11 by AI, with the Starsim 3 section on the philosophy of time restored; units rewritten as the one reference for how the unit is chosen, and the appendix replaced by a link, on Nov 12 by AI after the docs review
+  note: Combines the Starsim 3 user guide page on time with sections written by AI
 ---
 
 Every rate in a model is per some unit of time, every duration is in some unit, and a sim runs over a span of time in steps. Give rates and durations with their units (`ss.perday(1.9)`, `ss.days(8)`), give the span as dates or durations, and Starsim converts between them. Starsim's choices where reasonable conventions differ come first, below. Units, dates, and steps are introduced in [T2 – Building a model](../tutorials/t2_model.qmd).

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Merged from "People and agents" and "Demographics" on Nov 11 by AI. "People and agents" was based on the AI-written v4 draft, with the sections on arrays and multi-column states adapted from the Starsim 3 user guide page on people; "Demographics" was based on the AI-written v4 draft, with the comparison of runs with and without demographics adapted from the Starsim 3 user guide. The examples made realistic, the new examples on changing rates, life tables, and migration, and the appendices, by AI. Shortened on Nov 11 by AI; the arrays and multi-column states moved to Array indexing; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with parts adapted from the Starsim 3 user guide pages on people and demographics
 ---
 
 Every model has a population: its size, the ages and sex of its people, and anything else about them the model needs. Over years, births, deaths, and aging change it.

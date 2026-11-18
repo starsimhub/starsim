@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Claude draft, not yet reviewed; the comparison of the methods on two parameters, and the appendices, by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI; not yet reviewed
 ---
 
 `sim.fit()` chooses a method that suits the model, so most fits don't need to name one. This page is for choosing one yourself: what each method gives, needs, and costs, and how their answers compare on the same data. The data, parameters, and measures of fit, which are the same for every method, are in [Fitting a model](calibration_fitting.qmd).

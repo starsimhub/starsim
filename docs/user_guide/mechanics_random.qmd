@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 33
   ai: 67
-  note: Adapted from the Starsim 3 user guide page on common random numbers; ported to v4, with the limits and the rules for modules expanded by AI. "How it works" written by AI from the Claude draft of "Randomness and fitting", checked against the current code. Merged with the architecture page "Randomness" on Nov 11 by AI, and shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (reproducibility, fitting)
+  note: Adapted by AI from the Starsim 3 user guide page on common random numbers, with new sections
 ---
 
 A stochastic model uses random numbers to decide what happens to each person: whether they are infected on a step, how long they stay infectious, whether a vaccine takes. When two scenarios are compared, such as with and without an intervention, the difference between them should come from the intervention, not from the scenarios happening to draw different random numbers. Starsim arranges its random numbers so that, as far as possible, the same person making the same decision gets the same random number in both scenarios. This is known as **common random numbers**.

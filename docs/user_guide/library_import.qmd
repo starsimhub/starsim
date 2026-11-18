@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting; appendix of importers and exporters added by AI. Moved from the conversion section on Nov 11 by AI, with the pages for each framework moved to the lingua_franca site; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review (agreement as a check)
+  note: Written by AI
 ---
 
 A model written for another framework can be read into Starsim, and a Starsim model can be written out in formats other tools read. Importing is useful for checking a model against its original, for running it in ways the original can't (as agents, or fitted with gradients), or for building on it in Starsim. Each framework in [the formats](#the-formats) has a page on the lingua_franca site (for example [odin](https://starsim.org/lingua_franca/models/odin/) and [EpiModel](https://starsim.org/lingua_franca/models/epimodel/)) that shows a model from it written both ways, and how closely the results agree; [Comparison with other frameworks](https://starsim.org/lingua_franca/models/comparison.html) compares them all. For Starsim 3 code, see the [migration guide](../migration/v3_v4.md).
@@ -166,6 +166,7 @@ For a longer model, `sim.imported.prompt` is a prompt for an AI assistant with S
 | [Atomica](https://starsim.org/lingua_franca/models/atomica/) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `sim.optimize()` |
 | [camdl](https://starsim.org/lingua_franca/models/camdl/) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
 | [EMULSION](https://starsim.org/lingua_franca/models/emulsion/) | A model file (`.yaml`) | Each state machine becomes a disease |
+| [epidemics](https://epiverse-trace.github.io/epidemics/) | An R script that calls `model_default()`, run first in R by `dump_epidemics.R` | Gives the same numbers as epidemics, with its interventions and vaccination; see [Epiverse](library_epiverse.qmd) |
 | [EpiModel](https://starsim.org/lingua_franca/models/epimodel/) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
 | [epipack](https://starsim.org/lingua_franca/models/epipack/) | A live model, or the JSON written by `epipack.py` | Each reaction process becomes a flow; a network is read at its mean degree |
 | [epydemix](https://starsim.org/lingua_franca/models/epydemix/) | A live model, or the JSON written by `epydemix.py` | Runs as a chain binomial in daily steps, as epydemix does |
@@ -177,7 +178,7 @@ For a longer model, `sim.imported.prompt` is a prompt for an AI assistant with S
 | [SimInf](https://starsim.org/lingua_franca/models/siminf/) | An R file (read without R), with its initial state and events | Nodes become places; events a movement register |
 | [summer2](https://starsim.org/lingua_franca/models/summer2/) | A live model, or the JSON written by `summer2.py` | Each stratification, with its mixing matrix |
 
-For epipack, epydemix, epymorph, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/converters/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/converters/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see the [migration guide](../migration/v3_v4.md#the-migration-script).
+For epipack, epydemix, epymorph, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/converters/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel and epidemics, `starsim/converters/dump_epimodel.R` and `dump_epidemics.R` do the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see the [migration guide](../migration/v3_v4.md#the-migration-script).
 
 Every importer reads its format into the same object, `ss.converters.Source` (states, parameters, flows, stratifications, outcomes, and what it couldn't translate), which `ss.converters.write()` writes as Starsim code and `ss.converters.build()` runs to make the sim. A `Source` can also be filled in by hand (`add_state()`, `add_par()`, `add_flow()`), to bring in a model from a framework with no importer, such as one from a paper. See [Architecture](architecture_index.qmd).
 

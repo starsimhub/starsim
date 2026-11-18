@@ -22,6 +22,7 @@ tested = dict(
     atomica  = ('Atomica',  '1.32.4',  'atomica'),
     camdl    = ('camdl',    'commit e8219d1', None),
     emulsion = ('EMULSION', '1.1.1',   'emulsion'),
+    epidemics = ('epidemics', '0.5.0', None), # An R package, not checked
     epimodel = ('EpiModel', '2.6.2',   None), # R packages, not checked
     epipack  = ('epipack',  '0.1.5',   'epipack'),
     epydemix = ('epydemix', '1.4.0',   'epydemix'),
@@ -317,6 +318,8 @@ class Rates(sc.prettyobj):
         def visit(node):
             if isinstance(node, ast.Call) and getattr(node.func, 'id', None) == 'everywhere': # The number in the whole population, every place, e.g. who a program in several populations reaches
                 return ast.Attribute(node.args[0], 'total')
+            if isinstance(node, ast.Attribute) and node.attr in ['n', 'frac', 'total']: # Already a count, e.g. a weighted one, (w*S).n
+                return node
             if isinstance(node, ast.Name) and node.id in self.source.states:
                 return ast.Attribute(node, 'n')
             elif isinstance(node, ast.Name) and node.id == total:

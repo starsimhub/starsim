@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude drafts of "The model as data", "From model to run", and "Errors, importing, and exporting", and from the execution spec and the report on timestep conventions in lingua_franca, checked against the current code. Merged from "Model declaration", "Model execution", and "Steps and time points" on Nov 11 by AI; shortened on Nov 11 by AI; within-step updates rewritten on Nov 12 by AI from the engines' code, after the docs review
+  note: Written by AI from the code and the design record in lingua_franca
 ---
 
 

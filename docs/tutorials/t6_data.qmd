@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, from the earlier AI-written calibration tutorials; its data, the posterior, and the check against what happened next rewritten by AI. Merged on Nov 11 by AI with the sections on real places (from the AI-written geography tutorial), on a real population and on births and deaths (from the AI-written tutorial on age groups), and on a country's population (from the agent-based demographics tutorial, based on an AI draft with text from the Starsim 3 demographics tutorial). Shortened on Nov 11 by AI; reordered on Nov 12 by AI after the docs review, with the population material trimmed and moved to the end, a projection from the best fit added, and the posterior marked as advanced and found with pmcmc rather than NUTS
+  note: Written by AI, with a little from the Starsim 3 demographics tutorial
 ---
 
 **How big will this outbreak get, and would a vaccination campaign now make a difference?**

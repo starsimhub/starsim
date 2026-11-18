@@ -3,7 +3,7 @@ title: FAQ
 authorship:
   human: 50
   ai: 50
-  note: Some parts written by humans, the rest written by AI; all reviewed by humans; shortened on Nov 11 by AI; shortened again on Nov 12 by AI after the docs review
+  note: Partly written by humans, the rest by AI; reviewed by humans
 ---
 
 Short answers to common questions, each with a link to the page that covers it in full.

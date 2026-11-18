@@ -3,7 +3,7 @@ title: Library
 authorship:
   human: 30
   ai: 70
-  note: The introduction is from the Starsim 3 user guide page on library modules, by way of the v4 page on library diseases; the table was written by AI
+  note: The introduction is from the Starsim 3 user guide page on library modules; the rest was written by AI
 ---
 
 Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.Disease`, `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of specific modules built on those:
@@ -14,6 +14,8 @@ Core Starsim (`import starsim as ss`) provides the framework and its generic bui
 | `ssl.networks` | Networks for households and other clusters, for space, and for theoretical work | [Networks](library_networks.qmd) |
 | `ssl.mnch` | Maternal, newborn, and child health: worked examples of harder patterns such as congenital infection | [Maternal-child health](library_mnch.qmd) |
 | `ssl.econ` | Health economics: costs, DALYs, discounting, and cost-effectiveness | [Health economics](library_econ.qmd) |
+
+Connections to other tools are in `ss.converters`, beside the importers: [Epiverse](library_epiverse.qmd) covers the Epiverse-TRACE packages for outbreak analytics.
 
 Every class is also at the top level (`ssl.Measles` is `ssl.diseases.Measles`), and the [API reference](../api/index.qmd) lists them all.
 

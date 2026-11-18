@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; made a page of its own, and exercise 4 simplified, on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 These are solutions to the exercises at the end of [T3 – Building a disease](t3_disease.qmd). Many of the exercises are open-ended, so these are examples: there are often other good answers. This page runs on its own, from the setup below.

@@ -46,16 +46,19 @@ def age_labels(edges):
     return [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(edges, ends)]
 
 
+age_label = r'\d+(\.\d+)?(-\d+(\.\d+)?|\+)?|\[\d+(\.\d+)?,\s*(\d+(\.\d+)?|Inf)\)' # '0-4', '75+', '3', or as an interval, '[0,5)' and '[65,Inf)' (as R's cut() and socialmixr label them)
+
+
 def age_edges(labels):
-    """ The lower edge of each age group from its label ('0-4', '75+', or '3'), as floats: the inverse of `age_labels()` """
-    return [float(str(label).split('-')[0].rstrip('+')) for label in labels]
+    """ The lower edge of each age group from its label ('0-4', '75+', '3', or '[0,5)'), as floats: the inverse of `age_labels()` """
+    return [float(re.split(r'[-,+]', str(label).strip().lstrip('['))[0]) for label in labels]
 
 
 def is_age_index(index):
-    """ Whether a table's index is by age group: named "age", or labeled as `age_labels()` labels them ('0-4', '75+', or '3'), and not just the positions of the rows (a RangeIndex) """
+    """ Whether a table's index is by age group: named "age", or labeled as `age_labels()` labels them ('0-4', '75+', or '3') or as intervals ('[0,5)', '[65,Inf)'), and not just the positions of the rows (a RangeIndex) """
     if index.name == 'age':
         return True
-    return not isinstance(index, pd.RangeIndex) and len(index) > 0 and all(re.fullmatch(r'\d+(\.\d+)?(-\d+(\.\d+)?|\+)?', str(label).strip()) for label in index)
+    return not isinstance(index, pd.RangeIndex) and len(index) > 0 and all(re.fullmatch(age_label, str(label).strip()) for label in index)
 
 
 def age_pyramid(sim, strat=None):

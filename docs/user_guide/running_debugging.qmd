@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 8
   ai: 92
-  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging; comparing sims and appendices of tools and errors added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, with profiling and the loop adapted from the Starsim 3 user guide
 ---
 
 A model can go wrong in three ways: it stops with an error, it runs but gives an answer that looks wrong, or it runs too slowly. This page goes through Starsim's tools for each, and the mistakes that commonly catch people out.

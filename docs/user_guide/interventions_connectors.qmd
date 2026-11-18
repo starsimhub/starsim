@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 14
   ai: 86
-  note: Based on the AI-written v4 draft, which ports the HIV and STI examples and the timing of connectors from the Starsim 3 user guide page on connectors; examples made realistic, and modifiers as members of a disease, added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI, porting the examples of the Starsim 3 user guide page on connectors
 ---
 
 A **connector** links modules: it lets one part of a model change another, such as one disease raising the risk of another, or a disease lowering fertility. Most connectors are a single `ss.modify()`, the same call that [changes parameters](interventions_interventions.qmd#changing-parameters) (where its keywords, targets, and how modifiers combine are explained), given to the sim with `connectors=`; anything a modifier can't say is a connector written as code. The tutorial [T7 – Stratification and co-transmission](../tutorials/t7_strata.qmd) builds up a model of two interacting diseases, and [Strains](building_diseases.qmd#strains) covers several strains of one disease.

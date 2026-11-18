@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, drawing on the Starsim 3 user guide pages on model structure and the sim, and on the Architecture pages; shortened on Nov 11 by AI; the SIR example cut back to a link to the pages that teach it on Nov 12 by AI after the docs review; the solver example replaced by a link to Solvers and backends on Nov 15 by AI
+  note: Written by AI, drawing on the Starsim 3 user guide
 ---
 
 This page is the mental model of Starsim on one page: what a model is made of, how it runs, and how Starsim decides whether to run it as compartments or as agents. For a hands-on start, see [T1 – Getting started](../tutorials/t1_intro.qmd).

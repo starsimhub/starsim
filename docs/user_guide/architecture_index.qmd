@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the Claude draft of the architecture overview and the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py. Merged from the architecture overview and "Modules" on Nov 11 by AI; shortened on Nov 11 by AI; further reading trimmed on Nov 12 by AI; initialization shortened to a link on Nov 15 by AI
+  note: Written by AI from the code
 ---
 
 This section is developer documentation: it explains how Starsim is put together and why, for contributors and for anyone who wants to know what happens when they call `sim.run()`; no model needs it. What a modeler needs is on the modeler pages: what β means with a network ([Mixing](populations_mixing.qmd#choosing-how-people-mix)), base and effective values ([Interventions](interventions_interventions.qmd#how-changes-combine)), when stocks and flows are recorded ([Time](building_time.qmd#the-time-span-the-step-and-units)), and the order of a step ([Running sims](running_sim.qmd#the-order-of-a-step)). This page gives the idea, the principles, and a map of the package, and then looks at *modules*, the pieces a sim is made of. [From declaration to run](architecture_run.qmd) follows a model from its declaration to a run, and [Engines and transmission](architecture_engines.qmd) looks at the engines that run it. Random numbers are in [Random numbers](mechanics_random.qmd#how-it-works), and how the design is tested in the [developer guide](../contributing/developer.qmd#testing).

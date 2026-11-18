@@ -3,7 +3,7 @@ title: Developer guide
 authorship:
   human: 10
   ai: 90
-  note: Written by AI, with the changelog and release guidelines from the human-written contributing guide; reordered (ordinary contributions first, kernels and releases after) on Nov 12 by AI after the docs review
+  note: Written by AI, with the changelog and release guidelines from the human-written contributing guide
 ---
 
 This guide is for people changing Starsim itself: how to set up, where the code is, how it is tested, and how changes are recorded. Most changes need only the first few sections; [changing the kernels](#the-kernels) and [releasing](#release-procedure) come after. To understand how Starsim works inside, see the [architecture](../user_guide/architecture_index.qmd) section of the user guide.

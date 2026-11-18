@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 4
   ai: 96
-  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial. Shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review; the section on looking inside a network replaced by a link on Nov 15 by AI
+  note: Written by AI, with text and examples from the Starsim 3 networks tutorial
 ---
 
 **Who meets whom, and why does it matter?** So far, everyone in the town mixes equally. In reality, children have more contacts than adults, mostly with other children; people travel between towns; and some infections pass only between people who know each other, such as sexual partners. This tutorial goes from equal mixing, to a contact matrix between age groups, to movement between places, to contacts between particular people. The last part runs as agents.
@@ -234,19 +234,19 @@ make_measles <- function(init_n = 10) {
 ```
 :::
 
-The town, Upelis, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places' names, populations, and positions (here in kilometers):
+The town, Smalininkai, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places' names, populations, and positions (here in kilometers):
 
 ```{python}
 towns = ss.geo.geography(
-    names       = ['Upelis', 'Kalnava', 'Ezerynas', 'Laukava'],
+    names       = ['Smalininkai', 'Coumeenoole', 'Amedzofe', 'Kalemouth'],
     populations = [100_000, 40_000, 20_000, 10_000],
-    x           = [0, 20, 35, 60], # Kilometers east of Upelis
-    y           = [0, 10, -15, 5], # Kilometers north of Upelis
+    x           = [0, 20, 35, 60], # Kilometers east of Smalininkai
+    y           = [0, 10, -15, 5], # Kilometers north of Smalininkai
 )
 towns.plot()
 ```
 
-Places are a stratification, like age groups: `stratify(patch=...)` splits each state by town (a "patch" is a place in a metapopulation model), and the contact matrix applies within each town. `ss.by(patch=[10, 0, 0, 0])` starts the outbreak in Upelis only.
+Places are a stratification, like age groups: `stratify(patch=...)` splits each state by town (a "patch" is a place in a metapopulation model), and the contact matrix applies within each town. `ss.by(patch=[10, 0, 0, 0])` starts the outbreak in Smalininkai only.
 
 Movement is rarely known in detail. A **gravity model** is the usual first guess: movement grows with the destination's population and falls with the square of the distance. Its amount is the fraction of time people spend in other towns, `away`, here 1%. Written out, it is a matrix of the fraction of time each town's people spend in each other town:
 
@@ -268,10 +268,10 @@ sim.results.measles.I.by('patch').plot()
 
 ```r
 towns <- ss$geo$geography(
-  names       = c("Upelis", "Kalnava", "Ezerynas", "Laukava"),
+  names       = c("Smalininkai", "Coumeenoole", "Amedzofe", "Kalemouth"),
   populations = c(100000, 40000, 20000, 10000),
-  x           = c(0, 20, 35, 60), # Kilometers east of Upelis
-  y           = c(0, 10, -15, 5)  # Kilometers north of Upelis
+  x           = c(0, 20, 35, 60), # Kilometers east of Smalininkai
+  y           = c(0, 10, -15, 5)  # Kilometers north of Smalininkai
 )
 away <- par(0.01, bounds = c(0.001, 0.1)) # People spend 1% of their time in other towns
 measles <- make_measles(init_n = ss$by(patch = c(10, 0, 0, 0)))
@@ -302,7 +302,7 @@ by_hand.results.measles.I.by('patch').plot()
 ```
 :::
 
-This is commuting: people keep their home town, but spend a fraction of their time in the others. (Migration, in which people move home, is `kind='migrate'`.) When movement is known, from a survey or mobile phone data, give it as a matrix, as in the explicit tab. The outbreak peaks first in Upelis, then in each other town in turn, last in Laukava, the smallest and farthest. `select(patch='Laukava')` picks one place's result, as it does an age group's.
+This is commuting: people keep their home town, but spend a fraction of their time in the others. (Migration, in which people move home, is `kind='migrate'`.) When movement is known, from a survey or mobile phone data, give it as a matrix, as in the explicit tab. The outbreak peaks first in Smalininkai, then in each other town in turn, last in Kalemouth, the smallest and farthest. `select(patch='Kalemouth')` picks one place's result, as it does an age group's.
 
 `map()` draws a result on a map of the places; prevalence suits it better than counts, since the towns differ in size. `animate=True` makes an animation (press play); [Places](../user_guide/populations_places.qmd#maps) has the other options, and [Mixing](../user_guide/populations_mixing.qmd) the radiation model and other ways to couple places:
 
@@ -312,20 +312,20 @@ sim.results.measles.prevalence.map(animate=True)
 
 ### Chance
 
-In this ODE model, measles always reaches Laukava: a fraction of an infectious person can travel there on day one. In reality, a whole infectious person must go, and the chains of infection they start can die out by chance. To see this, run the model as a stochastic model (`solver='binomial'`; [T5](t5_interventions.qmd#many-runs) says more), with a tenth as much movement (`pars=dict(away=0.001)`), many times:
+In this ODE model, measles always reaches Kalemouth: a fraction of an infectious person can travel there on day one. In reality, a whole infectious person must go, and the chains of infection they start can die out by chance. To see this, run the model as a stochastic model (`solver='binomial'`; [T5](t5_interventions.qmd#many-runs) says more), with a tenth as much movement (`pars=dict(away=0.001)`), many times:
 
 ```{python}
 sim = ss.Sim(measles, pars=dict(away=0.001), solver='binomial', **settings)
 msim = ss.parallel(sim, n_runs=30)
-msim.results.measles.I.select(patch='Laukava').plot(lines=True)
+msim.results.measles.I.select(patch='Kalemouth').plot(lines=True)
 ```
 
 ```{python}
-fairfield = msim.results.measles.infection.select(patch='Laukava').summarize() # The infections in Laukava in each run
-print('Runs with an outbreak in Laukava:', sum(fairfield > 100), 'of', len(fairfield))
+fairfield = msim.results.measles.infection.select(patch='Kalemouth').summarize() # The infections in Kalemouth in each run
+print('Runs with an outbreak in Kalemouth:', sum(fairfield > 100), 'of', len(fairfield))
 ```
 
-In some runs, measles never takes off in Laukava, and in the others it comes at very different times. For a small, weakly linked place, whether an outbreak arrives at all is a matter of chance. The same model also runs as agents (`n_agents=170_000`), each with a home town and an age group, who age, are born, and die ([T6](t6_data.qmd#births-and-deaths)).
+In some runs, measles never takes off in Kalemouth, and in the others it comes at very different times. For a small, weakly linked place, whether an outbreak arrives at all is a matter of chance. The same model also runs as agents (`n_agents=170_000`), each with a home town and an age group, who age, are born, and die ([T6](t6_data.qmd#births-and-deaths)).
 
 ## Contacts per person
 

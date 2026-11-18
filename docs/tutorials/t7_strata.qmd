@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, from the earlier AI-written tutorials on stratification and on several diseases, with new examples of an under-vaccinated community and of measles immune amnesia. Shortened on Nov 11 by AI; simplified on Nov 12 by AI after the docs review, as two parts with their own starting points
+  note: Written by AI
 ---
 
 **Who is the outbreak in, and does it make other infections worse?**

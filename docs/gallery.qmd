@@ -3,7 +3,7 @@ title: Gallery
 authorship:
   human: 0
   ai: 100
-  note: Written by AI; split into short examples and case studies on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 Complete models, each on a page of its own with the same parts: what the model is and why a modeler would build it this way, its state-transition diagram, its parameters, the code, a result with a plot, and where to go next. They cover a range of diseases and structures, rather than building one model up step by step as the [tutorials](tutorials.qmd) do. Each page runs as it is.

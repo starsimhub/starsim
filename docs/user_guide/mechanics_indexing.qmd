@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 34
   ai: 66
-  note: Adapted from the Starsim 3 user guide page on array indexing; ported to v4, with new sections on combining selections and indexing in a module written by AI. On Nov 11, the arrays and multi-column states moved here from People and demographics, and the page was shortened, by AI; consolidated on Nov 12 by AI after the docs review
+  note: Adapted by AI from the Starsim 3 user guide page on array indexing, with new sections
 ---
 
 When a model runs as agents, each person's properties (age, sex, the state of each disease) are kept in arrays with one value per agent. Code that reads or changes them, in a [module written as code](building_modules.qmd) or in an analysis after a run, needs to pick out agents correctly, including when some of them have died. This page covers the arrays, how agents are identified, and the rules for indexing them.

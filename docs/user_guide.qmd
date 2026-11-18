@@ -3,7 +3,7 @@ pagetitle: "User guide"
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, with some text from the Starsim 3 user guide page; descriptions shortened on Nov 12 by AI after the docs review
+  note: Written by AI, with some text from the Starsim 3 user guide
 ---
 
 # User guide

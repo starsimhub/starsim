@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 35
   ai: 65
-  note: The guidelines are from the human-written contributing guide; the section on reporting problems was written by AI; shortened on Nov 12 by AI after the docs review
+  note: The guidelines are from the human-written contributing guide; the rest was written by AI
 ---
 
 Welcome! We are thrilled you are interested in contributing to Starsim. There are many ways to help: asking a question, reporting a bug, suggesting a feature, improving the docs, or contributing code or models.

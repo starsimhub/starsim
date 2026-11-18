@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI for the v4 docs; DALYs example and appendix added by AI; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, `cost`, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted. The tools for adding costs up, discounting them, counting DALYs, and comparing scenarios are in the Starsim library, in `ssl.econ`: `ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, and `ssl.ICER`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd).

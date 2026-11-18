@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page; bed nets replaced by masks, to suit a directly transmitted infection, by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI
 ---
 
 Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a model whose parameters are set, usually by calibration: given a budget, how should it be divided between programs to do the most good? With diminishing returns on each program, the best division is rarely all to the program that looks best on its own. `sim.optimize()` finds it with the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries. Where costs come from is in [Health economics](library_econ.qmd).

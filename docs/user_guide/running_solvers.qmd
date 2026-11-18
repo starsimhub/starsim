@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 3
   ai: 97
-  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft; merged on Nov 11 by AI with "Will my model run as an ODE?" (drafted by AI, revised by a human), now the appendix on what needs agents; shortened on Nov 11 by AI; revised on Nov 12 by AI after the docs review
+  note: Written by AI; the appendix on what needs agents was revised by a human
 ---
 
 A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters, and what each solver supports, approximates, or can't run ([Will my model run as an ODE?](#appendix-what-needs-agents)). How the solvers work inside is in [Engines and transmission](architecture_engines.qmd).
