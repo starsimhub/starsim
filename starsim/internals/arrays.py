@@ -29,8 +29,11 @@ math_ufuncs = {'+': np.add, '-': np.subtract, '*': np.multiply, '/': np.divide, 
 
 
 def nan_of(dtype):
-    """ The value that stands for NaN in an array of this dtype, e.g. `int_nan` for integers; None for objects """
-    return {'b':False, 'i':int_nan, 'f':np.nan, 'U':''}.get(np.dtype(dtype).kind)
+    """ The value that stands for NaN in an array of this dtype, e.g. `int_nan` for integers (or the smallest value, for integers too small to hold it); None for objects """
+    dtype = np.dtype(dtype)
+    if dtype.kind == 'i':
+        return max(int_nan, np.iinfo(dtype).min)
+    return {'b':False, 'f':np.nan, 'U':''}.get(dtype.kind)
 
 
 def np_indexer(arr, inds):
