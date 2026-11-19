@@ -26,6 +26,7 @@ Each person's wealth is a state, and who gives and to whom are drawn from Starsi
 
 ```{python}
 import numpy as np
+import sciris as sc
 import matplotlib.pyplot as plt
 import starsim as ss
 
@@ -112,6 +113,10 @@ class Boids(ss.Module):
         self.define_results(ss.Result('aligned', label='Alignment with neighbors', kind='ratio'))
         return
 
+    def snapshot(self):
+        """ A copy of the boids' positions and velocities """
+        return sc.obj(x=self.x.copy(), y=self.y.copy(), vx=self.vx.copy(), vy=self.vy.copy())
+
     def offsets(self):
         """ The offsets from each boid to every other, the short way round the edges, and the distances """
         x, y = self.x.values, self.y.values
@@ -169,30 +174,29 @@ msim.plot('boids.aligned')
 
 With alignment, most boids are moving with their neighbors within about 50 steps, and nearly all within 100; without it, their headings stay about as random as at the start.
 
-The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), keeping the boids' positions and headings every 3 steps, and then plays them back as an animation, with each boid as an arrow along its heading (the plotting code is folded; click to show it):
+The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), keeping the boids' positions and headings every 3 steps, and then plays them back as an animation, with each boid as an arrow along its heading:
 
 ```{python}
-#| code-fold: true
-#| code-summary: "The code for the animation"
 from matplotlib import animation
 from IPython.display import HTML
 
-sim = ss.Sim(Boids(), n_agents=200, stop=200)
+sim = ss.Sim(Boids(), n_agents=200, stop=200, verbose=0) # Quiet: run in many stages, each would print its progress
 sim.init()
 boids = sim.custom.boids # A module of no standard kind, kept in sim.custom: any module that is not a disease, network, demographic module, intervention, analyzer, or connector
 frames = []
 for step in range(0, 201, 3):
     sim.run(until=step)
-    frames.append([state.values.copy() for state in [boids.x, boids.y, boids.vx, boids.vy]])
+    frames.append(boids.snapshot())
 
 fig, ax = plt.subplots(figsize=(4, 4), dpi=72)
 ax.set(xlim=(0, 1), ylim=(0, 1), xticks=[], yticks=[], aspect='equal')
-arrows = ax.quiver(*frames[0], angles='xy', scale_units='xy', scale=0.25, width=0.005, pivot='mid')
+f = frames[0]
+arrows = ax.quiver(f.x, f.y, f.vx, f.vy, angles='xy', scale_units='xy', scale=0.25, width=0.005, pivot='mid')
 
 def draw(i):
-    x, y, vx, vy = frames[i]
-    arrows.set_offsets(np.c_[x, y])
-    arrows.set_UVC(vx, vy)
+    f = frames[i]
+    arrows.set_offsets(np.c_[f.x, f.y])
+    arrows.set_UVC(f.vx, f.vy)
     ax.set_title(f'Step {3*i}')
 
 anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=100)
