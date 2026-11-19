@@ -455,6 +455,10 @@ class Network(Route):
         for key, dtype in self.meta.items(): # The columns not given: their defaults, or empty
             if key not in self.edges:
                 self.edges[key] = np.full(n, self.edge_defaults[key], dtype=dtype) if key in self.edge_defaults else np.empty((0,), dtype=dtype)
+        for key, col in self.edges.items(): # E.g. edges built by hand
+            if len(col) != n:
+                errormsg = f'Network "{self.name}" has {n} edges (in p1), but {len(col)} values of "{key}"; each column of the edges needs one value for each edge'
+                raise ValueError(errormsg)
         self.validate_uids()
         return
 

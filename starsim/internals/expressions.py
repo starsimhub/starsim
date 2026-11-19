@@ -923,7 +923,7 @@ class BinOp(Expr):
     def __rshift__(self, other):
         """ A sum of states as the sources of one transition, e.g. S + I + R >> D @ mu """
         if isinstance(other, ss.transitions.Transition):
-            return other._copy()._set_source(self._sum_states())
+            return other.copy()._set_source(self._sum_states())
         return ss.transitions.Transition(source=self._sum_states(), dest=other)
 
     @property

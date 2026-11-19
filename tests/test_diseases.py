@@ -396,6 +396,19 @@ def test_define_transitions():
     assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
     with pytest.raises(ss.CapabilityError): # A transition assigned to it after it was made would not be part of it
         extra.waning = extra.R >> extra.S @ ss.days(10)
+
+    class Faster(SIRS): # A copy of a transition, with another rate, replaces it by name; the original is unchanged
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.orig = self.infection
+            tr = self.infection.copy()
+            tr.rate *= 2
+            self.define_transitions(tr, overwrite=True)
+    faster = Faster(name='sirs')
+    assert list(faster.transitions) == ['infection', 'recovery', 'waning'] and faster.orig.rate is not faster.infection.rate
+    sim2 = ss.Sim(faster, **kw).run()
+    ref2 = ss.Sim(ClassSIRS(init_prev=0.01, beta=0.6, name='sirs'), **kw).run()
+    assert np.allclose(sim2.results.sirs.prevalence, ref2.results.sirs.prevalence)
     return sim
 
 

@@ -67,6 +67,9 @@ def _():
     dist.jump(to=10)
     dist.jump(to=3) # Back to a state it has passed
 
+@trigger('has 3 edges (in p1), but 2 values of "p2"', ValueError)
+def _(): ss.Sim(sir(), networks=ss.Network(edges=dict(p1=[0, 1, 2], p2=[3, 4])), n_agents=100, **kw).init()
+
 @trigger('Logical operations are only valid on Boolean arrays', ss.errors.BooleanOperationError)
 def _(): ss.Sim(n_agents=100, **kw).init().people.age & True
 

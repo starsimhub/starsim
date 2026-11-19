@@ -264,6 +264,8 @@ def test_code_every_solver():
         assert np.isclose(moved, 150, rtol=0.4), moved
         I0 = sir.I.n
         assert np.isclose(ss.move(sir.I, sir.R, p=0.5), I0/2, rtol=0.2)
+        sir.move('I', 'R', p=1) # States by name
+        assert sir.I.n == 0
         if solver == 'ode':
             with pytest.raises(ss.CapabilityError):
                 people.alive.sum() # Counts agents, which a compartmental run has none of
