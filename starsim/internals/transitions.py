@@ -38,7 +38,7 @@ class Endpoint:
     def __rshift__(self, other):
         """ S >> I, or S >> (a transition into I) """
         if isinstance(other, Transition):
-            return other._copy()._set_source(self)
+            return other.copy()._set_source(self)
         return Transition(source=self, dest=other)
 
     def __matmul__(self, driver):
@@ -878,7 +878,7 @@ class Transition(Nameable):
             errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
             raise TypeError(errormsg)
         if isinstance(driver, on): # People move as soon as it holds, or when it happens
-            new = self._copy()
+            new = self.copy()
             new._trigger = driver
             return new
         value = driver.value if isinstance(driver, par) else driver
@@ -897,7 +897,7 @@ class Transition(Nameable):
             errormsg = f'"@ {value}" is a probability, not a rate or a duration; a fraction that goes one way is the fraction of its destination, e.g. ss.Transition(I, {{R: None, D: 0.1}}, dur=10)'
             raise TypeError(errormsg)
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
-        new = self._copy()
+        new = self.copy()
         if isinstance(value, (ss.Duration, ss.Dist)) or any(isinstance(v, (ss.Duration, ss.Dist)) for v in typed): # Including ss.by(sex=[dist, dist])
             new.dur = as_dur(driver)
         else:
@@ -932,8 +932,19 @@ class Transition(Nameable):
             raise ValueError(f'the rate of the transition "{label}" is {raw!r}, but a rate must be >= 0; for net migration of either sign, use ss.migration(rate=ss.{raw!r})')
         return
 
-    def _copy(self):
-        """ A copy, so that a partial transition (S >> I, or I @ rate) can be used to build more than one """
+    def copy(self):
+        """
+        A copy of the transition, e.g. to declare one like it with another rate
+
+        The copy is shallow: its rate refers to the same parameters and states, so it stays part of the
+        same disease. Changing the copy's rate (`tr2.rate *= 2`) makes a new rate, so the original is unchanged.
+
+        **Example**:
+
+            tr2 = self.infection.copy() # In the __init__() of a declared disease, before it is built
+            tr2.rate *= 2
+            self.define_transitions(tr2, overwrite=True) # Replaces the infection, by name
+        """
         new = sc.cp(self)
         new.guessed = sc.obj(self.guessed)
         return new

@@ -241,6 +241,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             if not overwrite and (name in d.kwargs or name in d.members):
                 raise ValueError(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
             d.kwargs[name] = obj
+            if isinstance(obj, ss.Transition) and obj.name is None: # Named now, not only when built, so that a copy keeps the name (see ss.Transition.copy())
+                obj.name = name
             self.setattribute(name, obj) # So the declarations that follow can use it, e.g. self.S >> self.I
         declared = {id(obj) for obj in d.kwargs.values()}
         d.names.update({i:n for i,n in names.items() if i not in declared}) # A local variable that holds a member already named by keyword (e.g. src = self.I) does not rename it
@@ -795,19 +797,20 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         from whichever of its other states they are in
 
         Args:
-            states (State): the state (or list of states) to move people from, if given, and the state to move them to (or `ss.dead`, `ss.outside`)
+            states (State/str): the state (or list of states) to move people from, if given, and the state to move them to (or `ss.dead`, `ss.outside`); each a state or its name
             kwargs (dict): passed to `ss.move()`, e.g. `p` or `uids`
 
         Examples:
             ```python
             sir.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
             sir.move(sir.I, sir.R, uids=uids) # These agents, if they are infectious
-            sir.move(sir.R, uids=uids) # These agents, from wherever they are (or sir.move(uids, sir.R))
+            sir.move(sir.R, uids=uids) # These agents, from wherever they are (or sir.move(uids, sir.R), or sir.move(uids, 'R'))
             sir.move(ss.dead, uids=uids) # These agents die, whatever their state
             ```
         """
         if states and (isinstance(states[0], ss.uids) or (isinstance(states[0], np.ndarray) and np.issubdtype(states[0].dtype, np.integer))): # The agents first, e.g. sir.move(uids, sir.R)
             kwargs['uids'], states = states[0], states[1:]
+        states = [self._state_by_name(s) for s in states]
         if len(states) == 1: # From any of its other states
             dst = states[0]
             src = [self[state.name] for state in self.graph.people_states if state.name != getattr(dst, 'name', None)]
@@ -816,6 +819,16 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         else:
             raise TypeError(f'"{self.name}".move() takes the state to move people to, and optionally first the state to move them from, not {len(states)} arguments')
         return ss.move(src, dst, **kwargs)
+
+    def _state_by_name(self, state):
+        """ For `move()`: a state given by name (`'R'`), or a list of them, as the state itself """
+        if isinstance(state, (list, tuple)):
+            return type(state)(self._state_by_name(s) for s in state)
+        if not isinstance(state, str):
+            return state
+        if state not in self.graph.states:
+            raise sc.KeyNotFoundError(f'"{state}" is not a state of "{self.name}". Its states are {sc.strjoin(self.graph.states.keys())}')
+        return self[state]
 
     def infect(self, uids, strain=None):
         """
