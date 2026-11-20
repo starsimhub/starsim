@@ -1,7 +1,0 @@
-quartodoc
-sphobjinv
-jupyter
-jupyter-cache
-jupytext
-dask
-distribute

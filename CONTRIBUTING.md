@@ -2,36 +2,12 @@
 
 Welcome! We are thrilled you are interested in contributing to Starsim. This document will help you get started.
 
-- We are serious about inclusion and believe the open-source software community still has a long way to go. The Starsim community follows a [code of conduct](https://docs.idmod.org/projects/starsim/en/stable/conduct.html). By participating in this project, you agree to abide by its terms.
+- We are serious about inclusion and believe the open-source software community still has a long way to go. The Starsim community follows a [code of conduct](CODE_OF_CONDUCT.md). By participating in this project, you agree to abide by its terms.
 - Take a look at our house [style guide](https://github.com/starsimhub/styleguide). Starsim more or less follows Google's Python style guide, but with some exceptions.
 - Feel free to [open an issue](https://github.com/starsimhub/starsim/issues/new/choose) on more or less anything! This project is small enough that we don't need a formal triage system.
 - Pull requests should be made against `main`. In addition to following the [style guide](https://github.com/starsimhub/styleguide), please make sure the tests pass (`run_tests` in the `tests` folder; they also run via GitHub actions).
 
 If you have any other questions, please reach out to us: <info@starsim.org>. Thank you!
 
-## Changelog entries
-Every PR should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, must be flagged with **Migration** or **Regression**.
-
-For any backwards-incompatible change, write the entry so that a human (or an LLM) could perform the migration from the changelog alone. Include the concrete before/after call. For example, instead of:
-
-> `ss.foo()` and `ss.bar()` are deprecated; use `ss.cat()` instead.
-
-write:
-
-> `ss.foo()` and `ss.bar()` have been replaced by `ss.cat()`. Instead of `ss.foo(x=1)` and `ss.bar(y=2)`, use e.g. `ss.cat(z=[1, 2])`.
-
-The extra specificity (which arguments map to which, with example values) is what makes the entry actionable.
-
-## Release procedure
-This assumes you're about to release version `3.1.1`.
-1. Merge all PRs into the release candidate branch (`rc3.1.1`)
-2. Update the version in `version.py` from `3.1.1.dev0` to `3.1.1`, and update the date
-3. Mark the PR ready
-4. If tests pass, merge
-5. On the `Starsim` repository page, click 'Releases' to go to the [Releases](https://github.com/starsimhub/starsim/releases) page
-6. Click 'Draft a new release' on the top right
-7. In the tag dropdown, enter `v3.1.1` as a new tag. Leave the target as `main`
-8. Set the Release title to `v3.1.1`
-9. Generate release notes automatically, and then edit further as required
-10. Click 'Publish release' to deploy, which will update PyPI and build/upload the latest documentation
-11. Create a new release candidate branch (e.g. `rc3.1.2`), and make a draft PR
+## Changelog entries and releases
+See the [developer guide](https://starsim.org/v4/contributing/developer.html#changelog-entries) for how to write changelog entries, and for the [release procedure](https://starsim.org/v4/contributing/developer.html#release-procedure). <!-- V4-PREVIEW: drop /v4 on release -->

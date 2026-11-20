@@ -1,0 +1,3 @@
+# The Rust kernels' source, for the sdist, so that a platform with no wheel can compile them (not installed: see pyproject.toml)
+graft starsim/solvers/rust
+prune starsim/solvers/rust/target

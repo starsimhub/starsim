@@ -1,5 +1,9 @@
 ---
 pagetitle: "What's new"
+authorship:
+  human: 45
+  ai: 55
+  note: Entries up to Starsim 3.7 were written by humans; most of the Starsim 4 entries were written by AI
 ---
 
 {{< include ../CHANGELOG.md >}}

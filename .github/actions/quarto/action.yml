@@ -1,0 +1,19 @@
+# Install Quarto from sciris/quarto-cli, which renders in parallel (`--jobs`), and the faster interlinks filter from
+# sciris/quartopydoc. The fork publishes a prebuilt Linux tarball on every push to its main branch.
+
+name: Install Quarto
+description: Install Sciris's Quarto for building the docs
+inputs:
+  tag:
+    description: The sciris/quarto-cli release to install from
+    default: sciris-dev
+runs:
+  using: composite
+  steps:
+    - uses: sciris/quarto-cli/.github/actions/setup@main
+      with:
+        tag: ${{ inputs.tag }}
+    - name: Install quartopydoc's Quarto extensions (interlinks, authorship)
+      shell: bash
+      working-directory: docs
+      run: quarto add sciris/quartopydoc --no-prompt

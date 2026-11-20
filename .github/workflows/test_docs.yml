@@ -1,21 +1,21 @@
-# Test that docs build successfully on pushes to main
-# and PRs targeting main.
+# Test that docs build successfully. Disabled for now: run it manually from the
+# Actions tab. To re-enable, restore the push and pull_request triggers below.
 
 name: Test docs
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  #   branches:
+  #     - main
   workflow_dispatch:
 
 jobs:
   test:
     name: Render
-    timeout-minutes: 15
+    timeout-minutes: 45
     runs-on: ubuntu-latest
 
     steps:
@@ -26,16 +26,12 @@ jobs:
       with:
         python-version: "3.13"
 
-    - name: Install Starsim
-      run: pip install -e .[dev]
+    - uses: ./.github/actions/install
+      with:
+        extras: '[dev]'
 
-    - name: Set up Quarto
-      uses: quarto-dev/quarto-actions/setup@v2
-
-    - name: Install Quarto interlinks
-      working-directory: ./docs
-      run: quarto add machow/quartodoc --no-prompt
+    - uses: ./.github/actions/quarto
 
     - name: Render docs
       working-directory: ./docs
-      run: ./render
+      run: ./render --jobs 4

@@ -2,6 +2,65 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 4.0.0 (2026-11-18)
+
+Starsim 4 adds a way to write models using declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as "code" (i.e. the Starsim v3 approach, with custom `step()` methods) still run, but their results are slightly different. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim v3 code to Starsim v4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
+<!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
+
+### New features
+- **States and transitions**: declare a disease from `ss.State` and `ss.Transition` (`S >> I @ beta*I`), shown with `describe()`, `diagram()` (a figure) and `equations()`, also for a whole sim (`sim.diagram()`), with `R0()` and `Rt()`; diseases can also be written as code, or both.
+- **Solvers**: one model runs as an ODE, a chain binomial, by Gillespie's method, by tau-leaping, or as agents (`ss.solvers.ode()`, `binomial()`, `gillespie()`, `tau()`, `abm()`); `'auto'` picks an ODE unless something needs agents, and says why.
+- **Agents by events** (a prototype): `ss.solvers.abm(step='events')` steps agents event by event in continuous time; a class can suggest how it runs as agents (`suggested_solver`).
+- **Stratification**: `sim.stratify(age=[0, 15, 65])` and other properties, with aging, transfers (`ss.transfer()`), contact matrices (`ss.contacts()`) and results by group.
+- **Places**: `ss.geo.geography()`, with movement between places (`ss.geo.gravity()`, `ss.geo.radiation()`), maps and animations.
+- **Strains**: `ss.Strains`, with immunity between them (`ss.immunity()`), for declared diseases.
+- **Partnerships**: `ss.DegreeNet` and `ss.SexualNet`, with target numbers of partners, matching and acts.
+- **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age or on events (`who=`, `when=`), with priorities, queues and delays; `ss.modify()` changes any named quantity.
+- **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`, the one way to give births and deaths; UN data by country (`ss.population('Kenya')`, `ss.birth(rate='Kenya')`).
+- **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC (keeping a run with each draw, which `fit.project()` continues), iterated filtering or ABC-SMC; process noise on a rate (`noise=`); `sim.sensitivity()` and `sim.optimize()`.
+- **Runs**: `ss.parallel()` returns a MultiSim with summaries, bands and comparisons by scenario.
+- **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 14 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epidemics, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
+- **Epiverse-TRACE**: `ss.converters.epiverse` reads parameters from epiparameter (`parameter()`) and contact matrices from socialmixr (`contacts()`), and writes a sim's outbreak as a line list, incidence, and chains of transmission (`linelist()`, `incidence()`, `chains()`, `offspring()`) for Epiverse's R packages; `ss.data.age_edges()` and `ss.contacts()` read age groups labeled as intervals (`'[0,5)'`).
+- **Library**: `starsim.library` (`ssl`) holds simple models of many diseases, maternal and newborn health, more networks, and health economics.
+- **Command line and speed**: `starsim init`, `convert`, `help` and `ai`; Numba kernels throughout, with Rust copies that give the same numbers; optional JAX.
+
+### Changes that may affect results
+- *Regression*: a stock at `ti` is the state at the start of the step that starts there, and a flow at `ti` the number during that step; diseases written as code record their stocks one step later than in Starsim 3.
+- *Regression*: `ss.SIR`, `ss.SIS` and `ss.SEIR` are the textbook models, with defaults in days.
+- *Regression*: a bare number given as a time is a calendar year from 1800 on, else a time from 0 in the sim's unit.
+- *Regression*: a birth, death or fertility rate (bare, typed, or a table) is per person unless `rate_per=` (was `rate_units=`) says otherwise; Starsim 3's were per 1,000, so give `rate_per=1000`.
+- *Regression*: `ss.Births` and `ss.Deaths` hold each period's rate until the next.
+- *Regression*: a number in an `ss.MixingPools` matrix is the same for everyone in the group.
+- *Regression*: results have a `kind=` (flow, stock or ratio), which sets their scaling and summaries; one whose kind can't be told from its name warns.
+- *Regression*: `prevalence` comes from the infected states.
+- *Regression*: over a network, every factor of a contact's hazard is in the exponent (`rel_trans`, `rel_sus`, edge weight, modifiers), so a contact infects with chance 1 − (1 − p)^(factors) rather than p × factors; an ODE on a network gives each transmission its own saturation factor.
+- *Regression*: as agents, draws are keyed by stream, step and round, so runs don't depend on batching.
+- *Regression*: a module's random numbers are seeded by the name given (`name=`), else its default name, numbered within its kind in the order given (`sir`, `sir2`), never by its variable, so renaming a variable doesn't change a run, and scenarios keep common random numbers however their variables are named.
+- *Regression*: fixes to delays under the chain binomial, outcomes of fractional agents, and smooth time-varying values, among others.
+
+### Changes that may require migration
+- *Migration*: removed Starsim 3 names have no aliases, only errors naming the replacement; the [migration guide](https://starsim.org/v4/migration/v3_v4.html) and `python -m starsim.converters.migrate` cover them.
+- *Migration*: `ss.Infection` is `ss.AgentDisease`, which transmits in `transmit()`; new infections are counted by `infect()`.
+- *Migration*: `sim.calibrate()` is `sim.fit()`, with a method's settings as keywords (`sim.fit(method='nuts', draws=1000)`).
+- *Migration*: results are named after states and transitions (`sim.results.sir.I`, `infection`, `infection.cum`); `ss.Births` and `ss.Deaths` give `birth` and `death`, the sim gives `birth`, `death`, and `emigration` (each if anything in it makes them) however births and deaths are given, and `ss.Births`, `ss.Deaths`, and `ss.Pregnancy` give the crude rates (`cbr`, `cmr`) (Starsim 3's `new_deaths` and `new_emigrants` are `death` and `emigration`).
+- *Migration*: interventions are deliveries of products (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`; were `ss.routine_vx()` etc.), with `who=` (was `eligibility=`) and `when=`, `start=` and `stop=` (were `years=`, `start_year=` and `end_year=`).
+- *Migration*: distributions take their means by name: `ss.normal(mean=, std=)` and `ss.poisson(mean=)` (were `loc=`, `scale=`, `lam=`).
+- *Migration*: a network's edge weight is `weight` (was `beta`); a route's transmissibility is the disease's.
+- *Migration*: `pop_scale=` is `total_pop=` with `n_agents=`.
+- *Migration*: `ss.MultiSim(sim)` alone is one run (was four).
+
+### Bugfixes and performance
+- Many fixes found by porting Covasim, STIsim, HPVsim, FPsim, TBsim and other models: coded and declared diseases agree under the same solver, as do agents and compartments.
+- Compartmental runs are taken whole in compiled kernels, with time-varying values tabulated once per run; mixing between many places is up to 5× faster.
+- Agent passes are compiled; networks whose edges haven't changed visit only the edges that matter.
+- `pip install starsim` includes the compiled Rust kernels on all major platforms.
+- `import starsim` limits BLAS to one thread (`ss.options.blas_threads`).
+- Fixes from a review of fitting ([#1591](https://github.com/starsimhub/starsim/issues/1591)): the JAX log-density refuses what it would approximate, Optuna scores a stochastic sim by the particle filter, ABC-SMC is refused for an ODE, and chains start apart.
+- The full list of changes is in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
+<!-- V4-PREVIEW: restore the links above to docs.starsim.org for normal publishing -->
+- *GitHub info*: PR [1437](https://github.com/starsimhub/starsim/pull/1437)
+
+
 ## Version 3.7.4 (2026-11-03)
 - Arithmetic between dates and days no longer involves a conversion to years; this fixes bugs due to rounding errors (especially in leap years). Adding durations to a date is also faster.
 - *GitHub info*: PR [1532](https://github.com/starsimhub/starsim/pull/1532)
@@ -405,7 +464,7 @@ This release introduces the **Starsim library** (`starsim.library`), which absor
 
 
 ## Version 3.1.0 (2026-02-12)
-- *Migration information*: See `docs/migration/v3.0_v3.1.md` for a detailed, LLM-friendly migration guide.
+- *Migration information*: See [`docs/migration/v3.0_v3.1.md`](https://github.com/starsimhub/starsim/blob/v3.7.4/docs/migration/v3.0_v3.1.md) for a detailed, LLM-friendly migration guide.
 - Added new functionality to the `Pregnancy` module:
     - Renamed `make_p_fertility()` -> `make_p_conceive()`
     - Added variable durations of pregnancies and tracking of pre-term birth outcomes
@@ -592,7 +651,7 @@ Starsim v3 comes with several new options, set via `ss.options`:
 `ss.options` also now has a `help` method that will print detailed help on a given option or all options, e.g. `ss.options.help(detailed=True)`.
 
 #### Migration summary
-- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then `docs/migration/v2_v3/README.md`. However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
+- An agentic LLM such as Cursor or Claude Code should be able to perform most of the migrations from v2 to v3 automatically. Tell it to read `llms.txt`, then [`docs/migration/v2_v3/README.md`](https://github.com/starsimhub/starsim/blob/v3.7.4/docs/migration/v2_v3/README.md). However, there will still be a few things to manually double check, especially around time conversions (such as whether you want `ss.beta()` ported literally to `ss.probperyear()`, or "upgraded" to `ss.peryear()`).
 - *GitHub info*: PR [927](https://github.com/starsimhub/starsim/pull/927)
 
 

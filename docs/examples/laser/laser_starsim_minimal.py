@@ -1,7 +1,7 @@
 """
 Minimal port of laser_example_orig.py, following LASER's naming conventions
 
-Requires starsim>=3.0
+Requires starsim>=4.0
 """
 import numpy as np
 import sciris as sc
@@ -9,12 +9,8 @@ import matplotlib.pyplot as plt
 import starsim as ss
 
 class SIRModel(ss.Module):
-    def __init__(self):
-        super().__init__()
-        self.define_states(
-            ss.Arr('disease_state', dtype=np.int32, default=0),
-            ss.Arr('recovery_timer', dtype=np.int32, default=0),
-        )
+    disease_state  = ss.Arr(dtype=np.int32, default=0)
+    recovery_timer = ss.Arr(dtype=np.int32, default=0)
 
     def init_pre(self, sim):
         super().init_pre(sim)
@@ -25,12 +21,15 @@ class SIRModel(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('S', dtype=np.float32),
-            ss.Result('I', dtype=np.float32),
-            ss.Result('R', dtype=np.float32),
+            ss.Result('S', dtype=np.float32, kind='stock'),
+            ss.Result('I', dtype=np.float32, kind='stock'),
+            ss.Result('R', dtype=np.float32, kind='stock'),
         )
 
     def step(self):
+        pass # Nothing to do in the step itself
+
+    def record_states(self): # Called at the start of each step, so each result is the state at its time point
         tick = self.ti
         susceptible = (self.population.disease_state == 0).sum()
         infected = (self.population.disease_state == 1).sum()
@@ -81,9 +80,7 @@ class IntrahostProgression(ss.Module):
 
 
 class Transmission(ss.Module):
-    def __init__(self, infection_rate):
-        super().__init__()
-        self.infection_rate = infection_rate
+    infection_rate = ss.par(0.3)
 
     def init_post(self):
         super().init_post()
@@ -101,7 +98,7 @@ class Transmission(ss.Module):
         fraction_infected = num_infected / population_size
 
         # Transmission logic: Probability of infection per susceptible individual
-        infection_probability = self.infection_rate * fraction_infected
+        infection_probability = self.pars.infection_rate * fraction_infected
 
         # Apply infection probability to all susceptible individuals
         new_infections = np.random.rand(num_susceptible) < infection_probability
@@ -113,22 +110,22 @@ class Transmission(ss.Module):
         self.population.recovery_timer[newly_infected_indices] = np.random.randint(5, 15, size=newly_infected_indices.size)  # Random recovery time
 
 
-params = sc.objdict({
+params = sc.obj({
     "n_agents": 100_000,
     "dur": 160,
 })
 infection_rate = 0.3
 
 intrahost = IntrahostProgression()
-transmission = Transmission(infection_rate)
+transmission = Transmission(infection_rate=infection_rate)
 sir_model = SIRModel()
 
 # Initialize the model
-sim = ss.Sim(params, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+sim = ss.Sim(params, [intrahost, transmission, sir_model])
 
 # Run the simulation
 with sc.timer():
     sim.run()
 
 # Plot results
-sir_model.plot_results()
+sim.custom.sirmodel.plot_results() # The sim's copy of sir_model, which ran
