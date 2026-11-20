@@ -672,6 +672,8 @@ class Groups(sc.prettyobj):
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         self.joint_strats = [] # The dimensions for diseases whose states are tracked jointly: see ss.solvers.init_joint_states()
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
+        self.joint = None # A split over several dimensions at once, as (their positions, the fractions): see resolve_joint()
+        self.joint_from_people = False # Whether it is a named population's by age and sex, which agents take from their people instead (see sex_by_age())
         self.version = 0 # How many times the groups were worked out, so a layout knows whether it holds for them (see ss.solvers.Compartmental.current())
         self.kept = set() # The properties the people came with, which are kept and binned rather than drawn: set by ss.Sim.init_people()
         self.vals_set = False # Whether the agents' levels have been assigned (see init_vals()), after which agents added are placed as they are made
@@ -840,9 +842,15 @@ class Groups(sc.prettyobj):
                         f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
                         f'and is the fraction of people at each combination (e.g. the fraction in each level of "{strat.name}" within each row, times the fraction of the row)')
             raise ValueError(errormsg)
-        if not joints:
-            return
-        ds, grid = joints[0].joint.grid(sim)
+        self.joint_from_people = False # Whether the split over several dimensions is a named population's by age and sex (see sex_by_age()), which agents take from their people instead
+        if joints:
+            ds, grid = joints[0].joint.grid(sim)
+        else:
+            found = self.sex_by_age()
+            if found is None:
+                return
+            ds, grid = found
+            self.joint_from_people = True
         ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
         within = [] # A split over age and other dimensions whose rows each sum to 1 is the fraction at each level of the others within each age group, so people keep their ages (otherwise it is the fraction at each combination, and sets the ages)
         if ages:
@@ -864,8 +872,33 @@ class Groups(sc.prettyobj):
                 self.strats[d].guessed.pop('fractions', None)
                 if within:
                     self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
+                if self.joint_from_people:
+                    self.strats[d].guessed['fractions'] = "the named population's at each age"
         self.joint = (ds, grid)
         return
+
+    def sex_by_age(self):
+        """
+        For `resolve_joint()`: the fraction female in each age group of a named population (`ss.population()`), as a split
+        over age and sex (each age group's row summing to 1), for a sim split by both with no split of sex given, so that
+        a compartmental run starts with the population's sexes at each age, as agents do; None otherwise
+        """
+        named = getattr(self.sim, 'named_people', None)
+        if named is None or getattr(named, 'female', None) is None:
+            return None
+        plain = lambda strat: strat.states is None and strat.cond is None and strat.joint is None
+        age = next((d for d,strat in enumerate(self.strats) if strat.kind == 'age' and strat.edges is not None and plain(strat)), None)
+        sex = next((d for d,strat in enumerate(self.strats) if strat.female is not None and strat.n == 2 and plain(strat)), None)
+        if age is None or sex is None or (self.strats[sex].fractions_given and 'fractions' not in self.strats[sex].guessed):
+            return None
+        edges = np.append(self.strats[age].edges, np.inf)
+        count = lambda counts: np.diff(ss.data.younger_than(named.ages, counts)(edges))*np.sum(counts)
+        female, total = count(named.female), count(named.counts)
+        share = np.divide(female, total, out=np.full(len(total), 0.5), where=total > 0)
+        grid = np.zeros((len(share), 2))
+        grid[:, self.strats[sex].female] = share
+        grid[:, 1 - self.strats[sex].female] = 1 - share
+        return [age, sex], grid
 
     def resolve_conditional(self):
         """ For init(): a split of a dimension of some states only, given the levels of others (e.g. clinical severity by age), normalized over this dimension """
@@ -1250,7 +1283,7 @@ class Groups(sc.prettyobj):
         sim = self.sim
         people = sim.people
         uids = people.auids
-        joint = self.joint[0] if self.joint is not None else []
+        joint = self.joint[0] if self.joint is not None and not self.joint_from_people else [] # A named population's sexes by age are the agents' own
         for d,strat in enumerate(self.strats):
             if strat.name in self.kept: # Properties the people came with, which are kept and binned (see ss.Sim.init_people())
                 continue
@@ -1323,7 +1356,7 @@ class Groups(sc.prettyobj):
         """
         sim = self.sim
         people = sim.people
-        joint = self.joint[0] if self.joint is not None else []
+        joint = self.joint[0] if self.joint is not None and not self.joint_from_people else [] # A named population's sexes by age are the agents' own
         if len(joint):
             self.draw_joint(uids)
         parent = people.parent.raw[uids]

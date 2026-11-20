@@ -506,10 +506,6 @@ class Moving:
         new = self.add_people([(place, states, int(k)) for place,k in enumerate(npl) if k], ti, f'born_{tr.name}', newborn=born)
         order = np.concatenate([moms[places == place] for place,k in enumerate(npl) if k]) # In the order they were made: by place, then each parent's
         people.parent[new] = order
-        if f'sex_{tr.name}' in self.dists:
-            people.female[new] = self.draw(f'sex_{tr.name}', new)
-            sim.groups.set_sex(new) # A dimension called sex follows (it was set from the default when they were made)
-            sim.groups.groups_changed(new)
         if not born: # Fetuses, so that they are born at 0
             byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])
             people.age[new] = np.broadcast_to(age, len(moms))[byplace]

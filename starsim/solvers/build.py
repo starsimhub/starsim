@@ -78,7 +78,7 @@ def init_flows(sim):
     """
     Births, deaths, and migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`): see `ss.demographics.Flows`
 
-    People are born and die once, so these become the transitions of one disease, the first declared (or, for births into a
+    People are born and die once, so these become the transitions of one disease, the first declared that is not a demographic module such as `ss.Pregnancy` (or, for births into a
     state that is given, the one it is a state of), whose people are everyone's: as agents, the diseases share the people, and
     in a compartmental run with several declared diseases, their states are tracked jointly (see `ss.solvers.init_joint_states()`). For the
     same reason, births or deaths of everyone declared in more than one disease are an error.
@@ -86,11 +86,12 @@ def init_flows(sim):
     for flows in [mod for mod in sim.pars.demographics.values() if isinstance(mod, ss.demographics.Flows)]:
         for tr in flows.transitions:
             named = tr.dest[0] if tr._inflow and tr.state_given else None # A state of one of the diseases
-            holder = next((mod for mod in sim.declared if named is None or any(st is named for st in mod.graph.states.values())), sim.declared[0])
+            hosts = [mod for mod in sim.declared if not isinstance(mod, ss.Demographics)] or sim.declared # Not a declared demographic module (ss.Pregnancy), whose own states (P) the deaths of everyone would end without its knowing
+            holder = next((mod for mod in sim.declared if named is not None and any(st is named for st in mod.graph.states.values())), hosts[0])
             tr = sc.dcp(tr, memo={} if named is None else {id(named):named}) # The sim's own, so the module is unchanged if it is built again
             tr.of_population = True
             holder.graph.add_flow(tr)
-    holders = [mod.name for mod in sim.declared if flows_of(mod)]
+    holders = [mod.name for mod in sim.declared if flows_of(mod) and not isinstance(mod, ss.Demographics)] # A demographic module's own births (ss.Pregnancy's) beside the population's are warned of by the module (see ss.Pregnancy.init_pre())
     if len(holders) > 1:
         raise ValueError(f'births or deaths of everyone are declared in {sc.strjoin(holders)}; people are born and die once, whatever their diseases, so this would count them twice.\n'
                                       f'     Declare them once, for the population: ss.Sim(..., demographics=[ss.birth(rate=...), ss.death(rate=...)]).')

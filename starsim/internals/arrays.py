@@ -909,8 +909,12 @@ class FloatArr(Arr):
 
     It exists so that a state can be defined by name alone, e.g. `ss.FloatArr('cd4')`.
     """
-    def __init__(self, name=None, **kwargs):
-        super().__init__(name=name, dtype=ss_float, nan=np.nan, **kwargs) # Do not allow dtype or nan to be overwritten
+    def __init__(self, name=None, dtype=None, **kwargs):
+        dtype = ss_float if dtype is None else np.dtype(dtype)
+        if not np.issubdtype(dtype, np.floating):
+            errormsg = f'ss.FloatArr holds floats, so its dtype is a float type (e.g. np.float64), not {dtype}'
+            raise TypeError(errormsg)
+        super().__init__(name=name, dtype=dtype, nan=np.nan, **kwargs) # NaN is not allowed to be overwritten; the dtype is 32-bit unless a wider float is needed (e.g. people.age)
         return
 
 

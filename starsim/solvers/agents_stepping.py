@@ -373,12 +373,18 @@ class Stepping:
                 continue
             if self.never(tr): # A rate of 0 for the run (e.g. ss.peryear(0)): nobody is born, and nothing is drawn
                 continue
+            adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
+            parents = self.birth_rates(tr) # A birth rate of each person's own (e.g. ss.by(age=..., sex=...)): the agents and their rates
             with self.evaluating(by_group=True):
-                adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
-                amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
+                if parents is None:
+                    amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
                 ps = [np.broadcast_to(p, sim.groups.n_groups) for p in self.branch_probs(tr)] # An inflow split between several states, e.g. ss.unborn >> (0.9*S + 0.1*X)
+            if parents is not None: # The sum of the rates of the people in each group (born in their parents' place)
+                uids, rates = parents
+                groups = self.groups(uids)
+                amount = np.bincount(groups, weights=rates*np.broadcast_to(adjust, sim.groups.n_groups)[groups]*dt, minlength=sim.groups.n_groups)
             amount = np.broadcast_to(amount, sim.groups.n_groups)
-            dims = ([d] if d is not None else []) + [dim for dim in self.inflow_dims(tr) if dim != d] # The place, and the levels the inflow is given at
+            dims = ([d] if d is not None else []) + ([] if parents is not None else [dim for dim in self.inflow_dims(tr) if dim != d]) # The place, and the levels the inflow is given at
             cells, cell = np.unique(sim.groups.group_coords[:, dims], axis=0, return_inverse=True) if dims else (np.zeros((1, 0), dtype=int), np.zeros(sim.groups.n_groups, dtype=int))
             expected = np.bincount(cell.ravel(), weights=amount, minlength=len(cells))
             born = self.rng.poisson(expected) # By place and level; the other levels are drawn as people are born into them
@@ -393,7 +399,7 @@ class Stepping:
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
             if not tr.migration:
                 if getattr(tr, 'mother_ages', None) is not None and len(new): # ss.birth(mothers=True)
-                    self.give_mothers(tr, new)
+                    self.give_mothers(tr, new, parents)
                 sim.people.born(new)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
@@ -407,27 +413,72 @@ class Stepping:
                 self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
         return
 
-    def give_mothers(self, tr, new):
-        """ A mother for each child born at a crude rate (`ss.birth(rate=)`): a woman alive of the ages it gives (`min_age` to `max_age`), in the child's place if the model has places, chosen at random as `ss.Births` chooses them; none if there is no such woman """
+    def birth_rates(self, tr):
+        """
+        For a birth rate of each person's own (`ss.birth(rate=ss.by(age=..., sex=...))`, or one that reads people's properties), the agents alive and the
+        rate of each, in agents born per unit time (their weights included); None for a rate that is the same for everyone in a group, which is worked out by group
+        """
+        if not getattr(tr, 'per_capita', False) or tr.per_person is None or tr.by_level is not None or not self.reads_people(tr.per_person):
+            return None
+        uids = self.sim.people.auids
+        with self.evaluating(uids=uids, for_uids=True, by_group=False):
+            vals = np.asarray(self.eval(tr.per_person), dtype=float)
+        rates = np.maximum(vals[uids] if vals.ndim and len(vals) != len(uids) else np.broadcast_to(vals, len(uids)), 0)
+        w = self.weights(uids)
+        return uids, (rates if w is None else rates*w)
+
+    def reads_people(self, expr):
+        """ Whether a rate reads each person's own properties (a value by people's properties, a property or attribute of people, or a function of the agents), so is worked out for each agent rather than each group """
+        for leaf in expr.leaves:
+            if isinstance(leaf, (ss.expressions.Prop, ss.expressions.attr)):
+                return True
+            if isinstance(leaf, ss.par):
+                raw = leaf.raw
+                if isinstance(raw, ss.by) and raw.on_people(self.sim):
+                    return True
+                if callable(raw) and not isinstance(raw, (ss.Dist, ss.parameters.TimeValue, ss.TimePar)) and ss.utils.takes_uids(raw):
+                    return True
+        return False
+
+    def give_mothers(self, tr, new, parents=None):
+        """
+        A mother for each child born at a crude rate (`ss.birth(rate=)`), in the child's place if the model has places; none if there is no such woman.
+        For a rate the same for everyone, a woman alive of the ages it gives (`min_age` to `max_age`), chosen at random as `ss.Births` chooses them; for a rate
+        of each person's own (`parents`, e.g. age-specific fertility), a woman chosen in proportion to her rate (of those aged `min_age` to `max_age`, if given)
+        """
         sim = self.sim
         ppl = sim.people
         lo, hi = tr.mother_ages
-        women = ss.solvers.numba.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, lo, hi).view(ss.uids)
-        women = women[~np.isin(women, new)]
+        if parents is None:
+            women = ss.solvers.numba.passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, sc.ifelse(lo, 15), sc.ifelse(hi, 50)).view(ss.uids)
+            weights = None
+        else:
+            uids, rates = parents
+            age = ppl.age.raw[uids]
+            keep = ppl.female.raw[uids] & (rates > 0) & (age >= sc.ifelse(lo, -np.inf)) & (age < sc.ifelse(hi, np.inf))
+            women, weights = uids[keep], rates[keep]
+        keep = ~np.isin(women, new)
+        women = women[keep]
+        weights = None if weights is None else weights[keep]
         if not len(women):
             return
         u = self.draw(f'mother_{tr.name}', new)
+        def pick(pool, w, u):
+            if w is None:
+                return pool[np.minimum((u*len(pool)).astype(int), len(pool) - 1)]
+            cum = np.cumsum(w)
+            return pool[np.minimum(np.searchsorted(cum, u*cum[-1], side='right'), len(pool) - 1)]
         d = sim.contact_rates.space
         if d is None:
-            ppl.parent[new] = women[np.minimum((u*len(women)).astype(int), len(women) - 1)]
+            ppl.parent[new] = pick(women, weights, u)
             return
         level = sim.groups.level_raw(d)
         places, kids = level[women], level[new]
         for place in np.unique(kids):
-            here = women[places == place]
+            sel = places == place
             mine = kids == place
-            if len(here):
-                ppl.parent[new[mine]] = here[np.minimum((u[mine]*len(here)).astype(int), len(here) - 1)]
+            if sel.any():
+                ppl.parent[new[mine]] = pick(women[sel], None if weights is None else weights[sel], u[mine])
         return
 
     def transfer_uids(self, name, tf):
@@ -802,7 +853,12 @@ class Stepping:
         total = sum(k for dst,states,k in enter)
         if not total:
             return ss.uids()
-        new = people.grow(total, placed=True)
+        age = next((strat.edges[0] for strat in sim.groups.strats if strat.kind == 'age' and strat.edges is not None), 0.0) if newborn else None
+        new = people.grow(total, placed=True, age=age) # Newborns at their age, so that a fraction female by age is that at birth
+        sex = f'sex_{key[len("born_"):]}' if key.startswith('born_') else None
+        if sex in self.dists: # The sex of the children of a birth that gives it, or at the fraction at birth (see ss.solvers.p_female_birth())
+            people.female[new] = self.draw(sex, new)
+            sim.groups.set_sex(new) # A dimension called sex follows (it was set from the default when they were made)
         dsts = np.concatenate([np.full(k, dst) for dst,states,k in enter])
         d = sim.contact_rates.space
         for i,strat in enumerate(sim.groups.strats): # The place given, and the other levels as people are born into them
