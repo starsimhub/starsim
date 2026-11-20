@@ -389,6 +389,7 @@ class Network(Route):
             A list of the (source UIDs, target UIDs) that transmit, for each direction not skipped
         """
         out = []
+        self.validate() # The edges may have been set by hand since they were last checked
         if not len(self):
             return out
         edges = self.edges
@@ -455,11 +456,7 @@ class Network(Route):
         for key, dtype in self.meta.items(): # The columns not given: their defaults, or empty
             if key not in self.edges:
                 self.edges[key] = np.full(n, self.edge_defaults[key], dtype=dtype) if key in self.edge_defaults else np.empty((0,), dtype=dtype)
-        for key, col in self.edges.items(): # E.g. edges built by hand
-            if len(col) != n:
-                errormsg = f'Network "{self.name}" has {n} edges (in p1), but {len(col)} values of "{key}"; each column of the edges needs one value for each edge'
-                raise ValueError(errormsg)
-        self.validate_uids()
+        self.validate() # E.g. edges built by hand
         return
 
     def init_post(self, add_pairs=True):
@@ -533,6 +530,26 @@ class Network(Route):
         `ss.SexualNet` can draw the age of debut of people who have none.
         """
         pass
+
+    def validate(self):
+        """
+        Check the columns of the edges: raise an error if they are not all the same length, and convert any of the wrong type
+
+        Starsim calls this when the sim starts, when edges are added (`append()`, `from_df()`), and before each transmission over
+        the network, so edges set by hand (e.g. `self.edges.weight = ...` in a network's `step()`) are checked before they are used.
+        """
+        if not isinstance(self.edges, dict): # Once shrunk
+            return
+        n = len(self)
+        for key, col in self.edges.items():
+            if len(col) != n:
+                errormsg = f'Network "{self.name}" has {n} edges (in p1), but {len(col)} values of "{key}"; each column of the edges needs one value for each edge'
+                raise ValueError(errormsg)
+            dtype = self.meta.get(key)
+            if dtype and getattr(col, 'dtype', None) != dtype:
+                self.edges[key] = np.asarray(col, dtype=dtype)
+        self.validate_uids()
+        return
 
     def validate_uids(self):
         """ Make p1 and p2 UID arrays, if they are not """
@@ -622,7 +639,7 @@ class Network(Route):
                 errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
             self.edges[key] = np.concatenate([curr_arr, new_arr])
-        self.validate_uids()
+        self.validate()
         return
 
     def record_events(self):
@@ -698,7 +715,7 @@ class Network(Route):
                 self.edges[key] = np.full(len(df['p1']), self.edge_defaults[key], dtype=self.meta.get(key))
             else:
                 self.edges[key] = np.array(df[key], dtype=self.meta.get(key))
-        self.validate_uids()
+        self.validate()
         return self
 
     def shrink(self):

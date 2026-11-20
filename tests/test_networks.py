@@ -135,8 +135,25 @@ def test_edge_ops():
     assert list(popped['p1']) == [1, 2] and list(net.p1) == [0, 3]
     net.append(popped)
     assert len(net) == 4
+    ss.RandomNet().validate() # A network with no edges yet is valid
+    net.edges.weight = [1, 2, 3, 4] # A column set by hand is converted to its type...
+    net.validate()
+    assert net.edges.weight.dtype == net.meta.weight
+    net.edges.weight = np.ones(3) # ...and one of the wrong length is an error
+    with pytest.raises(ValueError, match='3 values of "weight"'):
+        net.validate()
+
+    class BadNet(ss.Network): # Edges broken in a step are caught before transmission uses them
+        def step(self):
+            if self.ti == 2:
+                self.edges.weight = self.edges.weight[:-1]
+    with pytest.raises(ValueError, match='values of "weight"'):
+        ss.Sim(n_agents=small, diseases='sis', networks=BadNet(p1=np.arange(9), p2=np.arange(1, 10)), verbose=0).run()
+
+    net.from_df(df)
     net.shrink()
     assert len(net) == 0 # Not an error once shrunk
+    net.validate()
     assert 'foo' in ss.Network(p1=[0], p2=[1], edges=dict(foo=[1])).edges # Other columns go in edges=
     with pytest.raises(ValueError):
         ss.RandomNet(n_contact=5) # A typo is not an edge column
