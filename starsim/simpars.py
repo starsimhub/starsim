@@ -385,7 +385,7 @@ class SimPars(ss.Pars):
         modules = self.convert_modules()
         modules = self.expand_modules(modules)
         flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
-        if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are held by everyone alive, a declared module like any other
+        if flows and not any(getattr(mod, 'graph', None) is not None and not isinstance(mod, ss.Demographics) for source,mod in modules): # With no declared disease (a declared demographic module, ss.Pregnancy, is not one), births and deaths declared for the population are held by everyone alive, a declared module like any other
             modules.append(('demographics', self.population()))
         self._reset_modules()
         products = []

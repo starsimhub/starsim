@@ -308,12 +308,13 @@ class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Tra
         for tr in graph.inflows: # Births at a crude rate: which woman is each child's mother (see step_births())
             if getattr(tr, 'mother_ages', None) is not None and tr.people and not tr.migration:
                 add(f'mother_{tr.name}', ss.random())
-        for tr in graph.inflows: # Births driven by a flow: the number of children of each parent, and their sex (see step_per())
-            if getattr(tr, 'birth_on', None) is not None and tr.people:
-                if isinstance(tr.n_born, ss.Dist):
-                    add(f'n_{tr.name}', copy(tr.n_born))
-                if tr.p_female is not None: # Its stream keeps the name sex_<transition>
-                    add(f'sex_{tr.name}', copy(tr.p_female) if isinstance(tr.p_female, ss.Dist) else ss.bernoulli(p=tr.p_female))
+        for tr in graph.inflows: # Births driven by a flow: the number of children of each parent (see step_per())
+            if getattr(tr, 'birth_on', None) is not None and tr.people and isinstance(tr.n_born, ss.Dist):
+                add(f'n_{tr.name}', copy(tr.n_born))
+        for tr in graph.inflows: # Births: the sex of the children, if the birth gives it or the people's fraction female is by age (otherwise it is drawn as anyone added is: see add_people())
+            p = ss.solvers.p_female_birth(self.sim, tr)
+            if p is not None and tr.people and (tr.p_female is not None or self.sim.people.female_by_age is not None): # Its stream keeps the name sex_<transition>
+                add(f'sex_{tr.name}', copy(p) if isinstance(p, ss.Dist) else ss.bernoulli(p=p))
         self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
         for a in self.attrs.values():
             values = [('', a.value)] if a.kind in ['drawn', 'trait'] else [(f'event{j}_', v) for j,(_,v) in enumerate(a.by_event or [])] # Each event's own

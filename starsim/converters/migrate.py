@@ -188,7 +188,6 @@ flags = [
     (r'\.(relvec|tivec)\b', 'Timeline.relvec and tivec were removed: use t.tvec, t.yearvec, t.timevec or t.datevec (the time indices are np.arange(t.npts))'),
     (r'\boptions\.precision\b|\bSTARSIM_PRECISION\b', 'ss.options.precision was removed: agents use float32 (ss.dtypes)'),
     (r'\.init_mock\(|\bModule\.create\(', 'Module.init_mock() and Module.create() were removed: add the module to a small sim (ss.Sim(modules=mod, n_agents=100).init())'),
-    (r'\.validate\(\s*(force\s*=\s*\w+\s*)?\)', "if this is a network's validate(), it was removed: it did nothing"),
     (r'\bss\.check_version\(',"ss.check_version() was removed: compare ss.__version__ yourself, e.g. sc.compareversions(ss.__version__, '>=4.0')"),
     (r'\b(prenatal|postnatal|congenital)_death_keys\b', "Starsim 3's congenital outcomes on ss.Infection (prenatal_death_keys and the like) were removed: ssl.CongenitalDisease's set_prognoses() calls set_congenital(uids) for those infected before birth (their mothers are people.parent[uids]), and ssl.CongenitalDisease (import starsim.library as ssl) schedules the outcomes at birth (birth_outcome_keys=, each with a ti_<key> state)"),
     (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route with self.transmit(rel_trans=..., rel_sus=...), which gives the new infections (and records their sources and routes in an ss.infection_log)"),

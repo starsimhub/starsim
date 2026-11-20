@@ -100,7 +100,7 @@ class People:
         n_agents (int): the initial number of agents in the model
         age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or fraction of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
         extra_states (list): more properties of each person, e.g. `[ss.FloatArr('income')]` (modules can also add them, with `people.add_state()`)
-        p_female (float): the fraction of agents who are female
+        p_female (float/series/array): the fraction of agents who are female: one number, or by age, as a series indexed by the lower edge of each age group (or a two-column array of the edges and the fractions), e.g. a named population's (`ss.population()`); by age, it is drawn from each agent's age, and a child is born female at its value at age 0 unless the birth says otherwise (e.g. `ss.birth(p_female=)`)
         mock (bool): if True, link the people to a mock sim, so they can be used without one (for testing and debugging)
 
     Examples:
@@ -139,13 +139,14 @@ class People:
         self.initialized = False
         self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
         self.named = None # For a named population (ss.population('Kenya')), where it came from: see ss.population()
+        self.p_female, self.female_by_age = self.female_split(p_female) # One fraction, or by age (the lower edges of the age groups, and the fraction in each)
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         states = [
             ss.BoolState('alive', default=True),  # Whether the agent is alive
-            ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
-            ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
+            ss.FloatArr('age', dtype=np.float64, default=self.get_age_dist(age_data)),  # NaN until conceived; 64-bit, so that ages reach the edges of age groups on time (see age_step())
+            ss.BoolState('female', default=ss.bernoulli(name='female', p=self.p_female if self.female_by_age is None else self.female_p)), # By age, from each agent's age: see female_p()
             ss.TimeArr('ti_dead'),  # The step of death
             ss.TimeArr('ti_removed'),  # The step of leaving for another reason (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
@@ -589,17 +590,41 @@ class People:
         self.slot.grow(new_uids, new_vals=new_slots)
 
         self.parent.grow(new_uids) # None, until set
-        for state in self._states.values():
-            state.grow(new_uids)
         if parent is not None:
             self.parent[new_uids] = parent
-        if age is not None:
-            self.age[new_uids] = age
+        for state in self._states.values():
+            state.grow(new_uids)
+            if state is self.age and age is not None: # Before the states after it are drawn, so that one drawn by age (e.g. female, for a fraction by age) sees it
+                self.age[new_uids] = age
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
         if isinstance(getattr(sim, 'solver', None), ss.solvers.abm):
             sim.groups.added(new_uids, placed=placed, age_given=age is not None)
         return new_uids
+
+    @staticmethod
+    def female_split(p_female):
+        """ The fraction female (`p_female` of `ss.People`) as (the fraction, None) for one number, or (the fraction at birth, (edges, fractions)) by age """
+        if isinstance(p_female, pd.Series):
+            p_female = np.column_stack([p_female.index.values, p_female.values])
+        if isinstance(p_female, np.ndarray) and p_female.ndim == 2:
+            edges, vals = np.asarray(p_female[:,0], dtype=float), np.asarray(p_female[:,1], dtype=float)
+            if len(edges) != len(vals) or not len(edges) or np.any(np.diff(edges) <= 0) or np.any((vals < 0) | (vals > 1)):
+                errormsg = f'p_female by age needs increasing ages (the lower edge of each age group) and a fraction from 0 to 1 for each, not {p_female!r}'
+                raise ValueError(errormsg)
+            return float(vals[0]), (edges, vals)
+        return p_female, None
+
+    def female_share(self, age):
+        """ The fraction female at some ages: `p_female`, or its value in each age group if it is by age (the first group's below it) """
+        if self.female_by_age is None:
+            return np.full(np.shape(age), self.p_female, dtype=float)
+        edges, vals = self.female_by_age
+        return vals[np.clip(np.searchsorted(edges, age, side='right') - 1, 0, len(vals) - 1)]
+
+    def female_p(self, sim, uids):
+        """ The chance each of some agents is female, from their ages, for `p_female` by age """
+        return self.female_share(self.age.raw[uids])
 
     def add_active(self, new_uids):
         """ Add agents to the active agents, in place where there is room (so a few births do not copy all of them) """
@@ -626,11 +651,19 @@ class People:
         """
         return self.scale[inds].sum()
 
+    def age_step(self, age_eps=1e-12):
+        """
+        How much agents age in a step, in years: the step, and `age_eps` more (1e-12 of a year, about a second over a century of daily steps), so that an
+        age on the grid of steps (that of anyone born in the run) reaches a whole year at or just above it, never a hair below from the
+        rounding of adding the step many times, and is counted in the next age group on time
+        """
+        return self.sim.t.dt_year + age_eps
+
     def update_post(self):
         """ Updates at the end of each step: agents get older (see `finish_step()`) """
         sim = self.sim
         if sim.pars.aging and sim.solver.agents: # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
-            self.age[self.alive.uids] += sim.t.dt_year
+            self.age[self.alive.uids] += self.age_step()
         return
 
     def request_death(self, uids, cause=None, hazard=None):
@@ -821,7 +854,7 @@ class People:
         dying = self.dying()
         self._dying = None
         age = self.age.raw if aging else np.zeros(0, dtype=ss.dtypes.float) # In a compartmental run, people have no ages
-        dt = age.dtype.type(self.sim.t.dt_year if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
+        dt = age.dtype.type(self.age_step() if aging else 0) # Added in the array's own precision, as NumPy adds a Python float
         expected = len(auids) - len(dying)
         if not len(dying) and auids is self._auids_view: # Nobody leaves (as in most steps): the agents kept, in order, are written over themselves, so no copy is made
             room = self._auids_room
@@ -1095,8 +1128,9 @@ def population(place, year=None, n_agents=None, revision=None):
     pop = ss.data.population(place, year=year, revision=revision)
     ages = np.array(ss.data.age_edges(pop.index))
     total = (pop.female + pop.male).values
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
-    ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
+    p_female = np.column_stack([ages, np.divide(pop.female.values, total, out=np.full(len(total), 0.5), where=total > 0)]) # By age (the lower edge of each group, and the fraction female in it), so agents and age groups split by sex take the population's split at each age
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=p_female)
+    ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, female=pop.female.values, ref=pop.attrs['ref'])
     return ppl
 
 

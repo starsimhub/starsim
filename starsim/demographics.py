@@ -782,8 +782,9 @@ class Pregnancy(Demographics, ss.Disease):
         rate_per (float): how many women the rates of `fertility_rate` are per, e.g. 1000 for per 1,000; by default 1 (per woman), with a warning if the rates are above 1 per year (see `ss.demographics.rate_per_of()`); not needed for a country by name
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
-        min_age (float): minimum age of conception
-        max_age (float): maximum age of conception
+        fertility_age (str): which age the fertility rates, `min_age`, and `max_age` are by: 'delivery' (the default, as published age-specific fertility rates are, e.g. the UN's), so that a woman conceiving at age x has the rate of age x plus the mean duration of pregnancy; or 'conception'
+        min_age (float): the youngest age of a mother (at delivery, or at conception: see `fertility_age`)
+        max_age (float): the age that mothers are younger than (at delivery, or at conception: see `fertility_age`)
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
         loss_rate (rate/func): hazard of a spontaneous loss, or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
@@ -795,7 +796,7 @@ class Pregnancy(Demographics, ss.Disease):
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
         fetal_agents (bool/str): whether fetuses are agents from conception: 'auto' (the default), if something reads them (a prenatal network, or `ss.mother()` in a module); agents only
-        p_female (float/bernoulli): the fraction of babies born female (default 0.5)
+        p_female (float/bernoulli): the fraction of babies born female (default: the people's, at birth: 0.5 unless `ss.People(p_female=)` or a named population says otherwise)
         children (int/Dist): the number of children of each delivery: a number, or a distribution (e.g. `ss.choice(a=[1, 2], p=[0.98, 0.02])` for twins)
         preterm (`ss.preterm`): the risk of preterm birth (see `ss.preterm()`): the thresholds, each woman's relative risk, and the relative risk by her age
         columns (dict): if `fertility_rate` is a table, its column for each standard key, where they differ from the defaults (`year='Time'`, `age='AgeGrp'`, `value='ASFR'`)
@@ -841,13 +842,14 @@ class Pregnancy(Demographics, ss.Disease):
         self.define_pars( # The parameters its code reads rather than its graph (so they are in code_pars: see ss.Disease.define_pars())
             rel_fertility = 1, # Scales all fertility rates, useful if a dataframe is used
             p_infertile = ss.bernoulli(p=0), # Primary infertility
-            min_age = 15, # Minimum age of conception
-            max_age = 50, # Maximum age of conception
+            fertility_age = 'delivery', # Which age the fertility rates, min_age, and max_age are by: 'delivery' (as published rates are) or 'conception'
+            min_age = 15, # The youngest age of a mother, at delivery by default (see fertility_age)
+            max_age = 50, # The age that mothers are younger than, at delivery by default
             rate_per = None, # The number of women the rates are per, e.g. 1000; by default 1, per woman (see ss.demographics.rate_per_of())
             dur_breastfeed = ss.lognormal(mean=ss.years(0.75), std=ss.years(0.5)),
             p_breastfeed = ss.bernoulli(p=1),
             children = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0])), # The number of children of each delivery
-            p_female = ss.bernoulli(0.5), # Fraction of babies born female
+            p_female = None, # Fraction of babies born female; by default the people's, at birth (see ss.solvers.p_female_birth())
             burnin = True, # Whether women are pregnant at the start: see burnin_plan()
             preterm = preterm(), # The risk of preterm birth: see ss.preterm
             p_maternal_death = ss.bernoulli(p=0), # The chance of a maternal death at delivery (agents only); the hazard while pregnant is maternal_death_rate
@@ -990,6 +992,9 @@ class Pregnancy(Demographics, ss.Disease):
         if any(isinstance(mod, Births) for mod in sim.modules) or any(tr.per_capita and not tr.migration for tr in declared):
             ss.warn(f'{self.name} makes births, and so does the sim\'s ss.Births or ss.birth(): the two add up. Keep only one, unless both are meant.')
         pars = self.pars
+        if pars.fertility_age not in ('delivery', 'conception'):
+            errormsg = f'fertility_age of {self.name} must be "delivery" or "conception", not {pars.fertility_age!r}'
+            raise ValueError(errormsg)
         if sc.isnumber(pars.p_maternal_death): # Set to a number after the module was made (preg.pars.p_maternal_death = 0.002): a bernoulli, as one given when it is made is
             pars.p_maternal_death = ss.bernoulli(p=pars.p_maternal_death)
         if self.fertility_data is not None:
@@ -1017,9 +1022,9 @@ class Pregnancy(Demographics, ss.Disease):
 
     def burnin_plan(self, engine):
         """
-        `burnin=True` (the default): women pregnant at the start. Each woman who could conceive has the chance of
-        having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
-        (`1 - exp(-h*dur)`), at a step uniform over it, and is run forward by the pregnancy's own transitions
+        `burnin=True` (the default): women pregnant at the start. Each woman who could conceive is pregnant with the chance
+        of the steady state, her conception hazard times the mean duration of a pregnancy (`h*dur`, at most 1), having
+        conceived at a step uniform over that duration before the start, and is run forward by the pregnancy's own transitions
         (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
         their deliveries. In the compartmental form, the same fraction
         of each group, less the abortions and the losses on the way, is spread evenly over gestation (see `ss.solvers.Compartmental.backfill_burnin()`).
@@ -1030,7 +1035,8 @@ class Pregnancy(Demographics, ss.Disease):
         if not self.pars.burnin:
             return None
         dt = engine.dt
-        steps = max(1, int(round(ss.solvers.convert(ss.years(self.mean_dur_pregnancy), engine.sim.unit_base)/dt)))
+        dur = ss.solvers.convert(ss.years(self.mean_dur_pregnancy), engine.sim.unit_base) # In the sim's unit, as the rates are converted
+        steps = max(1, int(round(dur/dt)))
         p_kept = 1.0 # The share of pregnancies not lost before the start
         if not self.abm: # Compartments place people directly, so those lost before the start are taken off: abortions at once, and losses at their constant rate over the time since conception
             g = self.graph
@@ -1047,7 +1053,7 @@ class Pregnancy(Demographics, ss.Disease):
                 rate[uids] = engine.convert(ss.utils.call_fn(fertility, self=self, sim=sim, uids=uids))
             else:
                 rate = np.asarray(engine.convert(ss.utils.call_fn(fertility, self=self, sim=sim)), dtype=float)
-            return -np.expm1(-rate*dt*steps)*p_kept
+            return np.minimum(rate*dur, 1)*p_kept # The share pregnant in a steady state, the rate times the mean duration
         def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
             delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0
             self.parity[kept] += delivered
@@ -1460,8 +1466,8 @@ class Pregnancy(Demographics, ss.Disease):
     def conception_rate(self, sim):
         """
         The hazard of conception, per year, for each agent (by UID) or each group: the fertility rate (in the year a
-        pregnancy starting now would end, if given by year), rescaled from all fecund women to those not pregnant; 0 for
-        anyone not fecund
+        pregnancy starting now would end, if given by year, and by default at the age it would end: see `fertility_age`),
+        rescaled from all fecund women to those not pregnant; 0 for anyone not fecund
 
         An override can instead take `(sim, uids)` and return a rate for each of those agents (as agents only), e.g.
         `ss.peryear(table[self.method[uids]])`, rather than one for every slot of the raw arrays.
@@ -1480,16 +1486,21 @@ class Pregnancy(Demographics, ss.Disease):
         rows, years, ages = self.fertility_rows
         return rows[years[sc.findnearest(years, year)]], ages
 
+    def _age_shift(self):
+        """ How much older than now the rates' ages are, in years: the mean duration of pregnancy for rates by age at delivery (`fertility_age='delivery'`), else 0 """
+        return self.mean_dur_pregnancy if self.pars.fertility_age == 'delivery' else 0.0
+
     def _conception_agents(self, sim):
-        """ `conception_rate()` as agents: for each slot of the arrays, by the woman's age group """
+        """ `conception_rate()` as agents: for each slot of the arrays, by the woman's age group (at delivery or at conception: see `fertility_age`) """
         pars = self.pars
         ppl = sim.people
         age = ppl.age.raw
-        fecund = ppl.female.raw & (age >= pars.min_age) & (age < pars.max_age) & ppl.alive.raw
+        shift = self._age_shift()
+        fecund = ppl.female.raw & (age >= pars.min_age - shift) & (age < pars.max_age - shift) & ppl.alive.raw
         fertile = fecund & ~self.infertile.raw
         idx = np.flatnonzero(fecund) # Those who can conceive: few, against the slots of the arrays
         vals, edges = self._fertility_now()
-        bins = np.zeros(len(idx), dtype=int) if edges is None else np.clip(ppl.age_bins(edges)[idx] - 1, 0, len(vals) - 1)
+        bins = np.zeros(len(idx), dtype=int) if edges is None else np.clip(ppl.age_bins(edges - shift)[idx] - 1, 0, len(vals) - 1) # The age groups at delivery (age + shift) are those of age against edges - shift
         total = np.bincount(bins, minlength=len(vals)) # From all fecund women to those not pregnant, by age group
         preg = np.bincount(bins[self.P.raw[idx]], minlength=len(vals))
         vals = vals*np.divide(total, total - preg, out=np.zeros(len(vals)), where=total > preg)
@@ -1498,10 +1509,10 @@ class Pregnancy(Demographics, ss.Disease):
         return ss.peryear(out)
 
     def _conception_groups(self, sim):
-        """ `conception_rate()` as compartments: for each group, by its age, with the mean of infertility (which is not a dimension) """
+        """ `conception_rate()` as compartments: for each group, by its age (at delivery or at conception: see `fertility_age`), with the mean of infertility (which is not a dimension) """
         pars = self.pars
         engine = self.engine
-        age = np.asarray(sim.people.age.raw, dtype=float)[:sim.groups.n_groups]
+        age = np.asarray(sim.people.age.raw, dtype=float)[:sim.groups.n_groups] + self._age_shift()
         female = engine.selector.select(ss.person.female)[0]
         fecund = female*((age >= pars.min_age) & (age < pars.max_age))
         n_np, n_p = engine.count([self.graph.states.NP], total=False), engine.count([self.graph.states.P], total=False)

@@ -432,6 +432,71 @@ def test_rate_tables():
     return
 
 
+def test_births_by_age():
+    sc.heading('A birth rate by age and sex runs as agents as in compartments; mothers are chosen by their rates; pregnancies lost at the mother\'s death are counted')
+    asfr = ss.by(dict(age=[0, 15, 50]*2, sex=['female']*3 + ['male']*3, value=[0, 0.15, 0, 0, 0, 0]))
+    def make(solver):
+        kw = dict(n_agents=10_000, rand_seed=1) if solver == 'abm' else dict(total_pop=10_000)
+        sim = ss.Sim(demographics=[ss.birth(rate=ss.peryear(asfr), mothers=True), ss.death(rate=ss.peryear(0.01))], start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **kw)
+        if solver == 'ode':
+            sim.stratify(age=np.arange(0, 100, 0.5), sex=['female', 'male'])
+        return sim.run()
+    abm, ode = make('abm'), make('ode')
+    assert np.isclose(abm.results.alive[-1], ode.results.alive[-1], rtol=0.02)
+    ppl = abm.people
+    kids = ppl.auids[ppl.parent.raw[ppl.auids] != ppl.parent.nan]
+    moms = ppl.parent.raw[kids]
+    moms, kids = moms[ppl.alive.raw[moms]], kids[ppl.alive.raw[moms]]
+    at_birth = ppl.age.raw[moms] - ppl.age.raw[kids]
+    assert len(kids) and ppl.female.raw[moms].all() and at_birth.min() >= 15 - 1e-6 and at_birth.max() < 50
+
+    # A woman who dies while pregnant loses the pregnancy, counted as a miscarriage or stillbirth (the deaths of everyone are not held by the pregnancy)
+    sim = ss.Sim(diseases=ss.SIS(beta=0, init_prev=0), demographics=[ss.Pregnancy(fertility_rate=200, rate_per=1000), ss.death(rate=ss.peryear(0.2))],
+                 n_agents=5000, start=2000, stop=2003, dt=ss.months(1), solver='abm', rand_seed=1, verbose=0).run()
+    r = sim.results.pregnancy
+    lost = r.P[0] + r.conception[:-1].sum() - r.delivery[:-1].sum() - r.P[-1]
+    assert lost > 0 and np.isclose(r.miscarriage[:-1].sum() + r.stillbirth[:-1].sum(), lost, rtol=0.05)
+    assert 'deaths' not in sim.pregnancy.graph.transitions
+
+    # Ages on the grid of steps reach whole years on time, not a hair below
+    sim = ss.Sim(demographics=[ss.Births(birth_rate=30, rate_per=1000)], n_agents=2000, start=2000, stop=2030, dt=ss.months(1), verbose=0, rand_seed=1).run()
+    ppl = sim.people
+    age = ppl.age.raw[ppl.auids[ppl.auids >= 2000]] # Those born in the run
+    assert age.dtype == np.float64 and not np.any((np.ceil(age) - age > 0) & (np.ceil(age) - age < 1e-6))
+
+    # Fertility rates are by the age at delivery, by default
+    asfr = sc.dataframe(Time=2000, AgeGrp=[20, 25, 30], ASFR=[0, 300, 0])
+    for fertility_age, lo, hi in [('delivery', 25, 30), ('conception', 25.6, 30.9)]:
+        sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=asfr, rate_per=1000, fertility_age=fertility_age), n_agents=5000, start=2000, stop=2005, dt=ss.months(1), rand_seed=1, verbose=0).run()
+        ppl = sim.people
+        kids = ppl.auids[ppl.parent.raw[ppl.auids] != ppl.parent.nan]
+        at_birth = ppl.age.raw[ppl.parent.raw[kids]] - ppl.age.raw[kids]
+        assert len(kids) > 100 and lo - 0.1 <= np.percentile(at_birth, 1) and np.percentile(at_birth, 99) <= hi
+    return
+
+
+def test_sex_by_age():
+    sc.heading('A named population is female by its fraction at each age, under both solvers, and children are born female by its fraction at birth, unless the birth says otherwise')
+    pop = ss.data.population('India', year=1950)
+    female, total = pop.female.values, (pop.female + pop.male).values
+    old = female[14:].sum()/total[14:].sum() # Aged 70 and over, about half female (against 48.6% overall)
+    demog = lambda p_female=None: [ss.birth(rate=ss.peryear(0.04), p_female=p_female), ss.death(rate=ss.peryear(0.01))]
+    sim = ss.Sim(people=ss.population('India', year=1950, n_agents=50_000), demographics=demog(), start=1950, stop=1955, dt=ss.months(1), rand_seed=1, verbose=0).run()
+    ppl = sim.people
+    first, new = ppl.auids[ppl.auids < 50_000], ppl.auids[ppl.auids >= 50_000]
+    assert abs(ppl.female.raw[first][ppl.age.raw[first] >= 75].mean() - old) < 0.02
+    assert abs(ppl.female.raw[new].mean() - female[0]/total[0]) < 0.02 # About 10,000 births
+    for p_female, born in [(None, female[0]/total[0]), (0.3, 0.3)]:
+        sim = ss.Sim(people=ss.population('India', year=1950), demographics=demog(p_female), start=1950, stop=1951, dt=ss.months(1), solver='ode', verbose=0)
+        sim.stratify(age=np.arange(0, 75, 5), sex=['female', 'male']).init()
+        ds, grid = sim.groups.joint
+        assert np.isclose(grid[-1, 0]/grid[-1].sum(), old, atol=1e-3)
+        tr = next(tr for tr in sim.declared[0].graph.transitions.values() if tr.per_capita)
+        split = sim.declared[0].engine.inflow_split(tr)
+        assert np.isclose(split[split > 0][0], born)
+    return
+
+
 if __name__ == '__main__':
     for name,test in list(globals().items()):
         if name.startswith('test_'):

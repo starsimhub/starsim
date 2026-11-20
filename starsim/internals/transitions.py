@@ -1190,15 +1190,15 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number is per year (`0.03` is `ss.peryear(0.03)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; also a table of crude birth rates by year (a dataframe with columns `Year` and `CBR`, each rate holding until the next year), or a place by name, for its UN crude birth rates (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; it can differ by person, e.g. age-specific fertility rates `ss.peryear(ss.by(dict(age=..., sex=..., value=...)))`, when the births are the sum of everyone's rates; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number is per year (`0.03` is `ss.peryear(0.03)`), and a rate (or a time series of rates) is per person unless `rate_per` says otherwise; also a table of crude birth rates by year (a dataframe with columns `Year` and `CBR`, each rate holding until the next year), or a place by name, for its UN crude birth rates (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
         when (Transition): instead of a rate, the transition whose flow drives the births
         children (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         p_female (float/Dist): the chance a child is female (default: as for anyone added)
         rate_per (float): for the births of everyone, how many people the rate is per, e.g. 1000 for per 1,000; by default 1 (per person), with a warning if the rate is above 1 per year (see `ss.demographics.rate_per_of()`); not needed for a place
         rel_birth (float): a multiplier on the birth rate (e.g. on a place's rates)
-        mothers (bool): as agents, give each child born at a crude rate a mother (default false)
-        min_age (float): with `mothers=True`, the youngest age of a mother (default 15)
-        max_age (float): with `mothers=True`, the age that mothers are younger than (default 50)
+        mothers (bool): as agents, give each child born at a crude rate a mother (default false): for a rate that differs by person, a woman chosen in proportion to her rate
+        min_age (float): with `mothers=True`, the youngest age of a mother (default 15, or none for a rate that differs by person)
+        max_age (float): with `mothers=True`, the age that mothers are younger than (default 50, or none for a rate that differs by person)
         columns (dict): for a table, its column for each standard key, where they differ from the defaults (`year='Year'`, which may also be `Time`, and `value='CBR'`)
         name (str): the name of the transition
         label (str): a human-readable name
@@ -1245,7 +1245,7 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, rate_per=
     out.n_born = children
     out.p_female = p_female
     out.state_given = state is not None
-    out.mother_ages = (sc.ifelse(min_age, 15), sc.ifelse(max_age, 50)) if mothers else None # As agents, the ages of the women who are mothers (see ss.solvers.agents_stepping.step_births())
+    out.mother_ages = (min_age, max_age) if mothers else None # As agents, the ages of the women who are mothers, as given; 15 to 50 for a rate the same for everyone (see ss.solvers.agents_stepping.give_mothers())
     return out
 
 

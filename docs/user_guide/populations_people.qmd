@@ -48,7 +48,7 @@ Without either, a model has 10,000 people. Fewer agents than people make a model
 
 As agents, each person has an age and a sex. By default, agents have the ages of the world's population in 2024, and an even chance of being female (`ss.People(n_agents, p_female=0.49)` for another fraction). A compartmental model split into age groups without a fraction for each takes the fractions from the same ages, and `describe()` marks them as guessed.
 
-The population of a country is `ss.population()`: its size, its ages, and the fraction of women, from the UN World Population Prospects (see [Places and data](populations_places.qmd)). The sim takes its size from it, under any solver:
+The population of a country is `ss.population()`: its size, its ages, and the fraction of women at each age, from the UN World Population Prospects (see [Places and data](populations_places.qmd)). Agents are female by the fraction at their age, and children are born female by the fraction at ages 0 to 4, unless the birth gives its own (`ss.birth(p_female=)`, `ss.Pregnancy(p_female=)`); a compartmental model split by age and sex starts with the same fraction in each age group, and splits its births the same way. The sim takes its size from it, under any solver:
 
 ```{python}
 kenya = ss.population('Kenya', year=2024)
@@ -420,7 +420,8 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 | `fertility_rate` | Age-specific fertility rates: a table, a place by name, or one rate; or the hazard of conception itself, as a function of `(sim, uids)` | `ss.peryear(0.1)`: 100 per 1,000 women a year |
 | `rate_per` | How many women the rates are per, e.g. 1000 (not needed for a place by name) | None: per woman, with a warning if the rates are above 1 a year |
 | `rel_fertility` | A multiplier on the fertility rates | 1 |
-| `min_age`, `max_age` | The ages at which women can conceive | 15 and 50 |
+| `fertility_age` | Which age the fertility rates, `min_age`, and `max_age` are by: `'delivery'`, as published rates are (a woman conceiving at age x has the rate of age x plus the mean duration of pregnancy), or `'conception'` | `'delivery'` |
+| `min_age`, `max_age` | The ages of mothers (at delivery, by default: see `fertility_age`) | 15 and 50 |
 | `p_infertile` | The fraction of women with primary infertility | 0 |
 | `dur_pregnancy` | The duration of pregnancy (a number is in weeks) | 32 to 42 weeks, mostly 39 to 42 |
 | `p_abortion` | The chance a pregnancy ends in an abortion, at conception | 0 |
@@ -430,7 +431,7 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 | `p_maternal_death` | The chance of a maternal death at delivery (agents only); with `maternal_death_rate`, both happen | 0 |
 | `infant_death_rate` | The hazard of death before the age of 1 | 0 |
 | `children` | The number of children of each delivery (a distribution, for twins) | 1 |
-| `p_female` | The chance a child is born female | 0.5 |
+| `p_female` | The chance a child is born female | The people's at birth: 0.5, or a named population's at ages 0 to 4 |
 | `preterm` | Preterm birth, as `ss.preterm(threshold=, very_threshold=, rel=, by_age=)`: the gestational ages below which a birth is preterm and very preterm, and the relative risk of preterm birth for each woman and by the mother's age; newborns get `preterm`, `very_preterm`, and `gestation_at_birth` | 37 and 32 weeks; 1 (varying by 10% between women); 1.2 at the youngest and oldest ages |
 | `p_breastfeed` | The chance a mother breastfeeds a newborn | 1 |
 | `dur_breastfeed` | The duration of breastfeeding | 9 months on average |

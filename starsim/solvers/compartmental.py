@@ -1745,7 +1745,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if strat.kind == 'space':
                     out *= coords[:, d][:, None] == coords[:, d][None, :]
                 else:
-                    out *= np.asarray(self.inflow_factors[tr.dest[0].name][d])[None, :]
+                    out *= np.asarray(self.inflow_factor(tr, d))[None, :]
             self.maps[key] = groups.fold_matrix(out)
         return self.maps[key]
 

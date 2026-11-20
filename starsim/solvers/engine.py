@@ -13,7 +13,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'people_flows', 'crude_rates', 'population_flows', 'hold_flows']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts', 'people_t', 'people_flows', 'crude_rates', 'p_female_birth', 'population_flows', 'hold_flows']
 
 
 from .numba.compartmental import no_tables # For a step whose program holds for the whole step: see ss.solvers.numba.compartmental.step()
@@ -271,6 +271,40 @@ def crude_rates(birth, death, alive, dt_year):
     """ The crude birth and mortality rates (`cbr`, `cmr`), per 1,000 people per year: the births and deaths of each step over the people alive at its start, the same way whatever made them """
     per = lambda x: np.divide(x, alive, out=np.zeros(np.shape(alive)), where=np.asarray(alive)>0)*1000/dt_year
     return per(birth), per(death)
+
+
+def p_female_birth(sim, tr):
+    """
+    The chance a child born by an inflow is female: the birth's own (`ss.birth(p_female=)`, `ss.Pregnancy(p_female=)`), or else
+    the people's fraction at birth (at age 0) if their fraction female is by age, as a named population's is (see `ss.People`);
+    None for an inflow that is not a birth, or for a birth whose children are female as anyone added is (agents: see `ss.People`)
+    or by the split of a sex dimension (compartments)
+
+    Args:
+        sim (Sim): the sim
+        tr (Transition): the inflow
+    """
+    if not (getattr(tr, 'per_capita', False) or getattr(tr, 'birth_on', None) is not None) or getattr(tr, 'migration', False):
+        return None
+    if tr.p_female is not None:
+        return tr.p_female
+    people = sim.people
+    if people is not None and people.female_by_age is not None:
+        return people.p_female
+    named = getattr(sim, 'named_people', None) # A compartmental run takes the population's split, not its people
+    if named is not None and getattr(named, 'female', None) is not None and named.counts[0] > 0:
+        return float(named.female[0]/named.counts[0])
+    return None
+
+
+def female_fraction(p, tr):
+    """ The fraction of children born female, from `p_female_birth()` (a number or a Bernoulli), for a compartmental run """
+    if isinstance(p, ss.bernoulli):
+        p = p.pars.p
+    if not sc.isnumber(p) or not 0 <= p <= 1:
+        errormsg = f'p_female of "{tr.name}" must be a fraction from 0 to 1 (or ss.bernoulli(p)) in a compartmental run, not {p!r}'
+        raise ValueError(errormsg)
+    return float(p)
 
 
 def population_flows(mod):
@@ -824,9 +858,27 @@ class Engine(Effects):
             return self.inflow_splits[name]
         dims = self.inflow_dims(tr)
         factors = self.inflow_factors[name]
-        if not dims or not factors:
+        sexed = any(self.sexes_births(tr, d) for d in range(len(factors)))
+        if not (dims or sexed) or not factors:
             return self.inflow_splits[name]
-        return self.sim.groups.fold(np.prod([np.ones(len(factor)) if d in dims else factor for d,factor in enumerate(factors)], axis=0))
+        key = ('inflow', tr.name, tuple(dims))
+        if key not in self.maps:
+            self.maps[key] = self.sim.groups.fold(np.prod([np.ones(len(factor)) if d in dims else self.inflow_factor(tr, d) for d,factor in enumerate(factors)], axis=0))
+        return self.maps[key]
+
+    def sexes_births(self, tr, d):
+        """ Whether dimension d is a sex dimension that the children of the inflow `tr` are split along by the chance a child is female (see `ss.solvers.p_female_birth()`), rather than by its own split """
+        strat = self.sim.groups.strats[d]
+        return not self.solver.agents and strat.female is not None and bool(self.applies[tr.dest[0].name][d]) and p_female_birth(self.sim, tr) is not None # As agents, each child's sex is drawn (see add_people())
+
+    def inflow_factor(self, tr, d):
+        """ The factor of dimension d for where the inflow `tr` arrives (see `inflow_factors`); for the children of a birth along a sex dimension, the chance a child is female (see `ss.solvers.p_female_birth()`) """
+        factor = self.inflow_factors[tr.dest[0].name][d]
+        if not self.sexes_births(tr, d):
+            return factor
+        p = female_fraction(p_female_birth(self.sim, tr), tr)
+        strat = self.sim.groups.strats[d]
+        return np.where(self.sim.groups.group_coords[:, d] == strat.female, p, 1 - p)
 
     def inflow_dims(self, tr):
         """ The dimensions an inflow with a rate is given at, so arrives at the same level (see `inflow_split()`): those of its values by level, and the places, if it uses the number in one """
