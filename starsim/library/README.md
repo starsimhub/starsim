@@ -21,23 +21,11 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 
 ### Diseases (`diseases/`)
 
-| Class | Base | Description |
-| --- | --- | --- |
-| `Cholera` | `ss.Infection` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir |
-| `Ebola` | `ss.SIR` | Ebola with severe disease and continued transmission from unburied bodies |
-| `HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
-| `ART` | `ss.Intervention` | Scales up antiretroviral therapy over time; requires `HIV` |
-| `CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every timestep |
-| `Measles` | `ss.SIR` | Measles as an SEIR model, with CDC natural history parameters |
+About twenty diseases: declared models of measles, Ebola, cholera, malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea; and, written as code, HIV with treatment and CD4 counts, a non-communicable disease, and Starsim 3's SIR, SIS, and SEIR. Each says in its docstring where its structure and its default parameters came from. The user guide page [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html) describes them, with their sources, and its appendix lists every one, generated from the classes: whether it is declared or written as code, its default parameters (flagging placeholders), and its results.
 
 ### Networks (`networks/`)
 
-| Class | Base | Description |
-| --- | --- | --- |
-| `HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time as women move out and give birth |
-| `DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
-| `ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
-| `NullNet` | `ss.Network` | Self-connections only, with zero transmission; useful as a placeholder or for debugging |
+Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet`, `GridNet`, and `GeoNet` for real places), and theoretical networks (`StaticNet` from any NetworkX graph, by default an Erdős–Rényi graph, `SmallWorldNet`, `ScaleFreeNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
 
 ### MNCH (`mnch/`)
 
@@ -45,15 +33,26 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `CongenitalDisease` | `ss.SIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic `set_congenital()`/`step_congenital()` framework |
-| `NeonatalSepsis` | `ss.SIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
-| `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via callbacks |
+| `CongenitalDisease` | `AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal), scheduled around delivery by its `set_congenital()` and `step_congenital()` |
+| `NeonatalSepsis` | `AgentSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
+| `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via its methods |
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
-| `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |
+| `treat_pregnant` | `ss.Delivery` | Treats infected pregnant women and partially reverses accumulated fetal damage |
+
+### Economics (`econ/`)
+
+Health economics, which most sims don't need, so it is here rather than in core Starsim. See the user guide page on [health economics](https://starsim.org/v4/user_guide/library_econ.html).
+
+| Name | Base | Description |
+| --- | --- | --- |
+| `Costs` | `ss.Analyzer` | Adds up the costs of a sim as results: the `cost` of each delivery, a cost for each event of any other result (e.g. care for each infection), and a fixed cost per year, with their `total` |
+| `discount()` | | Discounts a result (or any values over time) at a yearly rate from a start year |
+| `DALYs` | `ss.Analyzer` | Adds up disability-adjusted life years as results: years lived with disability, and years of life lost |
+| `ICER` | `ss.Analyzer` | Compares the costs and effects of scenarios, after they have run or as a sim runs, with incremental cost-effectiveness ratios, plots, and the best scenario at a willingness to pay |
 
 ## Documentation
 
-- User guide: [Library modules](https://docs.starsim.org/user_guide/modules_library.html)
+- User guide: [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html), [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), and [Library: maternal-child health](https://starsim.org/v4/user_guide/library_mnch.html)
 - API reference: [starsim.library](https://docs.starsim.org/api/)
 
 ## Contributing
@@ -61,8 +60,7 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 New library modules are welcome, especially ones that demonstrate a modeling pattern that is otherwise hard to discover. Guidelines:
 
 1. Put the module in the most specific existing subfolder, or create a new one with an `__init__.py` that has a module docstring.
-2. Define `__all__` in each file, and re-export its contents explicitly from the subpackage `__init__.py` and from `library/__init__.py` — no star imports, so that the public API is unambiguous.
+2. Define `__all__` in each file, and re-export its contents explicitly from the subpackage `__init__.py` (no star imports, so that the public API is unambiguous); `library/__init__.py` and the API docs then pick it up automatically.
 3. Follow the [Starsim style guide](https://github.com/starsimhub/styleguide).
-4. Document each class with a short description, a `Pars:` section, a `States:` section, and a runnable `Examples:` block.
-5. Add a test to `tests/test_library.py`, and a row to the tables above.
-6. Add the class to the relevant `library.*` page in the `quartodoc` section of `docs/_quarto.yml` so it appears in the API reference. (Members are listed explicitly there, since quartodoc's static analysis doesn't follow re-exports.)
+4. Document each class with a short description, an `Args:` section, an `Attributes:` section for its states, and a runnable `Examples:` block.
+5. Add a test to `tests/test_library.py`. The appendices of the user guide pages are generated from the subpackages, so a new disease or network appears there by itself; add it to the descriptions on the page, and to the tables above for MNCH and economics.

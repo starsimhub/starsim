@@ -8,15 +8,18 @@ Starsim, at the top level (e.g. `ssl.HouseholdNet`, `ssl.Cholera`).
 
 Each class appears in exactly two places: where it is defined, and in its subpackage's
 `__init__.py`. The top-level exports below, and the API docs, follow automatically.
+Unlike core Starsim, whose `__init__.py` imports each public name by name, this one
+re-exports everything its subpackages import, so that adding a class needs no change here.
 """
 import inspect
 from . import diseases
+from . import econ
 from . import mnch
 from . import networks
 
 # Also export the contents of each subpackage at the top level, e.g. ssl.Cholera
-__all__ = ['diseases', 'mnch', 'networks']
-for _sub in [diseases, mnch, networks]:
+__all__ = ['diseases', 'econ', 'mnch', 'networks']
+for _sub in [diseases, econ, mnch, networks]:
     for _key,_val in vars(_sub).items():
         if not _key.startswith('_') and not inspect.ismodule(_val):
             globals()[_key] = _val

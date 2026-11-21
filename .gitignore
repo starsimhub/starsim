@@ -16,6 +16,11 @@ docs/_inv/
 docs/api/
 objects.json
 objects.txt
+*.html
+# The docs' own scripts, included in every page
+!docs/assets/*.html
+*_files/
+docs/site_libs/
 
 # Other files
 .idea
@@ -30,6 +35,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.pyd
 
 # Distribution / packaging
 .Python
@@ -153,3 +159,7 @@ dmypy.json
 
 # Node.js and NPM
 node_modules
+
+# Skills linked by "starsim ai"; specific to each environment
+/.agents/
+/.claude/skills/

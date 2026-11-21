@@ -1,0 +1,59 @@
+# Run Starsim from R: the R tests of Starsim, and the tests of R-Starsim (the R package).
+#
+# For now, R-Starsim's v4 branch is tested; set `ref` back to main once Starsim 4 is released.
+
+name: R
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+      - v4
+
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: r-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test_r:
+    name: Starsim from R
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      STARSIM_RSTARSIM: ${{ github.workspace }}/rstarsim # Where test_r.py finds R-Starsim
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+      - uses: actions/setup-python@master
+        with:
+          python-version: '3.14'
+          architecture: x64
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
+      - name: Check out R-Starsim (v4)
+        uses: actions/checkout@v7 # Fails if the branch doesn't exist
+        with:
+          repository: starsimhub/rstarsim
+          ref: v4
+          path: rstarsim
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Install R-Starsim's dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          working-directory: rstarsim
+          extra-packages: any::pkgload, any::testthat
+      - name: Use this Python from R # R-Starsim's tests are skipped if R can't import Starsim, so check that it can
+        run: |
+          echo "RETICULATE_PYTHON=$(which python)" >> $GITHUB_ENV
+          RETICULATE_PYTHON=$(which python) Rscript -e 'stopifnot(reticulate::py_module_available("starsim"))'
+      - name: Run the R tests
+        working-directory: ./tests
+        run: pytest devtests/io/test_r.py
+      - name: Run R-Starsim's tests
+        run: Rscript -e 'testthat::test_local("rstarsim", stop_on_failure = TRUE)'
