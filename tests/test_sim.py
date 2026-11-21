@@ -371,6 +371,10 @@ def test_ode_map():
         expect.append(s)
     assert np.allclose(sim.results.x.S.values, expect, rtol=1e-12, atol=0)
     assert np.isclose(sim.results.x.D.values[-1], d, rtol=1e-12)
+    run = lambda step, n: ss.Sim(dis, total_pop=1.0, unit='day', dt=ss.days(step), stop=ss.days(60), verbose=0, solver=ss.solvers.ode(integrator='map', substeps=n)).run().results.x.S.values
+    assert np.allclose(run(dt, 2), run(dt/2, 1)[::2], rtol=1e-12, atol=0) # With substeps, each substep is taken as the map (exponential Euler)
+    ode = ss.Sim(dis, total_pop=1.0, unit='day', dt=ss.days(dt), stop=ss.days(60), verbose=0, solver='ode').run().results.x.S.values
+    assert np.abs(run(dt, 50) - ode).max() < 0.1*np.abs(run(dt, 1) - ode).max() # More substeps approach the ODE
     return sim
 
 
@@ -388,8 +392,7 @@ def test_solver_options():
     for make_solver in [lambda: ss.solvers.gillespie(substeps=2), lambda: ss.solvers.tau(foo=1)]: # An option a solver has none of is not dropped
         with pytest.raises(TypeError):
             make_solver()
-    with pytest.raises(ValueError): # The map takes each step whole
-        ss.solvers.ode(integrator='map', substeps=2)
+    assert ss.solvers.ode(integrator='map').substeps == 1 and ss.solvers.ode(integrator='map', substeps=3).substeps == 3 # The map takes each step whole unless given substeps
     named = ss.solvers.abm(step='midstep') # A step named as the default still overrides a module's suggested step, so it is not the same as abm()
     assert named != ss.solvers.abm() and repr(named) == "ss.solvers.abm(step='midstep')" and ss.solvers.abm(step='events') == ss.solvers.abm(step='events')
     agents = ss.Sim(make(), solver='abm', n_agents=500, total_pop=5000, unit='day', stop=5, verbose=0).init()

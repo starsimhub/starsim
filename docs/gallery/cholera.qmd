@@ -23,6 +23,9 @@ Infection depends on the bacteria in the water, with a dose-response curve that 
 | Population | 10,000 | |
 | Infectious at the start | 0.1% | |
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -37,23 +40,74 @@ decay     = W >> ss.dead @ ss.days(30)          # Bacteria survive 30 days on av
 cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001))
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+states("W", people = FALSE) # Bacteria in the water: a count, not people
+K <- 1e5                    # Amount of bacteria at which infection is half its maximum
+
+cholera <- Disease(
+  infection = Transition(S, I, rate = perday(0.5) * W$n / (W$n + K)),
+  recovery  = Transition(I, R, dur = days(5)),
+  shedding  = Transition(ss$outside, W, rate = perday(10) * I$n), # Each infectious person sheds 10 a day
+  decay     = Transition(W, ss$dead, dur = days(30)),             # Bacteria survive 30 days on average
+  init = list(I = 0.001)
+)
+```
+:::
+
 `W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the fraction of people infectious (`I.frac`). `ss.outside` and `ss.dead` are outside the model: shedding adds bacteria from outside it, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 cholera.diagram()
 ```
 
+## R
+
+```r
+cholera$diagram()
+```
+:::
+
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 cholera.equations()
 ```
 
+## R
+
+```r
+cholera$equations()
+```
+:::
+
 ## Result
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sim = ss.Sim(cholera, total_pop=10_000, stop=ss.days(200))
 sim.run()
 sim.plot('cholera')
 ```
+
+## R
+
+```r
+sim <- Sim(cholera, total_pop = 10000, stop = days(200))
+sim$run()
+sim$plot("cholera")
+```
+:::
 
 Bacteria build up in the water while people are infectious, and outlast them: the amount in the water peaks after the number infectious does, and keeps infecting people as the epidemic declines. Since W is a count and not people, it is left out of the population, and it stays a count when the people are run as agents (`n_agents=`).
 

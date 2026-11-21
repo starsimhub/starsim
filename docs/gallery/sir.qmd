@@ -21,6 +21,9 @@ The SIR model is the starting point of most epidemic modeling: people are suscep
 
 Each transition says where people move from and to, and at what rate. These four spellings say the same thing:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -56,7 +59,49 @@ recovery  = I >> R @ ss.days(10)
 spellings['Whole flow'] = ss.Disease(infection, recovery, init_prev=0.001, name='sir')
 ```
 
+## R
+
+```r
+library(starsim)
+
+spellings <- list()
+
+# Each transition written out in full (R has no operator spelling, from >> to @ rate)
+states("S I R")
+spellings$Explicit <- Disease(
+  infection = Transition(S, I, rate = 0.3 * I),
+  recovery  = Transition(I, R, dur = days(10)),
+  init_prev = 0.001,
+  name = "sir"
+)
+
+# A function, for a disease to reuse or extend, as a class is in Python
+make_sir <- function(...) {
+  states("S I R")
+  Disease(
+    infection = Transition(S, I, rate = 0.3 * I),
+    recovery  = Transition(I, R, dur = days(10)),
+    ...
+  )
+}
+spellings$Function <- make_sir(init_prev = 0.001, name = "sir")
+
+# The whole flow, β S I / N, as most other frameworks write it: read as written, the fraction infectious, 0.3*I.frac, which is 0.3*I when everyone mixes
+states("S I R")
+N <- S + I + R
+spellings[["Whole flow"]] <- Disease(
+  infection = Transition(S, I, rate = 0.3 * S * I / N),
+  recovery  = Transition(I, R, dur = days(10)),
+  init_prev = 0.001,
+  name = "sir"
+)
+```
+:::
+
 The same states, transitions, and rates give the same results, whatever the spelling:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 for label, disease in spellings.items():
@@ -64,15 +109,39 @@ for label, disease in spellings.items():
     print(f'{label:12s} peak infections: {sim.results.sir.I.max():,.0f}')
 ```
 
+## R
+
+```r
+for (label in names(spellings)) {
+  sim <- Sim(spellings[[label]], total_pop = 10000, stop = days(150), verbose = 0)
+  sim$run()
+  cat(sprintf("%-12s peak infections: %s\n", label, format(round(sim$results$sir$I$max()), big.mark = ",")))
+}
+```
+:::
+
 The state-transition diagram, from `diagram()` (the dashed arrow is a transmission):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 spellings['Operators'].diagram()
 ```
 
+## R
+
+```r
+spellings$Explicit$diagram()
+```
+:::
+
 ## Result: four ways to run it {#result}
 
 The same model can be run in four ways: as an ODE (the default for this model, since nothing in it is about individual people), as a chain binomial (a random number of people move between states each day), with the Gillespie algorithm (each event at its own random time), and as agents.
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sir = spellings['Operators']
@@ -83,11 +152,34 @@ msim = ss.parallel(sims)
 msim.plot('sir')
 ```
 
+## R
+
+```r
+sir <- spellings$Explicit
+sims <- list()
+for (solver in c("ode", "binomial", "gillespie", "abm")) {
+  sims[[solver]] <- Sim(sir, total_pop = 10000, stop = days(150), solver = solver, verbose = 0)
+}
+msim <- parallel(sims)
+msim$plot("sir")
+```
+:::
+
 The three stochastic runs follow the ODE closely, each a little differently by chance. With 10,000 people and 10 infected at the start, chance mostly moves the timing of the peak; with fewer people, or fewer infected at the start, the runs differ more (see [The chance of a major outbreak](theory_checks.qmd#the-chance-of-a-major-outbreak)). In all of them about 94% of people are infected in the end, as the final-size equation predicts for R0 = 3 (see [Final size](theory_checks.qmd#final-size)):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 msim.summarize().loc['sir.infection']
 ```
+
+## R
+
+```r
+subset(msim$summarize(), result == "sir.infection")
+```
+:::
 
 ## Going further
 

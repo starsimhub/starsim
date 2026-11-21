@@ -88,7 +88,7 @@ coverage_by_age = ss.by([[0.15, 0.85],  # 0-14: 15% unvaccinated, 85% vaccinated
 ## R
 
 ```r
-coverage_by_age <- ss$by(rbind(c(0.15, 0.85),  # 0-14: 15% unvaccinated, 85% vaccinated
+coverage_by_age <- by(rbind(c(0.15, 0.85),  # 0-14: 15% unvaccinated, 85% vaccinated
                                c(0.08, 0.92),  # 15-64
                                c(0.05, 0.95)), # 65+
                          dims = c("age", "vaccinated"))
@@ -203,7 +203,7 @@ def make_community_measles():
 ## R
 
 ```r
-coverage_by_community <- ss$by(rbind(c(0.02, 0.98),  # General: 2% unvaccinated, 98% vaccinated
+coverage_by_community <- by(rbind(c(0.02, 0.98),  # General: 2% unvaccinated, 98% vaccinated
                                      c(0.40, 0.60)), # Close-knit community
                                dims = c("community", "vaccinated"))
 
@@ -262,7 +262,7 @@ msim.sims['Close-knit'].results.measles.I.by('community').plot()
 ## R
 
 ```r
-for (sim in msim$sims) {
+for (sim in as.list(msim$sims)) {
   res <- sim$results$measles
   cat(sim$label, "- in the community:", round(res$infection$select(community = "close-knit")$sum()), "- elsewhere:", round(res$infection$select(community = "general")$sum()), "\n")
 }
@@ -299,7 +299,7 @@ msim.summarize().loc['measles.infection']
 ## R
 
 ```r
-catchup <- ss$transfer(list(vaccinated = TRUE), rate = peryear(ss$by(community = c(0, 2))), states = list("S")) # To vaccinated, at a rate of 0 a year outside the community and 2 in it
+catchup <- ss$transfer(list(vaccinated = TRUE), rate = peryear(by(community = c(0, 2))), states = list("S")) # To vaccinated, at a rate of 0 a year outside the community and 2 in it
 
 measles <- make_measles()
 measles$stratify(community = list("general" = 0.95, "close-knit" = 0.05))
@@ -311,7 +311,7 @@ msim <- parallel(list(
 ))
 msim$plot("measles.infection")
 cat("Doses given:", round(msim$sims[["Catch-up"]]$results$measles$catchup$sum()), "\n")
-msim$summarize()$loc["measles.infection"]
+subset(msim$summarize(), result == "measles.infection")
 ```
 :::
 
@@ -386,7 +386,7 @@ measles <- Disease(
   progression = Transition(E, I, dur = days(10)),  # Latent for 10 days on average
   recovery    = Transition(I, A, dur = days(8)),   # Recovered, with immune amnesia
   restored    = Transition(A, R, dur = years(2)),  # Immune memory of other infections restored after 2 years on average
-  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+  init   = list(R = by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n = list(I = 10),
   name   = "measles"
 )
@@ -396,7 +396,7 @@ states("S C")
 pneumococcus <- Disease(
   acquisition = Transition(S, C, rate = 0.003 * C), # Acquired through contact with carriers, at a rate of 0.003 per contact per day
   clearance   = Transition(C, S, dur = days(30)),   # Carried for a month on average
-  init = list(C = ss$by(age = c(0.25, 0.17, 0.17))), # The fraction carrying it in each age group
+  init = list(C = by(age = c(0.25, 0.17, 0.17))), # The fraction carrying it in each age group
   name = "pneumococcus"
 )
 pneumococcus$stratify(age = ages)
@@ -445,7 +445,7 @@ msim <- parallel(list(
   "Interacting" = make_sim(diseases = list(measles, pneumococcus), connectors = amnesia)
 ))
 msim$plot(c("measles.I", "pneumococcus.C"))
-msim$summarize()$loc["pneumococcus.acquisition"]
+subset(msim$summarize(), result == "pneumococcus.acquisition")
 ```
 :::
 

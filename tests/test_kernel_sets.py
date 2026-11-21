@@ -351,10 +351,11 @@ def test_jax():
         with ss.options.context(backend='jax'):
             ode.run()
         assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
-    ode, ref = [models.seir(**how('map')) for i in range(2)] # The discrete map
-    with ss.options.context(backend='jax'):
-        ode.run()
-    assert np.allclose(ode.results.seir.I.values, ref.run().results.seir.I.values, rtol=1e-9, atol=0)
+    for substeps in [1, 3]: # The discrete map, and with substeps (exponential Euler)
+        ode, ref = [models.seir(solver=ss.solvers.ode(integrator='map', substeps=substeps)) for i in range(2)]
+        with ss.options.context(backend='jax'):
+            ode.run()
+        assert np.allclose(ode.results.seir.I.values, ref.run().results.seir.I.values, rtol=1e-9, atol=0)
     return
 
 

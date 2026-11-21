@@ -44,8 +44,8 @@ E.parameters('ebola')[['epi_name', 'distribution', 'parameters', 'sample_size', 
 
 socialmixr's `contact_matrix()` gives the mean number of contacts a day that a participant in each age group (the rows) has with people in each age group (the columns). That is what `ss.contacts()` takes, so a CSV saved in R goes straight in, with its age groups (`[0,5)`, ..., `[65,Inf)`) read from its labels:
 
-```r
-m <- socialmixr::contact_matrix(polymod, countries = "United Kingdom", age_limits = c(0, 5, 18, 65), symmetric = TRUE)
+```{.r .notest}
+m <- socialmixr::contact_matrix(socialmixr::polymod, countries = "United Kingdom", age_limits = c(0, 5, 18, 65), symmetric = TRUE)
 write.csv(m$matrix, "uk_contacts.csv")
 ```
 
@@ -98,7 +98,7 @@ ll.head()
 
 In R, `linelist::make_linelist()` tags it, and cleanepi and cfr read it:
 
-```r
+```{.r .notest}
 d <- read.csv("linelist.csv")   # From ll.to_csv('linelist.csv', index=False)
 x <- linelist::make_linelist(d, id = "id", date_onset = "date_onset", date_outcome = "date_outcome", outcome = "outcome", gender = "sex", age = "age")
 ```

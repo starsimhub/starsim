@@ -109,7 +109,7 @@ states("I", infected = TRUE) # Infected: counted in the results infected and pre
 measles <- Disease(
   infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
   recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-  init_n    = list(I = ss$by(patch = c(10, 0, 0)))  # 10 infectious people in Smalininkai
+  init_n    = list(I = by(patch = c(10, 0, 0)))  # 10 infectious people in Smalininkai
 )
 measles$stratify(patch = ss$levels(towns, mobility = ss$geo$gravity(away = 0.001)))
 

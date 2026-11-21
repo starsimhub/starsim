@@ -88,7 +88,7 @@ measles <- Disease(
   infection   = Transition(S, E, rate = beta * I), # At a rate of β times the contacts with infectious people
   progression = Transition(E, I, dur = days(10)),
   recovery    = Transition(I, R, dur = days(8)),
-  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
+  init   = list(R = by(age = c(0.8, 0.92, 0.98))),
   init_n = list(I = 10)
 )
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1))
@@ -224,7 +224,7 @@ recovery    <- Transition(I, R, dur = days(8))
 
 make_measles <- function(init_n = 10) {
   measles <- Disease(infection, progression, recovery,
-    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+    init   = list(R = by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
     init_n = list(I = init_n),
     name   = "measles"
   )
@@ -274,7 +274,7 @@ towns <- ss$geo$geography(
   y           = c(0, 10, -15, 5)  # Kilometers north of Smalininkai
 )
 away <- par(0.01, bounds = c(0.001, 0.1)) # People spend 1% of their time in other towns
-measles <- make_measles(init_n = ss$by(patch = c(10, 0, 0, 0)))
+measles <- make_measles(init_n = by(patch = c(10, 0, 0, 0)))
 measles$stratify(patch = ss$levels(towns, mobility = ss$geo$gravity(away = away)))
 
 sim <- Sim(measles, networks = age_contacts, start = "2025-01-01", stop = "2026-01-01")

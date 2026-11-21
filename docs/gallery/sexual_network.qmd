@@ -21,6 +21,9 @@ This model restricts transmission to sexual partnerships, which form and dissolv
 | Infected at the start | 5% | |
 | Time step | 1 month | Over 10 years |
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -30,15 +33,42 @@ recovery  = I >> S @ ss.years(5)
 sti = ss.Disease(infection, recovery, init_prev=0.05)
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S I")
+sti <- Disease(
+  infection = Transition(S, I, rate = list(sexual = ss$peract(m2f = 0.08, f2m = 0.05)) * I), # Per act, on the sexual network
+  recovery  = Transition(I, S, dur = years(5)),
+  init_prev = 0.05
+)
+```
+:::
+
 The chance of transmission is given per act (`ss.peract`), for each direction of the network, which has men on one side and women on the other. The diagram, from `diagram()`:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sti.diagram()
 ```
 
+## R
+
+```r
+sti$diagram()
+```
+:::
+
 ## Result
 
 Since this model has a network, Starsim runs it as agents. With 2,000 people, each run is different, so it is run 20 times, each with its own random seed:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sim = ss.Sim(sti, networks=ss.SexualNet(), n_agents=2_000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
@@ -46,11 +76,30 @@ msim = ss.parallel(sim, n_runs=20)
 msim.plot('sti')
 ```
 
+## R
+
+```r
+sim <- Sim(sti, networks = ss$SexualNet(), n_agents = 2000, start = 2000, stop = 2010, dt = months(1), verbose = 0)
+msim <- parallel(sim, n_runs = 20)
+msim$plot("sti")
+```
+:::
+
 The plot shows the median of the runs and the range that holds 95% of them. The number infected rises in the first year, as infections pass to the partners of the people infected at the start, and then falls slowly, as people are cured faster than new partnerships bring them new infections. Since in this model an infection can only pass to a current partner, how many partners people have, and how long partnerships last, matter as much as the chance of transmission per act. The number infected at the end, and the infections over the ten years:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 msim.summarize().loc[['sti.I', 'sti.infection']]
 ```
+
+## R
+
+```r
+subset(msim$summarize(), result %in% c("sti.I", "sti.infection"))
+```
+:::
 
 ## Going further
 

@@ -3,6 +3,7 @@ Test time: durations, rates, and dates, their arithmetic and units, and the time
 """
 import operator
 import warnings
+import datetime as dt
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -239,6 +240,8 @@ def test_sim_times():
     assert ss.Sim(start=2020, dur=10, unit='day', **kw).init().t.stop == ss.years(2030) # In years in a sim of calendar years, whatever the unit
     assert ss.Sim(dur=10, unit='day', **kw).init().t.stop == ss.days(10) # Else in the sim's unit
     assert ss.Sim(start=2020, stop=2025, **kw).new(dur=3).init().t.stop == ss.years(2023) # A new length replaces the stop
+    t = ss.Sim(start=dt.date(2020, 1, 1), stop=np.datetime64('2021-01-01'), **kw).init().t # Python's and NumPy's dates are dates too (an R Date is a datetime.date)
+    assert t.calendar == 'dates' and t.stop == ss.date('2021-01-01')
 
     # A sim with only modules written as code honors its unit
     class Step(ss.Module):

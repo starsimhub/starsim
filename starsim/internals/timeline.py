@@ -14,6 +14,7 @@ time, read as the start is; its length is `dur=` (the stop is then the start plu
 Used with: agents and compartments; declared and coded modules
 """
 import copy
+import datetime as dt
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -22,6 +23,11 @@ import starsim as ss
 
 default_start = 2000 # The year a sim with a calendar starts in, if its start is not given
 default_length = dict(days=100) # The length of a run with no stop, in the sim's unit: 100 days (an epidemic of a respiratory infection), else 50 of the unit (e.g. 50 years, or 50 steps for a sim with no unit)
+
+
+def is_date(val):
+    """ Whether a start, stop, or other time is a date: a string, or a date of Starsim's, pandas, Python, or NumPy (e.g. an R Date, which reticulate makes a datetime.date) """
+    return isinstance(val, (str, ss.date, pd.Timestamp, dt.date, np.datetime64))
 
 
 def calendar_of(start, stop=None, unit=None):
@@ -38,7 +44,7 @@ def calendar_of(start, stop=None, unit=None):
         unit (str): the unit given to the sim (`unit=`), if any
     """
     val = start if start is not None else stop
-    if isinstance(val, (str, ss.date)):
+    if is_date(val):
         return 'dates'
     elif sc.isnumber(val) and val >= ss.time.cal_year_threshold:
         unit = unit if isinstance(unit, str) or unit is None else getattr(unit, 'base', None) # e.g. 'day', or ss.days
@@ -81,7 +87,7 @@ def own_unit_and_calendar(start, stop, dur, dt, sim=None, given_unit=None):
         unit = next((type(v) for v in [start, stop, dur] if is_dur(v)), ss.years if calendar or not is_dur(dt) else type(dt))
     if calendar is None and start is None and (stop is None or (isinstance(stop, ss.Duration) and ss.time.assume_cal_year(stop))) and unit is ss.years: # A model in years with no start starts in the year 2000 (and a stop of ss.years(2030) is that year)
         calendar = 'years'
-    if isinstance(stop, (str, ss.date)) or isinstance(start, (str, ss.date)): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
+    if is_date(stop) or is_date(start): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
         if calendar is None:
             errormsg = f'stop={stop!r} is a date, but the sim has no calendar (it starts at {start!r}, a time in {unit.__name__} from 0); give a start date, or the length of the run, e.g. dur=ss.{unit.__name__}(100)'
             raise ValueError(errormsg)
@@ -382,7 +388,7 @@ class Timeline:
             return None
         if isinstance(val, ss.Duration): # A time on the axis, from 0
             return self.dur_time(val, name)
-        elif isinstance(val, (str, ss.date)) or sc.isnumber(val):
+        elif is_date(val) or sc.isnumber(val):
             if sc.isnumber(val):
                 ss.time.warn_ambiguous(val, name.removesuffix('='))
             if self.calendar is None:
@@ -456,7 +462,7 @@ class Timeline:
 
     def reconcile_own(self, start, stop, dur, dt, sim=None):
         """ The sim's timeline (or one standing alone): decide the calendar from the start (or, with none, the stop), then read the rest on it; the stop is a time, as the start is, or else the start plus the length (dur); given the stop and the length, the start is the stop minus it """
-        if isinstance(dur, (str, ss.date)) or (dur is not None and not sc.isnumber(dur) and not isinstance(dur, ss.Duration)):
+        if is_date(dur) or (dur is not None and not sc.isnumber(dur) and not isinstance(dur, ss.Duration)):
             errormsg = f'dur={dur!r} is the length of the run: give a duration (e.g. dur=ss.years(10)) or a bare number in the sim\'s unit, not a {type(dur).__name__}; for when it ends, give stop='
             raise TypeError(errormsg)
         given_unit = getattr(getattr(sim, 'pars', None), 'unit', None) # unit= as given, which decides how a bare stop with no start is read

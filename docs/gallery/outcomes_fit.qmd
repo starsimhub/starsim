@@ -21,6 +21,9 @@ Data on an epidemic is rarely the number infected: it is reported cases, hospita
 | Population | 1,000,000 | |
 | Infectious at the start | 0.1% | |
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -36,15 +39,46 @@ sir = ss.Disease(infection, recovery, cases, hosp, deaths, init=dict(I=0.001))
 pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01')
 ```
 
+## R
+
+```r
+library(starsim)
+
+beta <- par(0.3, bounds = c(0.05, 1.0)) # A parameter to fit, with its starting value and bounds
+states("S I R")
+infection <- Transition(S, I, rate = beta * I)
+recovery  <- Transition(I, R, dur = days(10))
+cases     <- outcome(0.5 * infection, delay = days(5))
+hosp      <- outcome(0.05 * infection, delay = days(7), dur = days(10))
+deaths    <- outcome(0.2 * hosp, delay = ss$lognormal(mean = 14, std = 5, unit = "days"))
+sir <- Disease(infection, recovery, cases, hosp, deaths, init = list(I = 0.001))
+
+make_sim <- function(...) Sim(sir, total_pop = 1e6, start = "2020-01-01", stop = "2020-06-01", ...)
+```
+:::
+
 The outcomes are not states, so the diagram, from `diagram()`, is an SIR's:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sir.diagram()
 ```
 
+## R
+
+```r
+sir$diagram()
+```
+:::
+
 ## Data
 
 The data is made from the model itself, with β = 0.25, as weekly counts of cases and deaths with Poisson noise (real reports usually vary more than this; [T6](../tutorials/t6_data.qmd) uses a negative binomial). Since the right answer is known, this checks that the fit can find it.
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 truth = ss.Sim(sir, pars=dict(beta=0.25), rand_seed=2, verbose=0, **pars)
@@ -53,9 +87,22 @@ data = truth.to_synthetic_data(['cases', 'deaths'], resample='week')
 data.head()
 ```
 
+## R
+
+```r
+truth <- make_sim(pars = list(beta = 0.25), rand_seed = 2, verbose = 0)
+truth$run()
+data <- truth$to_synthetic_data(c("cases", "deaths"), resample = "week")
+head(data)
+```
+:::
+
 ## Result
 
 The data is matched to results by name (`cases` and `deaths`), and each week of data is compared with the model's total over that week. `sim.fit()` fits every parameter with bounds to every result with data:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sim = ss.Sim(sir, data=data, **pars)
@@ -63,9 +110,28 @@ fit = sim.fit()
 fit.plot()
 ```
 
+## R
+
+```r
+sim <- make_sim(data = data)
+fit <- sim$fit()
+fit$plot()
+```
+:::
+
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 fit.pars
 ```
+
+## R
+
+```r
+fit$pars
+```
+:::
 
 β comes out at 0.25, the value the data was made with.
 
