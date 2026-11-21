@@ -18,6 +18,7 @@ copy a run takes, and `ss.compile()`, are in `ss.solvers.backends.compiling`.
 Used with: compartments; declared modules
 """
 
+import math
 import collections
 import numpy as np
 import numba as nb
@@ -630,9 +631,9 @@ def chain_probs(r, h, dt, d, out):
     """
     x = r*dt
     xt = (r + h)*dt
-    stay = np.exp(-h*dt)
-    term = np.exp(-x)
-    term_t = np.exp(-xt)
+    stay = math.exp(-h*dt)
+    term = math.exp(-x)
+    term_t = math.exp(-xt)
     cdf_t = 0.0
     total = 0.0
     for m in range(d):
@@ -748,7 +749,7 @@ def draw(rng, y, p, w, dt, flows, tau, whole):
                 elif transmits and not whole: # The rate times the substep's length, so each stay counts in transmission (from the substep after it starts) for 1/rate in time on average, as in the ODE; 1 - exp(-rate*dt) would keep people half a substep longer, as if R0 were R0*(1 + rate*dt/2)
                     prob[g] = min(total[g]*dt, 1.0)
                 else: # Exact for a rate held over the substep (e.g. the force of infection)
-                    prob[g] = -np.expm1(-total[g]*dt)
+                    prob[g] = -math.expm1(-total[g]*dt)
             if tau:
                 poissons(rng, prob, left, rows)
             else:
@@ -796,7 +797,7 @@ def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows):
         for e in range(mov_starts[1, m], mov_starts[1, m+1]):
             if mov_rate[e] != 0:
                 g, h = mov_pair[0, e], mov_pair[1, e]
-                prob = -np.expm1(-mov_rate[e]*dt)
+                prob = -math.expm1(-mov_rate[e]*dt)
                 for k in range(mov_starts[0, m], mov_starts[0, m+1]):
                     c = mov_comps[k]
                     moved = binomial(rng, y[c, g], prob)
@@ -956,7 +957,7 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
             if t == 0.0: # The first event in this step: the counter of the place's random numbers in this step
                 z = draws.mix(seed + draws.mix(np.uint64(i + 1)*golden))
             z += golden
-            t -= np.log(uniform(z))/total
+            t -= math.log(uniform(z))/total
             if t > dt:
                 break
             z += golden
@@ -1236,7 +1237,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
             if t == 0.0: # As in place_events()
                 z = draws.mix(seed + draws.mix(np.uint64(i + 1)*golden))
             z += golden
-            t -= np.log(uniform(z))/total
+            t -= math.log(uniform(z))/total
             if t > dt:
                 break
             z += golden
@@ -1712,7 +1713,7 @@ def release_rates(y, p, rates, dt):
                 if exits[f]:
                     x += max(rates[f, g], 0.0)*dt
             if x > 1e-12:
-                p.inflow[f_out, g] *= x/np.expm1(x)
+                p.inflow[f_out, g] *= x/math.expm1(x)
     return
 
 
@@ -2067,7 +2068,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                     for g in range(ng):
                         x = yt[c, g]
                         if solver == MAP:
-                            yt[c, g] = -np.expm1(-x)/x if x != 0 else 1.0
+                            yt[c, g] = -math.expm1(-x)/x if x != 0 else 1.0
                         else:
                             yt[c, g] = 1.0/x if x > 1 else 1.0
             for f in range(nf): # The groups inside what each flow does, not the other way round, so a loop over them is simple enough to be vectorized
