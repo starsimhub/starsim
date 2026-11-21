@@ -151,8 +151,8 @@ states("U A") # Not yet sexually active, and active
 debut <- Transition(U, A, when = ss$on(ss$person$age >= 15)) # As soon as they are 15
 sexual <- Disease(debut)
 
-demog <- list(ss$birth(rate = ss$peryear(0.03)), ss$death(rate = ss$peryear(0.01)))
-sim <- Sim(sexual, demographics = demog, n_agents = 5000, start = 2000, stop = 2010, dt = ss$months(1), verbose = 0)
+demog <- list(birth(rate = peryear(0.03)), death(rate = peryear(0.01)))
+sim <- Sim(sexual, demographics = demog, n_agents = 5000, start = 2000, stop = 2010, dt = months(1), verbose = 0)
 sim$run()
 active <- sim$results$sexual$A$values
 cat("Active after the first step:", active[2], "- after 10 years:", tail(active, 1), "\n")
@@ -360,10 +360,10 @@ sim.results.measles.infection.resample('month').plot()
 ```r
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = ss$perday(1.9) * I),
+  infection = Transition(S, I, rate = perday(1.9) * I),
   recovery  = Transition(I, R, dur = days(8)),
-  births    = ss$birth(S, rate = ss$peryear(0.02)), # 20 births per 1,000 people per year
-  deaths    = ss$death(rate = ss$peryear(0.02)),    # The same death rate, so the population is stable
+  births    = birth(S, rate = peryear(0.02)), # 20 births per 1,000 people per year
+  deaths    = death(rate = peryear(0.02)),    # The same death rate, so the population is stable
   init      = list(S = 0.07, I = 0.0001)            # The rest start in R, immune
 )
 sim <- Sim(measles, total_pop = 1000000, start = "2000-01-01", stop = "2020-01-01", dt = days(1))
@@ -391,7 +391,7 @@ print(sim.results.sir.keys())
 ## R
 
 ```r
-sir <- ss$SIR(beta = ss$perday(1.9), dur_inf = days(8), init_prev = 0.001)
+sir <- ss$SIR(beta = perday(1.9), dur_inf = days(8), init_prev = 0.001)
 sim <- Sim(sir, total_pop = 100000, stop = days(50), verbose = 0)
 sim$run()
 print(sim$results$sir$keys())

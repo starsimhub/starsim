@@ -164,7 +164,7 @@ df.loc[:, ['uid', 'age', 'female', 'measles.S', 'measles.I', 'measles.R', 'measl
 ## R
 
 ```r
-agents <- msim$sims$Agents
+agents <- msim$sims[["Agents"]]
 df <- reticulate::py_to_r(agents$people$to_df())
 head(df[, c("uid", "age", "female", "measles.S", "measles.I", "measles.R", "measles.ti_I")])
 ```

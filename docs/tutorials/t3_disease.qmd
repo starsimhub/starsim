@@ -73,6 +73,7 @@ progression = E >> I @ ss.erlang(k=10, mean=ss.days(10))
 ## R
 
 ```r
+states("S E I R")
 progression <- Transition(E, I, dur = ss$erlang(k = 10, mean = days(10)))
 ```
 

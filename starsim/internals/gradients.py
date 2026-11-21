@@ -179,7 +179,7 @@ class Run(sc.prettyobj):
         program (Program): the engine's program, for how its flows are put together
         dt (float): the timestep
         npts (int): the number of steps
-        solver (int): 0 for RK4, 1 for Euler (see `ss.solvers.numba.compartmental.solvers`)
+        solver (int): 0 for RK4, 1 for Euler, 2 for the map (see `ss.solvers.numba.compartmental.solvers`)
         n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
@@ -400,9 +400,13 @@ class Run(sc.prettyobj):
         src = np.maximum(p.src, 0)
         leave_mat, arrive_mat = self.comp_matrices(nc)
         amount = jnp.where((p.src >= 0)[:, None], rates*ys[src], rates*X['inflow'])
-        if self.solver == 1: # Euler: outflows that would take more than everyone in a compartment are scaled down together
+        if self.solver in (1, 2): # Euler: outflows that would take more than everyone in a compartment are scaled down together; the map: they take 1 - exp(-x) of it, x their total rate times the step
             total = -leave_mat @ (rates*(p.src >= 0)[:, None]*h)
-            scale = jnp.where(total > 1, 1/jnp.where(total > 1, total, 1.0), 1.0)
+            if self.solver == 1:
+                scale = jnp.where(total > 1, 1/jnp.where(total > 1, total, 1.0), 1.0)
+            else:
+                safe = jnp.where(total != 0, total, 1.0)
+                scale = jnp.where(total != 0, -jnp.expm1(-safe)/safe, 1.0)
             amount = jnp.where((p.src >= 0)[:, None], amount*scale[src], amount)
         dy = dy + leave_mat @ amount
         df = df + self.count_mat @ amount

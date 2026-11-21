@@ -98,7 +98,7 @@ class People:
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or fraction of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or fraction of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead, which also gives agents their ages when no people are given (with people given, their ages are kept, and a split of the age groups that disagrees with them is an error)
         extra_states (list): more properties of each person, e.g. `[ss.FloatArr('income')]` (modules can also add them, with `people.add_state()`)
         p_female (float/series/array): the fraction of agents who are female: one number, or by age, as a series indexed by the lower edge of each age group (or a two-column array of the edges and the fractions), e.g. a named population's (`ss.population()`); by age, it is drawn from each agent's age, and a child is born female at its value at age 0 unless the birth says otherwise (e.g. `ss.birth(p_female=)`)
         mock (bool): if True, link the people to a mock sim, so they can be used without one (for testing and debugging)
@@ -169,6 +169,13 @@ class People:
         if mock:
             self.init_mock()
         return
+
+
+    def own_dists(self):
+        """ The people's distributions, by their paths, for the sim to seed (see `ss.dists.sim_dists()`): each state's default, and those kept on the people (e.g. the cause of a death) """
+        out = {('states', name, 'default'):state.default for name,state in self.states.items() if isinstance(getattr(state, 'default', None), ss.Dist)}
+        out.update({(key,):val for key,val in vars(self).items() if isinstance(val, ss.Dist)})
+        return out
 
     def make_uids(self):
         """
@@ -405,7 +412,11 @@ class People:
         self.sim = sim
         for arr in [self.ti_dead, self.ti_removed]:
             arr.t = sim.t
-        ss.dists.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
+        for dist in self.own_dists().values():
+            dist.link_sim(sim)
+            dist.link_module(self)
+            if init:
+                dist.init()
         return
 
     @property

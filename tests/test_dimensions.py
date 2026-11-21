@@ -182,6 +182,17 @@ def test_given_splits():
     assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
     assert 'Guessed' not in [line for line in sim.describe().splitlines() if 'tob' in line and 'Dimension' in line][0]
 
+    # The people's ages are kept, so a split of the age groups must agree with them
+    def aged(age_data):
+        S = ss.State()
+        m = ss.Disease(stay=ss.Transition(S, S, rate=ss.peryear(0)), name='life')
+        m.stratify(age={0: 0.2, 18: 0.5, 65: 0.3})
+        return ss.Sim(m, people=ss.People(5_000, age_data=age_data), stop=1, verbose=0)
+    with pytest.raises(ValueError, match='agents keep their ages'):
+        aged(np.array([[0, 1], [18, 0]])).init()
+    ages = aged(np.array([[0, 0.2], [18, 0.5], [65, 0.3], [90, 0]])).init().people.age
+    assert np.isclose((ages >= 65).mean(), 0.3, atol=0.02)
+
     # A split over two dimensions that contradicts one's own split raises
     table = np.array([[0.11, 0.21, 0.22, 0.23, 0.23], [0.75, 0.16, 0.05, 0.02, 0.02]]) # P(wealth | urban)
     def make(table):

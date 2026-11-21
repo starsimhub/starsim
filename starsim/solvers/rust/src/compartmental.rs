@@ -1,5 +1,5 @@
 //! The kernels of the compartmental solvers (`starsim/solvers/numba/compartmental.py`, `ss.solvers.numba.compartmental`), with the same arguments and results: the
-//! ODE (RK4 and Euler), the chain binomial, tau-leaping, and the exact solver (by place, and by the compartments that hold anyone),
+//! ODE (RK4, Euler and the map), the chain binomial, tau-leaping, and the exact solver (by place, and by the compartments that hold anyone),
 //! the events of a movement register, and the deliveries. A program, register, deliveries, and tape are the namedtuples of
 //! compartmental.py, as views of their arrays; the random numbers are the caller's NumPy Generators, drawn as Numba draws them.
 //!
@@ -24,6 +24,15 @@ use register::*;
 use rng::dr;
 pub use rng::Rng;
 pub use views::*;
+
+// The solvers' codes (see `solvers` in compartmental.py): the ODE's three integrators, then the stochastic solvers (solver >= BINOMIAL)
+pub const RK4: i64 = 0;
+pub const EULER: i64 = 1;
+pub const MAP: i64 = 2;
+pub const BINOMIAL: i64 = 3;
+pub const TAU: i64 = 4;
+pub const GILLESPIE: i64 = 5;
+pub const WHOLE: i64 = 6;
 
 // The operations a rate can be made of (see compartmental.py)
 pub const CONST: i64 = 0;
@@ -337,11 +346,11 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
     let (nc, ng) = (y.n0(), if ONE { 1 } else { y.n1() });
     let nf = p.src.len();
     let nflows = p.n_trans + p.n_movers;
-    let mut stages = if solver == 0 { 4 } else { 1 };
+    let mut stages = if solver == RK4 { 4 } else { 1 };
     let mut h = dt;
-    let timed = solver == 3 || solver == 4; // Tau-leaping and the exact solver take steps of their own length
-    let by_place = solver == 4 && p.local;
-    let auto = solver < 2 && n_sub <= 0;
+    let timed = solver == TAU || solver == GILLESPIE; // Tau-leaping and the exact solver take steps of their own length
+    let by_place = solver == GILLESPIE && p.local;
+    let auto = solver < BINOMIAL && n_sub <= 0;
     let mut dp = false; // Whether the step is taken by Dormand-Prince
     let mut first = 0; // The stage a substep starts at
     let mut chosen = false; // Whether Dormand-Prince has just been chosen, after the step's first stage
@@ -522,12 +531,12 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             }
                             top -= 1;
                         } else if op == NOISE { // Noise on the rate, drawn for each substep under the chain binomial, and for each leap under tau-leaping, once its length is known (below)
-                            if solver == 2 || solver == 5 {
+                            if solver == BINOMIAL || solver == WHOLE {
                                 for g in 0..ng {
                                     let v = stack.at(top as usize, g)*noise(rng, p.consts.at(arg, g), dt/(n_sub.max(1) as f64));
                                     stack.set(top as usize, g, v);
                                 }
-                            } else if solver == 3 {
+                            } else if solver == TAU {
                                 noisy = true;
                             }
                         } else if op >= EXP {
@@ -563,7 +572,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                 certain(rng, y, p, w, rates, flows, stage == 0, solver);
             }
 
-            if solver == 3 { // Tau-leaping: the fastest rate at which any compartment is being left
+            if solver == TAU { // Tau-leaping: the fastest rate at which any compartment is being left
                 fastest = 0.0;
                 for s in 0..p.src_starts.len() - 1 {
                     if p.src.at(p.src_flows.u(p.src_starts.u(s))) >= 0 {
@@ -587,7 +596,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                 }
             }
             if sub == 0 && stage == 0 {
-                if solver < 2 && n_sub <= 0 {
+                if solver < BINOMIAL && n_sub <= 0 {
                     for e in 0..p.mov_rate.len() {
                         fastest = mx(fastest, p.mov_rate.at(e));
                     }
@@ -595,22 +604,22 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                 }
                 n_sub = n_sub.max(1);
                 h = dt/n_sub as f64;
-                if extra > 0 && solver < 2 {
+                if extra > 0 && solver < BINOMIAL {
                     release_rates(y, p, rates, dt);
                 }
             }
-            if solver >= 2 { // The stochastic solvers take it from here
+            if solver >= BINOMIAL { // The stochastic solvers take it from here
                 let mut end = dt;
-                if pending && solver == 4 {
+                if pending && solver == GILLESPIE {
                     end = mn(end, dt/2.0);
                 }
                 if by_place {
                     gillespie_places(rng, y, p, w, end - elapsed, flows, varying || p.has_det);
                     h = end - elapsed;
-                } else if solver == 4 {
+                } else if solver == GILLESPIE {
                     h = event(rng, y, p, w, end - elapsed, flows);
                 } else {
-                    if solver == 3 {
+                    if solver == TAU {
                         h = mn(end - elapsed, 0.03/mx(fastest, 1e-12));
                         if noisy { // The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
                             for f in 0..nf {
@@ -626,13 +635,13 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             }
                         }
                     }
-                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5);
+                    draw(rng, y, p, w, h, flows, solver == TAU, solver == WHOLE);
                 }
                 if p.has_det && !by_place {
                     settle(y, p, w, h, flows);
                 }
                 elapsed += h;
-                if pending && elapsed >= dt/2.0 + (if solver == 4 { -1e-12 } else { 1e-12 }) {
+                if pending && elapsed >= dt/2.0 + (if solver == GILLESPIE { -1e-12 } else { 1e-12 }) {
                     convey(rng, y, p, w, flows, true);
                     pending = false;
                 }
@@ -660,7 +669,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     }
                 }
             }
-            if solver == 1 { // Euler: outflows that would take more than everyone in a compartment are scaled down together (yt holds the scale)
+            if solver == EULER || solver == MAP { // Euler: outflows that would take more than everyone in a compartment are scaled down together; the map: they take 1 - exp(-x) of it, x their total rate times the step (yt holds the scale)
                 yt.fill(0.0);
                 for f in 0..nf {
                     if p.src.at(f) >= 0 {
@@ -672,7 +681,8 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                 }
                 for c in 0..nc {
                     for g in 0..ng {
-                        yt.set(c, g, if yt.at(c, g) > 1.0 { 1.0/yt.at(c, g) } else { 1.0 });
+                        let x = yt.at(c, g);
+                        yt.set(c, g, if solver == MAP { if x != 0.0 { -(-x).exp_m1()/x } else { 1.0 } } else if x > 1.0 { 1.0/x } else { 1.0 });
                     }
                 }
             }
@@ -684,7 +694,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     for g in 0..ng {
                         vals.set(g, r.at(g)*from.at(g));
                     }
-                    if solver == 1 {
+                    if solver == EULER || solver == MAP {
                         let scale = yt.row(s as usize);
                         for g in 0..ng {
                             vals.set(g, vals.at(g)*scale.at(g));
@@ -776,7 +786,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     n_sub = more;
                     h = dt/n_sub as f64;
                 }
-                if solver == 0 && !sure && mx(fastest, growing)*dt/(n_sub as f64) > FAST { // Too fast for RK4: by Dormand-Prince, from this first stage
+                if solver == RK4 && !sure && mx(fastest, growing)*dt/(n_sub as f64) > FAST { // Too fast for RK4: by Dormand-Prince, from this first stage
                     dp = true;
                     stages = 7;
                     first = 1;
@@ -804,7 +814,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
             chosen = false;
             continue;
         }
-        if solver >= 2 {
+        if solver >= BINOMIAL {
         } else if stages == 1 {
             for c in 0..nc {
                 for g in 0..ng {
@@ -836,7 +846,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
             break;
         }
     }
-    if solver == 4 { // The exact solver moves people between groups once, over the whole step
+    if solver == GILLESPIE { // The exact solver moves people between groups once, over the whole step
         move_people(rng, y, p, dt, flows);
         for e in 0..p.mov_rate.len() {
             if p.mov_rate.at(e) != 0.0 {
@@ -865,7 +875,7 @@ pub fn varies(tables: &Tables) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i64, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, tables: &Tables,
                   reg: &Register, sh: &Shifts, tally: A3<f64>) -> f64 {
-    let whole = solver >= 2;
+    let whole = solver >= BINOMIAL;
     if sh.to.n0() > 0 {
         apply_shifts(rng, y, sh, ti, whole, tally);
         if (0..sh.due.n0()).any(|k| sh.due.b(k, ti)) {
@@ -878,11 +888,11 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
     let mut short = 0.0;
     if reg.src.len() > 0 {
         short = apply_events(rng, y, reg, ti + 1, whole);
-        if solver == 4 && p.local {
+        if solver == GILLESPIE && p.local {
             touch(reg, ti + 1, p.places, w);
         }
     }
-    if solver == 4 && p.local && p.has_det {
+    if solver == GILLESPIE && p.local && p.has_det {
         settle_places(y, p, w, dt, flows);
     }
     short
@@ -1014,7 +1024,7 @@ pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize
                 }
             }
             if n_sh > 0 {
-                apply_shifts(rng, y, a.sh, ti, a.solver >= 2, tally);
+                apply_shifts(rng, y, a.sh, ti, a.solver >= BINOMIAL, tally);
                 if (0..a.sh.due.n0()).any(|k| a.sh.due.b(k, ti)) {
                     wake(&w);
                 }
@@ -1024,12 +1034,12 @@ pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize
             set_movers(p);
             step(rng, y, p, &w, a.dt, a.n_sub, a.solver, now, varies(&tables));
             if a.reg.src.len() > 0 {
-                apply_events(rng, y, a.reg, ti + 1, a.solver >= 2);
-                if a.solver == 4 && p.local {
+                apply_events(rng, y, a.reg, ti + 1, a.solver >= BINOMIAL);
+                if a.solver == GILLESPIE && p.local {
                     touch(a.reg, ti + 1, p.places, &w);
                 }
             }
-            if a.solver == 4 && p.local && p.has_det {
+            if a.solver == GILLESPIE && p.local && p.has_det {
                 settle_places(y, p, &w, a.dt, now);
             }
             for f in 0..nflows {

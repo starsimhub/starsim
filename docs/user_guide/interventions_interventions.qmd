@@ -132,13 +132,13 @@ kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 ```r
 states("S I")
 sis <- Disease(
-  infection = Transition(S, I, rate = ss$peryear(2) * I), # β = 2 per year
+  infection = Transition(S, I, rate = peryear(2) * I), # β = 2 per year
   recovery  = Transition(I, S, dur = years(1)),           # Infected for a year on average, then susceptible again
   init_prev = 0.1
 )
 
 make_sim <- function(...) { # A sim with these settings, and any others given
-  Sim(sis, n_agents = 5000, start = 2000, stop = 2020, dt = ss$months(1), verbose = 0, ...)
+  Sim(sis, n_agents = 5000, start = 2000, stop = 2020, dt = months(1), verbose = 0, ...)
 }
 ```
 :::
@@ -170,7 +170,7 @@ msim.plot('sis.I')
 ## R
 
 ```r
-births_deaths <- list(ss$birth(rate = ss$peryear(0.03)), ss$death(rate = ss$peryear(0.03)))
+births_deaths <- list(birth(rate = peryear(0.03)), death(rate = peryear(0.03)))
 
 routine  <- vaccinate(efficacy = 0.8, who = ss$at_age(years(1)), start = "2005", coverage = 0.8)                  # Once per child, as they turn one
 yearly   <- vaccinate(efficacy = 0.8, when = ss$schedule(every = years(1), start = "2005"), coverage = 0.2) # A round every year

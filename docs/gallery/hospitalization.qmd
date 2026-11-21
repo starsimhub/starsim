@@ -24,6 +24,9 @@ Two different mechanisms decide what happens to people after a state, and a mode
 
 The model is written as a function of the chance of hospitalization, so that the same model can be made again with a chance that depends on age, [below](#severity-by-age-as-a-function):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -39,21 +42,65 @@ def make_covid(hospitalized=0.1):
 covid = make_covid()
 ```
 
+## R
+
+```r
+library(starsim)
+
+make_covid <- function(hospitalized = 0.1) { # An SIR with hospitalization and death; hospitalized is the chance of going to hospital
+  states("S I R H D")
+  Disease(
+    infection = Transition(S, I, rate = 0.3 * I),
+    course    = Transition(I, reticulate::py_dict(list(R, H), list(NULL, hospitalized)), dur = days(8)), # Split on entry: 10% to H, the rest to R (a dict, since its keys are states)
+    discharge = Transition(H, R, dur = days(10)),      # Competing hazards: discharge ...
+    death     = Transition(H, D, rate = perday(0.02)), # ... and death
+    init = list(I = 0.001),
+    name = "covid"
+  )
+}
+
+covid <- make_covid()
+```
+:::
+
 In `{R: None, H: 0.1}`, `None` stands for the rest (here, 90%). The diagram, from `diagram()`:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 covid.diagram()
 ```
 
+## R
+
+```r
+covid$diagram()
+```
+:::
+
 And the equations, in which the split appears as the fractions (1 - 0.1) and 0.1 of the flow out of I, and the competing hazards as two flows out of H:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 covid.equations()
 ```
 
+## R
+
+```r
+covid$equations()
+```
+:::
+
 A rate given as a number is named by its transition, so the rate of death appears as a parameter called `rate_death`, and a duration by the state it is the time in (`dur_I` and `dur_H`). To give it a name of your own, write it as `ss.par(ss.perday(0.02), name='mu')` (see [Parameters](../user_guide/building_parameters.qmd)).
 
 ## Result
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sim = ss.Sim(covid, total_pop=100_000, stop=ss.days(200))
@@ -61,7 +108,19 @@ sim.run()
 sim.plot('covid')
 ```
 
+## R
+
+```r
+sim <- Sim(covid, total_pop = 100000, stop = days(200))
+sim$run()
+sim$plot("covid")
+```
+:::
+
 Of the people admitted to hospital, the fraction who die is the rate of death over the sum of the two rates out of H: 0.02 / (0.02 + 1/10) = 1/6. The flow `course.H` is the number admitted to hospital:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 admitted = sim.results.covid['course.H'].sum()
@@ -69,9 +128,21 @@ deaths = sim.results.covid.death.sum()
 print('Admitted:', round(admitted), 'Died:', round(deaths), 'Fraction:', round(deaths/admitted, 3))
 ```
 
+## R
+
+```r
+admitted <- sim$results$covid[["course.H"]]$sum()
+deaths <- sim$results$covid$death$sum()
+cat("Admitted:", round(admitted), "Died:", round(deaths), "Fraction:", round(deaths / admitted, 3), "\n")
+```
+:::
+
 ## Advanced: severity by age, as a function {#severity-by-age-as-a-function}
 
 Some parts of a model are easiest to write as a function. Here the chance that an infection is severe enough for hospital depends on age: 10% under 50, and 40% from 50 up. Rather than stratify the disease by age and give a value for each group, the chance is a Python function of the sim, which reads people's ages. Starsim tries the function on the model's age groups, and since it works on them, the model still runs as compartments; run as agents, the same function is evaluated for each person.
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 def severity(sim):
@@ -81,7 +152,21 @@ def severity(sim):
 covid_age = make_covid(hospitalized=severity)
 ```
 
+## R
+
+```r
+severity <- reticulate::py_func(function(sim) { # The chance of hospitalization: 10%, plus 30% from age 50
+  0.1 + 0.3 * (sim$people$age >= 50)
+}) # py_func() keeps the function's argument, sim, which Starsim reads
+
+covid_age <- make_covid(hospitalized = severity)
+```
+:::
+
 The sim is split into two age groups at 50 (`stratify=dict(age=[0, 50])`), so that the function has ages to work on in a compartmental run. The same model is run as an ODE and as agents, in a population of 10,000:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sims = {
@@ -92,11 +177,33 @@ msim = ss.parallel(sims)
 msim.plot('covid')
 ```
 
+## R
+
+```r
+sims <- list(
+  ODE    = Sim(covid_age, total_pop = 10000, stop = days(200), stratify = list(age = c(0, 50)), verbose = 0),
+  Agents = Sim(covid_age, total_pop = 10000, stop = days(200), solver = "abm", verbose = 0)
+)
+msim <- parallel(sims) # Run one after another in this R session, since worker processes can't call an R function
+msim$plot("covid")
+```
+:::
+
 The two agree, apart from chance in the agent run. Of about 8,800 infections, about 1,500 people are admitted to hospital (`covid_course.H`): about one in six, between the 10% of those under 50 and the 40% of those over, since about a quarter of people are 50 or over (the population's ages are guessed as the world's in 2024, as `describe()` says). Of those admitted, one in six die, as before, since the competing hazards out of H haven't changed:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 msim.summarize().loc[['covid.infection', 'covid.course.H', 'covid.death']]
 ```
+
+## R
+
+```r
+subset(msim$summarize(), result %in% c("covid.infection", "covid.course.H", "covid.death"))
+```
+:::
 
 A function that needs each person (one that takes `uids`, the people it applies to, as well as the sim) can't be run as compartments, so Starsim runs a model with one as agents, and `describe()` says why.
 

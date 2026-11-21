@@ -659,6 +659,13 @@ class Engine(Effects):
         ss.utils.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run', 'held_series', 'in_people', 'res_values'] + arrays + ['compiled']*isinstance(getattr(self, 'compiled', None), dict)) # The selector holds the sim, the cache the values per agent, compiled (as agents) the functions of its expressions, the series the tables of a compartmental run, held_series the values in time of each step, and in_people and res_values the module's results
         return
 
+    def own_dists(self):
+        """ The engine's distributions, by their paths in it, for the sim to seed (see `ss.dists.sim_dists()`): those it draws from (`dists`, as agents) and its delays' """
+        out = {('dists', key):dist for key,dist in (getattr(self, 'dists', None) or {}).items() if isinstance(dist, ss.Dist)}
+        for name,dw in self.dwells.items():
+            out.update({('dwells', name, key):getattr(dw, key) for key in ['dist', 'raw'] if isinstance(getattr(dw, key, None), ss.Dist)})
+        return out
+
     def make_rng(self, stream=0, seed=None):
         """ The random numbers of the engine: stream 0 for draws made in Python, 1 for the kernels, 2 for the events of a register at the start; from the sim's seed (or the one given) and the name that seeds the module (see `ss.dists.seed_names()`), so no two modules share them """
         seed = self.sim.pars.rand_seed if seed is None else seed
@@ -1642,7 +1649,7 @@ class Engine(Effects):
     def note_fast_steps(self):
         """ See `note_steps()`: which notes apply to the solver """
         solver = self.sim.solver
-        euler = isinstance(solver, ss.solvers.ode) and solver.integrator == 'euler' and solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
+        euler = isinstance(solver, ss.solvers.ode) and solver.integrator in ('euler', 'map') and solver.substeps is not None # Euler with steps of a given size, or the map (whole steps); otherwise the ODE takes enough substeps
         self.note_density()
         self.note_smoothing()
         if solver.agents or euler:
@@ -1680,7 +1687,7 @@ class Engine(Effects):
         return
 
     def note_fast(self, euler):
-        """ For agents, and Euler with steps of a given size, which take whole steps: say which transitions are fast compared with the step """
+        """ For agents, the ODE's map, and Euler with steps of a given size, which take whole steps: say which transitions are fast compared with the step """
         sim = self.sim
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves

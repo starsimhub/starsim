@@ -54,7 +54,7 @@ measles <- Disease(
   infection   = Transition(S, E, rate = beta * I), # At a rate of β times the contacts with infectious people
   progression = Transition(E, I, dur = days(10)),  # Latent for 10 days on average
   recovery    = Transition(I, R, dur = days(8)),   # Infectious for 8 days on average
-  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+  init   = list(R = by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n = list(I = 10)                               # 10 people infectious at the start
 )
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
@@ -147,7 +147,7 @@ gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, rate=ss.probperyear(
 ## R
 
 ```r
-gradual <- vaccinate(efficacy = 0.93, who = measles$age < 15, rate = ss$probperyear(0.8))
+gradual <- vaccinate(efficacy = 0.93, who = measles$age < 15, rate = probperyear(0.8))
 ```
 
 ## Explicit
@@ -311,7 +311,7 @@ treatment = ss.treat(drug, when=screening.positive)
 ```r
 drug <- ss$Treatment(cure = 0.95) # As above: cures 95% of the people it is given to
 young <- (ss$person$age >= 15) & (ss$person$age < 30) # Who is eligible: a condition on each person, worked out when it is needed
-screening <- ss$screen(sensitivity = 0.9, specificity = 0.98, who = young, when = ss$schedule(every = ss$months(6), start = "2010"), coverage = 0.5)
+screening <- ss$screen(sensitivity = 0.9, specificity = 0.98, who = young, when = ss$schedule(every = months(6), start = "2010"), coverage = 0.5)
 treatment <- ss$treat(drug, when = screening$positive)
 ```
 

@@ -83,7 +83,7 @@ interactions <- list(
 )
 
 make_sim <- function(...) { # A sim with these settings, and any others given
-  Sim(list(hiv, sti), networks = ss$SexualNet(dur = years(1)), n_agents = 2000, start = 2000, stop = 2030, dt = ss$months(1), verbose = 0, ...)
+  Sim(list(hiv, sti), networks = ss$SexualNet(dur = years(1)), n_agents = 2000, start = 2000, stop = 2030, dt = months(1), verbose = 0, ...)
 }
 msim <- parallel(list(
   "Without interactions" = make_sim(),

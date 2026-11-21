@@ -81,6 +81,15 @@ def age_pyramid(sim, strat=None):
     return None
 
 
+def pyramid_of(people, edges=None):
+    """ The ages that people given to a sim (`ss.People(age_data=...)`) are drawn from, by age group (their lower edges, by default 5-year groups, and the number in each); not for the user """
+    dist = sc.dcp(people.age.default)
+    dist.init(force=True)
+    edges = world.ages if edges is None else np.asarray(edges)
+    counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
+    return edges, counts
+
+
 def to_age_data(ages, counts):
     """ The `age_data` of `ss.People` for counts by 5-year age group (the last is 100 and over, taken to end at 105); not for the user """
     return np.column_stack([np.append(ages, ages[-1] + 5), np.append(counts, 0)])

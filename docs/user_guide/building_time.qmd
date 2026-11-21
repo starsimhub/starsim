@@ -71,7 +71,7 @@ library(starsim)
 
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = ss$perday(1.9) * I), # β = 1.9 per day
+  infection = Transition(S, I, rate = perday(1.9) * I), # β = 1.9 per day
   recovery  = Transition(I, R, dur = days(8)),             # Infectious for 8 days on average
   init_prev = 0.001
 )
@@ -298,20 +298,20 @@ make_measles <- function(beta) {
   Disease(
     infection = Transition(S, I, rate = beta * I),
     recovery  = Transition(I, R, dur = days(8)),
-    births    = ss$birth(S, rate = ss$peryear(0.02)),
-    deaths    = ss$death(rate = ss$peryear(0.02)),
+    births    = birth(S, rate = peryear(0.02)),
+    deaths    = death(rate = peryear(0.02)),
     init      = list(S = 0.07, I = 0.0001),
     name      = "measles"
   )
 }
 
 terms <- ss$timeseries(list(
-  "2000-01-01" = ss$perday(1.97), # School term
-  "2000-07-20" = ss$perday(1.37), # Summer holiday
-  "2000-09-01" = ss$perday(1.97)  # School term
+  "2000-01-01" = perday(1.97), # School term
+  "2000-07-20" = perday(1.37), # Summer holiday
+  "2000-09-01" = perday(1.97)  # School term
 ), period = years(1)) # The same every year
 
-scenarios <- list("Constant" = ss$perday(1.9), "School terms" = terms)
+scenarios <- list("Constant" = perday(1.9), "School terms" = terms)
 sims <- lapply(scenarios, function(beta) {
   Sim(make_measles(beta), total_pop = 1000000, start = "2000-01-01", stop = "2020-01-01", dt = days(1), verbose = 0)
 })
@@ -340,8 +340,8 @@ msim.results.measles.infection.resample('year').plot()
 ## R
 
 ```r
-seasonal <- ss$seasonal(mean = ss$perday(1.9), amplitude = 0.1, peak = "January")
-scenarios <- list("Constant" = ss$perday(1.9), "Seasonal (±10%)" = seasonal)
+seasonal <- ss$seasonal(mean = perday(1.9), amplitude = 0.1, peak = "January")
+scenarios <- list("Constant" = perday(1.9), "Seasonal (±10%)" = seasonal)
 sims <- lapply(scenarios, function(beta) {
   Sim(make_measles(beta), total_pop = 1000000, start = "2000-01-01", stop = "2020-01-01", dt = days(1), verbose = 0)
 })

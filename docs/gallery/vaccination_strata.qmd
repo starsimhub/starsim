@@ -21,6 +21,9 @@ In many compartmental models, vaccination is not part of the disease at all: the
 | Population | 10,000 | |
 | Infectious at the start | 0.1% | |
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -35,13 +38,46 @@ def make_sir():
 campaign = ss.Event(dict(vaccinated=True), when=ss.days(10), p=0.5)
 ```
 
+## R
+
+```r
+library(starsim)
+
+make_sir <- function() {
+  states("S I R")
+  sir <- Disease(
+    infection = Transition(S, I, rate = 0.3 * by(vaccinated = c(1.0, 0.1)) * I),
+    recovery  = Transition(I, R, dur = days(10)),
+    init = list(I = 0.001)
+  )
+  sir$stratify(vaccinated = reticulate::py_dict(list(FALSE, TRUE), list(1, 0))) # {False: 1, True: 0}: a dict, since its keys are TRUE and FALSE
+  sir
+}
+
+campaign <- ss$Event(list(vaccinated = TRUE), when = days(10), p = 0.5)
+```
+:::
+
 `stratify()` splits each state in two, with everyone unvaccinated at the start (`{False: 1, True: 0}`), and `ss.by()` in the rate of infection multiplies it by 1 for the unvaccinated and 0.1 for the vaccinated. The campaign is a delivery that moves people to the vaccinated group: it needs no vaccine product, since the effect of vaccination is in the stratification. The diagram, from `diagram()`, is an SIR's, since the vaccinated and unvaccinated groups split each state:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 make_sir().diagram()
 ```
 
+## R
+
+```r
+make_sir()$diagram()
+```
+:::
+
 ## Result
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sims = {
@@ -52,11 +88,33 @@ msim = ss.parallel(sims)
 msim.plot('sir')
 ```
 
+## R
+
+```r
+sims <- list(
+  "No vaccination" = Sim(make_sir(), total_pop = 10000, stop = days(150), verbose = 0),
+  "Campaign"       = Sim(make_sir(), interventions = campaign, total_pop = 10000, stop = days(150), verbose = 0)
+)
+msim <- parallel(sims)
+msim$plot("sir")
+```
+:::
+
 Vaccinating half of the population lowers the reproduction number from 3 to 3 × (0.5 + 0.5 × 0.1) = 1.65: that is R0 weighted by the susceptibility of each group, for a population that is still almost all susceptible. By day 10 some people have already been infected, so the effective reproduction number on the day of the campaign is a little lower. The epidemic infects under half as many people:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 msim.summarize().loc['sir.infection']
 ```
+
+## R
+
+```r
+subset(msim$summarize(), result == "sir.infection")
+```
+:::
 
 ## Going further
 

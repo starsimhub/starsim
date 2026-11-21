@@ -62,7 +62,7 @@ measles <- Disease(
   progression = progression,
   recovery    = recovery,
   cases       = outcome(reported * infection), # Reported cases: a fraction of new infections
-  init        = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
+  init        = list(R = by(age = c(0.8, 0.92, 0.98))), # The fraction immune in each age group
   init_n      = list(I = 10)
 )
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+
@@ -249,7 +249,7 @@ scenarios <- list(
 )
 proj <- fit$project(scenarios)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles.cases"]
+subset(proj$summarize(), result == "measles.cases")
 ```
 :::
 
@@ -297,7 +297,7 @@ proj.summarize().loc['measles.cases']
 ```r
 proj <- post$project(scenarios, n_runs = 100)
 proj$plot("measles.cases")
-proj$summarize()$loc["measles.cases"]
+subset(proj$summarize(), result == "measles.cases")
 ```
 :::
 
@@ -353,7 +353,7 @@ kenya.results.measles.infection.by('age').plot()
 
 ```r
 measles <- Disease(infection, progression, recovery, # The model above, without reported cases
-  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
+  init   = list(R = by(age = c(0.8, 0.92, 0.98))),
   init_n = list(I = 10),
   name   = "measles"
 )
@@ -393,11 +393,11 @@ msim.plot('measles.I')
 ## R
 
 ```r
-measles <- Disease(infection, progression, recovery, init = list(R = ss$by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
+measles <- Disease(infection, progression, recovery, init = list(R = by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # The made-up town's age groups
 demographics <- list(
-  ss$birth(rate = peryear(0.03)), # 30 births a year per 1,000 people
-  ss$death(rate = peryear(0.02))  # 20 deaths a year per 1,000 people
+  birth(rate = peryear(0.03)), # 30 births a year per 1,000 people
+  death(rate = peryear(0.02))  # 20 deaths a year per 1,000 people
 )
 make_long <- function(...) {
   Sim(measles, networks = age_contacts, total_pop = 100000, unit = "day", dt = weeks(1), start = "2025-01-01", stop = "2045-01-01", ...)

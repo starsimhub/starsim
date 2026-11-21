@@ -545,6 +545,13 @@ class TimeValue:
 shared_years = weakref.WeakKeyDictionary() # The times of time series as years, for each sim, by the times (see timeseries.years())
 
 
+def as_numbers(items):
+    """ Plain numbers (e.g. the times or values of `ss.timeseries`) as an array, which is read, copied and searched as one object rather than one number at a time; None if they are not all plain numbers """
+    if isinstance(items, np.ndarray):
+        return items.copy() if items.ndim == 1 and items.dtype.kind in 'iuf' else None
+    return np.array(items) if all(type(v) in (int, float, np.int64, np.float64) for v in items) else None
+
+
 class timeseries(TimeValue):
     """
     A value that varies in time, given at some times and interpolated between them
@@ -584,31 +591,35 @@ class timeseries(TimeValue):
     def __init__(self, data, values=None, interpolation='step', period=None):
         if isinstance(values, str): # ss.timeseries(data, 'linear'): the interpolation
             values, interpolation = None, values
+        if interpolation not in ['step', 'linear', 'cosine']:
+            errormsg = f'The interpolation of ss.timeseries() is "step", "linear", or "cosine", not "{interpolation}"'
+            raise ValueError(errormsg)
         if values is not None: # ss.timeseries(times, values), as np.interp() takes them
             if len(data) != len(values):
                 errormsg = f'ss.timeseries() was given {len(data)} times but {len(values)} values; give one value for each time'
                 raise ValueError(errormsg)
-            data = dict(zip(data, values))
+            times, vals = as_numbers(data), as_numbers(values)
+            data = dict(zip(data, values)) if times is None or vals is None else None
         if isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
-        if not isinstance(data, dict):
+        if data is not None and not isinstance(data, dict):
             data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
-        if interpolation not in ['step', 'linear', 'cosine']:
-            errormsg = f'The interpolation of ss.timeseries() is "step", "linear", or "cosine", not "{interpolation}"'
-            raise ValueError(errormsg)
-        self.times = list(data.keys())
-        self.values = list(data.values())
+        if data is not None:
+            times, vals = list(data.keys()), list(data.values())
+            times, vals = sc.ifelse(as_numbers(times), times), sc.ifelse(as_numbers(vals), vals)
+        self.times = times
+        self.values = vals.astype(float) if isinstance(vals, np.ndarray) else vals
         self.interpolation = interpolation
         self.period = period
         self._years = None # The times as years, worked out for the sim it is used in
         return
 
     def __repr__(self):
-        return f'timeseries({dict(zip(self.times, self.values))}, interpolation={self.interpolation!r})'
+        return f'timeseries({dict(zip(list(self.times), list(self.values)))}, interpolation={self.interpolation!r})'
 
     @property
     def typed(self):
-        return self.values
+        return [] if isinstance(self.values, np.ndarray) else self.values # Plain numbers are not typed
 
     def map(self, func):
         """
@@ -627,18 +638,21 @@ class timeseries(TimeValue):
             sim (`ss.Sim`): the sim
         """
         if self._years is None or self._years[0] is not sim:
-            key = tuple(map(float, self.times)) if all(sc.isnumber(t) for t in self.times) else None # Bare numbers, worked out once for each sim, since a model can have thousands of time series with the same times
+            key = self.times.astype(float).tobytes() if isinstance(self.times, np.ndarray) else None # Bare numbers, worked out once for each sim, since a model can have thousands of time series with the same times
             shared = shared_years.setdefault(sim, {})
             if key in shared:
                 self._years = (sim, shared[key])
                 return shared[key]
-            out = []
-            for time in self.times:
-                if isinstance(time, ss.Duration) and sim.t.calendar is None: # A time from 0 in any unit, e.g. ss.years(k/12) for each month in a sim in days, with no warning about its unit
-                    out.append(time.years)
-                    continue
-                time = ss.connectors.to_time(sim, time) # A duration is that long after the start, with a calendar
-                out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
+            if isinstance(self.times, np.ndarray) and sim.t.calendar is None: # Bare numbers with no calendar: times in the sim's unit from 0, all at once
+                out = sim.t.unit(self.times.astype(float)).to('year').value
+            else:
+                out = []
+                for time in self.times:
+                    if isinstance(time, ss.Duration) and sim.t.calendar is None: # A time from 0 in any unit, e.g. ss.years(k/12) for each month in a sim in days, with no warning about its unit
+                        out.append(time.years)
+                        continue
+                    time = ss.connectors.to_time(sim, time) # A duration is that long after the start, with a calendar
+                    out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
                 if all(sc.isnumber(t) for t in self.times) and np.all(np.diff(self.times) > 0): # In order as given, but not as read: bare numbers are in the sim's unit, and a date has whole days
@@ -684,7 +698,7 @@ class timeseries(TimeValue):
             year (float): the year, as a decimal
             sim (`ss.Sim`): the sim
         """
-        vals = [const_value(v) for v in self.values]
+        vals = self.values if isinstance(self.values, np.ndarray) else [const_value(v) for v in self.values]
         year, i, j, w = self.weights(year, sim)
         i, j, w = int(i), int(j), float(w)
         if w == 0: # At or outside the times given, or with interpolation='step'
@@ -693,22 +707,25 @@ class timeseries(TimeValue):
 
     def series(self, years, sim, convert):
         """ As `TimeValue.series()`, converting each value once rather than at each time """
-        vals = [const_value(v) for v in self.values]
-        if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
-            return super().series(years, sim, convert)
-        vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
+        if isinstance(self.values, np.ndarray): # Plain numbers: converted as one array
+            vals = np.asarray(convert(self.values), dtype=float)
+        else:
+            vals = [const_value(v) for v in self.values]
+            if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
+                return super().series(years, sim, convert)
+            vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
         year, i, j, w = self.weights(np.asarray(years, dtype=float), sim)
         return vals[i]*(1 - w) + vals[j]*w
 
     def __deepcopy__(self, memo): # The cached times belong to one sim
         new = object.__new__(type(self))
-        new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), interpolation=self.interpolation, period=self.period, _years=None)
+        new.__dict__.update(times=self.times.copy(), values=self.values.copy() if isinstance(self.values, np.ndarray) else sc.dcp(self.values, memo=memo), interpolation=self.interpolation, period=self.period, _years=None)
         if self.module is not None: # Bound to a module (see Pars.bind()), as its copy is
             new.module = sc.dcp(self.module, memo=memo)
         return new
 
     def to_json(self):
-        out = dict(timeseries={str(time):ss.display.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, interpolation=self.interpolation)
+        out = dict(timeseries={str(time):ss.display.quantity_json(val, None, None) for time,val in zip(self.times, self.values.tolist() if isinstance(self.values, np.ndarray) else self.values)}, interpolation=self.interpolation)
         if self.period is not None:
             out['period'] = ss.display.quantity_json(self.period, 'dur', None)
         return out

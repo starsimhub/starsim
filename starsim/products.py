@@ -784,7 +784,10 @@ class Treatment(Held):
     A treatment: what `ss.treat()` delivers
 
     A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
-    (`efficacy=`), or both. By default it is given to the people who are infected. A treatment that cures
+    (`efficacy=`), or both. By default it is given to the people who are infected: those in any state of
+    `disease.graph.infected`, the latent (E) as well as the infectious, so it cures people who are still exposed, as
+    prophylaxis after exposure does. For a drug given on symptoms, deliver it on their onset, e.g.
+    `ss.treat(drug, when=ss.on(seir.onset))`, or for one branch of an onset, `ss.on(seir.onset.to(seir.I))`. A treatment that cures
     has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not in a state it cures: not
     infected, or in no source of the transitions it cures along), which are results and events of its deliveries.
 
