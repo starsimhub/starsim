@@ -84,15 +84,20 @@ class ode(Solver):
     The ODE solver (deterministic compartments: the average epidemic, with no randomness), with its options: `ss.Sim(solver=ss.solvers.ode(integrator='euler', substeps=1))`; `solver='ode'` is the same with the defaults
 
     Args:
-        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default: accurate at a coarse step) or 'euler' (simpler and less accurate; use it to match a model written with Euler steps)
+        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default: accurate at a coarse step), 'euler' (simpler and less accurate; use it to match a model written with Euler steps), or 'map' (the discrete-time map: each step taken whole, with 1 − exp(−rate·dt) of each compartment leaving it, shared between its exits by rate, the rates as at the start of the step; the expected value of `ss.solvers.binomial(substeps=1)`, and the form of a model written in discrete time, such as the renewal equation of EpiEstim and EpiNow2 with `dwells='exact'`)
         substeps (int): the number of substeps per timestep (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one). More is more accurate and slower. With `integrator='euler'`, `substeps=1` takes each step whole, as a model written in discrete time does, e.g. to reproduce another model's numbers
         dwells (str): how the time spent in a state is modeled: 'stages' (the default: as Erlang stages, or exponential, which is fast) or 'exact' (the duration's own distribution, e.g. a fixed 5 days, as a conveyor of whole steps at its own chance of leaving: an integro-differential model, which under `branching=True` is the renewal equation; see the user guide on branching processes). Use 'exact' when the shape of the duration matters, e.g. a fixed incubation period
     """
     name = 'ode'
-    options = dict(integrator=('rk4', ['rk4', 'euler']), substeps=(None, None), dwells=('stages', ['stages', 'exact']))
+    options = dict(integrator=('rk4', ['rk4', 'euler', 'map']), substeps=(None, None), dwells=('stages', ['stages', 'exact']))
     example = "ss.solvers.ode(integrator='euler', substeps=4)"
 
     def __init__(self, *, integrator='rk4', substeps=None, dwells='stages'):
+        if integrator == 'map' and substeps not in (None, 1):
+            errormsg = f"ss.solvers.ode(integrator='map') takes each step whole, so has no substeps (it was given substeps={substeps}); for substeps, use integrator='euler' or 'rk4'"
+            raise ValueError(errormsg)
+        if integrator == 'map':
+            substeps = 1
         super().__init__(integrator=integrator, substeps=substeps, dwells=dwells)
 
 

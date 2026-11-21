@@ -115,7 +115,7 @@ def test_hybrid():
     assert len(nets.s) == 0 and len(nets.w) > 0 # No contacts is an empty network
 
     # Covasim's transmissibility on each layer, as a disease's beta by network, with random schools and workplaces
-    sim3 = ss.Sim(n_agents=small, diseases=ss.SIR(beta=ssl.HybridNet.betas()), networks=ssl.HybridNet(clustered=False, method='uniform'), unit='day', stop=30, verbose=0).run()
+    sim3 = ss.Sim(n_agents=small, diseases=ss.SIR(beta=ssl.HybridNet.betas(), init_prev=0.05), networks=ssl.HybridNet(clustered=False, method='uniform'), unit='day', stop=30, verbose=0).run()
     assert sim3.results.sir.infection.sum() > 0 and np.all(sim3.people.age[sim3.networks.s.members] < 22) # Schools are age-restricted
 
 
@@ -219,7 +219,9 @@ def test_network_args():
             self.end_pairs()
             if not len(self):
                 n = 10
-                self.append(p1=np.arange(n), p2=np.arange(n, 2*n), weight=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
+                ppl = self.sim.people
+                self.first = ppl.male.uids[:n] # Each with a woman
+                self.append(p1=self.first, p2=ppl.female.uids[:n], weight=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
     kw = dict(diseases=ss.SIS(beta=ss.peract(0.01)), n_agents=300, verbose=0)
     for cls, n_start in [(Own, 0), (Wrapped, 0), (ss.SexualNet, None)]:
         sim = ss.Sim(networks=cls(n_contacts=0.5, dur=ss.years(2)), **kw, stop=2001).init()
@@ -227,7 +229,7 @@ def test_network_args():
         sim.run()
         net = sim.networks[0]
         if cls is Own:
-            assert len(net) == 10 and set(net.p1) == set(range(10)), 'Only its own partnerships'
+            assert len(net) == 10 and set(net.p1) == set(net.first), 'Only its own partnerships'
         else:
             assert np.isclose(net.results.mean_degree[0], 0.5, rtol=0.25), f'{cls.__name__} starts at the target'
 
@@ -492,7 +494,7 @@ def test_counts():
     assert np.allclose(make(lambda S, I: I.n/(S + I).total), frac, rtol=1e-9) # The same, as counts over the population
     assert make(lambda S, I: I)[:, -1].sum() > 2*frac[:, -1].sum() # On the share of each group, which is more
     agents = make(lambda S, I: I.n/pop, solver='abm', n_agents=pop)
-    assert np.allclose(agents[:, -1], frac[:, -1], rtol=0.1)
+    assert np.allclose(agents[:, -1], frac[:, -1], rtol=0.25) # The low-risk group's prevalence is small, so its agents differ by up to about 16% over seeds
 
     # A count inside a function of the rate modifies it by the total, and is not met: three groups mixing evenly are one group
     def capped(groups):

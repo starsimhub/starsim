@@ -50,7 +50,7 @@ def fingerprint(raw):
     elif isinstance(raw, ss.Dist):
         return [fingerprint(v) for v in raw.pars.values()]
     elif isinstance(raw, ss.parameters.TimeValue):
-        shape = [repr(getattr(raw, name)) for name in ['times', 'interpolation', 'period'] if hasattr(raw, name)] # How an ss.timeseries goes between its values, which can be changed in place
+        shape = [fingerprint(v) if isinstance(v, np.ndarray) else repr(v) for v in [getattr(raw, name) for name in ['times', 'interpolation', 'period'] if hasattr(raw, name)]] # How an ss.timeseries goes between its values, which can be changed in place
         return [fingerprint(getattr(raw, name)) for name in raw.fields] + [fingerprint(p.raw) for p in raw.pars] + shape
     elif isinstance(raw, dict):
         return [fingerprint(v) for v in raw.values()]
@@ -134,6 +134,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     max_ngm = 1000 # The most compartments by groups for which binomial_substeps() works out R0 (the next-generation matrix takes two evaluations of the model for each)
     binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (see binomial_substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
+
+    def own_dists(self):
+        """ None: compartments draw from their own generator (see `make_rng()`), and read the model's distributions only for their numbers """
+        return {}
 
     def __init__(self, module, sim, solver=None):
         super().__init__(module, sim, solver)
@@ -2544,7 +2548,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def euler(self):
-        return isinstance(self.sim.solver, ss.solvers.ode) and self.sim.solver.integrator == 'euler'
+        return isinstance(self.sim.solver, ss.solvers.ode) and self.sim.solver.integrator in ('euler', 'map') # Values at the start of the step
 
     def at_middle(self):
         """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti` to the next, as `tables()` does, so that a stepped run takes the same values as a whole one """

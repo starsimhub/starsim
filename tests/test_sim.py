@@ -353,6 +353,28 @@ def test_module_names():
 
 #%% Solvers and what a run says
 
+def test_ode_map():
+    """ The ODE's map integrator: each step whole, 1 - exp(-rate*dt) of each compartment leaving it, shared by rate, the rates as at the start of the step; compiled """
+    S, I, R, D = ss.states(4)
+    beta, gamma, mu, dt = 0.4, 0.1, 0.02, 2.0
+    dis = ss.Disease(S >> I @ ss.perday(beta)*I.frac, I >> R @ ss.perday(gamma), I >> D @ ss.perday(mu), init=dict(S=0.99, I=0.01), name='x')
+    sim = ss.Sim(dis, total_pop=1.0, unit='day', dt=ss.days(dt), stop=ss.days(60), verbose=0, solver=ss.solvers.ode(integrator='map'))
+    sim.init()
+    assert sim._compiled_reason() is None and sim.solver.substeps == 1
+    sim.run()
+    s, i, r, d = 0.99, 0.01, 0.0, 0.0
+    expect = [s]
+    for t in range(30): # The discrete map, by hand
+        inf = s*-np.expm1(-beta*i*dt)
+        left = i*-np.expm1(-(gamma + mu)*dt)
+        s, i, r, d = s - inf, i + inf - left, r + left*gamma/(gamma + mu), d + left*mu/(gamma + mu)
+        expect.append(s)
+    assert np.allclose(sim.results.x.S.values, expect, rtol=1e-12, atol=0)
+    assert np.isclose(sim.results.x.D.values[-1], d, rtol=1e-12)
+    return sim
+
+
+
 def test_solver_options():
     """ A solver's options in its helper; a module's own solver chooses agents; the scale of agents """
     S, I, R = ss.states(3)
@@ -366,6 +388,8 @@ def test_solver_options():
     for make_solver in [lambda: ss.solvers.gillespie(substeps=2), lambda: ss.solvers.tau(foo=1)]: # An option a solver has none of is not dropped
         with pytest.raises(TypeError):
             make_solver()
+    with pytest.raises(ValueError): # The map takes each step whole
+        ss.solvers.ode(integrator='map', substeps=2)
     named = ss.solvers.abm(step='midstep') # A step named as the default still overrides a module's suggested step, so it is not the same as abm()
     assert named != ss.solvers.abm() and repr(named) == "ss.solvers.abm(step='midstep')" and ss.solvers.abm(step='events') == ss.solvers.abm(step='events')
     agents = ss.Sim(make(), solver='abm', n_agents=500, total_pop=5000, unit='day', stop=5, verbose=0).init()
