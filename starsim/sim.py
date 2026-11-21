@@ -820,6 +820,12 @@ class Sim(ss.modules.Base):
         elif agents:
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
+                if strat.kind == 'age' and strat.edges is not None and strat.fractions_given and 'fractions' not in strat.guessed: # The people's ages are kept, so a split of the age groups that differs from them would hold only in a compartmental run
+                    counts = ss.data.pyramid_of(people, strat.edges)[1]
+                    split = counts/counts.sum()
+                    if not np.allclose(split, strat.fractions, atol=0.02):
+                        raise ValueError(f'"{strat.name}" is given the split {np.round(strat.fractions, 2).tolist()}, but the ages of the people given (ss.People(age_data=...)) give {np.round(split, 2).tolist()}, and agents keep their ages. '
+                                         f'Give the age groups as a list (e.g. {strat.name}={[int(e) if float(e).is_integer() else float(e) for e in strat.edges]}) to take their split from the people, or leave out the people (or their age_data) for ages that follow the split.')
                 if strat.name in self.groups.kept and strat.fractions_given:
                     raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; fractions given for its levels would overwrite them. Give the levels as a list (e.g. {strat.name}={list(strat.labels)!r}), or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:

@@ -11,6 +11,7 @@ Its Rust copy (`starsim/solvers/rust/src/agent_events.rs`) gives the same events
 
 Used with: agents; declared modules
 """
+import math
 import numpy as np
 import numba as nb
 from . import draws
@@ -88,7 +89,7 @@ def dwell(tr, a, key, ctr, dw_kind, dw_k, dw_mean, dw_row, pool):
         k = dw_k[tr]
         tot = 0.0
         for i in range(k): # Erlang: the sum of k exponentials
-            tot -= np.log(rand(key, a, ctr))
+            tot -= math.log(rand(key, a, ctr))
         return tot*dw_mean[tr]/k
     return pool[dw_row[tr], a] # Drawn again for each step, so the same only for an agent who enters the state twice in one step
 
@@ -127,7 +128,7 @@ def queue(a, s, t, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr,
     tn = t_exit[a]
     trn = exit_tr[a]
     if tot > 0:
-        th = t - np.log(rand(key, a, ctr))/tot
+        th = t - math.log(rand(key, a, ctr))/tot
         if th < tn:
             tn = th
             u = rand(key, a, ctr)*tot
@@ -142,7 +143,7 @@ def queue(a, s, t, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr,
     for r in range(len(r_kind)):
         rate = contact_rate(a, s, r, r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc)
         if rate > 0:
-            size = push(ht, ha, hk, hv, hr, size, t - np.log(rand(key, a, ctr))/rate, a, r, ver[a], -1)
+            size = push(ht, ha, hk, hv, hr, size, t - math.log(rand(key, a, ctr))/rate, a, r, ver[a], -1)
     return size
 
 
@@ -283,7 +284,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
             rate = contact_rate(a, s, k, r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc) # The next contact of the same agent
             if size + 1 > len(ht):
                 ht, ha, hk, hv, hr = grow(ht, ha, hk, hv, hr, size, 1)
-            size = push(ht, ha, hk, hv, hr, size, t - np.log(rand(key, a, ctr))/rate, a, k, ver[a], -1)
+            size = push(ht, ha, hk, hv, hr, size, t - math.log(rand(key, a, ctr))/rate, a, k, ver[a], -1)
             if p > 1:
                 over = True
             u = rand(key, a, ctr) # Drawn whether or not the contact can infect, so the agent's later numbers do not depend on its contacts' states

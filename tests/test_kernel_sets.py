@@ -46,8 +46,8 @@ def snapshot(sim):
 
 
 def how(solver):
-    """ The sim's arguments for a solver: rk4 and euler are integrators of the ODE """
-    return dict(solver=ss.solvers.ode(integrator=solver)) if solver in ['rk4', 'euler'] else dict(solver=solver)
+    """ The sim's arguments for a solver: rk4, euler and map are integrators of the ODE """
+    return dict(solver=ss.solvers.ode(integrator=solver)) if solver in ['rk4', 'euler', 'map'] else dict(solver=solver)
 
 
 def same(make, kernels, seeds=(0,)):
@@ -270,7 +270,7 @@ def test_agents():
 @sc.timer()
 def test_compartmental():
     sc.heading('Testing compartmental runs, compiled and as plain Python: every solver, with groups and places, whole and stepped')
-    solvers = ['rk4', 'euler', 'binomial', 'tau', 'gillespie']
+    solvers = ['rk4', 'euler', 'map', 'binomial', 'tau', 'gillespie']
     for solver in solvers: # Small enough for plain Python
         same(lambda s: models.seir(total_pop=2000, stop=60, rand_seed=s, **how(solver)), compiled + ['python'], seeds=[2])
         same(lambda s: models.seir(total_pop=2000, stop=40, rand_seed=s, branching=True, **how(solver)), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.solvers.numba.compartmental.GROUP)
@@ -351,6 +351,11 @@ def test_jax():
         with ss.options.context(backend='jax'):
             ode.run()
         assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
+    for substeps in [1, 3]: # The discrete map, and with substeps (exponential Euler)
+        ode, ref = [models.seir(solver=ss.solvers.ode(integrator='map', substeps=substeps)) for i in range(2)]
+        with ss.options.context(backend='jax'):
+            ode.run()
+        assert np.allclose(ode.results.seir.I.values, ref.run().results.seir.I.values, rtol=1e-9, atol=0)
     return
 
 

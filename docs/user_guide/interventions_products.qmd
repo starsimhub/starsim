@@ -119,14 +119,14 @@ library(starsim)
 
 # The SIS model above
 states("S I")
-infection <- Transition(S, I, rate = ss$peryear(2) * I) # β = 2 per year
+infection <- Transition(S, I, rate = peryear(2) * I) # β = 2 per year
 recovery  <- Transition(I, S, dur = years(1))           # Infected for a year on average, then susceptible again
 sis <- Disease(infection, recovery, init_prev = 0.1)
 
 screening <- ss$screen(sensitivity = 0.9, specificity = 0.98, when = ss$schedule(every = years(1), start = "2010"), coverage = 0.5)
 treatment <- ss$treat(cure = 0.95, when = screening$positive, coverage = 0.8)
 
-sim <- Sim(sis, interventions = list(screening, treatment), n_agents = 5000, start = 2000, stop = 2020, dt = ss$months(1), verbose = 0)
+sim <- Sim(sis, interventions = list(screening, treatment), n_agents = 5000, start = 2000, stop = 2020, dt = months(1), verbose = 0)
 sim$run()
 sim$plot("sis")
 cat("Positive tests:", sum(sim$results$screening$positive$values), "\n")

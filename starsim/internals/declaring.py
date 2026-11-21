@@ -84,7 +84,13 @@ def reuse(args, members, names=None):
     endpoints = set() # States that the transitions given move people between, which this disease will own
     counted = {} # States counted in a rate (I.n), which may be another disease's
     conds = [] # Conditions in a who=, which may be on another disease's states
+    walked = (list, tuple, ss.conditions.Cond, ss.State, ss.par, ss.Transition, ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum) # What walk() finds things in; anything else (numbers, text, arrays) it would pass over
+    seen = {} # The shallowest depth each object has been walked from, with or without where=: what it adds is the same each time, and walking it again from deeper finds nothing more
     def walk(obj, depth=0, where=False): # The states, transitions, and parameters in what was given
+        key = (id(obj), where)
+        if seen.get(key, depth + 1) <= depth:
+            return
+        seen[key] = depth
         if isinstance(obj, (list, tuple)):
             for item in obj:
                 walk(item, depth, where)
@@ -107,7 +113,7 @@ def reuse(args, members, names=None):
             elif isinstance(obj, ss.expressions.Count):
                 counted.update({id(st):st for st in obj.states})
             for key,val in vars(obj).items():
-                if key not in ['module', 'who']: # who= as given is also kept resolved, as _who_now
+                if key not in ['module', 'who'] and isinstance(val, walked): # who= as given is also kept resolved, as _who_now
                     walk(val, depth + 1, where or key == '_who_now')
     walk(list(args) + list(members.values()))
     others = {key:st for key,st in counted.items() if key not in endpoints and getattr(st, 'module', None) is not None} # Another disease's state in a rate, e.g. syph.I.n: a reference to it, not a copy

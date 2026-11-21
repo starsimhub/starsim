@@ -1247,6 +1247,30 @@ class Graph:
         exprs = [expr for tr in self.transitions.values() for expr in [tr.rate] + sc.tolist(tr.p)]
         return [leaf for expr in exprs if isinstance(expr, Expr) for leaf in expr.leaves]
 
+    def own_dists(self):
+        """
+        The distributions the graph holds of its own, not as parameters, by their paths in it, for the sim to seed (see `ss.dists.sim_dists()`):
+        each outcome's likelihood, the distributions in each attribute's value, and the delay of each transition's trigger (a distribution,
+        or a parameter, `ss.par`, whose value is one)
+        """
+        out = {}
+        def add(path, val):
+            if isinstance(val, ss.Dist):
+                out[path] = val
+            elif isinstance(getattr(val, 'value', None), ss.Dist):
+                out[path + ('value',)] = val.value
+        for name,oc in self.outcomes.items():
+            add(('outcomes', name, 'likelihood'), oc.likelihood)
+        for name,a in self.attrs.items(): # A value can be a distribution, a parameter, values by key, or an expression of distributions (e.g. ss.uniform()*ss.bernoulli()): small, so searched
+            if isinstance(a.value, ss.Dist):
+                out[('attrs', name, 'value')] = a.value
+            else:
+                found = sc.search(a.value, type=ss.Dist, skip=dict(keys=ss.utils.skipkeys(['module', 'owner', 'sim']), subclasses=(ss.Module, ss.Sim)))
+                out.update({('attrs', name, 'value') + tuple(path):dist for path,dist in found.items()})
+        for name,tr in self.transitions.items():
+            add(('transitions', name, '_trigger', 'delay'), getattr(getattr(tr, '_trigger', None), 'delay', None))
+        return out
+
     def all_pars(self):
         """ Every parameter in the graph, named or inline """
         out = {id(p):p for p in self.pars.values()}

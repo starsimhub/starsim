@@ -206,14 +206,14 @@ make_measles <- function(beta) {
   states("S I R")
   infection <- Transition(S, I, rate = beta * I)
   recovery  <- Transition(I, R, dur = days(8))
-  measles <- Disease(infection, recovery, init = list(R = ss$by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
+  measles <- Disease(infection, recovery, init = list(R = by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
   measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction in each
   measles
 }
 
 betas <- list(
   "The same for everyone" = 1.9,
-  "By age"                = ss$by(age = c(2.5, 1.9, 1.0))
+  "By age"                = by(age = c(2.5, 1.9, 1.0))
 )
 attack <- sapply(betas, function(beta) {
   sim <- Sim(make_measles(beta), total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", verbose = 0)

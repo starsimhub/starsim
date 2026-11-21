@@ -44,7 +44,7 @@ states("S I R")
 measles <- Disease(
   infection = Transition(S, I, rate = 0.14 * I), # With contacts, beta is per contact: 0.14 per contact per day
   recovery  = Transition(I, R, dur = days(8)),
-  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
+  init   = list(R = by(age = c(0.8, 0.92, 0.98))),
   init_n = list(I = 10)
 )
 measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction in each

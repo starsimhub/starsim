@@ -166,6 +166,41 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **
     return dists
 
 
+def sim_dists(sim):
+    """
+    Every distribution of a sim, by its path, which seeds it: each module's, found in the module where the sim keeps it (by kind and name,
+    e.g. `('diseases', 'sir', 'pars', 'dur_inf')`), but not in its engine, which lists its own (`ss.solvers.Engine.own_dists()`), nor in
+    its graph, which also lists its own (`Graph.own_dists()`), nor in its states or transitions, whose distributions are its parameters';
+    then the people's (`ss.People.own_dists()`), and any kept on the sim itself (e.g. a stratification's, or a network's in `contact_rates`)
+    """
+    kinds = ss.simpars.module_kinds()
+    kept = {(kind, name):mod for kind in kinds for name,mod in getattr(sim, kind, {}).items()}
+    declared = (ss.transitions.Transition, ss.transitions.State, ss.solvers.engine.CountState) # A declared module's states and transitions, also kept on it, whose distributions are its parameters'
+    skip = dict(keys=ss.utils.skipkeys(['module', 'owner', 'sim', 'engine', 'graph', '_before_init']), subclasses=(Dists, ss.People, ss.Sim) + declared + no_dists())
+    others = [id(mod) for mod in kept.values()] # A module is found where the sim keeps it, not in another that refers to it (a product, kept only in its intervention, is found there)
+    found = sc.objdict()
+    seen = set()
+    def add(prefix, obj, own=None):
+        dists = sc.search(obj, type=Dist, skip=dict(skip, ids=[i for i in others if i != id(obj)])) if own is None else own
+        for path,dist in dists.items():
+            if id(dist) not in seen:
+                seen.add(id(dist))
+                found[prefix + tuple(path)] = dist
+    for (kind,name),mod in kept.items():
+        add((kind, name), mod)
+        graph = getattr(mod, 'graph', None)
+        if isinstance(graph, ss.internals.graph.Graph):
+            add((kind, name, 'graph'), None, graph.own_dists())
+        engine = getattr(mod, 'engine', None)
+        if isinstance(engine, ss.solvers.Engine):
+            add((kind, name, 'engine'), None, engine.own_dists())
+    add(('people',), None, sim.people.own_dists())
+    if getattr(sim, 'contact_rates', None) is not None: # The networks it makes itself
+        add(('contact_rates',), sim.contact_rates)
+    add((), None, {(key,):val for key,val in vars(sim).items() if isinstance(val, Dist)})
+    return found
+
+
 def link_owners(sim, dists):
     """
     Link each distribution found in a sim (by its path, from `sc.search()`) to the module it belongs to: the last one on its path, or whose parameters are;
@@ -285,19 +320,7 @@ class Dists(sc.prettyobj):
             raise ValueError(errormsg)
 
         if isinstance(obj, ss.Sim):
-            # Sim-specific prioritization of where to look for dists
-            skip_ids = set()
-            skip_ids.add(id(sim))
-            skip_ids.add(id(sim.people._states))
-            skip_ids.add(id(sim.people)) # Skip checking people on the first round
-            # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=ss.utils.skipkeys(['module', '_before_init', 'declared', 'owner']), subclasses=(Dists,) + no_dists()) # The copy of the sim before it was initialized is only for sim.new(); the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
-            dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
-            skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
-            skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
-            skip_ids.remove(id(sim.people)) # Don't skip people on the second pass
-            skip['subclasses'] += (ss.Module,) # Found on the first round
-            dists += sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip))
+            dists = sim_dists(sim)
             link_owners(sim, dists)
             dists = sc.sc_nested.flatten_traces(seed_paths(sim, dists))
         else:

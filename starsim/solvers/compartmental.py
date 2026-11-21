@@ -7,6 +7,7 @@ Used with: compartments; declared modules
 """
 import numpy as np
 import numba as nb
+import scipy.optimize
 import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
@@ -50,7 +51,7 @@ def fingerprint(raw):
     elif isinstance(raw, ss.Dist):
         return [fingerprint(v) for v in raw.pars.values()]
     elif isinstance(raw, ss.parameters.TimeValue):
-        shape = [repr(getattr(raw, name)) for name in ['times', 'interpolation', 'period'] if hasattr(raw, name)] # How an ss.timeseries goes between its values, which can be changed in place
+        shape = [fingerprint(v) if isinstance(v, np.ndarray) else repr(v) for v in [getattr(raw, name) for name in ['times', 'interpolation', 'period'] if hasattr(raw, name)]] # How an ss.timeseries goes between its values, which can be changed in place
         return [fingerprint(getattr(raw, name)) for name in raw.fields] + [fingerprint(p.raw) for p in raw.pars] + shape
     elif isinstance(raw, dict):
         return [fingerprint(v) for v in raw.values()]
@@ -134,6 +135,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     max_ngm = 1000 # The most compartments by groups for which binomial_substeps() works out R0 (the next-generation matrix takes two evaluations of the model for each)
     binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (see binomial_substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
+
+    def own_dists(self):
+        """ None: compartments draw from their own generator (see `make_rng()`), and read the model's distributions only for their numbers """
+        return {}
 
     def __init__(self, module, sim, solver=None):
         super().__init__(module, sim, solver)
@@ -1671,7 +1676,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         A dwell time as it is (see as_is()), as a conveyor of whole steps, with the rate of leaving each slot that gives the
         distribution's own chance of leaving after that many steps (rounded to the nearest), out to the step by which all but
-        1e-6 have left, whose slot is the last: everyone left there leaves in the next step, as from a fixed delay
+        1e-6 have left, whose slot is the last: everyone left there leaves in the next step, as from a fixed delay. People
+        arrive in slot 0 through a step, so its rate is the one that gives its chance over the rest of the step they arrived in
 
         Returns the rates of the slots before the last
         """
@@ -1684,8 +1690,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             left = 1 - before
             if 1 - G[j] <= 1e-6 or left <= 1e-12: # The last slot
                 return np.array(rates)
-            q = (G[j] - before)/left
-            rates.append(-np.log1p(-min(q, 1 - 1e-15))/dt)
+            q = min((G[j] - before)/left, 1 - 1e-15)
+            if j == 0 and q > 0: # Arrivals come through the step, so they spend half of it in slot 0 on average: the rate at which q of them leave before its end
+                rates.append(scipy.optimize.brentq(lambda x: 1 + np.expm1(-x)/x - q, 1e-12, 2/(1 - q) + 1)/dt)
+            else:
+                rates.append(-np.log1p(-q)/dt)
             before = G[j]
         raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for exact dwell times (solver=ss.solvers.ode(dwells="exact")); take a longer step, or run with solver="ode" (Erlang stages)')
 
@@ -2544,7 +2553,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def euler(self):
-        return isinstance(self.sim.solver, ss.solvers.ode) and self.sim.solver.integrator == 'euler'
+        return isinstance(self.sim.solver, ss.solvers.ode) and self.sim.solver.integrator in ('euler', 'map') # Values at the start of the step
 
     def at_middle(self):
         """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti` to the next, as `tables()` does, so that a stepped run takes the same values as a whole one """
@@ -2679,11 +2688,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if not any(flow.new for flow in self.flows): # Not an infection
             return None
 
-        saved = self.y, self.held_n # Working out the rates sets the compartments, so they are put back afterwards, even after an error
+        saved = self.y, self.held_n, self.sim.modifiers # Working out the rates sets the compartments, so they are put back afterwards, even after an error
+        if y is None: # At the disease-free state, without the interventions' modifiers (a lockdown from day 0): those of connectors are part of the model, and are kept
+            ivs = {id(iv) for iv in self.sim.interventions.values()}
+            self.sim.modifiers = sc.ddict(list, {key:[m for m in mods if id(m) not in ivs] for key,mods in self.sim.modifiers.items()})
+            self.cache.clear()
         try:
             F, V = self.ngm_parts(infected, start, y)
         finally:
-            self.y, self.held_n = saved
+            self.y, self.held_n, self.sim.modifiers = saved
             self.cache.clear()
         return F @ np.linalg.inv(V)
 

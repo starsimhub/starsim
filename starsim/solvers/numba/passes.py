@@ -12,6 +12,7 @@ compartmental kernels (`ss.solvers.numba.compartmental`), so a change to either 
 
 Used with: agents; declared and coded modules
 """
+import math
 import types
 import numpy as np
 import numba as nb
@@ -183,7 +184,7 @@ def crossed(raw, level, lo, hi):
 @nb.jit(nopython=True, cache=True, error_model='numpy', inline='always')
 def chance(rate, rel, state_sus, adjust, mult, dt):
     """ The chance of infection in a step (as Rust's `chance()`): one place for its arithmetic, whose order the agents' chances must all share to give the same numbers """
-    return -np.expm1(-max(rate*rel*state_sus*adjust*mult, 0.0)*dt)
+    return -math.expm1(-max(rate*rel*state_sus*adjust*mult, 0.0)*dt)
 
 
 @jit
