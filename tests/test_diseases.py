@@ -89,6 +89,10 @@ def test_sis():
     assert isinstance(ode.solver, ss.solvers.ode) and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
     rt = ode.diseases.sis.Rt()
     assert np.isclose(rt[0], 2.5, rtol=0.01) and np.isclose(rt[-1], 1, atol=0.01) # R0 at the start, 1 at the endemic state
+    sis = ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(5))
+    cut = lambda: ss.modify(sis.pars.beta, multiply=0.3, start=0, stop=1)
+    assert np.isclose(ss.Sim(sis, interventions=cut(), stop=10).init().diseases.sis.R0(), 2.5) # An intervention from the start is left out of R0, but a connector is part of the model
+    assert np.isclose(ss.Sim(sis, connectors=cut(), stop=10).init().diseases.sis.R0(), 0.75)
 
     # R over time is R0 × S/N in an SIR, and is lowered by a modifier while it acts
     S, I, R = ss.states(3)

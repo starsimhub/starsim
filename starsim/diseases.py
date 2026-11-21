@@ -501,7 +501,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
         is made with `solver='ode'`, with its mixing and stratification; otherwise a sim with
         the disease alone, under homogeneous mixing, with the default number of people. Values that vary in time
-        (a seasonal β) are taken at the start, so this is R0 at the start time.
+        (a seasonal β) are taken at the start, so this is R0 at the start time. Interventions are left out, so a
+        lockdown from the start (`interventions=ss.modify(...)`) does not lower it; modifiers given as connectors are part of
+        the model, and count. For the reproduction number with them, see `Rt()`.
         A sim runs a copy of the disease it is given, so the R0 of a sim's model is `sim.diseases.<name>.R0()`;
         this matters where a count is a number rather than a fraction of the people (mosquitoes per person).
 

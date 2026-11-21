@@ -249,11 +249,7 @@ def init_named_people(sim):
     sim.given_pyramid = None # People given to a compartmental solver: the ages their age groups are split by
     sim.pop_from = None # Where the population size came from, if it was not given: the people given, named people, or the populations of places
     if isinstance(pars.people, ss.People) and named is None and sim.declared and (pars.solver != 'auto' and not isinstance(pars.solver, ss.solvers.abm)): # Their ages and number, not their agents
-        dist = sc.dcp(pars.people.age.default)
-        dist.init(force=True)
-        edges = ss.data.world.ages
-        counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
-        sim.given_pyramid = (edges, counts)
+        sim.given_pyramid = ss.data.pyramid_of(pars.people)
         if 'total_pop' not in sim.given:
             pars.total_pop = len(pars.people)
             sim.pop_from = 'people'

@@ -83,6 +83,9 @@ def test_ide():
         return ss.Sim(dis, total_pop=1e6, solver=solver, unit='day', dt=dt, stop=stop, branching=branching, **kw).run().results.seir
     gamma = ss.gamma(shape=4, scale=ss.days(2)) # Exact as four Erlang stages
     assert np.allclose(make(gamma, 'ode', 0.25).I.values, make(gamma, 'ide', 0.25).I.values, rtol=2e-3, atol=1)
+    expon = ss.expon(mean=ss.days(4)) # As a conveyor, the same as one stage, including those who leave in the step they arrive in
+    ode, ide = make(expon, 'ode').I.values, make(expon, 'ide').I.values
+    assert np.abs(ode - ide).max() < 0.02*ode.max()
     delay = ss.constant(ss.days(6)) # Exact as a conveyor, as it already is
     assert np.array_equal(make(delay, 'ode').I.values, make(delay, 'ide').I.values)
     days = ss.choice(a=ss.days([3, 4, 5, 8]), p=[0.1, 0.4, 0.3, 0.2]) # Whole steps: a conveyor under every compartmental solver, not stages
