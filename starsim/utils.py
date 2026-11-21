@@ -6,6 +6,7 @@ What is shared by the rest of the code, and doesn't belong to any one part of it
 Used with: agents and compartments; declared and coded modules
 """
 import os
+import bisect
 import contextlib
 import types
 import functools
@@ -308,6 +309,14 @@ def getframe(depth=1):
         return None
 
 
+@functools.lru_cache(maxsize=1024)
+def code_instructions(code):
+    """ The instructions of a code object and their offsets, read once for each (see `assigned_name()`, which is called each time a module is made, often from the same line) """
+    import dis
+    instructions = list(dis.get_instructions(code))
+    return [ins.offset for ins in instructions], instructions
+
+
 def assigned_name(obj):
     """
     The name of the variable an object being made is assigned to, e.g. "campaign" in `campaign = ss.vaccinate(...)`,
@@ -316,16 +325,17 @@ def assigned_name(obj):
     result is not stored straight in a variable (e.g. it is returned, put in a list, or passed on). It is read when the
     object is made, so the name is that of its first variable, whatever variable holds it later (e.g. in a loop)
     """
-    import dis
     frame = getframe(1)
     while frame is not None and frame.f_locals.get('self') is obj: # Out of its constructors (__init__ and super().__init__())
         frame = frame.f_back
     if frame is None or frame.f_code.co_filename.startswith(os.path.dirname(ss.__file__)): # Made by Starsim itself (e.g. a disease the sim makes from transitions), not by the user's code
         return None, None
     try:
-        after = next((ins for ins in dis.get_instructions(frame.f_code) if ins.offset > frame.f_lasti), None)
+        offsets, instructions = code_instructions(frame.f_code)
     except Exception: # Code that cannot be read, e.g. compiled
         return None, None
+    i = bisect.bisect_right(offsets, frame.f_lasti)
+    after = instructions[i] if i < len(instructions) else None
     if after is not None and after.opname in ['STORE_NAME', 'STORE_FAST', 'STORE_GLOBAL', 'STORE_DEREF', 'STORE_FAST_LOAD_FAST', 'STORE_FAST_STORE_FAST']:
         name = after.argval[0] if isinstance(after.argval, tuple) else after.argval # E.g. STORE_FAST_LOAD_FAST, which stores the first
         if isinstance(name, str) and not name.startswith('_'):

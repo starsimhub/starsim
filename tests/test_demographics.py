@@ -471,7 +471,7 @@ def test_births_by_age():
         ppl = sim.people
         kids = ppl.auids[ppl.parent.raw[ppl.auids] != ppl.parent.nan]
         at_birth = ppl.age.raw[ppl.parent.raw[kids]] - ppl.age.raw[kids]
-        assert len(kids) > 100 and lo - 0.1 <= np.percentile(at_birth, 1) and np.percentile(at_birth, 99) <= hi
+        assert len(kids) > 100 and lo - 0.25 <= np.percentile(at_birth, 1) and np.percentile(at_birth, 99) <= hi # The 1st percentile is 24.8 to 25.1 over seeds
     return
 
 

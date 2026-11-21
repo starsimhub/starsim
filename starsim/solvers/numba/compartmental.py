@@ -224,7 +224,7 @@ sparse_flows = 256 # The flows above which the exact solver by place follows onl
 row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups
 no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program is set already: see one_step()
 Workspace = collections.namedtuple('Workspace', ['rates', 'exposures', 'stack', 'groups', 'cells', 'dy', 'df', 'yt', 'chain', 'credits', 'rows']) # The arrays the kernels work in: see workspace()
-RK4, EULER, BINOMIAL, TAU, GILLESPIE, WHOLE = range(6) # The solvers' codes (see solvers and solver_code()): the ODE's two integrators, then the stochastic solvers, which move whole people (solver >= BINOMIAL); WHOLE is the chain binomial in whole steps
+RK4, EULER, MAP, BINOMIAL, TAU, GILLESPIE, WHOLE = range(7) # The solvers' codes (see solvers and solver_code()): the ODE's three integrators (MAP: the discrete map, whole steps with 1 - exp(-rate*dt) for each compartment's exits), then the stochastic solvers, which move whole people (solver >= BINOMIAL); WHOLE is the chain binomial in whole steps
 IDLE = 5 # The row of a workspace's cells that holds, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places())
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
 
@@ -2055,7 +2055,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             df[stage, p.n_trans + m, g] += ys[c, g]*r
                             if stage == 0 and sub == 0 and len(moved_in):
                                 moved_in[c, j] += ys[c, g]*r
-            if solver == EULER: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do (yt is free, so holds the scale)
+            if solver == EULER or solver == MAP: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do; the map: each compartment's outflows take 1 - exp(-x) of it, x their total rate times the step, shared by rate (yt is free, so holds the scale)
                 for c in range(nc):
                     for g in range(ng):
                         yt[c, g] = 0
@@ -2065,13 +2065,17 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             yt[p.src[f], g] += rates[f, g]*h
                 for c in range(nc):
                     for g in range(ng):
-                        yt[c, g] = 1.0/yt[c, g] if yt[c, g] > 1 else 1.0
+                        x = yt[c, g]
+                        if solver == MAP:
+                            yt[c, g] = -np.expm1(-x)/x if x != 0 else 1.0
+                        else:
+                            yt[c, g] = 1.0/x if x > 1 else 1.0
             for f in range(nf): # The groups inside what each flow does, not the other way round, so a loop over them is simple enough to be vectorized
                 s = p.src[f]
                 if s >= 0:
                     for g in range(ng):
                         vals[g] = rates[f, g]*ys[s, g]
-                    if solver == EULER:
+                    if solver == EULER or solver == MAP:
                         for g in range(ng):
                             vals[g] *= yt[s, g]
                     for g in range(ng):
@@ -2338,7 +2342,7 @@ def enter_state(rng, y, w, arrived, whole):
 
 #%% Run: the entry points, which the engines call: a whole run, many runs, the particles of a filter, or one step
 
-solvers = dict(rk4=RK4, euler=EULER, binomial=BINOMIAL, tau=TAU, gillespie=GILLESPIE, whole=WHOLE) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
+solvers = dict(rk4=RK4, euler=EULER, map=MAP, binomial=BINOMIAL, tau=TAU, gillespie=GILLESPIE, whole=WHOLE) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
 
 def solver_code(sim):
     """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`ss.solvers.binomial(substeps=1)`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """

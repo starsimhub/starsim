@@ -170,6 +170,13 @@ class People:
             self.init_mock()
         return
 
+
+    def own_dists(self):
+        """ The people's distributions, by their paths, for the sim to seed (see `ss.dists.sim_dists()`): each state's default, and those kept on the people (e.g. the cause of a death) """
+        out = {('states', name, 'default'):state.default for name,state in self.states.items() if isinstance(getattr(state, 'default', None), ss.Dist)}
+        out.update({(key,):val for key,val in vars(self).items() if isinstance(val, ss.Dist)})
+        return out
+
     def make_uids(self):
         """
         Make the four fundamental arrays: UIDs for tracking agents, slots for tracking random
@@ -405,7 +412,11 @@ class People:
         self.sim = sim
         for arr in [self.ti_dead, self.ti_removed]:
             arr.t = sim.t
-        ss.dists.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
+        for dist in self.own_dists().values():
+            dist.link_sim(sim)
+            dist.link_module(self)
+            if init:
+                dist.init()
         return
 
     @property

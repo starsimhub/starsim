@@ -82,7 +82,7 @@ pub fn certain(rng: Rng, y: A2<f64>, p: &Program, w: &Work, rates: A2<f64>, flow
                 if !some {
                     continue;
                 }
-                let drawn = solver >= 2 && !p.det.b(f);
+                let drawn = solver >= BINOMIAL && !p.det.b(f);
                 if drawn {
                     binomials(rng, left, prob, n, rows);
                 } else {
@@ -127,8 +127,8 @@ pub fn step_start(y: A2<f64>, p: &Program, dt: f64, solver: i64) -> bool {
     for i in 0..p.starts.len() - nf - 1 {
         let (a, b) = (p.starts.u(nf + i), p.starts.u(nf + i + 1));
         if p.ops.at(a) == CONVEY {
-            pending = solver >= 2;
-            if solver < 2 {
+            pending = solver >= BINOMIAL;
+            if solver < BINOMIAL {
                 for g in 0..ng {
                     p.inflow.set(p.args.u(a), g, y.at(p.args.u(b - 1), g)/dt);
                 }
