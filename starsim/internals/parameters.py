@@ -245,11 +245,7 @@ class Pars(sc.obj):
                     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
-                elif callable(old) or isinstance(old, (dict, by, by_func, TimeValue)): # A function, a dict, or a value by level or in time: update directly
-                    self[key] = new
-                else: # Everything else; not used currently but could be
-                    warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
-                    ss.warn(warnmsg)
+                else: # Anything else (a function, a dict, a tuple, a value by level or in time, ...): update directly
                     self[key] = new
         for key,new in nested.items(): # In place, as the module's code may hold the dict
             outer, _, inner = key.partition('.')

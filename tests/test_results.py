@@ -157,6 +157,26 @@ def test_results_by_group():
     return sim
 
 
+def test_one_level():
+    """ A stratification with one level is still a dimension of the results, whose one level is the total; a starting fraction 1.0 in it is everyone, and one above 1 by rounding is 1 """
+    S, I, R = ss.states('S I R')
+    for solver in ['ode', 'abm']:
+        dis = ss.Disease(S >> I @ ss.perday(0.5)*I, I >> R @ ss.days(3), init=dict(S=ss.by(np.array([0.99]), dims=['member']), I=0.01), name='x')
+        dis.stratify(member=ss.levels(['m0'], kind='space'))
+        res = ss.Sim(dis, total_pop=1000, unit='day', stop=10, solver=solver, verbose=0).run().results.x
+        assert np.array_equal(res.S.by('member')[:, 0], res.S) and np.allclose(res.prevalence.select(member='m0'), res.prevalence)
+    dis = ss.Disease(S >> I @ ss.perday(0.5)*I, I >> R @ ss.days(3), init=dict(S=ss.by(np.array([1.0]), dims=['member'])), name='x')
+    dis.stratify(member=ss.levels(['m0'], kind='space'))
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        assert ss.Sim(dis, total_pop=1000, unit='day', stop=2, verbose=0).run().results.x.S[0] == 1000
+    sim = ss.Sim(ss.Disease(S >> I @ ss.perday(0.5)*I, I >> R @ ss.days(3), init=dict(S=0.0, R=1 + 2e-16), name='x'), total_pop=1.0, unit='day', stop=2, verbose=0).run()
+    assert sim.results.x.R[0] == 1.0
+    with pytest.raises(ValueError, match='is 1.001,'):
+        ss.Sim(ss.Disease(S >> I @ ss.perday(0.5)*I, I >> R @ ss.days(3), init=dict(S=0.0, R=1.001), name='x'), total_pop=1.0, verbose=0).init()
+    return
+
+
 def cohort(solver, p=0.3, data=None):
     """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
     P, C, R = ss.states('P C R')
@@ -365,6 +385,7 @@ if __name__ == '__main__':
     test_declared_results()
     test_summarize_by()
     test_results_by_group()
+    test_one_level()
     test_destinations()
     test_compare_data()
     test_plot()

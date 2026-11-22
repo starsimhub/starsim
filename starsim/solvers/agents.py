@@ -10,7 +10,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .engine import CountState, Engine, times
-from .compartmental import Compartmental
+from .compartmental import Compartmental, fingerprint
 from .agents_expressions import Expressions
 from .agents_moving import Moving
 from .agents_stepping import Stepping
@@ -369,6 +369,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Tra
         self._rounds = {}
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
         self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
+        self._kept_pars = self._kept_values = None # The parameters, and what they held, when the values above were kept: see check_kept()
         self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
         self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a delivery's or product's event, who it has seen it for: see unseen_fired()
@@ -1397,6 +1398,16 @@ class Agents(Expressions, Moving, Stepping, Branching, Transmitting, Engine, Tra
             elif not (isinstance(part, ss.by) and self.is_lifelong(part)) and not ss.transitions.is_lifelong(part): # A function marked with ss.lifelong()
                 return False
         return True
+
+    def check_kept(self):
+        """ The values kept for the run (see `is_route_fixed()`) are worked out again once a parameter is set (by an intervention, say, or between `sim.run(until=)` and `sim.run()`) """
+        if self._kept_pars is None:
+            self._kept_pars = self.graph.all_pars()
+        values = [fingerprint(p.raw) for p in self._kept_pars]
+        if values != self._kept_values:
+            self._route_kept = {}
+            self._kept_values = values
+        return
 
     def modules_changed(self):
         """ A module was added during the run (see `ss.Sim.add_module()`): the coefficients kept for the run are worked out again """

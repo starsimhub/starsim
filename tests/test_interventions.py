@@ -142,6 +142,21 @@ def test_modify_fast_paths():
     return sim
 
 
+def test_set_par():
+    sc.heading('A parameter set during a run, by an intervention or between sim.run(until=) and sim.run(), is used from then on, under every solver')
+    class Stop(ss.Intervention):
+        def step(self):
+            if self.ti == 50:
+                self.sim.diseases.d.pars.beta = ss.perday(0)
+    S, I = ss.states('S I')
+    for solver in ['ode', 'abm']:
+        d = ss.Disease(S >> I @ ss.par(ss.perday(0.2), name='beta')*I, I >> S @ ss.days(10), init=dict(I=0.01), name='d')
+        kw = dict(n_agents=2000, networks='random') if solver == 'abm' else dict(total_pop=2000)
+        sim = ss.Sim(d, interventions=Stop(), unit='day', stop=100, solver=solver, verbose=0, **kw).run()
+        assert sim.results.d.infection[49] > 0 and sim.results.d.infection[51:].sum() == 0, solver
+    return sim
+
+
 #%% Interventions and products written as code
 
 def test_coded_interventions():

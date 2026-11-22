@@ -704,6 +704,7 @@ class Stepping:
     def begin_state_step(self):
         """ The start of the step's first part (see `step_state()`): its first round of draws, and the people made, or moved by code, since the last step """
         self._moved = []
+        self.check_kept()
         self.new_round()
         self.start_phase(0)
         self.place_newcomers()
@@ -716,6 +717,7 @@ class Stepping:
         self.new_round()
         self.start_phase(2)
         self.cache.clear() # The interventions have run since the step started
+        self.check_kept()
         for tr in self.graph.transmissions:
             self.events.pop(tr.name, None)
             forced = self.forced.pop(tr.name, None)
