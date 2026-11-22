@@ -165,6 +165,12 @@ def test_pars():
     sir.pars.dur_inf.set(mean=8) # Keeps the standard deviation, and the unit
     assert sir.pars.dur_inf.pars.mean == ss.years(8)
 
+    class Months(ss.Intervention): # A tuple is set as it is, with no warning
+        def __init__(self, **kw): super().__init__(); self.define_pars(months=()); self.update_pars(**kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        assert Months(months=(7, 8)).pars.months == (7, 8)
+
     sim = ss.Sim(n_agents=100, start=2000, stop=2002, verbose=0) # A sim parameter set before init() is kept, as if given
     sim.pars.aging = True
     age0 = sim.init().people.age.raw[:100].copy()
@@ -506,7 +512,7 @@ def test_loop():
 
 
 def test_memory_cleanup():
-    """ Sims are collectable without shrink(), partly run, complete, or failed; caches of callable distributions are cleared and made again """
+    """ Sims are collectable without shrink(), partly run, complete, or failed; caches of callable distributions are cleared and made again; shrunk sims are freed without the garbage collector """
     def custom_duration(module, sim, uids):
         return 5 + sim.people.age[uids] * 0
     pars = dict(dur=ss.years(5), n_agents=100, diseases=ss.SIR(init_prev=0.2, dur_inf=ss.normal(mean=custom_duration, std=0.1)), networks='random', rand_seed=2)
@@ -537,6 +543,36 @@ def test_memory_cleanup():
     del sim
     gc.collect()
     assert ref() is None, 'Exception-path sim was not collectable'
+
+    # A shrunk sim refers to itself nowhere, so it is freed as soon as it is deleted
+    S, I, R = ss.states('S I R')
+    for solver in ['ode', 'abm']:
+        for full in [True, False]:
+            sir = ss.Disease(S >> I @ ss.perweek(1)*I, I >> R @ ss.weeks(2), name='sir', init=dict(I=0.01))
+            sim = ss.Sim(sir, networks='random', demographics=True, solver=solver, n_agents=1000 if solver == 'abm' else None, verbose=0).run().shrink(full=full)
+            ref = weakref.ref(sim)
+            gc.disable()
+            try:
+                del sim
+                assert ref() is None, f'Shrunk sim (solver={solver}, full={full}) was not freed without the garbage collector'
+            finally:
+                gc.enable()
+    return
+
+
+def test_shrink_size():
+    """ A shrunk sim keeps nothing per agent: each part of it is the same size however many agents it ran with """
+    def shrunk(n, solver):
+        S, E, I, R = ss.states('S E I R')
+        seirs = ss.Disease(S >> E @ ss.perweek(1)*I, E >> I @ ss.weeks(1), I >> R @ ss.by(sex=dict(female=ss.weeks(2), male=ss.weeks(3))), R >> S @ ss.years(1), name='seirs', init=dict(I=0.01))
+        tx = ss.treat(ss.Treatment(cure={seirs.R: 1.0}), who=seirs.I, rate=ss.peryear(2), name='tx')
+        sim = ss.Sim(seirs, diseases='sis', interventions=tx, networks='random', demographics=True, solver=solver, n_agents=n, dur=ss.years(5), dt=ss.months(1), verbose=0)
+        return sim.run().shrink()
+    for solver in ['abm', ss.solvers.abm(step='wholestep')]:
+        small, large = shrunk(1000, solver), shrunk(8000, solver)
+        for a,b in zip([small] + list(small.modules), [large] + list(large.modules)):
+            size_a, size_b = ss.utils.own_size(a), ss.utils.own_size(b)
+            assert size_b < 1.05*size_a + 2000, f'{getattr(b, "name", "the sim")} (solver={solver}) is {size_a/1e3:n} KB shrunk after running with 1000 agents, but {size_b/1e3:n} KB with 8000: it keeps something per agent'
     return
 
 
@@ -571,5 +607,6 @@ if __name__ == '__main__':
     test_notes()
     test_loop()
     test_memory_cleanup()
+    test_shrink_size()
     test_coded_alone()
     T.toc()

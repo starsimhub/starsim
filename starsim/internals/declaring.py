@@ -30,8 +30,8 @@ def check_init_prev(init_prev, seed_n, name):
         if value < 0:
             raise ValueError(f'init_n= of "{name}" is a number of people, not {value:n}')
         return
-    if value > 1:
-        errormsg = f'init_prev= of "{name}" is a fraction of people (1.0 is everyone), not {value:n}; for a number of people, use init_n={value:n}'
+    if value > 1 + 1e-12: # Beyond rounding, which the engine takes as 1
+        errormsg = f'init_prev= of "{name}" is a fraction of people (1.0 is everyone), not {np.format_float_positional(value, trim="-")}; for a number of people, use init_n={np.format_float_positional(value, trim="-")}'
         raise ValueError(errormsg)
     if value == 1 and isinstance(value, (int, np.integer)):
         ss.warn(f'init_prev= of "{name}" is the whole number 1, which is read as a fraction: everyone starts infected. Write 1.0 for everyone, or init_n=1 for one person')

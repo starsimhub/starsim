@@ -655,7 +655,14 @@ class Engine(Effects):
 
     def shrink(self):
         """ Drop the sim and the arrays the run worked in, for saving; the results are kept on the module """
-        arrays = [key for key,val in vars(self).items() if isinstance(val, np.ndarray) and val.nbytes > 1000]
+        def big(val, depth=0): # Whether it is or holds a large array, e.g. the values of each agent kept for the run (lifelong, as agents), or who moved in the last step (events and batches)
+            if isinstance(val, np.ndarray):
+                return val.nbytes > 1000
+            if depth < 3 and isinstance(val, (dict, list, tuple, Bunch)):
+                vals = vars(val).values() if isinstance(val, Bunch) else val.values() if isinstance(val, dict) else val
+                return any(big(v, depth+1) for v in vals)
+            return False
+        arrays = [key for key,val in vars(self).items() if key not in ['mod', 'graph', 'dists', 'dwells'] and big(val)] # Not the structure of the model, or its distributions, which are shrunk with the sim's
         ss.utils.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run', 'held_series', 'in_people', 'res_values'] + arrays + ['compiled']*isinstance(getattr(self, 'compiled', None), dict)) # The selector holds the sim, the cache the values per agent, compiled (as agents) the functions of its expressions, the series the tables of a compartmental run, held_series the values in time of each step, and in_people and res_values the module's results
         return
 
@@ -1825,7 +1832,7 @@ class Engine(Effects):
                 sim = self.sim
                 ds, given = init.grid(sim)
                 if state.people and not is_n:
-                    self.check_frac(state, given, init.is_count())
+                    given = self.check_frac(state, given, init.is_count())
                 grid, index = sim.groups.grid_index(ds, given, count=is_n if state.people else init.is_count() or np.any(given > 1)) # A group with no level of a dimension gets the mean fraction, or no one of a number
                 cells = np.ravel_multi_index(index, grid.shape) # The combination of levels each group is in
                 split = np.bincount(cells, weights=sim.groups.group_split, minlength=grid.size)[cells] # The fraction of people at that combination
@@ -1852,8 +1859,7 @@ class Engine(Effects):
             elif is_n:
                 fracs[state.name] = init/self.total_pop
             else:
-                self.check_frac(state, init, isinstance(init, (int, np.integer)))
-                fracs[state.name] = np.asarray(init, dtype=float)[()] # A fraction, or one for each group (from a function)
+                fracs[state.name] = self.check_frac(state, init, isinstance(init, (int, np.integer))) # A fraction, or one for each group (from a function)
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
@@ -1873,10 +1879,12 @@ class Engine(Effects):
                 if np.ndim(init_prev):
                     raise ValueError(f'init_n= of "{self.mod.name}" is one number of people, seeded through the transmission; for the number in each state, give init_n=dict(I=...)')
                 init_prev = init_prev/self.total_pop
-            elif np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
-                raise ValueError(f'init_prev of "{self.mod.name}" gives a fraction of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a fraction of the people in it')
-            elif np.ndim(init_prev) == 0 and init_prev > 1: # A fraction (1.0 is everyone), so more than 1 is a mistake
-                raise ValueError(f'init_prev of "{self.mod.name}" is a fraction of people (1.0 is everyone), not {init_prev:n}; for a number of people, use init_n={init_prev:n}')
+            else: # A fraction (1.0 is everyone), so more than 1 (beyond rounding, which is taken as 1) is a mistake
+                if np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1 + 1e-12):
+                    raise ValueError(f'init_prev of "{self.mod.name}" gives a fraction of more than 1 for some groups ({np.format_float_positional(np.max(init_prev), trim="-")}); a value for each group is a fraction of the people in it')
+                elif np.ndim(init_prev) == 0 and init_prev > 1 + 1e-12:
+                    raise ValueError(f'init_prev of "{self.mod.name}" is a fraction of people (1.0 is everyone), not {np.format_float_positional(init_prev, trim="-")}; for a number of people, use init_n={np.format_float_positional(init_prev, trim="-")}')
+                init_prev = np.minimum(init_prev, 1.0)[()]
             trs = self.seed_transmissions()
             if not trs:
                 errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'
@@ -1951,14 +1959,22 @@ class Engine(Effects):
         return val
 
     def check_frac(self, state, vals, whole):
-        """ Check a fraction given with init=: more than 1 raises, and a whole number 1 is everyone, with a warning to write 1.0 (or init_n= for one person) """
+        """
+        Check a fraction given with init=: more than 1 raises, and a whole number 1 is everyone, with a warning to write 1.0 (or init_n= for one person);
+        a fraction above 1 by no more than rounding (e.g. 1 + 2e-16, from a state carried between runs) is taken as 1
+
+        Returns:
+            The fractions, with any rounding above 1 taken off
+        """
         name, mod = state.name, self.mod.name
-        if np.any(np.asarray(vals) > 1):
-            errormsg = f'init= of "{name}" in "{mod}" is {np.max(vals):n}, but init= is a fraction of people (1.0 is everyone); for a number of people, use init_n=dict({name}={np.max(vals):n})'
+        vals = np.asarray(vals, dtype=float)[()]
+        if np.any(vals > 1 + 1e-12):
+            top = np.max(vals)
+            errormsg = f'init= of "{name}" in "{mod}" is {np.format_float_positional(top, trim="-")}, but init= is a fraction of people (1.0 is everyone); for a number of people, use init_n=dict({name}={np.format_float_positional(top, trim="-")})'
             raise ValueError(errormsg)
-        if whole and np.any(np.asarray(vals) == 1):
+        if whole and np.any(vals == 1):
             ss.warn(f'init= of "{name}" in "{mod}" is the whole number 1, which is read as a fraction: everyone starts in {name}. Write 1.0 for everyone, or init_n=dict({name}=1) for one person')
-        return
+        return np.minimum(vals, 1.0)[()]
 
     def seed_dist(self):
         """ An init_prev that chooses who starts infected one by one, which only agents have (see `Agents.seed_dist()`) """
@@ -2059,7 +2075,7 @@ class Engine(Effects):
         self.keep_at = self.kept_y = None # A time point to keep the compartments at in a run the kernels take whole, and those compartments: see ss.fitting.run_kept()
         self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.solvers.group_rows()
         self.row_flows = sc.obj() # Then, the flows by group so far in the current row
-        if ng > 1:
+        if self.sim.groups.strats: # Even one group (a dimension with one level) is kept, so that res.by() works the same for any number of levels; its values are the totals (see fill_one_group())
             names = [strat.name for strat in self.sim.groups.strats]
             dims = sc.obj() # The dimensions of each result
             for state in graph.states.values():
@@ -2360,7 +2376,7 @@ class Engine(Effects):
                 if res[key].values.dtype.kind in 'iu':
                     res[key]._init_values(dtype=float, force=True)
         self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts)}
-        self.exprs_by_group = [name for name in graph.exprs if getattr(res[name], 'strata', None) is not None]
+        self.exprs_by_group = [name for name in graph.exprs if getattr(res[name], 'strata', None) is not None] if self.sim.groups.n_groups > 1 else [] # With one group, they are the totals (see fill_one_group())
         stock_names = set(graph.states) | set(self.coded)
         self.stock_people = [r for r in self.in_people if r.name in stock_names]
         self.flow_people = [r for r in self.in_people if r.name not in stock_names]
@@ -2552,7 +2568,20 @@ class Engine(Effects):
     def finalize_results(self):
         """ Once the results are final (and scaled: see `ss.Result._apply_scale()`), work out those given as expressions, and say where chance would matter """
         self.store_derived()
+        self.fill_one_group()
         self.note_chance()
+        return
+
+    def fill_one_group(self):
+        """ With one group (every stratification has one level), the values by group are the totals, which the solvers keep instead """
+        if self.sim.groups.n_groups != 1:
+            return
+        for key,res in self.mod.results.items():
+            if isinstance(res, ss.Result) and res.strata is not None and key not in self.derived_res and res.strata.shape[1] == 1:
+                vals = np.asarray(res.values, dtype=float)
+                res.strata[:] = (vals if res.group_ti is None else vals[res.group_ti])[:, None]
+                if res.denom is not None:
+                    res.denom[:] = 1.0 # The values are already the ratio
         return
 
 

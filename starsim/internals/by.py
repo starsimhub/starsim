@@ -135,6 +135,7 @@ class by:
             if isinstance(table, ss.TimePar):
                 self.wrap = type(table)
                 table = table.value
+            self.integer = np.asarray(table).dtype.kind in 'iu' # Whole numbers, a count (see is_count()), as given: the array is kept as floats
             self.array = np.array(table, dtype=float)
             if self.array.ndim != len(dims):
                 errormsg = f'ss.by() was given {len(dims)} dimensions ({sc.strjoin(dims)}), but an array with {self.array.ndim} axes'
@@ -649,7 +650,7 @@ class by:
     def is_count(self):
         """ Whether the values are whole numbers (so that a 1 is one person rather than everyone) """
         if self.array is not None:
-            return bool(np.all(self.array == np.round(self.array)))
+            return self.integer
         return np.asarray(self.items).dtype.kind in 'iu'
 
 

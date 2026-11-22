@@ -1566,7 +1566,7 @@ class Sim(ss.modules.Base):
 
         Args:
             inplace (bool): whether to shrink this sim (default), or return a shrunk copy
-            full (bool): whether to remove the people and the large parts of each module (otherwise, only the references that keep the sim from being freed from memory)
+            full (bool): whether to remove the people and the large parts of each module (otherwise, only the references back to the sim, so that it is freed as soon as it is no longer used, without waiting for the garbage collector; either way, the sim can no longer be run again or copied with `sim.new()`)
             size_limit (float): the size each module may have, in KB per timestep (None to skip the check)
             base_size (float): the size each module may have whatever the length of the sim, in timesteps' worth of `size_limit` (for its parameters and the like)
             die (bool): whether a module that is too large raises an error (otherwise, a warning)
@@ -1575,18 +1575,32 @@ class Sim(ss.modules.Base):
             The shrunk sim
         """
         sim = self if inplace else self.copy() # A deep copy, so that nothing it shares with this sim is shrunk
-        if full:
-            ss.utils.shrink(sim, 'people')
+
+        # The copy made before the sim was initialized refers to itself, as the sim does (below), so it too would wait for the garbage collector to be freed
+        if sim._before_init is not None:
+            sim._before_init = None
+            sim._no_new = 'This sim was shrunk, which removes the copy that sim.new() and a rerun start from: make it again instead'
 
         # A sim that is not initialized has nothing more to shrink
         if sim.initialized:
-            sim.loop.shrink() # The loop and the distributions refer to the sim, which keeps it from being freed
+            # What refers back to the sim, which keeps it from being freed as soon as it is no longer used (rather than when the garbage collector next runs)
+            sim.loop.shrink()
             ss.utils.shrink(sim.dists, attrs=['sim', 'obj'])
+            for obj in [sim.people, sim.groups, getattr(sim, 'contact_rates', None)]:
+                if obj is not None:
+                    ss.utils.shrink(obj, 'sim')
+            for mod in sim.modules:
+                mod.setattribute('sim', ss.utils.shrink()) # As in mod.shrink(), since modules are locked
+                for obj in [getattr(mod, 'dists', None), getattr(mod, 'engine', None)]:
+                    if obj is not None:
+                        ss.utils.shrink(obj, 'sim')
             for dist in sim.dists.dists.values():
                 with sc.tryexcept(die=die):
                     dist.shrink()
 
             if full:
+                ss.utils.shrink(sim, 'people')
+                sim.groups._group_cache = sim.groups._level_cache = None # The group and levels of each agent
                 for mod in sim.modules:
                     with sc.tryexcept(die=die):
                         mod.shrink()
