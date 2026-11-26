@@ -348,21 +348,23 @@ class CallerNames(dict):
     where = None
 
 
-def caller_names(depth=1, skip=None):
+def caller_names(depth=1, obj=None):
     """
     The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
     each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
     them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
     what they are given once, here; nothing else does. If the stack is not that deep (e.g. from R via reticulate), the names given by `named()`, if any.
-    The code of the function `skip`, if that is the code above, does not count.
+    For an object being made (`obj`), the code is that which made it, and the variables of its constructors between
+    (e.g. the `__init__()` of a subclass, which calls `super().__init__()`) count too, first.
     """
     frame = getframe(depth + 1)
-    if frame is not None and skip is not None and frame.f_code is skip.__code__:
+    inner = [] # The constructors of obj between its maker and the caller, nearest first
+    while frame is not None and obj is not None and frame.f_locals.get('self') is obj:
+        inner.append(frame)
         frame = frame.f_back
-    if frame is None:
-        return CallerNames(given_names or {})
-    out = CallerNames(names_of(frame.f_globals, frame.f_locals))
-    out.where = frame.f_code.co_name
+    spaces = [given_names or {}] if frame is None else [frame.f_globals, frame.f_locals]
+    out = CallerNames(names_of(*[f.f_globals for f in inner], *spaces, *[f.f_locals for f in inner[::-1]]))
+    out.where = (frame or inner[-1]).f_code.co_name if frame or inner else None
     return out
 
 

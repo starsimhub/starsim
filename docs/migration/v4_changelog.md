@@ -227,7 +227,7 @@ Names were renamed where they meant different things in different places, or whe
 
 ### Library
 
-- `starsim.library` (`ssl`) holds simple models of HIV, cholera, Ebola, measles, malaria, TB, COVID (by age, with MEmilio's values for Germany), influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea, mostly declared; maternal and newborn health (`ssl.mnch`); more networks; and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, and `ssl.ICER`). Starsim 3's SIR, SIS, and SEIR, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.
+- `starsim.library` (`ssl`) holds models of HIV, cholera, Ebola, measles (after DynaMICE), malaria, TB, COVID (by age, with MEmilio's values for Germany), influenza (Baguelin et al. 2013), RSV (Pitzer et al. 2015), pertussis (with immune boosting, Lavine et al. 2011), dengue, typhoid (Pitzer et al. 2014), polio (Famulare et al. 2018), syphilis, and gonorrhea, mostly declared (measles, influenza, RSV, pertussis, typhoid, and polio by age, with their vaccines declared in the disease); maternal and newborn health (`ssl.mnch`); more networks; and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, and `ssl.ICER`). Starsim 3's SIR, SIS, and SEIR, written as code, are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.
 
 ### Command line, AI skills, and docs
 

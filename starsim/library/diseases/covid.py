@@ -97,12 +97,12 @@ class COVID(ss.Disease):
     critical  = ISev >> {ICr: p_crit, R: None} @ dur_sev
     outcome   = ICr >> {ss.dead: p_death, R: None} @ dur_crit
 
-    def __init__(self, ages=True, **kwargs):
+    def __init__(self, *args, ages=True, **kwargs):
         if not ages: # One group, with the values of MEmilio's simple example
             defaults = dict(rel_sus=1.0, rel_ins=0.67, rel_sym=0.25, dur_exp=ss.days(3.2), dur_ins=ss.days(2), dur_sym=ss.days(6), dur_sev=ss.days(12),
                             dur_crit=ss.days(8), p_sym=0.91, p_sev=0.20, p_crit=0.25, p_death=0.30)
             kwargs = defaults | kwargs
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
         if ages:
             self.stratify(age=age_groups)
         return

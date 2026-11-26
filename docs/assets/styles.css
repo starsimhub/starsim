@@ -79,3 +79,10 @@ table td:first-child a {
 .mermaid svg .edgeLabel rect, .cell-output-display svg .edgeLabel rect {
     fill: var(--bs-body-bg) !important;
 }
+
+/* API reference: the link to each object's source on GitHub (quartodoc's source_url), small and to the right, just under its heading */
+.doc-source-link {
+    float: right;
+    font-size: 0.8em;
+    margin-top: -0.5em;
+}

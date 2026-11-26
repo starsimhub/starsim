@@ -10,7 +10,7 @@ Core Starsim (`import starsim as ss`) provides the framework and its generic bui
 
 | Submodule | What it has | Page |
 | --- | --- | --- |
-| `ssl.diseases` | Particular diseases: measles, Ebola, cholera, HIV, and short versions of published models of others | [Diseases](library_diseases.qmd) |
+| `ssl.diseases` | Particular diseases: measles, Ebola, cholera, HIV, and short versions of published models of others ([the full list](library_diseases.qmd#all-the-diseases)) | [Diseases](library_diseases.qmd) |
 | `ssl.networks` | Networks for households and other clusters, for space, and for theoretical work | [Networks](library_networks.qmd) |
 | `ssl.mnch` | Maternal, newborn, and child health: worked examples of harder patterns such as congenital infection | [Maternal-child health](library_mnch.qmd) |
 | `ssl.econ` | Health economics: costs, DALYs, discounting, and cost-effectiveness | [Health economics](library_econ.qmd) |

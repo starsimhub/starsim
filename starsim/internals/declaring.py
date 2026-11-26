@@ -211,7 +211,7 @@ def build(dis, args, members, pars, kwargs, names=None, strains=None):
     members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
     for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, when=recovery)) is the copy
         rebind_conditions(tr, memo)
-    kwargs = {k:rebind_member(v, memo) for k,v in kwargs.items()} # A result, outcome, or transition given here that reads the class's states reads the copies, e.g. ssl.Measles(V=V, vax=ss.Transition(ssl.Measles.S, V, ...))
+    kwargs = {k:rebind_member(v, memo) for k,v in kwargs.items()} # A result, outcome, or transition given here that reads the class's states reads the copies, e.g. ssl.Measles(H=H, admission=ss.Transition(ssl.Measles.I, H, ...))
     args = [rebind_member(v, memo) for v in args]
     if isinstance(strains, ss.Strains): # An outcome for each strain carried, set on the copies, so that the class's own transitions are left as they were for the next instance
         ss.strains.prepare(strains, [(x.name, x) for x in args + sc.tolist(kwargs.get('transitions'))] + list(kwargs.items()) + list(members.items()))
