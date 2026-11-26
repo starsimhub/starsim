@@ -29,7 +29,8 @@ class Typhoid(ss.Disease):
         p_carrier (float): the fraction of cases who become chronic carriers
         dur_inf (`ss.Duration`): the mean duration of acute infection
         dur_imm (`ss.Duration`): the mean time immune after recovering (lifelong by default)
-        birth_rate (`ss.per`): the birth and death rate
+        birth_rate (`ss.per`): the birth rate
+        death_rate (`ss.per`): the death rate from other causes; equal to `birth_rate` by default, which keeps the population size constant
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -47,7 +48,8 @@ class Typhoid(ss.Disease):
     p_carrier   = ss.par(0.05, doc='Fraction of cases who become chronic carriers',                  source='Pitzer et al. (2014): 0.3% to 10% by age')
     dur_inf     = ss.par(ss.weeks(4), doc='Mean duration of acute infection',                        source='Standard value')
     dur_imm     = ss.par(ss.years(1000), doc='Mean time immune after recovering (lifelong by default)', source='Pitzer et al. (2014): waning estimated as close to zero')
-    birth_rate  = ss.par(ss.peryear(1/60), doc='Birth and death rate', source='Illustrative')
+    birth_rate  = ss.par(ss.peryear(1/60), doc='Birth rate',                   source='Illustrative')
+    death_rate  = ss.par(ss.peryear(1/60), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 
     S = ss.State()
     I = ss.State(init=0.001, label='Acute infection', infected=True) # Counted in the results infected and prevalence
@@ -58,7 +60,7 @@ class Typhoid(ss.Disease):
     outcome   = I >> {C: p_carrier, R: None} @ dur_inf
     waning    = R >> S @ dur_imm
     births    = ss.birth(S, rate=birth_rate)
-    deaths    = ss.death(rate=birth_rate)
+    deaths    = ss.death(rate=death_rate)
 
 
 
@@ -84,7 +86,8 @@ class Polio(ss.Disease):
         dur_exp (`ss.Duration`): the mean time from infection to shedding
         dur_inf (`ss.Duration`): the mean time shedding
         p_paralysis (float): the fraction of infections that cause paralysis
-        birth_rate (`ss.per`): the birth and death rate, which supplies the susceptible children
+        birth_rate (`ss.per`): the birth rate, which supplies the susceptible children
+        death_rate (`ss.per`): the death rate from other causes; equal to `birth_rate` by default, which keeps the population size constant
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -101,7 +104,8 @@ class Polio(ss.Disease):
     dur_exp     = ss.par(ss.days(3),  doc='Mean time from infection to shedding', source='Standard value')
     dur_inf     = ss.par(ss.days(20), doc='Mean time shedding',                   source='Standard value')
     p_paralysis = ss.par(1/200, doc='Fraction of infections that cause paralysis',source='US CDC Pink Book: about 1 in 200 for wild type 1')
-    birth_rate  = ss.par(ss.peryear(0.03), doc='Birth and death rate',            source='Illustrative')
+    birth_rate  = ss.par(ss.peryear(0.03), doc='Birth rate',                   source='Illustrative')
+    death_rate  = ss.par(ss.peryear(0.03), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 
     S = ss.State()
     E = ss.State(infected=True) # Counted in the results infected and prevalence
@@ -113,5 +117,5 @@ class Polio(ss.Disease):
     onset     = E >> I @ dur_exp
     outcome   = I >> {P: p_paralysis, R: None} @ dur_inf
     births    = ss.birth(S, rate=birth_rate)
-    deaths    = ss.death(rate=birth_rate)
+    deaths    = ss.death(rate=death_rate)
 

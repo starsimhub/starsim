@@ -34,7 +34,8 @@ class Influenza(ss.Disease):
         dur_exp (`ss.Duration`): the mean time from infection to being infectious
         dur_inf (`ss.Duration`): the mean time infectious
         dur_imm (`ss.Duration`): the mean time immune after recovering
-        birth_rate (`ss.per`): the birth and death rate, which supplies new susceptible people
+        birth_rate (`ss.per`): the birth rate, which supplies new susceptible people
+        death_rate (`ss.per`): the death rate from other causes; equal to `birth_rate` by default, which keeps the population size constant
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -52,7 +53,8 @@ class Influenza(ss.Disease):
     dur_exp    = ss.par(ss.days(2),  doc='Mean time from infection to being infectious', source='Carrat et al. (2008)')
     dur_inf    = ss.par(ss.days(5),  doc='Mean time infectious',                         source='Carrat et al. (2008)')
     dur_imm    = ss.par(ss.years(1), doc='Mean time immune after recovering',            source='Illustrative (antigenic drift)')
-    birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate',                    source='Illustrative')
+    birth_rate = ss.par(ss.peryear(0.02), doc='Birth rate',                   source='Illustrative')
+    death_rate = ss.par(ss.peryear(0.02), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 
     S = ss.State()
     E = ss.State(infected=True) # Counted in the results infected and prevalence
@@ -64,7 +66,7 @@ class Influenza(ss.Disease):
     recovery  = I >> R @ dur_inf
     waning    = R >> S @ dur_imm
     births    = ss.birth(S, rate=birth_rate)
-    deaths    = ss.death(rate=birth_rate)
+    deaths    = ss.death(rate=death_rate)
 
 
 
@@ -91,7 +93,8 @@ class RSV(ss.Disease):
         dur_exp (`ss.Duration`): the mean time from infection to being infectious
         dur_inf (`ss.Duration`): the mean time infectious
         dur_imm (`ss.Duration`): the mean time immune after recovering
-        birth_rate (`ss.per`): the birth and death rate; babies are born into `M`
+        birth_rate (`ss.per`): the birth rate; babies are born into `M`
+        death_rate (`ss.per`): the death rate from other causes; equal to `birth_rate` by default, which keeps the population size constant
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -110,7 +113,8 @@ class RSV(ss.Disease):
     dur_exp    = ss.par(ss.days(5),   doc='Mean time from infection to being infectious', source='Crowcroft et al., as used by Hogan et al. (2014)')
     dur_inf    = ss.par(ss.days(10),  doc='Mean time infectious',                         source='Weber et al. (2001)')
     dur_imm    = ss.par(ss.years(1),  doc='Mean time immune after recovering',            source='Illustrative')
-    birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate', source='Illustrative')
+    birth_rate = ss.par(ss.peryear(0.02), doc='Birth rate',                   source='Illustrative')
+    death_rate = ss.par(ss.peryear(0.02), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 
     M, S = ss.states('M S')
     E = ss.State(infected=True) # Counted in the results infected and prevalence
@@ -123,7 +127,7 @@ class RSV(ss.Disease):
     recovery  = I >> R @ dur_inf
     waning    = R >> S @ dur_imm
     births    = ss.birth(M, rate=birth_rate) # Babies are born protected
-    deaths    = ss.death(rate=birth_rate)
+    deaths    = ss.death(rate=death_rate)
 
 
 
@@ -149,7 +153,8 @@ class Pertussis(ss.Disease):
         dur_exp (`ss.Duration`): the mean latent period
         dur_inf (`ss.Duration`): the mean infectious period
         dur_imm (`ss.Duration`): the mean time immune after recovering
-        birth_rate (`ss.per`): the birth and death rate
+        birth_rate (`ss.per`): the birth rate
+        death_rate (`ss.per`): the death rate from other causes; equal to `birth_rate` by default, which keeps the population size constant
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -166,7 +171,8 @@ class Pertussis(ss.Disease):
     dur_exp    = ss.par(ss.days(8),   doc='Mean latent period',                   source='Wearing and Rohani (2009)')
     dur_inf    = ss.par(ss.days(15),  doc='Mean infectious period',               source='Wearing and Rohani (2009)')
     dur_imm    = ss.par(ss.years(30), doc='Mean time immune after recovering',    source='Wearing and Rohani (2009)')
-    birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate',             source='Wearing and Rohani (2009): 0.012 to 0.028 per year')
+    birth_rate = ss.par(ss.peryear(0.02), doc='Birth rate',                   source='Wearing and Rohani (2009): 0.012 to 0.028 per year')
+    death_rate = ss.par(ss.peryear(0.02), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 
     S = ss.State()
     E = ss.State(infected=True) # Counted in the results infected and prevalence
@@ -178,5 +184,5 @@ class Pertussis(ss.Disease):
     recovery  = I >> R @ dur_inf
     waning    = R >> S @ dur_imm
     births    = ss.birth(S, rate=birth_rate)
-    deaths    = ss.death(rate=birth_rate)
+    deaths    = ss.death(rate=death_rate)
 
