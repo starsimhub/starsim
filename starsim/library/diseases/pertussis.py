@@ -92,17 +92,19 @@ class Pertussis(ss.Disease):
         import starsim.library as ssl
 
         # Pre-vaccine pertussis, with epidemics every few years
-        sim = ss.Sim(diseases=ssl.Pertussis(), total_pop=500_000, solver='binomial', start='1920-01-01', stop='1960-01-01', dt=ss.days(5))
+        sim = ss.Sim(diseases=ssl.Pertussis(), total_pop=500_000, solver='binomial', start='1920-01-01', stop='1960-01-01')
         sim.run()
         sim.results.pertussis.infection.plot()
 
         # With 80% coverage of the DTP series: fewer cases, and older
-        sim = ss.Sim(diseases=ssl.Pertussis(cov_dtp=0.8), total_pop=500_000, solver='binomial', start='1920-01-01', stop='1960-01-01', dt=ss.days(5))
+        sim = ss.Sim(diseases=ssl.Pertussis(cov_dtp=0.8), total_pop=500_000, solver='binomial', start='1920-01-01', stop='1960-01-01')
         sim.run()
         sim.results.pertussis.infection.by('age').plot()
         sim.results.pertussis.outcome.select(to='dead').by('age').plot() # Deaths by age
         ```
     """
+    dt = ss.days(1) # The default step (a day, since its latent period is about a week), used if the sim is given no dt=
+
     beta       = ss.par(ss.perday(13/15), doc='Transmission rate (R0 of 13)', source='Wearing and Rohani (2009): R0 of 11 to 15')
     kappa      = ss.par(20.0, doc='Boosting coefficient: the rate of boosting relative to the force of infection', source=lavine)
     dur_exp    = ss.par(ss.days(8),   doc='Mean latent period',     source=wr)
@@ -129,8 +131,8 @@ class Pertussis(ss.Disease):
     importation = (S0 + S) >> E @ import_rate
     onset       = E >> I @ dur_exp
     outcome     = I >> {ss.dead: p_death, R: None} @ dur_inf
-    waning      = R >> W @ (2/dur_imm) # Two stages of equal length
-    loss        = W >> S @ (2/dur_imm)
+    waning      = R >> W @ dur_imm/2 # Two stages of equal length
+    loss        = W >> S @ dur_imm/2
     boosting    = W >> R @ kappa*beta*I
     routine     = S0 >> {V: cov_dtp*eff_dtp, S: None} @ age_dtp
     waning_dtp  = V >> W @ dur_dtp

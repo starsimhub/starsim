@@ -56,7 +56,7 @@ class Typhoid(ss.Disease):
       Asia: a mathematical modeling study", *PLoS Negl Trop Dis* 2014;8(1):e2642,
       https://doi.org/10.1371/journal.pntd.0002642. The structure; the R0s from person to person and through the
       water; the seasonal amplitude of 0.69 and peak at 18.2 weeks; the relative infectiousness of 0.01; the 4
-      weeks of infectiousness; the 104 weeks of full immunity; the disease-induced mortality of 0.001 (applied here
+      weeks of infectiousness; the two years (104 weeks) of full immunity; the disease-induced mortality of 0.001 (applied here
       to first infections only, so about 1% of clinical cases); the decay of the water's contamination (1/3 a
       week); the range of 0.3% to 10.1% of infections that become carriers, by age; and the birth rates of Tamil
       Nadu (Table 1).
@@ -97,28 +97,30 @@ class Typhoid(ss.Disease):
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.Typhoid(), total_pop=100_000, start=1960, stop=2020, dt=ss.weeks(1))
+        sim = ss.Sim(diseases=ssl.Typhoid(), total_pop=100_000, start=1960, stop=2020)
         sim.run()
         sim.typhoid.plot()
         sim.results.typhoid.recovery.select(to='dead').by('age').plot() # Deaths by age
 
         # With routine TCV at 9 months, at 80% coverage
-        sim = ss.Sim(diseases=ssl.Typhoid(cov_tcv=0.8), total_pop=100_000, start=1960, stop=2020, dt=ss.weeks(1))
+        sim = ss.Sim(diseases=ssl.Typhoid(cov_tcv=0.8), total_pop=100_000, start=1960, stop=2020)
         ```
     """
+    dt = ss.weeks(1) # The default step (a week, the unit of Pitzer et al.'s model), used if the sim is given no dt=
+
     beta        = ss.par(ss.perweek(0.47), doc='Rate of transmission from person to person, for a first infection (R0 of 2.49)', source=f'{source}: R0 of 2.49 from person to person')
     beta_w      = ss.par(ss.seasonal(ss.perweek(0.0175), amplitude=0.69, peak=ss.weeks(18.2)), doc='Rate of infection from the water (R0 of 0.28), seasonal', source=f'{source}: R0 of 0.28 through the water; amplitude 0.69, peak at 18.2 weeks')
     rel_carrier = ss.par(0.01, doc='Infectiousness of subclinical infections and carriers, relative to a first infection', source=source)
     shedding    = ss.par(ss.perweek(1), doc='Rate of contamination of the water by the infectious', source=f'{source} (inseparable from beta_w)')
     decay       = ss.par(ss.perweek(1/3), doc="Rate of decay of the water's contamination", source=source)
     dur_inf     = ss.par(ss.weeks(4), doc='Mean duration of infection', source=source)
-    dur_imm     = ss.par(ss.weeks(104), doc='Mean time fully immune', source=source)
+    dur_imm     = ss.par(ss.years(2), doc='Mean time fully immune', source=source)
     p_carrier   = ss.par(by_age(0.003, 0.003, 0.003, 0.003, 0.01, 0.02, 0.04, 0.101), doc='Fraction of infections that lead to chronic carriage, by age', source=f'{source}: 0.003 to 0.101 by age; values between illustrative, after Ames & Robins (1943)')
     p_death     = ss.par(0.001, doc='Fraction of first infections that die', source=f'{source}: disease-induced mortality')
     cov_tcv     = ss.par(0.0, doc='Coverage of routine TCV', source='No vaccination by default')
     eff_tcv     = ss.par(0.79, doc='Efficacy of TCV', source='Shakya et al. (2021): 79% over 2 years in Nepal')
-    dur_tcv     = ss.par(ss.weeks(780), doc='Mean duration of protection from TCV (15 years)', source='Bilcke et al. (2019), corrected: waning of 0.0672 a year')
-    age_tcv     = ss.par(ss.weeks(39), doc='Mean age at routine TCV (9 months)', source='Bilcke et al. (2019): routine vaccination at 9 months')
+    dur_tcv     = ss.par(ss.years(15), doc='Mean duration of protection from TCV', source='Bilcke et al. (2019), corrected: waning of 0.0672 a year')
+    age_tcv     = ss.par(ss.months(9), doc='Mean age at routine TCV', source='Bilcke et al. (2019): routine vaccination at 9 months')
     birth_rate  = ss.par(ss.peryear(0.017), doc='Birth rate', source=f'{source}: 14.9 to 19.2 births per 1,000 in Tamil Nadu')
     death_rate  = ss.par(ss.peryear(0.017), doc='Death rate from other causes', source='Equal to the birth rate, for a constant population')
 

@@ -93,16 +93,18 @@ class Influenza(ss.Disease):
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.Influenza(), total_pop=100_000, start='2000-01-01', stop='2010-01-01', dt=ss.days(1))
+        sim = ss.Sim(diseases=ssl.Influenza(), total_pop=100_000, start='2000-01-01', stop='2010-01-01')
         sim.run()
         sim.influenza.plot()
         sim.results.influenza.outcome.select(to='dead').by('age').plot() # Deaths by age
 
         # Vaccinating 70% of the over-65s and 50% of children each autumn, with the UK's contacts
         flu = ssl.Influenza(beta=ss.seasonal(mean=0.063, amplitude=0.3, peak='January'), cov_vax=ss.by(age=[0, 0.5, 0.5, 0, 0, 0, 0.7]))
-        sim = ss.Sim(diseases=flu, networks=ss.contacts('United Kingdom'), total_pop=100_000, start='2000-01-01', stop='2010-01-01', dt=ss.days(1))
+        sim = ss.Sim(diseases=flu, networks=ss.contacts('United Kingdom'), total_pop=100_000, start='2000-01-01', stop='2010-01-01')
         ```
     """
+    dt = ss.days(1) # The default step (a day, for a latent period of under a day), used if the sim is given no dt=
+
     beta     = ss.par(ss.seasonal(mean=ss.perday(0.87), amplitude=0.3, peak='January'),
                       doc='Transmission rate over the year, as a cycle around a mean giving R0 of 1.3', source='Biggerstaff et al. (2014); the cycle is illustrative')
     rel_asym = ss.par(0.5,   doc='Infectiousness of asymptomatic infections, relative to symptomatic ones', source='Illustrative')

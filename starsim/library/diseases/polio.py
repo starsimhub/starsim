@@ -99,7 +99,7 @@ class Polio(ss.Disease):
         import starsim as ss
         import starsim.library as ssl
 
-        pars = dict(total_pop=1_000_000, start=1950, stop=1980, dt=ss.days(5))
+        pars = dict(total_pop=1_000_000, start=1950, stop=1980)
         sim = ss.Sim(diseases=ssl.Polio(), **pars)
         sim.run()
         sim.results.polio.infection.P.by('age').plot() # Paralysis, mostly under 5
@@ -110,6 +110,8 @@ class Polio(ss.Disease):
         print('Paralytic cases:', sim.results.polio.infection.P.sum(), 'without OPV;', vax.results.polio.infection.P.sum(), 'with')
         ```
     """
+    dt = ss.weeks(1) # The default step (a week, short beside its infectious periods of two weeks or more), used if the sim is given no dt=
+
     beta          = ss.par(ss.perday(0.5), doc='Transmission rate of wild virus (R0 of 8)', source=f'{kalkowska}: R0 of 8 for type 1')
     rel_sus       = ss.par(by_age(1, 1, 1, 1, 0.6, 0.26, 0.26), doc='Susceptibility, relative to children under 5', source=f'{famulare}: adults receive 26% of the dose of children under 5; 5-14 illustrative')
     dur_inf       = ss.par(ss.days(43), doc='Mean time shedding, after a first infection', source=f'{famulare}: median of 43 days for wild virus')

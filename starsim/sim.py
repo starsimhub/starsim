@@ -781,7 +781,7 @@ class Sim(ss.modules.Base):
         self.t = ss.Timeline(name='sim')
         self.t.init(self)
         max_steps = ss.options.max_steps # 0 to never warn; above it, the timeline has warned already
-        if max_steps and min(max_steps, 3000) < self.t.npts <= max_steps and 'dt' not in self.given: # Many steps of a length that was not asked for
+        if max_steps and min(max_steps, 3000) < self.t.npts <= max_steps and 'dt' not in self.given and not getattr(self, 'dt_default', False): # Many steps of a length that was not asked for (by the sim, or as a module's default step)
             why = f"the model's unit, from {self.unit_source}" if self.unit_source else f"unit='{self.pars.unit}'" if self.pars.unit is not None else "the model's unit" # The unit given (source None) is said as given
             ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1) (or set ss.options.max_steps = 0 to turn off this warning)')
         self.results.timevec = self.timevec # Store the timevec in the results for plotting

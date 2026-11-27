@@ -115,7 +115,7 @@ class Measles(ss.Disease):
         # Endemic measles in a high-burden setting, with routine vaccination
         p_death = ss.by(age=[0.0303, 0.0303, 0.0163, 0.0163, 0.0084, 0.0067, 0.0067])
         measles = ssl.Measles(cov_mcv1=0.8, cov_mcv2=0.5, p_death=p_death, init=dict(I=0.0001, R=0.93))
-        sim = ss.Sim(diseases=measles, total_pop=1_000_000, start='2000-01-01', stop='2030-01-01', dt=ss.days(2))
+        sim = ss.Sim(diseases=measles, total_pop=1_000_000, start='2000-01-01', stop='2030-01-01')
         sim.run()
         sim.measles.plot()
 
@@ -123,6 +123,8 @@ class Measles(ss.Disease):
         campaign = ss.Event((measles.S0 + measles.S1 + measles.S) >> measles.V, when='2010-01-01', who=ss.person.age < 5, p=0.9*0.925)
         ```
     """
+    dt = ss.days(1) # The default step (a day, since its latent and infectious periods are about a week), used if the sim is given no dt=
+
     beta       = ss.par(ss.perday(1.4), doc='Transmission rate, giving R0 of about 15', source='Guerra et al. (2017): 12 to 18 usually quoted; 16 in DynaMICE')
     dur_mat    = ss.par(ss.days(182), doc='Mean time protected by maternal antibodies (6 months)', source=dynamice)
     dur_exp    = ss.par(ss.erlang(k=8, mean=ss.days(8)),  doc='Time from infection to being infectious (a spread of 3 days)', source='Illustrative, near the US CDC')

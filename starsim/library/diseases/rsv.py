@@ -3,7 +3,6 @@ Respiratory syncytial virus (`RSV`), as Pitzer et al.'s model of repeated infect
 """
 # Authorship: AI drafted, human reviewed and edited
 
-import sciris as sc
 import starsim as ss
 
 __all__ = ['RSV']
@@ -110,16 +109,18 @@ class RSV(ss.Disease):
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.RSV(), total_pop=100_000, start='2000-01-01', stop='2015-01-01', dt=ss.days(1))
+        sim = ss.Sim(diseases=ssl.RSV(), total_pop=100_000, start='2000-01-01', stop='2015-01-01')
         sim.run()
         sim.rsv.plot()
         sim.results.rsv.recovery1.select(to='H1').by('age').plot() # Hospitalizations with a first infection, by age
 
         # Half of babies given nirsevimab, and a quarter of mothers vaccinated in pregnancy
-        immunized = ss.Sim(diseases=ssl.RSV(cov_mab=0.5, cov_matvax=0.25), total_pop=100_000, start='2000-01-01', stop='2015-01-01', dt=ss.days(1))
+        immunized = ss.Sim(diseases=ssl.RSV(cov_mab=0.5, cov_matvax=0.25), total_pop=100_000, start='2000-01-01', stop='2015-01-01')
         immunized.run()
         ```
     """
+    dt = ss.days(1) # The default step (a day, for an infectious period of under a week), used if the sim is given no dt=
+
     beta     = ss.par(ss.seasonal(mean=ss.perday(0.9), amplitude=0.1, peak='November'),
                       doc='Transmission rate over the year, as a cycle around a mean giving R0 of 9', source=f'{pitzer}, for R0; Weber et al. (2001), for the form; the amplitude and peak are illustrative, for epidemics that peak in January')
     rel_sus1 = ss.par(0.76, doc='Susceptibility after one infection',            source=pitzer)
@@ -151,10 +152,11 @@ class RSV(ss.Disease):
     infected = I1 + I2 + I3 + I4
     init = dict(M=by_age(1.0, 0.5, 0, 0, 0, 0, 0, 0, 0, 0), S3=by_age(0, 0, 0, 0, 0, 0.5, 0.99, 0.99, 0.99, 0.99), I4=by_age(0, 0, 0, 0, 0, 0, 0.01, 0.01, 0.01, 0.01)) # Near the endemic state
 
-    infection1 = S0 >> I1 @ beta*(I1 + rel_inf2*I2 + rel_inf3*(I3 + I4))
-    infection2 = S1 >> I2 @ rel_sus1*beta*(I1 + rel_inf2*I2 + rel_inf3*(I3 + I4))
-    infection3 = S2 >> I3 @ rel_sus2*beta*(I1 + rel_inf2*I2 + rel_inf3*(I3 + I4))
-    infection4 = S3 >> I4 @ rel_sus3*beta*(I1 + rel_inf2*I2 + rel_inf3*(I3 + I4))
+    _foi       = beta*(I1 + rel_inf2*I2 + rel_inf3*(I3 + I4)) # The force of infection (with an underscore, not a result)
+    infection1 = S0 >> I1 @ _foi
+    infection2 = S1 >> I2 @ rel_sus1*_foi
+    infection3 = S2 >> I3 @ rel_sus2*_foi
+    infection4 = S3 >> I4 @ rel_sus3*_foi
     recovery1  = I1 >> {H1: p_hosp1, S1: None} @ dur_inf1
     recovery2  = I2 >> S2 @ dur_inf2
     recovery3  = I3 >> S3 @ dur_inf3
@@ -172,9 +174,9 @@ class RSV(ss.Disease):
     deaths     = ss.death(rate=death_rate)
 
     def __init__(self, *args, **kwargs):
-        covs = [kwargs.get('cov_matvax', 0), kwargs.get('cov_mab', 0)]
-        if all(sc.isnumber(c) for c in covs) and sum(covs) > 1:
-            raise ValueError(f'A baby gets one immunization or the other, so cov_matvax + cov_mab must be at most 1, not {sum(covs):g}')
         super().__init__(*args, **kwargs)
+        cov_matvax, cov_mab = self.pars.cov_matvax, self.pars.cov_mab
+        if cov_matvax + cov_mab > 1:
+            raise ValueError(f'A baby gets one immunization or the other, so cov_matvax + cov_mab must be at most 1, not {cov_matvax.raw + cov_mab.raw:g}')
         self.stratify(age=age_groups)
         return

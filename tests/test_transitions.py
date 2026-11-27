@@ -689,6 +689,34 @@ def test_treatment():
         ss.Treatment(cure=I >> S)
 
 
+def test_class_forms():
+    sc.heading('Testing an importation as an acquisition, a halved duration, comparisons of parameters, and a default step')
+    class SEIRS(ss.Disease):
+        S, E, I, R = ss.states('S E I R')
+        dt          = ss.days(2) # A default step
+        beta        = ss.par(ss.perday(0.3))
+        import_rate = ss.par(ss.perday(1e-3))
+        dur_imm     = ss.par(ss.days(60))
+        infection   = S >> E @ beta*I
+        importation = S >> E @ import_rate # Into the infection's destination, so an acquisition
+        onset       = E >> I @ ss.days(3)
+        recovery    = I >> R @ ss.days(10)
+        waning      = R >> S @ dur_imm/2 # Still a duration
+    sim = ss.Sim(SEIRS(init_prev=0), total_pop=1000, stop=ss.days(100), **kw)
+    sim.init()
+    dis = sim.diseases.seirs
+    assert dis.importation.acquisition and dis.infection.acquisition
+    assert dis.waning.dur is not None and dis.waning.rate is None
+    assert sim.t.dt == ss.days(2) and dis.dt == ss.days(2) # The default, with no dt= on the sim
+    assert ss.Sim(SEIRS(), total_pop=1000, stop=ss.days(100), dt=ss.days(1), **kw).init().t.dt == ss.days(1) # The sim's dt= overrides it
+    assert ss.Sim(SEIRS(dt=ss.days(5)), total_pop=1000, stop=ss.days(100), dt=ss.days(1), **kw).init().diseases.seirs.dt == ss.days(5) # One given to the module wins
+    a, b = ss.par(0.6), ss.par(0.5)
+    assert (a + b > 1) and not (a < 0.5) and a == 0.6
+    S, I = ss.states(2)
+    with pytest.raises(TypeError): # A comparison with states has no value until the model is built
+        bool(I.n > 1)
+
+
 if __name__ == '__main__':
     for name,test in list(globals().items()):
         if name.startswith('test_'):

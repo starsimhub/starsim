@@ -296,6 +296,12 @@ def init_unit(sim):
     bare year from 1800 on), whatever the unit; with no start, a bare stop from 1800 on is a year only if unit= is years or not given (see `ss.timeline.calendar_of()`).
     """
     pars = sim.pars
+    if pars.dt is None: # The finest of the default steps of the modules' classes (dt = ss.weeks(1) in a class body), for those given no dt= of their own
+        mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
+        defaults = [mod.default_dt for mod in mods if mod.default_dt is not None and mod.t.dt is None]
+        if defaults:
+            pars.dt = min(defaults, key=lambda dt: float(dt.days))
+            sim.dt_default = True # Chosen by the modules, so as deliberate as one given (see ss.Sim._init_time())
     time = ss.time
     unit = source = None
     def base(obj):
