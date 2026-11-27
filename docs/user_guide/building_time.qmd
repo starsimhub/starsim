@@ -99,6 +99,8 @@ For measles as agents, a day is too long a step (`dt=ss.days(0.25)` is closer to
 
 A module can have a step of its own, such as yearly births in a model with weekly transmission (`ss.Births(..., dt=ss.years(1))`), and the modules are run in order of time.
 
+A disease can also say which step suits it, as a default: `dt = ss.days(5)` in its class body (as `ssl.Pertussis` has) is the sim's step if the sim is given no `dt=`, and the sim's `dt=` overrides it. With several such defaults, the finest is used. A `dt=` given to the module itself (`ssl.Pertussis(dt=ss.days(1))`) is its own step, which the sim's doesn't change.
+
 ### Units
 
 A typed value carries its own unit (`ss.perday(1.9)`, `ss.days(8)`) and is converted to the sim's step, so a model can mix units freely.

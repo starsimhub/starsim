@@ -121,7 +121,7 @@ print('Nearest:    ', dur.rvs(sim.people.uid, reset=True)) # As set when it was 
 print('At random:  ', dur.rvs(sim.people.uid, round='random', reset=True))
 ```
 
-The parameters of a distribution that is already made, such as the default of a library module, can be changed with `set()`: `ssl.Measles().pars.p_death.set(p=0.05)` (see [Library: diseases](library_diseases.qmd)).
+The parameters of a distribution that is already made, such as the default of a library module, can be changed with `set()`: `ssl.Ebola().pars.dur_exp.set(mean=ss.days(10))` (see [Library: diseases](library_diseases.qmd)).
 
 ### A fixed number of people
 

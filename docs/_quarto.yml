@@ -334,6 +334,7 @@ quartodoc:
     warn_unknown_params: false
     warn_missing_types: false
   render_interlinks: true
+  source_url: https://github.com/starsimhub/starsim/blob/v4/{path}#L{lineno}-L{endlineno} # V4-PREVIEW: use the tag of the version, so the line numbers match its docs
   sections:
     - contents: # No title/desc here: the page already shows an "API" heading from the top-level title above (issue #1330)
         - analyzers

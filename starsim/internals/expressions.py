@@ -204,6 +204,9 @@ class Expr:
     def __ge__(self, other):       return compare('greater_equal', self, other)
 
     def __bool__(self):
+        """ An expression of parameters that hold numbers has a value now, e.g. `if cov_a + cov_b > 1:` in `__init__()`; one of states has none until the model runs """
+        if all(isinstance(leaf, par) and sc.isnumber(leaf.raw) for leaf in self.leaves):
+            return bool(ss.parameters.const_value(self))
         errormsg = f'Cannot use the expression "{self}" where Python needs a single True or False; it has no value until the model runs'
         raise TypeError(errormsg)
 
@@ -277,9 +280,11 @@ class par(Nameable, Expr):
         ```
     """
     def __eq__(self, other):
-        """ A parameter is only equal to itself; compared with a number it raises, rather than silently being False """
+        """ A parameter is equal to itself, and to a number if it holds that number; compared with a number while it holds something else (e.g. a distribution), it raises, rather than silently being False """
         if isinstance(other, (int, float, np.number)) and not isinstance(other, bool):
-            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Compare the value it holds, par.raw, or its current value, which arithmetic on it gives once the model is built (e.g. 1*par)'
+            if sc.isnumber(self.raw):
+                return self.raw == other
+            errormsg = f'Cannot compare the parameter "{self.name or self}", which is {value_str(self.raw)}, with the number {other}; compare the value it holds, par.raw'
             raise TypeError(errormsg)
         return self is other
 

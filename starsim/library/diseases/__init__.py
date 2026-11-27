@@ -16,11 +16,14 @@ from .cholera     import Cholera
 from .covid       import COVID
 from .dengue      import Dengue, DengueSerotype
 from .ebola       import Ebola
-from .enteric     import Typhoid, Polio
 from .hiv         import HIV, ART, CD4_analyzer
+from .influenza   import Influenza
 from .malaria     import Malaria, MalariaImmunity
 from .measles     import Measles
 from .ncd         import NCD
-from .respiratory import Influenza, RSV, Pertussis
+from .pertussis   import Pertussis
+from .polio       import Polio
+from .rsv         import RSV
 from .sti         import Syphilis, Gonorrhea
 from .tb          import TB
+from .typhoid     import Typhoid

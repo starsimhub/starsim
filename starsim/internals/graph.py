@@ -631,17 +631,27 @@ class Graph:
 
         A contact-mediated transition is one. So is any other transition of people out of the first state that is not an outflow,
         whatever its rate (a bite rate, an EIR, a count of bacteria), unless a transition out of that state is contact-mediated, which
-        is then the acquisition (so `S -> V` alongside `S -> I @ beta * I` is a vaccination). `acquisition=` on the transition says it outright.
+        is then the acquisition (so `S -> V` alongside `S -> I @ beta * I` is a vaccination). Any transition from a source of a contact-mediated
+        transition into one of its destinations is one too (so `S -> E @ import_rate` alongside `S -> E @ beta * I` is an importation).
+        `acquisition=` on the transition says it outright.
         """
         first = self.default_state
         out_of_first = [tr for tr in self.transitions.values() if any(src is first for src in tr.source or [])]
         by_contact = [tr.name for tr in out_of_first if tr.contact]
+        contacts = [tr for tr in self.transitions.values() if tr.contact]
+        def shares(a, b): # Whether two lists of states have one in common
+            return any(x is y for x in a or [] for y in b or [])
+        def like_contact(tr): # From a source of a contact-mediated transition into one of its destinations, e.g. an importation
+            return any(shares(tr.source, c.source) and shares(tr.dest, c.dest) for c in contacts)
         for name,tr in self.transitions.items():
             given = tr.acquisition_given
             if given is not None:
                 tr.acquisition = bool(given)
             elif tr.contact:
                 tr.acquisition = True
+            elif tr.people and not tr._outflow and like_contact(tr):
+                tr.acquisition = True
+                tr.guessed['acquisition'] = 'into the destination of a contact-mediated transition from its source'
             elif tr in out_of_first and tr.people and not tr._outflow:
                 tr.acquisition = not by_contact
                 tr.guessed['acquisition'] = f'contact-mediated {sc.strjoin(by_contact)} is' if by_contact else f'out of {first.name}'

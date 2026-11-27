@@ -177,7 +177,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         given = args or structure or declaring.has_structure(kwargs) # Its structure; a parameter's value (e.g. with bounds) is not
         later = members or strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'default_state']) or any(isinstance(v, ss.par) for v in kwargs.values()) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions(); or for parameters in the class body, which are set once that is known (see build_graph())
         if given or later:
-            names = (_names or ss.utils.caller_names(1, skip=BuiltAfterInit.__call__)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
+            names = (_names or ss.utils.caller_names(1, obj=self)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
             if not given: # A parameter's value given by keyword (e.g. with bounds) sets the parameter of that name that the transitions declared next use, as pars= does
                 pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in list(kwargs) if isinstance(kwargs[key], ss.par)})
             self._declared = declaring.declaration(members, args, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify)

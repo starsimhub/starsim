@@ -49,6 +49,8 @@ A rate is read as it is written: only a state on its own means contact. `ss.stat
 
 **Several sources of infection** are a sum: in `S >> E @ beta*(I + 0.5*A)`, people in `A` are half as infectious as those in `I`. A rate is linear in its bare states; anything nonlinear is written with counts (`I.n`). A set of states is written with `+` or `|`: `(E | I).frac` is the fraction in either, and `(E | I) >> R` a transition from either.
 
+**Infection from outside** (importation) is a term of the force of infection, `S >> E @ beta*I + import_rate`, or a transition of its own into the same state, `importation = S >> E @ import_rate`, which has its own result. Either is an acquisition, which `rel_sus` and vaccines act on.
+
 **Infected states and prevalence.** A disease with transmission has the results `infected` (the number in its infected states) and `prevalence` (their fraction of everyone in its states). The infected states are those people are infected into and those that infect them (`E` and `I` in `S >> E @ beta*I`), and are what a test detects and a treatment cures; `infected = E + I + H` on the disease adds others, such as a hospital stage.
 
 **Susceptibility and infectiousness.** A state can make the people in it less susceptible, or less infectious, than others, with `rel_sus` and `rel_trans`. Here people vaccinated against measles (`V`) are 97% protected, and 90% start vaccinated:
@@ -438,7 +440,7 @@ sim.run()
 sim.results.measles.plot()
 ```
 
-Starting values can go in the class body too (`init = dict(I=0.001)`). Every expression in the class body is also a result, unless its name starts with an underscore (`_h = ...`). For behavior that isn't a transition, override `step()`, and call `super().step()` to run the declared transitions ([Custom modules](building_modules.qmd)).
+Starting values can go in the class body too (`init = dict(I=0.001)`), and so can the step that suits the disease (`dt = ss.days(2)`), a default that the sim's `dt=` overrides ([Time](building_time.qmd)). Every expression in the class body is also a result, unless its name starts with an underscore: `_foi = beta*(I + 0.5*A)`, used in several transitions, is a named expression, not a parameter or a result. For behavior that isn't a transition, override `step()`, and call `super().step()` to run the declared transitions ([Custom modules](building_modules.qmd)).
 
 ## Advanced: states that are not people {#states-that-are-not-people}
 

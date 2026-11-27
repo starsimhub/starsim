@@ -217,7 +217,7 @@ class Module(Base):
         name (str): a short, key-like name for the module (e.g. "randomnet"); if not given, the variable it is assigned to (`net = ss.RandomNet()` is "net"), else its `default_name` (see `ss.Sim._name_modules()`)
         label (str): the full, human-readable name for the module (e.g. "Random network")
         pars (dict): values of the parameters declared in its class body, as an alternative to giving them by keyword
-        kwargs (dict): values of those parameters, by name; or passed to `ss.Timeline()` (e.g. start, stop, dt)
+        kwargs (dict): values of those parameters, by name; or passed to `ss.Timeline()` (e.g. start, stop, dt); a `dt` given here is the module's own step, while `dt = ss.weeks(1)` in its class body is a default, used only if the sim is given no `dt=`
 
     Examples:
         ```python
@@ -248,10 +248,17 @@ class Module(Base):
     _name_source = 'class' # Where its name came from: 'class' (the default, see default_name), 'variable' (the variable it was assigned to; see ss.Sim._name_modules()), or 'given' (name=, or a key)
     _class_pars = None # The names of the parameters declared in its class body: see define_class_parts()
     _effects = None # For a module written as code, what reads the modifiers of its parameters: see current_value()
+    default_dt = None # The step the module's class suits (dt = ss.weeks(1) in its body), used only if the sim is given no dt= (see ss.solvers.build.init_unit())
 
     def __init_subclass__(cls, **kwargs):
-        """ A module that defines `update_results()` is one written for Starsim 3 or an early v4: say how to split it, rather than never call it """
+        """ A module that defines `update_results()` is one written for Starsim 3 or an early v4: say how to split it, rather than never call it; a `dt` in the class body is its default step """
         super().__init_subclass__(**kwargs)
+        if 'dt' in cls.__dict__ and not isinstance(cls.__dict__['dt'], property): # dt = ss.weeks(1): a default, which the sim's dt= overrides; dt= given to the module is its own step, which wins
+            dt = cls.__dict__['dt']
+            if not isinstance(dt, ss.Duration):
+                raise TypeError(f'{cls.__name__}.dt is the step its class suits, a duration (e.g. dt = ss.weeks(1)), not {dt!r}')
+            cls.default_dt = dt
+            delattr(cls, 'dt') # So that module.dt is still its current step
         if 'update_results' in cls.__dict__:
             errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_states(), for the results that are the state at '
                         f'the start of the step (e.g. a count of a state), and record_events(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop, and https://docs.starsim.org/v3v4 for help migrating from Starsim 3')

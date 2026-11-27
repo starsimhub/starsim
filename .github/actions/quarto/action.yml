@@ -1,5 +1,7 @@
-# Install Quarto from sciris/quarto-cli, which renders in parallel (`--jobs`), and the faster interlinks filter from
-# sciris/quartopydoc. The fork publishes a prebuilt Linux tarball on every push to its main branch.
+# Install Quarto from sciris/quarto-cli, which renders in parallel (`--jobs`), and quartopydoc (the API reference, and
+# the faster interlinks filter) from sciris/quartopydoc, both from their main branches, so that changes to them need
+# no release. The Quarto fork publishes a prebuilt Linux tarball on every push to its main branch. quartopydoc stays a
+# plain requirement in pyproject.toml, since PyPI refuses a package whose requirements include a git URL.
 
 name: Install Quarto
 description: Install Sciris's Quarto for building the docs
@@ -17,3 +19,6 @@ runs:
       shell: bash
       working-directory: docs
       run: quarto add sciris/quartopydoc --no-prompt
+    - name: Install quartopydoc from its main branch, over the release
+      shell: bash
+      run: uv pip install --reinstall-package quartopydoc "quartopydoc @ git+https://github.com/sciris/quartopydoc@main"

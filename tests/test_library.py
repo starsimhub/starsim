@@ -146,36 +146,70 @@ def covid():
     assert simple.results.covid.ICr.max() > 0 and simple.results.covid.outcome.sum() > 0, 'Expected critical cases and deaths'
 
 
-def influenza(): # Transmission peaks each January, so epidemics return each winter
-    sim = ss.Sim(ssl.Influenza(), total_pop=100_000, start='2000-01-01', stop='2006-01-01', dt=ss.days(1), verbose=0).run()
-    yearly = np.array([sim.results.influenza.infection[i*365:(i + 1)*365].sum() for i in range(6)])
-    assert (yearly[4:] > 0.05*100_000).all(), 'Expected influenza epidemics to keep returning'
+def influenza(): # Transmission peaks each January, so epidemics return each winter; deaths are mostly among the over-65s
+    pars = dict(total_pop=100_000, start='2000-01-01', stop='2006-01-01', dt=ss.days(1), verbose=0)
+    sim = ss.Sim(ssl.Influenza(), **pars).run()
+    res = sim.results.influenza
+    assert 1.5 < sim.diseases.influenza.R0() < 1.9, 'Expected an R0 of 1.3 on average, and 1.7 at the January peak'
+    yearly = np.array([res.infection[i*365:(i + 1)*365].sum() for i in range(6)])
+    assert (yearly > 0.1*100_000).all() and (yearly < 0.4*100_000).all(), 'Expected influenza to return each year, infecting 10-40% of people'
+    deaths = res.outcome.select(to='dead').by('age').values.sum(0)
+    assert np.argmax(deaths) == 6 and deaths[6] > deaths[:6].sum(), 'Expected most deaths over 65'
+    vax = ss.Sim(ssl.Influenza(cov_vax=ss.by(age=[0, 0.5, 0.5, 0, 0, 0, 0.7])), **pars).run()
+    assert vax.results.influenza.vaccination.sum() > 0 and vax.results.influenza.infection.sum() < 0.9*res.infection.sum(), 'Expected vaccination to prevent infections'
+    assert vax.results.influenza.outcome.select(to='dead').sum() < 0.85*res.outcome.select(to='dead').sum(), 'Expected vaccinating the over-65s to prevent deaths'
 
 
-def rsv(): # Babies are born with maternal antibodies, then become susceptible
-    sim = ss.Sim(ssl.RSV(), total_pop=100_000, start='2000-01-01', stop='2004-01-01', dt=ss.days(1), verbose=0).run()
+def rsv(): # Repeated infections; first infections in babies are the severe ones, and immunizing babies prevents some
+    assert 8 < ssl.RSV().R0() < 11, 'Expected the R0 of about 9 of Pitzer et al.'
+    kw = dict(total_pop=100_000, start='2000-01-01', stop='2008-01-01', dt=ss.days(1), verbose=0)
+    sim = ss.Sim(ssl.RSV(), **kw).run()
     res = sim.results.rsv
     assert res.M[-1] > 0 and res.maternal.sum() > 0, 'Expected babies to be born protected and to lose that protection'
-    assert res.prevalence[-1] > 0, 'Expected RSV to persist'
+    assert res.infection4.sum() > res.infection1.sum(), 'Expected most infections to be reinfections'
+    hosp = res.recovery1.select(to='H1').by('age').values[-3*365:].sum(0)
+    assert np.argmax(hosp) <= 2, 'Expected most hospitalizations with a first infection under 6 months'
+    assert res.recovery4.select(to='H4').by('age').values[:, -1].sum() > 0, 'Expected older adults (65+) to be hospitalized'
+    immunized = ss.Sim(ssl.RSV(cov_mab=0.8), **kw).run()
+    hosp_imm = immunized.results.rsv.recovery1.select(to='H1').by('age').values[-3*365:].sum(0)
+    assert hosp_imm[:3].sum() < 0.9*hosp[:3].sum(), 'Expected nirsevimab to prevent hospitalizations under 6 months'
 
 
-def pertussis():
-    assert 11 < ssl.Pertussis().R0() < 15, 'Expected the R0 of 11 to 15 estimated by Wearing and Rohani'
-    sim = ss.Sim(ssl.Pertussis(), total_pop=100_000, start='1920-01-01', stop='1960-01-01', dt=ss.days(5), verbose=0).run()
-    assert sim.results.pertussis.waning.sum() > 0, 'Expected immunity to wane'
+def pertussis(): # Exposure boosts waned immunity; the DTP series prevents infant deaths and moves infections to older ages
+    pars = dict(total_pop=100_000, start=1920, stop=1980, dt=ss.days(5), verbose=0)
+    sims = [ss.Sim(ssl.Pertussis(cov_dtp=cov), **pars).run() for cov in [0, 0.8]]
+    assert 11 < sims[0].diseases.pertussis.R0() < 15, 'Expected the R0 of 11 to 15 estimated by Wearing and Rohani'
+    pre, dtp = [sim.results.pertussis for sim in sims]
+    last = slice(-20*73, None) # The last 20 years
+    infants = lambda res: res.infection.by('age').values[last, :4].sum()/res.infection.values[last].sum()
+    assert pre.boosting.sum() > pre.infection.sum() > 0 and pre.loss.sum() > 0, 'Expected immunity to wane, and to be boosted more often than people are infected'
+    assert dtp.outcome.dead[last].sum() < 0.5*pre.outcome.dead[last].sum(), 'Expected the DTP series to prevent most deaths'
+    assert infants(dtp) < 0.7*infants(pre), 'Expected vaccination to move infections out of infancy'
 
 
-def typhoid(): # Carriers are a hundredth as infectious, but shed for life, so they matter for R0
-    assert np.isclose(ssl.Typhoid().R0(), 2.8, atol=0.1), 'Expected the R0 of 2.8 estimated by Pitzer et al.'
-    assert ssl.Typhoid(p_carrier=0).R0() < ssl.Typhoid().R0(), 'Expected the carriers to add to R0'
-    sim = ss.Sim(ssl.Typhoid(), total_pop=20_000, start=2000, stop=2040, dt=ss.weeks(4), verbose=0).run()
-    assert sim.results.typhoid.C[-1] > 0, 'Expected chronic carriers'
+def typhoid(): # Pitzer et al.'s R0 of 2.8, to which carriers add; routine TCV lowers first infections; deaths by age
+    mean = dict(beta_w=ss.perweek(0.0175)) # The seasonal rate from the water, at its mean
+    assert np.isclose(ssl.Typhoid(**mean).R0(), 2.8, atol=0.1), 'Expected the R0 of 2.8 estimated by Pitzer et al.'
+    assert ssl.Typhoid(p_carrier=0, **mean).R0() < ssl.Typhoid(**mean).R0(), 'Expected the carriers to add to R0'
+    pars = dict(total_pop=20_000, start=1960, stop=2020, dt=ss.weeks(2), verbose=0)
+    base, vax = [ss.Sim(ssl.Typhoid(cov_tcv=cov), **pars).run().results.typhoid for cov in [0, 0.8]]
+    assert base.C[-1] > 0 and base.V[-1] == 0 < vax.V[-1], 'Expected chronic carriers, and the vaccinated only with TCV'
+    assert vax.infection[-260:].sum() < 0.9*base.infection[-260:].sum(), 'Expected routine TCV to lower first infections'
+    assert base.recovery.select(to='dead').by('age').values.sum() > 0, 'Expected deaths from typhoid, by age'
 
 
-def polio(): # About 1 infection in 200 causes paralysis
-    sim = ss.Sim(ssl.Polio(), total_pop=100_000, start=1980, stop=1990, dt=ss.days(5), verbose=0).run()
+def polio(): # Paralysis comes from first infections, mostly under 5; OPV prevents it, and its virus spreads
+    pars = dict(total_pop=1_000_000, start=1950, stop=1980, dt=ss.days(5), verbose=0)
+    sim = ss.Sim(ssl.Polio(), **pars).run()
     res = sim.results.polio
-    assert np.isclose(res['outcome.P'].sum()/res.onset.sum(), 1/200, rtol=0.2), 'Expected about 1 paralytic case per 200 infections'
+    assert 7.5 < sim.diseases.polio.R0() < 8.5, 'Expected the R0 of 8 for type 1 of Kalkowska et al.'
+    P = res.infection.P.by('age').values[-730:].sum(0) # The last 10 years
+    assert P[:4].sum() > 0.8*P.sum() and P[0] < P[1], 'Expected most paralysis under 5, but little under 6 months'
+    assert 1/300 < res.infection.P.sum()/res.infection.sum() < 1/190, 'Expected about 1 paralytic case per 190 first infections, fewer in babies'
+    vax = ss.Sim(ssl.Polio(cov_opv=0.8), **pars).run().results.polio
+    assert vax.infection.P.sum() < 0.5*res.infection.P.sum() and vax.opv_spread.sum() > 0, 'Expected OPV to prevent paralysis, and its virus to spread'
+    agents = ss.Sim(ssl.Polio(cov_opv=0.8, cov_ipv=0.5), n_agents=1000, start=1950, stop=1955, dt=ss.days(10), verbose=0).run().results.polio
+    assert agents.routine.O.sum() > 0 and agents.routine.V.sum() > 0, 'Expected vaccination as agents'
 
 
 def sti(): # Both run on a sexual network; syphilis's modifiers lower each latent person's infectiousness
@@ -191,20 +225,27 @@ def sti(): # Both run on a sexual network; syphilis's modifiers lower each laten
 
 
 @sc.timer()
-def measles(): # R0 is beta times the infectious period; as agents and as compartments, a share p_death of those leaving I die
-    assert np.isclose(ssl.Measles().R0(), 1.4*11)
-    for solver in ['ode', 'abm']:
-        size = dict(total_pop=10_000) if solver == 'ode' else dict(n_agents=10_000)
-        sim = ss.Sim(diseases=ssl.Measles(), solver=solver, start='2025-01-01', stop='2025-07-01', rand_seed=1, verbose=0, **size).run()
-        res = sim.results.measles
-        out = res.recovery.sum() + res.death.sum()
-        assert res.infection.sum() > 9000 and np.isclose(res.death.sum()/out, 0.005, rtol=0.4), solver
+def measles(): # R0 is beta times the infectious period; deaths are by age; and each dose protects its coverage times its efficacy, as compartments and as agents
+    assert np.isclose(ssl.Measles().R0(), 1.4*11, rtol=0.01) # Less the few who die of other causes while infected
+    outbreak = dict(start='2025-01-01', stop='2025-07-01', rand_seed=1, verbose=0)
+    res = ss.Sim(diseases=ssl.Measles(), total_pop=10_000, **outbreak).run().results.measles
+    died, recovered = res.death.by('age').values.sum(axis=0), res.recovery.by('age').values.sum(axis=0)
+    assert res.infection.sum() > 9000 and np.allclose((died/(died + recovered))[[0, -1]], [0.006, 0.0013], rtol=0.01) # p_death in infants and adults
+    res = ss.Sim(diseases=ssl.Measles(p_death=0.1), n_agents=2000, **outbreak).run().results.measles
+    assert res.infection.sum() > 1800 and np.isclose(res.death.sum()/(res.death.sum() + res.recovery.sum()), 0.1, rtol=0.3)
+
+    # Routine vaccination, with no transmission: a share cov*eff of the children who reach each dose are protected
+    for size, rtol in [(dict(total_pop=10_000), 0.001), (dict(n_agents=2000), 0.25)]:
+        vaccinated = ssl.Measles(beta=ss.perday(0), cov_mcv1=0.8, cov_mcv2=0.5, init=dict(I=0))
+        res = ss.Sim(diseases=vaccinated, start='2000-01-01', stop='2010-01-01', dt=ss.days(7), rand_seed=1, verbose=0, **size).run().results.vaccinated
+        share = [dose.select(to='V').sum()/dose.sum() for dose in [res.mcv1, res.mcv2]]
+        assert np.allclose(share, [0.8*0.84, 0.5*0.925], rtol=rtol), (size, share)
 
     # An instance takes extra states, transitions, and outcomes beside the class's, which stand for the instance's copies
-    V = ss.State('Vaccinated')
-    m = ssl.Measles(V, vax=ss.Transition(ssl.Measles.S, V, rate=ss.perday(0.01)), cases=ss.outcome(0.5*ssl.Measles.onset))
-    res = ss.Sim(diseases=m, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0).run().results.measles
-    assert res.vax.sum() > 0 and np.isclose(res.cases.sum(), 0.5*res.onset.sum()) and 'V' not in ssl.Measles().graph.states
+    H = ss.State('Hospitalized')
+    hosp = ssl.Measles(H, admission=ss.Transition(ssl.Measles.I, H, rate=ss.perday(0.01)), cases=ss.outcome(0.5*ssl.Measles.onset))
+    res = ss.Sim(diseases=hosp, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0).run().results.hosp
+    assert res.admission.sum() > 0 and np.isclose(res.cases.sum(), 0.5*res.onset.sum()) and 'H' not in ssl.Measles().graph.states
 
 
 @sc.timer()

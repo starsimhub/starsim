@@ -523,7 +523,8 @@ class Transition(Nameable):
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
         noise (float/par): random variation of the rate from step to step (see below), for data that vary more than chance alone explains; sigma, which can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`)
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
-            contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
+            contact-mediated transition is, and so is one from a source of a contact-mediated transition into one of its destinations (an importation, `S >> I @ import_rate`), and
+            any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         per_strain (str): for a disease with strains (`ss.Strains`) in a state they share, an outcome for each strain carried: `'each'` or `'first'` (see below)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
@@ -554,7 +555,7 @@ class Transition(Nameable):
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         infection = ss.Transition(S, E, rate=beta*I, noise=0.0878) # Infection whose rate varies at random from step to step (He et al. 2010)
         postpartum = ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6))) # Six months after each woman's own delivery
-        importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
+        importation = ss.Transition(S, I, rate=ss.perday(1e-4)) # An infection from outside, alongside one by contact (into its destination, so also an acquisition)
         ```
     """
     def __init__(self, source=None, dest=None, rate=None, dur=None, p=notgiven, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False):
@@ -898,7 +899,7 @@ class Transition(Nameable):
             raise TypeError(errormsg)
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
         new = self.copy()
-        if isinstance(value, (ss.Duration, ss.Dist)) or any(isinstance(v, (ss.Duration, ss.Dist)) for v in typed): # Including ss.by(sex=[dist, dist])
+        if isinstance(value, (ss.Duration, ss.Dist)) or any(isinstance(v, (ss.Duration, ss.Dist)) for v in typed) or (isinstance(value, Expr) and dimension(value) == 1): # Including ss.by(sex=[dist, dist]), and a duration times or divided by a number (dur_imm/2)
             new.dur = as_dur(driver)
         else:
             new.rate = as_expr(driver)
@@ -970,6 +971,11 @@ class Transition(Nameable):
                 new.dur = None
                 new.rate = as_expr(other*raw if reverse else raw*other)
                 new._check_dimensions() # e.g. a distribution of durations times I is still a duration in a rate
+                return new
+            plain = sc.isnumber(other) or (isinstance(other, Expr) and all(isinstance(leaf, par) for leaf in other.leaves)) # A number, or an expression of parameters
+            if plain and not isinstance(raw, ss.Dist) and (op == '*' or (op == '/' and not reverse)): # e.g. R >> W @ dur_imm/2, read as (R >> W @ dur_imm)/2: still a duration
+                new.dur = as_dur(BinOp(op, other, self.dur) if reverse else BinOp(op, self.dur, as_expr(other)))
+                new._check_dimensions()
                 return new
             if isinstance(other, Expr): # e.g. S >> I @ ss.days(3) * I, a duration in a rate
                 raise TypeError(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
